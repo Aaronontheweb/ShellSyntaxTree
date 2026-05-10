@@ -4,6 +4,8 @@
     <!-- Test stack -->
     <XunitVersion>2.9.2</XunitVersion>
     <XunitRunnerVersion>2.8.2</XunitRunnerVersion>
+    <!-- Sample stack -->
+    <AspNetCoreVersion>8.0.26</AspNetCoreVersion>
   </PropertyGroup>
   <!-- Test dependencies -->
   <ItemGroup>
@@ -15,5 +17,11 @@
   <!-- SourceLink -->
   <ItemGroup>
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.201" />
+  </ItemGroup>
+  <!-- Sample dependencies -->
+  <ItemGroup>
+    <PackageVersion Include="System.CommandLine" Version="2.0.7" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly" Version="$(AspNetCoreVersion)" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="$(AspNetCoreVersion)" />
   </ItemGroup>
 </Project>

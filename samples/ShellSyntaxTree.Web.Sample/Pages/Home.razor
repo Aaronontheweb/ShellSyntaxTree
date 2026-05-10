@@ -1,0 +1,216 @@
+@page "/"
+@inject IJSRuntime JS
+@implements IDisposable
+
+<PageTitle>ShellSyntaxTree Visualizer</PageTitle>
+
+<div class="app-shell">
+    <header class="app-header">
+        <h1>ShellSyntaxTree Mermaid Visualizer</h1>
+        <p>Paste a bash script — see what ShellSyntaxTree parses out. Everything runs in your browser; nothing is sent anywhere.</p>
+    </header>
+
+    <div class="layout">
+        <section class="panel">
+            <h2>Input</h2>
+            <div class="preset-row">
+                @foreach (var preset in Presets.All)
+                {
+                    <button type="button" @onclick="() => UsePreset(preset.Script)">@preset.Name</button>
+                }
+            </div>
+            <textarea class="script-input"
+                      spellcheck="false"
+                      placeholder="cd /repo && git pull && docker build -t myapp ."
+                      value="@_script"
+                      @oninput="OnInput"></textarea>
+            <div class="action-row">
+                <button type="button" @onclick="RenderNow">Render</button>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Output</h2>
+            <div class="tab-row">
+                <button class="@(_tab == Tab.Diagram ? "active" : null)" @onclick="() => _tab = Tab.Diagram">Diagram</button>
+                <button class="@(_tab == Tab.Source ? "active" : null)" @onclick="() => _tab = Tab.Source">Source</button>
+                <button class="@(_tab == Tab.Ast ? "active" : null)" @onclick="() => _tab = Tab.Ast">AST</button>
+                <button class="@(_tab == Tab.Unparseable ? "active" : null)" @onclick="() => _tab = Tab.Unparseable">Unparseable (@_unparseableCount)</button>
+            </div>
+            <div class="tab-body">
+                @if (_tab == Tab.Diagram)
+                {
+                    @if (string.IsNullOrWhiteSpace(_mermaidSource))
+                    {
+                        <div class="empty-state">No script yet. Pick a preset or paste a command.</div>
+                    }
+                    else
+                    {
+                        <div id="@DiagramHostId" class="diagram-host"></div>
+                    }
+                }
+                else if (_tab == Tab.Source)
+                {
+                    <pre class="code-block">@_mermaidSource</pre>
+                }
+                else if (_tab == Tab.Ast)
+                {
+                    <pre class="code-block">@_astText</pre>
+                }
+                else
+                {
+                    @if (_unparseableLines.Count == 0)
+                    {
+                        <div class="empty-state">No unparseable lines.</div>
+                    }
+                    else
+                    {
+                        <ul class="unparseable-list">
+                            @foreach (var line in _unparseableLines)
+                            {
+                                <li><code>@line.Source</code> — @(line.Reason ?? "no reason given")</li>
+                            }
+                        </ul>
+                    }
+                }
+            </div>
+            <div class="action-row">
+                <button type="button" @onclick="CopyMermaid">Copy mermaid</button>
+                <button type="button" @onclick="CopyAst">Copy AST</button>
+            </div>
+        </section>
+    </div>
+</div>
+
+@code {
+    private const string DiagramHostId = "sst-mermaid";
+    private const int DebounceMs = 300;
+
+    private enum Tab { Diagram, Source, Ast, Unparseable }
+
+    private string _script = string.Empty;
+    private string _mermaidSource = string.Empty;
+    private string _astText = string.Empty;
+    private int _unparseableCount;
+    private List<(string Source, string? Reason)> _unparseableLines = new();
+    private Tab _tab = Tab.Diagram;
+
+    private System.Threading.Timer? _debounce;
+    private bool _pendingRender;
+
+    protected override void OnInitialized()
+    {
+        UsePreset(Presets.All[0].Script);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_pendingRender && !string.IsNullOrWhiteSpace(_mermaidSource) && _tab == Tab.Diagram)
+        {
+            _pendingRender = false;
+            await JS.InvokeVoidAsync("shellSyntaxTreeInterop.renderMermaid", DiagramHostId, _mermaidSource);
+        }
+    }
+
+    private void UsePreset(string script)
+    {
+        _script = script;
+        RenderNow();
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _script = e.Value?.ToString() ?? string.Empty;
+        ScheduleRender();
+    }
+
+    private void ScheduleRender()
+    {
+        _debounce?.Dispose();
+        _debounce = new System.Threading.Timer(_ =>
+        {
+            InvokeAsync(RenderNow);
+        }, null, DebounceMs, System.Threading.Timeout.Infinite);
+    }
+
+    private void RenderNow()
+    {
+        var parser = new BashParser();
+        var commands = ScriptSplitter.Split(_script).ToList();
+        var parses = new List<ParsedCommand>(commands.Count);
+
+        var astSb = new System.Text.StringBuilder();
+        _unparseableLines = new List<(string, string?)>();
+
+        foreach (var cmd in commands)
+        {
+            var parsed = parser.Parse(cmd);
+            parses.Add(parsed);
+
+            if (parsed.IsUnparseable)
+            {
+                _unparseableLines.Add((parsed.Source, parsed.UnparseableReason));
+            }
+
+            astSb.Append("# ").AppendLine(cmd);
+            DumpAst(astSb, parsed);
+            astSb.AppendLine();
+        }
+
+        _unparseableCount = _unparseableLines.Count;
+        _mermaidSource = MermaidRenderer.Render(parses);
+        _astText = astSb.ToString();
+        _pendingRender = true;
+
+        StateHasChanged();
+    }
+
+    private static void DumpAst(System.Text.StringBuilder sb, ParsedCommand parsed)
+    {
+        if (parsed.IsUnparseable)
+        {
+            sb.Append("  UNPARSEABLE: ").AppendLine(parsed.UnparseableReason ?? "(no reason)");
+            return;
+        }
+
+        for (var i = 0; i < parsed.Clauses.Count; i++)
+        {
+            var clause = parsed.Clauses[i];
+            sb.Append("  Clause ").Append(i)
+              .Append(" op=").Append(clause.Operator)
+              .Append(" verb=\"").Append(clause.Verb.Joined).Append('"');
+            if (clause.IsSubshell) sb.Append(" subshell");
+            if (clause.IsBashCWrapped) sb.Append(" bash-c");
+            sb.AppendLine();
+
+            foreach (var arg in clause.Args)
+            {
+                sb.Append("    arg raw=\"").Append(arg.Raw).Append('"');
+                if (arg.Resolved is not null && arg.Resolved != arg.Raw)
+                {
+                    sb.Append(" resolved=\"").Append(arg.Resolved).Append('"');
+                }
+
+                sb.Append(" kind=").Append(arg.Kind);
+                if (arg.IsPath) sb.Append(" path");
+                if (arg.IsCwdAttribution) sb.Append(" cwd-attr");
+                if (arg.IsFlag) sb.Append(" flag");
+                sb.AppendLine();
+            }
+
+            foreach (var redirect in clause.Redirects)
+            {
+                sb.Append("    redirect dir=").Append(redirect.Direction)
+                  .Append(" target=\"").Append(redirect.Target).Append('"');
+                if (redirect.IsDynamicSkip) sb.Append(" dyn-skip");
+                sb.AppendLine();
+            }
+        }
+    }
+
+    private async Task CopyMermaid() => await JS.InvokeVoidAsync("shellSyntaxTreeInterop.copyText", _mermaidSource);
+
+    private async Task CopyAst() => await JS.InvokeVoidAsync("shellSyntaxTreeInterop.copyText", _astText);
+
+    public void Dispose() => _debounce?.Dispose();
+}

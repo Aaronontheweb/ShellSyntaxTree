@@ -21,4 +21,8 @@
   <Folder Name="/tests/">
     <Project Path="tests/ShellSyntaxTree.Tests/ShellSyntaxTree.Tests.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/ShellSyntaxTree.Cli.Sample/ShellSyntaxTree.Cli.Sample.csproj" />
+    <Project Path="samples/ShellSyntaxTree.Web.Sample/ShellSyntaxTree.Web.Sample.csproj" />
+  </Folder>
 </Solution>

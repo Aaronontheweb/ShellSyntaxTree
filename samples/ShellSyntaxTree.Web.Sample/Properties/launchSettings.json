@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "ShellSyntaxTree.Web.Sample": {
+      "commandName": "Project",
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:5239",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
