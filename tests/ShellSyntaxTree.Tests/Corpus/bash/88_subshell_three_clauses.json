@@ -1,0 +1,34 @@
+{
+  "name": "Subshell three-clause: (a; b; c)",
+  "input": "(a; b; c)",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["a"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": true,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["b"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": true,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["c"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": true,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Subshell with sequence operators; all three clauses carry IsSubshell=true."
+}

@@ -13,13 +13,23 @@ namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
 /// <summary>
 /// Translates a <see cref="BashLexer"/> token stream into the public
-/// <see cref="ParsedCommand"/> AST. PR 4 wires per-verb path classification
+/// <see cref="ParsedCommand"/> AST. PR 4 wired per-verb path classification
 /// (SPEC §7), the resolver (SPEC §8), and the flag-with-value-aware verb-
-/// chain probe on top of the PR 3 core. PR 5 will land subshell flag
-/// flipping, <c>bash -c</c> recursion, and cd-in-compound propagation.
+/// chain probe. PR 5 lands cd-in-compound attribution propagation
+/// (SPEC §9), subshell isolation (SPEC §10), and <c>bash -c</c> recursion
+/// with the depth-5 cap per locked interpretation #4.
 /// </summary>
 internal static class BashCommandParser
 {
+    /// <summary>
+    /// Maximum allowed <c>bash -c</c> / <c>sh -c</c> nesting depth before
+    /// the parser safe-fails per locked interpretation #4. Hard-coded —
+    /// SPEC §10 picks 5 because hostile input would have to chain 5+ wrapper
+    /// invocations to evade analysis and that's well beyond any legitimate
+    /// agent emission.
+    /// </summary>
+    private const int MaxBashCRecursionDepth = 5;
+
     /// <summary>
     /// Parse the input string into a <see cref="ParsedCommand"/>. Never
     /// throws on well-formed input; safe-fails to <c>IsUnparseable=true</c>
@@ -37,6 +47,23 @@ internal static class BashCommandParser
             throw new ArgumentNullException(nameof(options));
         }
 
+        return ParseInternal(source, options, bashCDepth: 0, markBashCWrapped: false);
+    }
+
+    /// <summary>
+    /// Recursion entry point. <paramref name="bashCDepth"/> counts how many
+    /// <c>bash -c</c> wrappers we've unwrapped to reach this call; the
+    /// outer caller passes 0. <paramref name="markBashCWrapped"/> sets
+    /// <see cref="Clause.IsBashCWrapped"/> on every emitted clause and
+    /// fires only on recursive calls (the outer top-level command doesn't
+    /// pretend to be wrapped).
+    /// </summary>
+    private static ParsedCommand ParseInternal(
+        string source,
+        BashParserOptions options,
+        int bashCDepth,
+        bool markBashCWrapped)
+    {
         if (source.Length == 0)
         {
             return new ParsedCommand
@@ -52,8 +79,8 @@ internal static class BashCommandParser
         // Step 1: lift any UnparseableSentinel to the outer ParsedCommand.
         // SPEC §11 step 3 says we may also return whatever clauses were
         // parsed up to that point — we keep it strictly safe-fail (empty
-        // Clauses) so consumers don't get a half-built AST whose shape
-        // changes when PR 5 wires recursion. The reason text comes
+        // Clauses) so consumers can't build on a partial AST whose shape
+        // a sibling clause might invalidate. The reason text comes
         // straight from the lexer.
         for (var i = 0; i < tokens.Count; i++)
         {
@@ -98,11 +125,138 @@ internal static class BashCommandParser
             };
         }
 
-        // Step 4: parse each segment into a Clause.
+        // Step 4: walk segments with the cd-attribution context and the
+        // bash -c recursion machinery.
         var clauses = new List<Clause>(segments.Count);
+        var attribution = new CdAttributionContext();
+        IReadOnlyList<int> prevStack = new[] { 0 };
+
         foreach (var segment in segments)
         {
-            var clauseOrError = ParseClauseSegment(segment, source, options);
+            // ---- Subshell push/pop driven by SubshellStack divergence ----
+            //
+            // Each segment carries the *full* stack of subshell IDs it
+            // sits inside (outer-most → inner-most), with ID 0 reserved
+            // for the top-level command. We pop pushed frames back to the
+            // common prefix between prevStack and segment.SubshellStack,
+            // then push fresh frames for each new ID we're entering. This
+            // correctly handles `(a) && (b)`: between the two segments
+            // we exit subshell A (pop) and enter subshell B (push), even
+            // though SubshellDepth=1 on both.
+            var commonPrefix = 0;
+            while (commonPrefix < prevStack.Count
+                && commonPrefix < segment.SubshellStack.Count
+                && prevStack[commonPrefix] == segment.SubshellStack[commonPrefix])
+            {
+                commonPrefix++;
+            }
+
+            // Pop everything past the common prefix in prevStack.
+            for (var k = prevStack.Count - 1; k >= commonPrefix; k--)
+            {
+                attribution.PopForSubshell();
+            }
+
+            // Push fresh frames for the new IDs in segment.SubshellStack.
+            for (var k = commonPrefix; k < segment.SubshellStack.Count; k++)
+            {
+                attribution.PushForSubshell();
+            }
+
+            prevStack = segment.SubshellStack;
+
+            // ---- bash -c detection (before clause-build) ----
+            //
+            // Locked interpretation #4: nested `bash -c "..."` wrappers
+            // expand inline; the outer wrapper clause is consumed. The cap
+            // at depth 5 fires here — one more level past 5 → outer
+            // ParsedCommand.IsUnparseable = true with reason naming the
+            // overflow. Sub-clauses parsed *up to* the cap may still appear,
+            // but per SPEC §11 + locked interpretation #4 we keep clauses
+            // empty for hostile-input safety.
+            if (TryDetectBashCWrapper(segment, source, out var innerCommand))
+            {
+                if (bashCDepth + 1 > MaxBashCRecursionDepth)
+                {
+                    return new ParsedCommand
+                    {
+                        Source = source,
+                        Clauses = Array.Empty<Clause>(),
+                        IsUnparseable = true,
+                        UnparseableReason = "bash -c recursion depth exceeded (>5)",
+                    };
+                }
+
+                // Recurse with the original options — bash -c spawns a
+                // fresh shell, so outer cd-attribution does *not* propagate
+                // into the inner command. This is a v0.1 decision; v0.1.x
+                // can revisit if real-world commands surface a counter-case.
+                var inner = ParseInternal(
+                    innerCommand!,
+                    options,
+                    bashCDepth: bashCDepth + 1,
+                    markBashCWrapped: true);
+
+                if (inner.IsUnparseable)
+                {
+                    return new ParsedCommand
+                    {
+                        Source = source,
+                        Clauses = Array.Empty<Clause>(),
+                        IsUnparseable = true,
+                        UnparseableReason = inner.UnparseableReason,
+                    };
+                }
+
+                // First inner clause inherits the outer segment's operator
+                // (since the bash -c clause itself is consumed). Remaining
+                // inner clauses keep their parsed operators.
+                var innerClauses = inner.Clauses;
+                for (var k = 0; k < innerClauses.Count; k++)
+                {
+                    var ic = innerClauses[k];
+                    var op = k == 0 ? segment.PrecedingOperator : ic.Operator;
+                    var isSubshell = segment.SubshellDepth > 0 || ic.IsSubshell;
+                    clauses.Add(ic with
+                    {
+                        Operator = op,
+                        IsSubshell = isSubshell,
+                        IsBashCWrapped = true,
+                    });
+                }
+
+                continue;
+            }
+
+            // ---- Normal clause path with attribution propagation ----
+            //
+            // Effective resolution options depend on attribution state:
+            //   - no attribution → caller options pass through unchanged.
+            //   - literal cd attribution → swap WorkingDirectory to the cd
+            //     target so relative path args in subsequent clauses
+            //     resolve under it (SPEC §9 example: `cd /a && cat foo`
+            //     → cat's `foo` resolves to `/a/foo`).
+            //   - dynamic cd attribution (locked interpretation #6) →
+            //     keep caller options but set the resolver's
+            //     `workingDirectoryUnknown` flag so relative paths surface
+            //     as DynamicSkip (the daemon cwd is *not* the right
+            //     fallback; we statically don't know the actual cwd).
+            var effectiveOptions = options;
+            var workingDirectoryUnknown = false;
+            if (attribution.HasAttribution && !attribution.IsDynamic)
+            {
+                effectiveOptions = new BashParserOptions
+                {
+                    HomeDirectory = options.HomeDirectory,
+                    WorkingDirectory = attribution.ResolvedCwd,
+                };
+            }
+            else if (attribution.IsDynamic)
+            {
+                workingDirectoryUnknown = true;
+            }
+
+            var clauseOrError = ParseClauseSegment(segment, source, effectiveOptions, workingDirectoryUnknown);
             if (clauseOrError.Error is not null)
             {
                 return new ParsedCommand
@@ -116,7 +270,36 @@ internal static class BashCommandParser
 
             foreach (var clause in clauseOrError.Clauses)
             {
-                clauses.Add(clause);
+                // Apply the IsSubshell / IsBashCWrapped flags first; both
+                // are properties of the *segment*, not the clause body.
+                var withFlags = clause with
+                {
+                    IsSubshell = segment.SubshellDepth > 0,
+                    IsBashCWrapped = markBashCWrapped,
+                };
+
+                // Inspect the verb to decide whether this clause updates
+                // the attribution context after emission.
+                var verb = clause.Verb;
+                var firstVerbToken = verb.Tokens.Count > 0 ? verb.Tokens[0] : null;
+                var isCdLike = firstVerbToken is not null
+                    && (string.Equals(firstVerbToken, "cd", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(firstVerbToken, "chdir", StringComparison.OrdinalIgnoreCase));
+
+                // Every clause receives the *current* attribution as a
+                // synthetic arg — including cd/chdir clauses themselves
+                // (per SPEC §9 rule 2 "subsequent clauses inherit", which
+                // applies to cd /b in `cd /a && cd /b`). The attribution
+                // state is updated *after* the arg is attached, so the
+                // newly-set cd /b doesn't attribute to itself.
+                var emitted = AttachAttributionArg(withFlags, attribution);
+
+                if (isCdLike)
+                {
+                    UpdateAttributionFromCd(clause, attribution);
+                }
+
+                clauses.Add(emitted);
             }
         }
 
@@ -126,6 +309,184 @@ internal static class BashCommandParser
             Clauses = clauses,
             IsUnparseable = false,
         };
+    }
+
+    // ---------------------------------------------------------------- cd attribution
+
+    /// <summary>
+    /// Inspect a freshly-parsed <c>cd</c> / <c>chdir</c> clause and update
+    /// <paramref name="attribution"/> from its first non-flag positional
+    /// arg. Per locked interpretation #5 only cd/chdir reach here;
+    /// pushd/popd/push-location/set-location parse as CwdVerbs but the
+    /// caller skips this update.
+    /// </summary>
+    private static void UpdateAttributionFromCd(Clause clause, CdAttributionContext attribution)
+    {
+        Arg? firstPositional = null;
+        foreach (var a in clause.Args)
+        {
+            if (!a.IsFlag)
+            {
+                firstPositional = a;
+                break;
+            }
+        }
+
+        if (firstPositional is null)
+        {
+            // `cd` with no target → bash semantics is "cd to $HOME". We
+            // could expand to HomeDirectory here, but security-gate
+            // consumers care about *explicit* cwds; treat as no attribution
+            // change (the previous attribution, if any, persists). A
+            // synthetic arg is also not appended downstream since
+            // HasAttribution stays as it was.
+            return;
+        }
+
+        switch (firstPositional.Kind)
+        {
+            case ArgKind.Literal:
+            case ArgKind.Tilde:
+                // Literal or tilde-expanded path. Resolved should be the
+                // normalized absolute path. When it isn't (resolver fell
+                // through), treat as dynamic so we don't carry a stale
+                // attribution.
+                if (firstPositional.Resolved is not null)
+                {
+                    attribution.SetLiteralAttribution(firstPositional.Resolved);
+                }
+                else
+                {
+                    attribution.SetDynamicAttribution();
+                }
+                break;
+            case ArgKind.DynamicSkip:
+            case ArgKind.EnvVar:
+            case ArgKind.Glob:
+                // Locked interpretation #6 (and the symmetric Glob case):
+                // we can't statically know the resolved cwd. Subsequent
+                // clauses get a synthetic DynamicSkip attribution arg.
+                attribution.SetDynamicAttribution();
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Append a synthetic <see cref="Arg.IsCwdAttribution"/> arg to
+    /// <paramref name="clause"/> when <paramref name="attribution"/> has
+    /// active state. Literal-cd attribution appends a Literal/IsPath=true
+    /// arg with Resolved set; dynamic-cd attribution (locked interpretation
+    /// #6) appends a DynamicSkip arg with Resolved=null. When no
+    /// attribution is active, returns <paramref name="clause"/> unchanged.
+    /// </summary>
+    private static Clause AttachAttributionArg(Clause clause, CdAttributionContext attribution)
+    {
+        if (!attribution.HasAttribution)
+        {
+            return clause;
+        }
+
+        Arg synthetic;
+        if (attribution.IsDynamic)
+        {
+            synthetic = new Arg
+            {
+                Raw = "<dynamic-cwd>",
+                Resolved = null,
+                Kind = ArgKind.DynamicSkip,
+                IsPath = false,
+                IsCwdAttribution = true,
+            };
+        }
+        else
+        {
+            var cwd = attribution.ResolvedCwd!;
+            synthetic = new Arg
+            {
+                Raw = cwd,
+                Resolved = cwd,
+                Kind = ArgKind.Literal,
+                IsPath = true,
+                IsCwdAttribution = true,
+            };
+        }
+
+        var newArgs = new List<Arg>(clause.Args.Count + 1);
+        newArgs.AddRange(clause.Args);
+        newArgs.Add(synthetic);
+        return clause with { Args = newArgs };
+    }
+
+    // ---------------------------------------------------------------- bash -c detection
+
+    /// <summary>
+    /// Detect whether <paramref name="segment"/> is a <c>bash -c "..."</c>
+    /// or <c>sh -c "..."</c> wrapper. On match, <paramref name="innerCommand"/>
+    /// receives the unquoted inner command string (suitable for recursive
+    /// parsing) and the method returns true.
+    /// </summary>
+    /// <remarks>
+    /// We scan the segment's tokens directly (rather than running through
+    /// the full clause parser first) so the wrapper is consumed cleanly —
+    /// the outer clause never appears in <c>ParsedCommand.Clauses</c>. The
+    /// scan looks for: a Word verb of <c>bash</c> or <c>sh</c>, followed by
+    /// any combination of flag tokens, then a <c>-c</c> Word flag, then an
+    /// adjacent QuotedString token whose value becomes the inner command.
+    /// </remarks>
+    private static bool TryDetectBashCWrapper(Segment segment, string source, out string? innerCommand)
+    {
+        innerCommand = null;
+
+        if (segment.Tokens.Count < 3)
+        {
+            return false;
+        }
+
+        // First non-flag Word token must be `bash` or `sh`.
+        var t0 = segment.Tokens[0];
+        if (t0.Kind != BashTokenKind.Word)
+        {
+            return false;
+        }
+
+        if (!string.Equals(t0.Value, "bash", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(t0.Value, "sh", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Scan from index 1 for `-c` followed immediately by a QuotedString.
+        for (var i = 1; i < segment.Tokens.Count - 1; i++)
+        {
+            var t = segment.Tokens[i];
+            if (t.Kind != BashTokenKind.Word)
+            {
+                return false;
+            }
+
+            if (string.Equals(t.Value, "-c", StringComparison.Ordinal))
+            {
+                var next = segment.Tokens[i + 1];
+                if (next.Kind == BashTokenKind.QuotedString)
+                {
+                    innerCommand = next.Value;
+                    return true;
+                }
+
+                // `-c` not followed by a quoted string → treat as a regular
+                // bash clause. (Caller falls through to the normal path.)
+                return false;
+            }
+
+            if (!IsFlagWord(t))
+            {
+                // First non-flag positional before reaching `-c` → not a
+                // bash-c wrapper. Treat as `bash script.sh ...` etc.
+                return false;
+            }
+        }
+
+        return false;
     }
 
     // ---------------------------------------------------------------- token filtering
@@ -196,6 +557,23 @@ internal static class BashCommandParser
         public List<BashToken> Tokens { get; init; } = new();
 
         public bool FromSubshell { get; init; }
+
+        /// <summary>
+        /// Paren-nesting depth of this segment. 0 = top-level; 1 = direct
+        /// child of one subshell; etc. PR 5 uses transitions in this value
+        /// across consecutive segments to push/pop the cd-attribution stack.
+        /// </summary>
+        public int SubshellDepth { get; init; }
+
+        /// <summary>
+        /// Stack of subshell IDs from outermost to innermost. ID 0 is the
+        /// top-level command; each subsequent <c>(</c> open assigns a fresh
+        /// monotonically-increasing ID. PR 5 uses divergence in this stack
+        /// across consecutive segments to detect exit-then-re-enter
+        /// boundaries (e.g. <c>(a) &amp;&amp; (b)</c> where both segments
+        /// have SubshellDepth=1 but live in different subshells).
+        /// </summary>
+        public IReadOnlyList<int> SubshellStack { get; init; } = Array.Empty<int>();
     }
 
     private static List<Segment> SplitIntoSegments(
@@ -204,10 +582,17 @@ internal static class BashCommandParser
         out string? error)
     {
         var segments = new List<Segment>();
-        var current = new Segment { PrecedingOperator = CompoundOperator.None };
+        var subshellStack = new List<int> { 0 }; // ID 0 is the top-level command.
+        var nextSubshellId = 1;
+
+        var current = new Segment
+        {
+            PrecedingOperator = CompoundOperator.None,
+            SubshellDepth = 0,
+            SubshellStack = subshellStack.ToArray(),
+        };
 
         var depth = 0;
-        var subshellDepthStack = new Stack<int>();
 
         for (var i = 0; i < tokens.Count; i++)
         {
@@ -222,15 +607,19 @@ internal static class BashCommandParser
                     if (current.Tokens.Count > 0)
                     {
                         segments.Add(current);
-                        current = new Segment { PrecedingOperator = CompoundOperator.Sequence, FromSubshell = subshellDepthStack.Count > 0 };
-                    }
-                    else
-                    {
-                        current = new Segment { PrecedingOperator = current.PrecedingOperator, FromSubshell = true };
                     }
 
-                    subshellDepthStack.Push(depth);
                     depth++;
+                    subshellStack.Add(nextSubshellId++);
+                    current = new Segment
+                    {
+                        PrecedingOperator = current.Tokens.Count > 0
+                            ? CompoundOperator.Sequence
+                            : current.PrecedingOperator,
+                        FromSubshell = true,
+                        SubshellDepth = depth,
+                        SubshellStack = subshellStack.ToArray(),
+                    };
                     continue;
                 }
 
@@ -243,10 +632,7 @@ internal static class BashCommandParser
                     }
 
                     depth--;
-                    if (subshellDepthStack.Count > 0)
-                    {
-                        subshellDepthStack.Pop();
-                    }
+                    subshellStack.RemoveAt(subshellStack.Count - 1);
 
                     if (current.Tokens.Count > 0)
                     {
@@ -256,7 +642,9 @@ internal static class BashCommandParser
                     current = new Segment
                     {
                         PrecedingOperator = CompoundOperator.None,
-                        FromSubshell = subshellDepthStack.Count > 0,
+                        FromSubshell = depth > 0,
+                        SubshellDepth = depth,
+                        SubshellStack = subshellStack.ToArray(),
                     };
                     continue;
                 }
@@ -277,7 +665,9 @@ internal static class BashCommandParser
                     current = new Segment
                     {
                         PrecedingOperator = MapOperator(op),
-                        FromSubshell = subshellDepthStack.Count > 0,
+                        FromSubshell = depth > 0,
+                        SubshellDepth = depth,
+                        SubshellStack = subshellStack.ToArray(),
                     };
                     continue;
                 }
@@ -335,7 +725,12 @@ internal static class BashCommandParser
         public static ClauseResult Fail(string reason) => new(Array.Empty<Clause>(), reason);
     }
 
-    private static ClauseResult ParseClauseSegment(Segment segment, string source, BashParserOptions options)
+    private static ClauseResult ParseClauseSegment(
+        Segment segment, string source, BashParserOptions options)
+        => ParseClauseSegment(segment, source, options, workingDirectoryUnknown: false);
+
+    private static ClauseResult ParseClauseSegment(
+        Segment segment, string source, BashParserOptions options, bool workingDirectoryUnknown)
     {
         if (segment.Tokens.Count == 0)
         {
@@ -432,6 +827,7 @@ internal static class BashCommandParser
                 options,
                 verb: new VerbChain(),
                 consumedFlagValueIndices: consumedFlagValueIndices,
+                workingDirectoryUnknown: workingDirectoryUnknown,
                 out var emptyArgs,
                 out var emptyRedirects,
                 out var redirectError);
@@ -491,6 +887,7 @@ internal static class BashCommandParser
             consumedFlagValueIndices: consumedFlagValueIndices,
             skipIndices: verbPositions,
             verbKeyForFlagValuePaths: verbTokens[0],
+            workingDirectoryUnknown: workingDirectoryUnknown,
             out var args,
             out var redirects,
             out var argError);
@@ -554,6 +951,7 @@ internal static class BashCommandParser
         BashParserOptions options,
         VerbChain verb,
         HashSet<int> consumedFlagValueIndices,
+        bool workingDirectoryUnknown,
         out IReadOnlyList<Arg> args,
         out IReadOnlyList<Redirect> redirects,
         out string? error)
@@ -567,6 +965,7 @@ internal static class BashCommandParser
             consumedFlagValueIndices,
             skipIndices: null,
             verbKeyForFlagValuePaths: verb.Tokens is null || verb.Tokens.Count == 0 ? null : verb.Tokens[0],
+            workingDirectoryUnknown: workingDirectoryUnknown,
             out args,
             out redirects,
             out error);
@@ -581,6 +980,7 @@ internal static class BashCommandParser
         HashSet<int> consumedFlagValueIndices,
         HashSet<int>? skipIndices,
         string? verbKeyForFlagValuePaths,
+        bool workingDirectoryUnknown,
         out IReadOnlyList<Arg> args,
         out IReadOnlyList<Redirect> redirects,
         out string? error)
@@ -628,7 +1028,7 @@ internal static class BashCommandParser
                         return;
                     }
 
-                    BuildRedirect(dir, target, source, options, redirectList);
+                    BuildRedirect(dir, target, source, options, redirectList, workingDirectoryUnknown);
                     i += 2;
                     continue;
                 }
@@ -695,7 +1095,7 @@ internal static class BashCommandParser
                         // so we don't apply LooksLikePath here).
                         var valueIsPath = verbKeyForFlagValuePaths is not null
                             && BashPerVerbRules.ValueOfFlagIsPath(verbKeyForFlagValuePaths, flagPart);
-                        var (vKind, vResolved, vIsPath) = BashResolver.Resolve(valuePart, valueIsPath, options);
+                        var (vKind, vResolved, vIsPath) = BashResolver.Resolve(valuePart, valueIsPath, options, workingDirectoryUnknown);
                         argList.Add(new Arg
                         {
                             Raw = valuePart,
@@ -757,7 +1157,7 @@ internal static class BashCommandParser
                         positionalIndex++;
                     }
 
-                    var (kind, resolved, isPath) = BashResolver.Resolve(t.Value, treatAsPath, options);
+                    var (kind, resolved, isPath) = BashResolver.Resolve(t.Value, treatAsPath, options, workingDirectoryUnknown);
                     argList.Add(new Arg
                     {
                         Raw = sourceRaw,
@@ -790,7 +1190,7 @@ internal static class BashCommandParser
                         positionalIndex++;
                     }
 
-                    var (kind, resolved, isPath) = BashResolver.Resolve(t.Value, treatAsPath, options);
+                    var (kind, resolved, isPath) = BashResolver.Resolve(t.Value, treatAsPath, options, workingDirectoryUnknown);
                     argList.Add(new Arg
                     {
                         Raw = sourceRaw,
@@ -839,7 +1239,8 @@ internal static class BashCommandParser
         BashToken target,
         string source,
         BashParserOptions options,
-        List<Redirect> redirectList)
+        List<Redirect> redirectList,
+        bool workingDirectoryUnknown)
     {
         if (target.Kind == BashTokenKind.OpaqueSubstitution)
         {
@@ -860,7 +1261,7 @@ internal static class BashCommandParser
         // locked interpretation #3: a glob target stays IsPath=true with
         // Kind=Glob; an env-var target becomes DynamicSkip; a literal
         // resolves against WorkingDirectory.
-        var (kind, resolved, _) = BashResolver.Resolve(target.Value, treatAsPath: true, options);
+        var (kind, resolved, _) = BashResolver.Resolve(target.Value, treatAsPath: true, options, workingDirectoryUnknown);
 
         bool isDynamic;
         string redirectTarget;

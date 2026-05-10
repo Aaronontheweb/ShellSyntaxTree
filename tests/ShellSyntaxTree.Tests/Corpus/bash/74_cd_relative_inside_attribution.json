@@ -1,0 +1,31 @@
+{
+  "name": "cd-attribution: cd /a && cd sub (relative cd resolves against attributed cwd)",
+  "input": "cd /a && cd sub",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "sub", "kind": "Literal", "isPath": true, "resolved": "/a/sub" },
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Relative cd target resolves against the active attribution; PR 5 swaps in WorkingDirectory=/a for the second cd."
+}

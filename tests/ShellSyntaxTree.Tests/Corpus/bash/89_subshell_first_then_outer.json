@@ -1,0 +1,34 @@
+{
+  "name": "Subshell at start with two outer clauses: (a) && b && c",
+  "input": "(a) && b && c",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["a"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": true,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["b"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["c"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Outer compound clauses after subshell exit are IsSubshell=false."
+}

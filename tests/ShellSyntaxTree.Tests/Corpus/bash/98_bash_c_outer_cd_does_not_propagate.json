@@ -1,0 +1,28 @@
+{
+  "name": "bash -c does not inherit outer cd: cd /outer && bash -c \"ls\"",
+  "input": "cd /outer && bash -c \"ls\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/outer", "kind": "Literal", "isPath": true, "resolved": "/outer" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["ls"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": true
+      }
+    ]
+  },
+  "notes": "v0.1 decision: outer cd attribution does NOT leak into bash -c inner clauses (fresh shell semantics)."
+}

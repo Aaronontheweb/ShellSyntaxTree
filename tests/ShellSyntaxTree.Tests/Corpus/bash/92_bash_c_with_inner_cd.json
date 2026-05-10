@@ -1,0 +1,30 @@
+{
+  "name": "bash -c with inner cd attribution: bash -c \"cd /a && cmd\"",
+  "input": "bash -c \"cd /a && cmd\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": true
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd"],
+        "args": [
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": true
+      }
+    ]
+  },
+  "notes": "SPEC §10: bash -c body parses recursively; inner cd attribution works inside the wrapped context."
+}

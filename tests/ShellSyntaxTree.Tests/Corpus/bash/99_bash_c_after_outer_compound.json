@@ -1,0 +1,26 @@
+{
+  "name": "bash -c surfaces operator from outer: a && bash -c \"b\"",
+  "input": "a && bash -c \"b\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["a"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["b"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": true
+      }
+    ]
+  },
+  "notes": "Inner clause inherits the outer segment's operator (AndIf) since the bash -c wrapper is consumed."
+}

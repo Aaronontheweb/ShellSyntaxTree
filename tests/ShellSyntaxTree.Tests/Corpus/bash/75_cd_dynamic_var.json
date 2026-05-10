@@ -1,6 +1,6 @@
 {
-  "name": "DynamicSkip: cd $REPO && cmd",
-  "input": "cd $REPO && cmd",
+  "name": "cd-attribution: cd $REPO && rm -rf node_modules (dynamic)",
+  "input": "cd $REPO && rm -rf node_modules",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -16,8 +16,10 @@
       },
       {
         "operator": "AndIf",
-        "verb": ["cmd"],
+        "verb": ["rm"],
         "args": [
+          { "raw": "-rf", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "node_modules", "kind": "DynamicSkip", "isPath": false },
           { "raw": "<dynamic-cwd>", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
         ],
         "redirects": [],
@@ -26,5 +28,5 @@
       }
     ]
   },
-  "notes": "Locked interpretation #6: cd target is an unresolved env var, so subsequent clauses get a synthetic DynamicSkip attribution arg (cwd statically unknown)."
+  "notes": "Locked interpretation #6: cd target is dynamic → node_modules can't safely resolve (DynamicSkip), and the synthetic attribution arg signals 'cwd unknown'."
 }

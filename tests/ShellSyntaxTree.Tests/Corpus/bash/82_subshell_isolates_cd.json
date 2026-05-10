@@ -1,0 +1,51 @@
+{
+  "name": "Subshell isolation: cd /a && (cd /b && cmd1) && cmd2",
+  "input": "cd /a && (cd /b && cmd1) && cmd2",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/b", "kind": "Literal", "isPath": true, "resolved": "/b" },
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": true,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd1"],
+        "args": [
+          { "raw": "/b", "kind": "Literal", "isPath": true, "resolved": "/b", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": true,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd2"],
+        "args": [
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §10 example: subshell's cd /b doesn't leak; cmd2 inherits /a from the outer compound."
+}

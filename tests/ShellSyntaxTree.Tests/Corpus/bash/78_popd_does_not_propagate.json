@@ -1,0 +1,26 @@
+{
+  "name": "cd-attribution: popd && cmd (popd does not propagate)",
+  "input": "popd && cmd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["popd"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Locked interpretation #5: popd parses but doesn't propagate. cmd has no attribution arg."
+}

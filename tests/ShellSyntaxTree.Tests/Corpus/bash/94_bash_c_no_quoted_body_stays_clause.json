@@ -1,0 +1,20 @@
+{
+  "name": "bash -c missing body: bash script.sh (no -c, not a wrapper)",
+  "input": "bash script.sh",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["bash"],
+        "args": [
+          { "raw": "script.sh", "kind": "Literal", "isPath": true, "resolved": "/work/script.sh" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "`bash script.sh` is not a wrapper invocation; it parses as a normal bash clause running a script."
+}

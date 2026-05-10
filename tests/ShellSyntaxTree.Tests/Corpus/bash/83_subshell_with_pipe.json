@@ -1,0 +1,26 @@
+{
+  "name": "Subshell with pipe: (a | b)",
+  "input": "(a | b)",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["a"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": true,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Pipe",
+        "verb": ["b"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": true,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Pipe inside subshell — both clauses carry IsSubshell=true."
+}

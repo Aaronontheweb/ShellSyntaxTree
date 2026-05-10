@@ -1,0 +1,51 @@
+{
+  "name": "cd-attribution: cd /a && cmd1 && cd /b && cmd2 (cd replaces)",
+  "input": "cd /a && cmd1 && cd /b && cmd2",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd1"],
+        "args": [
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/b", "kind": "Literal", "isPath": true, "resolved": "/b" },
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd2"],
+        "args": [
+          { "raw": "/b", "kind": "Literal", "isPath": true, "resolved": "/b", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §9 rule 3: second cd replaces attribution; cd /b sees /a (rule 2) but cmd2 sees /b."
+}

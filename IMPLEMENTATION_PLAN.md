@@ -114,20 +114,26 @@ bulldoze priorities.
 - [x] Flag-value path classification table (`git -C` is path; `curl -d`
       is body data; `docker -v` is single literal IsPath=false per #8)
 
-### 8. cd-in-compound propagation (SPEC §9)
+### 8. cd-in-compound propagation (SPEC §9) — PR 5, complete
 
-- [ ] First-clause `cd` sets attributed cwd for the compound
-- [ ] Subsequent clauses receive synthetic `Arg` with
-      `IsCwdAttribution=true`
-- [ ] Subsequent `cd` in the same compound replaces attribution
-- [ ] Subshell boundaries reset attribution
+- [x] First-clause `cd`/`chdir` sets attributed cwd; only those two verbs
+      propagate (interp #5)
+- [x] Subsequent clauses receive synthetic `Arg` with
+      `IsCwdAttribution=true`; `Kind=Literal, IsPath=true` when cd
+      target resolved, `Kind=DynamicSkip, IsPath=false` when dynamic
+      (interp #6)
+- [x] Subsequent `cd` in the same compound replaces attribution
+- [x] Subshell boundaries isolate attribution via push/pop stack
 
-### 9. Subshell + bash -c surfacing (SPEC §10)
+### 9. Subshell + bash -c surfacing (SPEC §10) — PR 5, complete
 
-- [ ] Flatten subshell clauses into parent's `Clauses` with
-      `IsSubshell=true`
-- [ ] Surface `bash -c` inner clauses inline with `IsBashCWrapped=true`
-- [ ] Recursion-depth cap
+- [x] Flatten subshell clauses into parent's `Clauses` with
+      `IsSubshell=true`; sibling subshells handled via SubshellStack IDs
+- [x] Surface `bash -c "..."` / `sh -c "..."` inner clauses inline with
+      `IsBashCWrapped=true`; outer cd attribution doesn't leak into
+      inner shell (v0.1 decision)
+- [x] Recursion depth cap at 5 → outer
+      `ParsedCommand.IsUnparseable=true` (interp #4)
 
 ### 10. Hand-authored corpus (SPEC §13 — minimum 105 entries)
 

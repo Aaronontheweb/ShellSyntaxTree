@@ -18,7 +18,8 @@
         "operator": "AndIf",
         "verb": ["rm"],
         "args": [
-          { "raw": "temp.log", "kind": "Literal", "isPath": true, "resolved": "/work/temp.log" }
+          { "raw": "temp.log", "kind": "Literal", "isPath": true, "resolved": "/tmp/temp.log" },
+          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp", "isCwdAttribution": true }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -26,5 +27,5 @@
       }
     ]
   },
-  "notes": "PR 4: temp.log is a relative path arg for rm (FileVerb) resolving against the test cwd /work. PR 5 will swap that to /tmp via cd-attribution."
+  "notes": "PR 5: temp.log resolves against the attributed cwd /tmp (not the test cwd /work). Synthetic attribution arg follows in source-order at end."
 }

@@ -161,23 +161,61 @@ the SPEC.md sections that get updated alongside the implementation.
 
 ## 5. PR 5 — cd attribution + subshells + bash -c (interpretations #4, #5, #6)
 
-- [ ] 5.1 `Internal/Bash/Parsing/CdAttributionContext.cs` (parser-internal
-      mutable; output AST stays immutable)
-- [ ] 5.2 Only `cd`/`chdir` propagate (interpretation #5); pushd/popd
-      parse but don't propagate
-- [ ] 5.3 Synthetic `Arg{ IsCwdAttribution=true, … }` appended to
-      subsequent clauses; `Kind=DynamicSkip` when cd target is dynamic
-      (interpretation #6)
-- [ ] 5.4 Subshell `(...)` parsing with attribution stack push/pop
-- [ ] 5.5 `bash -c "..."` / `sh -c "..."` recursion (cap at 5)
-- [ ] 5.6 Recursion overflow → outer `ParsedCommand.IsUnparseable=true`
-      (interpretation #4)
-- [ ] 5.7 Update `SPEC.md` §9 (clarify which CwdVerbs propagate; add
-      dynamic-cd attribution subsection); §10 (replace "mark the deepest
-      clause" wording with "set ParsedCommand.IsUnparseable=true")
-- [ ] 5.8 File GitHub issue: "Model pushd/popd directory stack semantics"
-- [ ] 5.9 Open OpenSpec change `cd-attribution-clarifications` for the
-      §9/§10 deltas
+- [x] 5.1 `Internal/Bash/Parsing/CdAttributionContext.cs` — parser-internal
+      mutable; SubshellStack of monotonic IDs (handles sibling subshells
+      cleanly); SetLiteralAttribution / SetDynamicAttribution; HasAttribution
+- [x] 5.2 Only `cd`/`chdir` propagate (interpretation #5); pushd/popd
+      parse as CwdVerbs but don't propagate. Test
+      `Pushd_does_not_propagate_attribution` pins this.
+- [x] 5.3 Synthetic `Arg{ IsCwdAttribution=true, … }` appended to
+      subsequent clauses. `Kind=Literal, IsPath=true, Resolved=<cwd>`
+      when cd target resolved; `Kind=DynamicSkip, IsPath=false,
+      Resolved=null, Raw="<dynamic-cwd>"` when cd target was DynamicSkip
+      per interpretation #6.
+- [x] 5.4 Subshell `(...)` parsing with attribution stack push/pop.
+      `cd /a && (cd /b && cmd1) && cmd2` — cmd1 sees /b attribution;
+      cmd2 sees /a (subshell's /b doesn't leak out). `IsSubshell=true`
+      set on every clause inside a subshell.
+- [x] 5.5 `bash -c "..."` / `sh -c "..."` recursion replaces PR 3's
+      single-clause framework. Outer `bash -c` consumed; inner clauses
+      surfaced inline with `IsBashCWrapped=true`. Outer cd attribution
+      does NOT leak into inner shell (v0.1 decision).
+- [x] 5.6 Recursion depth cap at 5 → outer
+      `ParsedCommand.IsUnparseable=true` with reason `"bash -c recursion
+      depth exceeded (>5)"` per interpretation #4.
+- [x] 5.7 SPEC §9 updated (rule 3 explicit on which verbs propagate;
+      dynamic-cd attribution subsection added per interp #6); §10
+      updated (subshell flattening rephrased; bash -c recursion-limit
+      replaced with "set ParsedCommand.IsUnparseable" per interp #4).
+- [x] 5.8 BashResolver internal overload `Resolve(raw, treatAsPath,
+      options, workingDirectoryUnknown)` lets the propagator force
+      DynamicSkip on relative-path args under dynamic-cd (interp #6)
+      without polluting the public `BashParserOptions` surface.
+- [x] 5.9 30 new corpus entries (71-100): 10 cd-in-compound + 10
+      subshell + 10 bash -c. 5 PR 3-4 corpus entries refreshed
+      (25, 28, 34, 35, 52).
+- [x] 5.10 8 new parser tests covering attribution propagation, subshell
+       isolation, sequential cd, pushd non-propagation, dynamic cd,
+       sibling subshells, bash -c depth-2 success, depth-6 overflow.
+- [x] 5.11 **337/337 tests passing** (was 296 at PR 4 baseline). Public
+       API surface unchanged.
+- [ ] 5.12 File GitHub issue: "Model pushd/popd directory stack semantics"
+       (interp #5 option-C upgrade)
+
+### PR 5 follow-ups (tracked for PR 6)
+
+- Possible SPEC clarification: pin the sentinel `Raw` value for
+  dynamic-cd synthetic attribution args (current implementation uses
+  `"<dynamic-cwd>"` but SPEC is silent).
+- Outer cd attribution into bash -c inner clauses (v0.1: doesn't
+  propagate; v0.1.x or v0.2 may revisit).
+- `cd -` (jump-to-previous-dir): currently treated as "no attribution
+  change" because `-` is detected as a flag (no non-flag positional).
+  v0.1.x may want explicit handling.
+- Existing PR 3 corpus entries 21-24, 26-27, 29-33 (the compound
+  entries that had no `cd` prefix) likely don't need updates; but PR 6
+  should audit all 100 corpus entries for AST drift now that PRs 1-5
+  have all landed.
 
 ## 6. PR 6 — Corpus completeness + PII audit (interpretation #7)
 
