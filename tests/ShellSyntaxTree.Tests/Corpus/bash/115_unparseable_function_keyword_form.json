@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable: function keyword form (alternate to name() {})",
+  "input": "function name { echo hi; }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "'function'"
+  },
+  "notes": "SPEC §11: function definitions are non-goals. The `function name { … }` form is detected by the function keyword sitting in ControlFlowKeywords — distinct from corpus 47's `name() { … }` form which fires the function-definition anomaly via adjacent ()."
+}

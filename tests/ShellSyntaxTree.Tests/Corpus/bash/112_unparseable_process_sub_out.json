@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable: process substitution >(cmd)",
+  "input": "tee >(cat)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "process substitution"
+  },
+  "notes": "SPEC §11: process substitution >(cmd) is a non-goal in v0.1. Same anomaly path as <(cmd) — the parser detects adjacent < or > + ( and surfaces unparseable."
+}

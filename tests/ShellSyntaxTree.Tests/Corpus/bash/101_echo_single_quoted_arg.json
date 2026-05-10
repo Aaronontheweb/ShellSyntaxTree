@@ -1,0 +1,20 @@
+{
+  "name": "Quote: echo 'hello world' (single-quoted literal)",
+  "input": "echo 'hello world'",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "'hello world'", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Single-quoted arg: SPEC §5 preserves bytes literally; the lexer's QuotedString Value is the inner text but Raw is the source slice (with quotes). echo isn't a FileVerb; LooksLikePath('hello world') is false → Literal, IsPath=false, Resolved=null."
+}

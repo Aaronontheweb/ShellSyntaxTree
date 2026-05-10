@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="CorpusRunnerTests.cs" company="Aaron Stannard">
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
@@ -16,9 +16,9 @@ namespace ShellSyntaxTree.Tests.Corpus;
 /// <summary>
 /// Drives the JSON corpus under <c>tests/ShellSyntaxTree.Tests/Corpus/bash/</c>.
 /// Each entry pairs an <c>input</c> string with an <c>expected</c>
-/// <see cref="ParsedCommand"/> shape; the runner parses the input and
-/// compares the result field-by-field. PR 3 ships a basic comparison
-/// helper; PR 6 will polish to <c>AstAssert.Equal</c> with rich diffs.
+/// <see cref="ParsedCommand"/> shape; <see cref="AstAssert.Equal"/> drives
+/// the field-by-field comparison and emits diff-friendly failure messages
+/// pointing at the first differing path.
 /// </summary>
 public class CorpusRunnerTests
 {
@@ -41,7 +41,7 @@ public class CorpusRunnerTests
         });
         var actual = parser.Parse(entry.Input);
 
-        AssertParsedCommandEqual(entry.Expected!, actual, fileName);
+        AstAssert.Equal(entry.Expected!, actual, fileName);
     }
 
     public static IEnumerable<object[]> CorpusEntries()
@@ -86,146 +86,9 @@ public class CorpusRunnerTests
         AllowTrailingCommas = true,
         Converters = { new JsonStringEnumConverter() },
     };
-
-    // -------- structural assertion (rough; PR 6 polishes) --------
-
-    private static void AssertParsedCommandEqual(
-        ExpectedParsedCommand expected, ParsedCommand actual, string fileName)
-    {
-        var diffPrefix = $"[{fileName}] ";
-
-        Assert.True(
-            expected.IsUnparseable == actual.IsUnparseable,
-            diffPrefix + $"IsUnparseable mismatch. expected={expected.IsUnparseable}, actual={actual.IsUnparseable}; reason={actual.UnparseableReason}");
-
-        if (expected.IsUnparseable)
-        {
-            // PR 3: don't pin the exact reason text — it's an implementation
-            // detail. The corpus author can include `unparseableReasonContains`
-            // for a substring contract.
-            if (!string.IsNullOrEmpty(expected.UnparseableReasonContains))
-            {
-                Assert.True(
-                    actual.UnparseableReason is not null
-                    && actual.UnparseableReason.Contains(expected.UnparseableReasonContains, StringComparison.Ordinal),
-                    diffPrefix + $"UnparseableReason should contain '{expected.UnparseableReasonContains}', got: '{actual.UnparseableReason}'");
-            }
-
-            return;
-        }
-
-        var expectedClauses = expected.Clauses ?? new List<ExpectedClause>();
-        Assert.True(
-            expectedClauses.Count == actual.Clauses.Count,
-            diffPrefix + $"Clause count mismatch. expected={expectedClauses.Count}, actual={actual.Clauses.Count}\n"
-            + DumpActual(actual));
-
-        for (var i = 0; i < expectedClauses.Count; i++)
-        {
-            AssertClauseEqual(expectedClauses[i], actual.Clauses[i], diffPrefix + $"clause[{i}]: ");
-        }
-    }
-
-    private static void AssertClauseEqual(ExpectedClause expected, Clause actual, string diffPrefix)
-    {
-        Assert.True(
-            expected.Operator == actual.Operator,
-            diffPrefix + $"Operator mismatch. expected={expected.Operator}, actual={actual.Operator}");
-
-        var expectedVerb = expected.Verb ?? new List<string>();
-        Assert.True(
-            expectedVerb.SequenceEqual(actual.Verb.Tokens),
-            diffPrefix + $"Verb mismatch. expected=[{string.Join(",", expectedVerb)}], actual=[{string.Join(",", actual.Verb.Tokens)}]");
-
-        var expectedArgs = expected.Args ?? new List<ExpectedArg>();
-        Assert.True(
-            expectedArgs.Count == actual.Args.Count,
-            diffPrefix + $"Args count mismatch. expected={expectedArgs.Count}, actual={actual.Args.Count}\n"
-            + " actual args: " + string.Join(", ", actual.Args.Select(a => $"({a.Raw}, kind={a.Kind})")));
-
-        for (var i = 0; i < expectedArgs.Count; i++)
-        {
-            AssertArgEqual(expectedArgs[i], actual.Args[i], diffPrefix + $"arg[{i}]: ");
-        }
-
-        var expectedRedirects = expected.Redirects ?? new List<ExpectedRedirect>();
-        Assert.True(
-            expectedRedirects.Count == actual.Redirects.Count,
-            diffPrefix + $"Redirects count mismatch. expected={expectedRedirects.Count}, actual={actual.Redirects.Count}");
-
-        for (var i = 0; i < expectedRedirects.Count; i++)
-        {
-            AssertRedirectEqual(expectedRedirects[i], actual.Redirects[i], diffPrefix + $"redirect[{i}]: ");
-        }
-
-        Assert.True(
-            expected.IsSubshell == actual.IsSubshell,
-            diffPrefix + $"IsSubshell mismatch. expected={expected.IsSubshell}, actual={actual.IsSubshell}");
-        Assert.True(
-            expected.IsBashCWrapped == actual.IsBashCWrapped,
-            diffPrefix + $"IsBashCWrapped mismatch. expected={expected.IsBashCWrapped}, actual={actual.IsBashCWrapped}");
-    }
-
-    private static void AssertArgEqual(ExpectedArg expected, Arg actual, string diffPrefix)
-    {
-        Assert.True(expected.Raw == actual.Raw, diffPrefix + $"Raw mismatch. expected='{expected.Raw}', actual='{actual.Raw}'");
-        Assert.True(expected.Kind == actual.Kind, diffPrefix + $"Kind mismatch. expected={expected.Kind}, actual={actual.Kind}");
-        Assert.True(expected.IsPath == actual.IsPath, diffPrefix + $"IsPath mismatch. expected={expected.IsPath}, actual={actual.IsPath}");
-        Assert.True(
-            expected.IsCwdAttribution == actual.IsCwdAttribution,
-            diffPrefix + $"IsCwdAttribution mismatch. expected={expected.IsCwdAttribution}, actual={actual.IsCwdAttribution}");
-
-        // isFlag is computed; assert when present so corpus can document it.
-        if (expected.IsFlag.HasValue)
-        {
-            Assert.True(expected.IsFlag.Value == actual.IsFlag, diffPrefix + $"IsFlag mismatch. expected={expected.IsFlag}, actual={actual.IsFlag}");
-        }
-
-        // Resolved comparison: opt-in via the corpus author. Use the
-        // sentinel "__NULL__" to assert that Resolved is null; omit the
-        // field entirely (default null) to skip the check.
-        if (expected.Resolved is not null)
-        {
-            if (expected.Resolved == "__NULL__")
-            {
-                Assert.True(actual.Resolved is null, diffPrefix + $"Resolved expected null, actual='{actual.Resolved}'");
-            }
-            else
-            {
-                Assert.True(expected.Resolved == actual.Resolved, diffPrefix + $"Resolved mismatch. expected='{expected.Resolved}', actual='{actual.Resolved}'");
-            }
-        }
-    }
-
-    private static void AssertRedirectEqual(ExpectedRedirect expected, Redirect actual, string diffPrefix)
-    {
-        Assert.True(expected.Direction == actual.Direction, diffPrefix + $"Direction mismatch. expected={expected.Direction}, actual={actual.Direction}");
-        Assert.True(expected.Target == actual.Target, diffPrefix + $"Target mismatch. expected='{expected.Target}', actual='{actual.Target}'");
-        if (expected.IsDynamicSkip.HasValue)
-        {
-            Assert.True(expected.IsDynamicSkip.Value == actual.IsDynamicSkip, diffPrefix + $"IsDynamicSkip mismatch. expected={expected.IsDynamicSkip}, actual={actual.IsDynamicSkip}");
-        }
-    }
-
-    private static string DumpActual(ParsedCommand actual) =>
-        JsonSerializer.Serialize(new
-        {
-            actual.Source,
-            actual.IsUnparseable,
-            actual.UnparseableReason,
-            Clauses = actual.Clauses.Select(c => new
-            {
-                Operator = c.Operator.ToString(),
-                Verb = c.Verb.Tokens,
-                Args = c.Args.Select(a => new { a.Raw, Kind = a.Kind.ToString(), a.IsPath, a.IsFlag }),
-                Redirects = c.Redirects.Select(r => new { Direction = r.Direction.ToString(), r.Target, r.IsDynamicSkip }),
-                c.IsSubshell,
-                c.IsBashCWrapped,
-            }),
-        }, new JsonSerializerOptions { WriteIndented = true });
 }
 
-// -------- corpus DTOs (JSON shape; PR 6 may move into a shared file) --------
+// -------- corpus DTOs (JSON shape) --------
 
 public sealed record CorpusEntry
 {
@@ -274,9 +137,9 @@ public sealed record ExpectedArg
 
     /// <summary>
     /// Expected <see cref="Arg.Resolved"/> value. Omit (leave null) to skip
-    /// the comparison; provide explicitly (including empty string) to pin
-    /// a literal value. The corpus author may use the special sentinel
-    /// <c>"__NULL__"</c> to assert that Resolved is null.
+    /// the comparison; provide explicitly to pin a literal value. The
+    /// corpus author may use the special sentinel <c>"__NULL__"</c> to
+    /// assert that Resolved is null.
     /// </summary>
     public string? Resolved { get; init; }
 

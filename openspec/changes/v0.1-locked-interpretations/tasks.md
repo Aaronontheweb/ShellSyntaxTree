@@ -219,16 +219,42 @@ the SPEC.md sections that get updated alongside the implementation.
 
 ## 6. PR 6 — Corpus completeness + PII audit (interpretation #7)
 
-- [ ] 6.1 Audit corpus categories from SPEC §13; fill to ≥105 entries
-- [ ] 6.2 `tests/.../Corpus/AstAssert.cs` — structural equality with
-      diffable failures
-- [ ] 6.3 `tests/.../Corpus/PiiAuditTests.cs` — `[Fact]` regex scan over
-      corpus JSON for SPEC §14 forbidden patterns
-- [ ] 6.4 Verify pr_validation runs both via `dotnet test`
-- [ ] 6.5 Confirm green on Linux + Windows (path separators)
-- [ ] 6.6 Update `SPEC.md` §13 (replace abbreviated path with canonical
-      `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json`)
-- [ ] 6.7 Open OpenSpec change `corpus-location` for the §13 delta
+- [x] 6.1 Audited corpus categories from SPEC §13; filled to **115
+      entries** (target was ≥105). Added 10 quote-handling (101-110)
+      and 5 more unparseable (111-115).
+- [x] 6.2 `tests/.../Corpus/AstAssert.cs` — polished structural-equality
+      helper with path-prefixed messages (e.g.
+      `clauses[1].args[2].kind: expected DynamicSkip, actual Literal`).
+      CorpusRunnerTests refactored to delegate.
+- [x] 6.3 `tests/.../Corpus/PiiAuditTests.cs` — `[Fact]` walks every
+      `bash/*.json`, applies SPEC §14 regex patterns; allowlists
+      generic placeholders; reports all hits in one failure.
+- [x] 6.4 PR validation runs corpus runner + PII audit via standard
+      `dotnet test` (no separate job).
+- [x] 6.5 Cross-platform: BashResolver (PR 4 fix) keeps forward-slash
+      paths regardless of host OS; corpus uses pinned
+      WorkingDirectory=/work, HomeDirectory=/home/test for stability.
+- [x] 6.6 SPEC §13 updated to canonical
+      `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json`; also fixed
+      stale refs in §14, §15, §17 acceptance criteria.
+- [x] 6.7 Light Path-C adoption: §13 delta lives in this bootstrap
+      change; no separate `corpus-location` change needed.
+- [x] 6.8 **353/353 tests passing**; clean build; PublicApiSnapshotTests
+       still 18/18 green; public API surface unchanged.
+
+### PR 6 follow-ups (tracked for v0.1.x or post-v0.1.0-alpha)
+
+- Single-quote `'literal $HOME'` resolver behavior: v0.1 substitutes
+  uniformly (corpus 104 pins). Bash semantics: doesn't substitute
+  inside single quotes. v0.1.x may carry quote-style through tokens.
+- LooksLikePath heuristic: trailing backslash in quoted literal
+  triggers IsPath=true (corpus 109 pins). v0.1.x may tighten heuristic.
+- Sentinel `Raw="<dynamic-cwd>"` for dynamic-cd attribution: pinned
+  by corpus 52 but SPEC §9 dynamic-cd subsection doesn't formalize
+  the value. v0.1.x can pin in spec text.
+- `case x in a) ;; esac` form: hits "unbalanced parens" diagnostic
+  before keyword check. Acceptable v0.1 behavior; v0.1.x may pin
+  diagnostic precedence in SPEC §11.
 
 ## 7. Verify
 

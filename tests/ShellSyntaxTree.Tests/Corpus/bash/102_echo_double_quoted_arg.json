@@ -1,0 +1,20 @@
+{
+  "name": "Quote: echo \"hello world\" (double-quoted literal)",
+  "input": "echo \"hello world\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "\"hello world\"", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Double-quoted arg: SPEC §5 preserves whitespace but processes \\\" \\\\ \\$ \\` escapes. Raw is the source slice including quotes; Value is the inner unescaped content. echo isn't a FileVerb; classifies as Literal/IsPath=false."
+}

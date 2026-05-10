@@ -1,0 +1,20 @@
+{
+  "name": "Quote: echo \"with \\\"escaped\\\" quotes\" (escaped double-quote inside double-quote)",
+  "input": "echo \"with \\\"escaped\\\" quotes\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "\"with \\\"escaped\\\" quotes\"", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §5 escape handling: inside double quotes, \\\" escapes a literal \". The lexer produces one QuotedString whose Value is `with \"escaped\" quotes` (without outer delimiters). Raw retains the source slice verbatim including all backslashes."
+}

@@ -1,0 +1,21 @@
+{
+  "name": "Quote: git commit -m \"fix bug\" (quoted flag value)",
+  "input": "git commit -m \"fix bug\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "commit"],
+        "args": [
+          { "raw": "-m", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "\"fix bug\"", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Verb chain captures both git+commit (arity=2). -m is a plain flag (not in git's FlagsWithValue table for value-as-path), so the quoted commit message stays Literal/IsPath=false."
+}
