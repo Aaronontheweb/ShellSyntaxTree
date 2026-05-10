@@ -15,4 +15,10 @@
     <File Path="IMPLEMENTATION_PLAN.md" />
     <File Path="SPEC.md" />
   </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/ShellSyntaxTree/ShellSyntaxTree.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ShellSyntaxTree.Tests/ShellSyntaxTree.Tests.csproj" />
+  </Folder>
 </Solution>

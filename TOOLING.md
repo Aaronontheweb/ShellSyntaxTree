@@ -118,6 +118,26 @@ Available via the `Agent` tool:
 | `/security-review` | Targeted security review — relevant for this library |
 | `/generate-image` | HCTI-backed image generation; used to mint the NuGet package icon |
 
+### OpenSpec authoring skills
+
+Light Path-C OpenSpec adoption: change proposals capture decision
+rationale; specs decompose to per-capability files in v0.2 work. Skills
+copied from `petabridge/sdkbin` and refreshed by `openspec init`.
+
+| Skill | When to use |
+|---|---|
+| `/opsx:propose` | Create a new change with proposal + design + tasks + specs deltas in one pass |
+| `/opsx:explore` | Think-partner mode for investigating a problem before drafting a change |
+| `/opsx:apply` | Implement the tasks of an active change |
+| `/opsx:archive` | Archive a completed change (move to `openspec/changes/archive/<date>-<name>/`) |
+| `openspec-new-change`, `openspec-continue-change`, `openspec-ff-change`, `openspec-verify-change`, `openspec-bulk-archive-change`, `openspec-sync-specs`, `openspec-onboard` | Granular flows for the same workflow; `propose`/`apply`/`archive` are usually enough |
+
+OpenSpec CLI (`openspec init`, `openspec list`, `openspec validate
+<change>`, `openspec archive <change>`) is installed at the user level;
+verify with `openspec --version`. Skill drift between this repo and
+upstream sdkbin: acceptable in v0.1; tracked as a NEXT-bucket task
+(periodic sync or marketplace publication).
+
 ## Image Generation (HCTI)
 
 Used to mint the package icon. Output goes to `assets/icon.png` (or similar)
