@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable: while-loop control flow",
+  "input": "while true; do echo hi; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "'while'"
+  },
+  "notes": "SPEC §11: while/do/done control-flow is not supported in v0.1. The leading while keyword fires the ControlFlowKeywords detector — same path PR 3's for-loop entry exercises (corpus 46) but for while."
+}

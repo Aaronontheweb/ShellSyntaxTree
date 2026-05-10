@@ -997,8 +997,9 @@ The corpus is the **acceptance contract** for the parser. Implementation is
 
 ### Location
 
-`tests/Corpus/bash/*.json` — one file per corpus entry. File name pattern:
-`NN_descriptive_slug.json` where NN is a zero-padded sequence number.
+`tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` — one file per corpus
+entry. File name pattern: `NN_descriptive_slug.json` where NN is a
+zero-padded sequence number.
 
 ### Format
 
@@ -1050,7 +1051,7 @@ real-world commands (see §14).
 
 ### Test runner
 
-A single xunit test method enumerates `tests/Corpus/bash/*.json`, parses
+A single xunit test method enumerates `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json`, parses
 each `input`, and asserts the result matches `expected` field-by-field.
 The runner emits a per-corpus-entry test name so failures point at the
 specific case.
@@ -1126,7 +1127,7 @@ Apply these transformations to every seeded entry **before** committing:
 Before any corpus PR merges, CI runs a regex check against the corpus
 files for residual PII patterns. The check fails the build if any
 sanitization-rule pattern appears in any committed corpus file. Implement
-as a small `dotnet test` that scans `tests/Corpus/bash/*.json` for the
+as a small `dotnet test` that scans `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` for the
 forbidden patterns.
 
 ---
@@ -1142,7 +1143,7 @@ Adapt for ShellSyntaxTree:
 
 - **Trigger NuGet publish on tag pattern `v*.*.*`** (e.g. `v0.1.0-alpha`).
 - **Test job** runs the corpus runner plus all unit tests.
-- **PII audit job** runs the sanitization-pattern scan over `tests/Corpus/`.
+- **PII audit job** runs the sanitization-pattern scan over `tests/ShellSyntaxTree.Tests/Corpus/`.
 
 ### Versioning
 
@@ -1212,10 +1213,10 @@ v0.1.0-alpha ships when **all** of the following hold:
 
 1. ✅ Public API matches §2 exactly. `dotnet pack` produces a
    ShellSyntaxTree.0.1.0-alpha.nupkg.
-2. ✅ Every corpus entry in `tests/Corpus/bash/*.json` parses to its
+2. ✅ Every corpus entry in `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` parses to its
    expected AST. `dotnet test` runs them all and passes.
 3. ✅ Corpus has at least 105 entries spanning the categories in §13.
-4. ✅ PII audit scan over `tests/Corpus/bash/*.json` finds zero hits.
+4. ✅ PII audit scan over `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` finds zero hits.
 5. ✅ `dotnet test` runs on PR via GitHub Actions and passes.
 6. ✅ Tagging `v0.1.0-alpha` triggers `publish_nuget.yml` and the package
    appears on nuget.org.

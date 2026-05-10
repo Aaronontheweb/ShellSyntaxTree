@@ -135,32 +135,39 @@ bulldoze priorities.
 - [x] Recursion depth cap at 5 → outer
       `ParsedCommand.IsUnparseable=true` (interp #4)
 
-### 10. Hand-authored corpus (SPEC §13 — minimum 105 entries)
+### 10. Hand-authored corpus (SPEC §13 — minimum 105 entries) — PR 6, complete
 
-- [ ] 10 simple-verb cases
-- [ ] 10 multi-token-verb cases
-- [ ] 15 compound cases
-- [ ] 10 cd-in-compound cases
-- [ ] 10 quote-handling cases
-- [ ] 10 redirect cases
-- [ ] 10 subshell cases
-- [ ] 10 `bash -c` cases
-- [ ] 10 dynamic-skip cases
-- [ ] 10 per-verb path-rule cases
-- [ ] 10 unparseable cases
+- [x] 10 simple-verb cases (01-10) — PR 3
+- [x] 10 multi-token-verb cases (11-20) — PR 3
+- [x] 15 compound cases (21-35) — PR 3
+- [x] 10 cd-in-compound cases (71-80) — PR 5
+- [x] 10 quote-handling cases (101-110) — PR 6
+- [x] 10 redirect cases (36-45) — PR 3
+- [x] 10 subshell cases (81-90) — PR 5
+- [x] 10 `bash -c` cases (91-100) — PR 5
+- [x] 10 dynamic-skip cases (51-60) — PR 4
+- [x] 10 per-verb path-rule cases (61-70) — PR 4
+- [x] 10 unparseable cases (46-50, 111-115) — PRs 3 + 6
+- [x] **115 total corpus entries** (target was ≥105)
 
-### 11. Corpus runner test
+### 11. Corpus runner test — PR 6, complete
 
-- [ ] Single `[Theory] [MemberData]` enumerating
-      `tests/.../Corpus/bash/*.json`
-- [ ] Per-entry test name so failures point at the specific case
-- [ ] Structural equality helper `AstAssert.Equal`
+- [x] Single `[Theory] [MemberData]` enumerating
+      `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` (skeleton in PR 3)
+- [x] Per-entry test name (file name) so failures point at the specific
+      case
+- [x] Polished structural-equality helper `AstAssert.Equal` with
+      diff-friendly messages (e.g.
+      `clauses[1].args[2].kind: expected DynamicSkip, actual Literal`)
 
-### 12. PII audit (SPEC §14)
+### 12. PII audit (SPEC §14) — PR 6, complete
 
-- [ ] Single `[Fact]` that scans `tests/.../Corpus/bash/*.json` for
-      SPEC §14 forbidden patterns
-- [ ] Wired into `pr_validation.yml` via `dotnet test` (no separate job)
+- [x] Single `[Fact]` that scans
+      `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` for SPEC §14
+      forbidden patterns; allowlists generic placeholders; reports all
+      hits in one failure
+- [x] Wired into `pr_validation.yml` via standard `dotnet test`
+      (no separate job)
 
 ### 13. Release v0.1.0-alpha
 

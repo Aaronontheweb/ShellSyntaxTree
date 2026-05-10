@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable: case control-flow keyword",
+  "input": "case x in y esac",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "'case'"
+  },
+  "notes": "SPEC §11: case/esac control-flow is not supported in v0.1. The case keyword as first verb fires BashVerbs.ControlFlowKeywords detection."
+}

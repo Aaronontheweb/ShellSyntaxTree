@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable: process substitution <(cmd)",
+  "input": "cat <(echo hi)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "process substitution"
+  },
+  "notes": "SPEC §11: process substitution <(cmd) is a non-goal in v0.1. The parser's anomaly detector flags this before clause-build and short-circuits to outer IsUnparseable."
+}

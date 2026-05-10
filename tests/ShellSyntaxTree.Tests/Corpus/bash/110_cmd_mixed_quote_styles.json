@@ -1,0 +1,22 @@
+{
+  "name": "Quote: cmd \"arg1\" 'arg2' arg3 (mixed quote styles)",
+  "input": "cmd \"arg1\" 'arg2' arg3",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [
+          { "raw": "\"arg1\"", "kind": "Literal", "isPath": false, "resolved": "__NULL__" },
+          { "raw": "'arg2'", "kind": "Literal", "isPath": false, "resolved": "__NULL__" },
+          { "raw": "arg3", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Mixed quotes round-trip cleanly. Three args, each Raw preserves its source-form delimiters (or lack thereof). cmd is unknown so arity=1, all three are positional args. None look like paths so all stay Literal/IsPath=false."
+}

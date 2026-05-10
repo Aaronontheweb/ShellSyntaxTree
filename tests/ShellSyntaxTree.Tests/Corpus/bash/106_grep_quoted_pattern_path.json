@@ -1,0 +1,21 @@
+{
+  "name": "Quote: grep \"pattern with spaces\" /tmp/log",
+  "input": "grep \"pattern with spaces\" /tmp/log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["grep"],
+        "args": [
+          { "raw": "\"pattern with spaces\"", "kind": "Literal", "isPath": false, "resolved": "__NULL__" },
+          { "raw": "/tmp/log", "kind": "Literal", "isPath": true, "resolved": "/tmp/log" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §7 grep rule: positional[0] is the pattern (IsPath=false even when quoted), positional[1]+ are paths. The quoted pattern's quotes stay in Raw."
+}

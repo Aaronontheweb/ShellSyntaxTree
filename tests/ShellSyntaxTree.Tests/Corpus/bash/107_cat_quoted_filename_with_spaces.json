@@ -1,0 +1,20 @@
+{
+  "name": "Quote: cat 'file with spaces.txt' (single-quoted path)",
+  "input": "cat 'file with spaces.txt'",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "'file with spaces.txt'", "kind": "Literal", "isPath": true, "resolved": "/work/file with spaces.txt" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "cat is a FileVerb (SPEC §6.3) so its positional[0] is a path. The single-quoted Value 'file with spaces.txt' resolves against WorkingDirectory=/work — embedded spaces are preserved through the join. PR 6: cross-platform-safe because the resolver uses bash-style forward-slash path semantics regardless of host OS."
+}

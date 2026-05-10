@@ -1,0 +1,20 @@
+{
+  "name": "Quote: echo \"$HOME\" (double-quoted with $HOME expansion)",
+  "input": "echo \"$HOME\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "\"$HOME\"", "kind": "Tilde", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §8 step 3: $HOME is the *only* env var the resolver substitutes. The quoted Value contains $HOME; after SubstituteHome the working buffer becomes /home/test; Kind=Tilde flags 'this came from a home-ish expansion'. Non-path slot so Resolved=null, IsPath=false."
+}

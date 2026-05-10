@@ -1,0 +1,20 @@
+{
+  "name": "Quote: echo 'literal $HOME' (single quotes — but resolver still substitutes $HOME)",
+  "input": "echo 'literal $HOME'",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "'literal $HOME'", "kind": "Tilde", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Single-quote lexer preservation (SPEC §5) keeps '$HOME' as literal bytes in the Value, but BashResolver runs uniformly on the Value and substitutes $HOME → Kind=Tilde. This diverges from real bash (which wouldn't expand inside single quotes). Documented v0.1 behavior; consumer gets Kind=Tilde, no IsPath signal."
+}
