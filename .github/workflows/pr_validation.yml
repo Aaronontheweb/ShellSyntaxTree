@@ -36,19 +36,19 @@ jobs:
       - name: "Restore .NET tools"
         run: dotnet tool restore
 
-      - name: "Update release notes"
+      - name: "Verify copyright headers"
         shell: pwsh
-        run: |
-          ./build.ps1
+        run: ./scripts/Add-FileHeaders.ps1 -Verify
+
+      - name: "dotnet restore"
+        run: dotnet restore
 
       - name: "dotnet build"
-        run: dotnet build -c Release
-
-      # .NET Framework tests can't run reliably on Linux, so we only do .NET 8
+        run: dotnet build -c Release --no-restore
 
       - name: "dotnet test"
         shell: bash
-        run: dotnet test -c Release 
+        run: dotnet test -c Release --no-build
 
       - name: "dotnet pack"
-        run: dotnet pack -c Release -o ./bin/nuget
+        run: dotnet pack -c Release --no-build -o ./bin/nuget

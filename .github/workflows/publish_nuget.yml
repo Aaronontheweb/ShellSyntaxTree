@@ -3,72 +3,69 @@ name: Publish NuGet
 on:
   push:
     tags:
-      - '*'
+      - 'v*.*.*'
+      - 'v*.*.*-*'
 
 permissions:
-   contents: write
+  contents: write
 
 jobs:
   publish-nuget:
-
     name: publish-nuget
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest]
+    runs-on: ubuntu-latest
 
     steps:
-    - name: "Checkout"
-      uses: actions/checkout@v6.0.2
-      with:
-        lfs: true
-        fetch-depth: 0
-        
-    - name: "Install .NET SDK"
-      uses: actions/setup-dotnet@v5.1.0
-      with:
-        global-json-file: "./global.json"
+      - name: "Checkout"
+        uses: actions/checkout@v6.0.2
+        with:
+          lfs: true
+          fetch-depth: 0
 
-    - name: "Restore .NET tools"
-      run: dotnet tool restore
+      - name: "Install .NET SDK"
+        uses: actions/setup-dotnet@v5.1.0
+        with:
+          global-json-file: "./global.json"
 
-    - name: "Update release notes"
-      shell: pwsh
-      run: |
-        ./build.ps1
+      - name: "Restore .NET tools"
+        run: dotnet tool restore
 
-    - name: Create Packages
-      run:  dotnet pack /p:PackageVersion=${{ github.ref_name }} -c Release -o ./output
+      - name: "Compute package version from tag"
+        shell: bash
+        run: |
+          # tag form is vX.Y.Z or vX.Y.Z-suffix
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+          echo "PACKAGE_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "Publishing package version: ${VERSION}"
 
-    - name: Push Packages
-      run: dotnet nuget push "output/*.nupkg" -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json
+      - name: "dotnet pack"
+        run: dotnet pack /p:PackageVersion=${{ env.PACKAGE_VERSION }} -c Release -o ./output
 
-    - name: "Extract latest release notes"
-      shell: pwsh
-      run: |
-        $content = Get-Content RELEASE_NOTES.md -Raw
-        # Match from the first #### heading to just before the second one
-        if ($content -match '(?s)(####.+?)(?=\n####|\z)') {
-          $Matches[1].Trim() | Set-Content RELEASE_NOTES_LATEST.md
-        } else {
-          $content | Set-Content RELEASE_NOTES_LATEST.md
-        }
+      - name: "dotnet nuget push"
+        run: dotnet nuget push "output/*.nupkg" -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json --skip-duplicate
 
-    - name: release
-      uses: actions/create-release@v1
-      id: create_release
-      with:
-        draft: false
-        prerelease: false
-        release_name: 'Akka.Hosting ${{ github.ref_name }}'
-        tag_name: ${{ github.ref }}
-        body_path: RELEASE_NOTES_LATEST.md
-      env:
-        GITHUB_TOKEN: ${{ github.token }}
+      - name: "Extract latest release notes"
+        shell: pwsh
+        run: |
+          if (-not (Test-Path RELEASE_NOTES.md)) {
+            "No release notes available." | Set-Content RELEASE_NOTES_LATEST.md
+            exit 0
+          }
+          $content = Get-Content RELEASE_NOTES.md -Raw
+          if ($content -match '(?s)(####.+?)(?=\n####|\z)') {
+            $Matches[1].Trim() | Set-Content RELEASE_NOTES_LATEST.md
+          } else {
+            $content | Set-Content RELEASE_NOTES_LATEST.md
+          }
 
-    - name: Upload Release Asset
-      uses: AButler/upload-release-assets@v3.0
-      with:
-          repo-token: ${{ github.token }}
-          release-tag: ${{ github.ref_name }}
-          files: 'output/*.nupkg'
+      - name: "Create GitHub release"
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "ShellSyntaxTree ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          body_path: RELEASE_NOTES_LATEST.md
+          files: output/*.nupkg
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
