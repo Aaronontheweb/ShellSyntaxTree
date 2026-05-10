@@ -1,0 +1,20 @@
+{
+  "name": "$HOME expansion: ls $HOME/Downloads",
+  "input": "ls $HOME/Downloads",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["ls"],
+        "args": [
+          { "raw": "$HOME/Downloads", "kind": "Tilde", "isPath": true, "resolved": "/home/test/Downloads" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "$HOME is the ONE env var that expands (SPEC §8 step 2). Kind=Tilde reflects the tilde-equivalent semantics."
+}

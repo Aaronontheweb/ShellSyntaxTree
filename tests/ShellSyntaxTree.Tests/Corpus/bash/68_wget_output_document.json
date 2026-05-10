@@ -1,0 +1,22 @@
+{
+  "name": "wget: -O /tmp/file https://example.com",
+  "input": "wget -O /tmp/file https://example.com",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["wget"],
+        "args": [
+          { "raw": "-O", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "/tmp/file", "kind": "Literal", "isPath": true, "resolved": "/tmp/file" },
+          { "raw": "https://example.com", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §7: wget -O is the saved file path; URL positional is IsPath=false."
+}

@@ -621,23 +621,35 @@ a normalized absolute path. Resolution order:
 
 4. **Glob detection.** Tokens containing `*`, `?`, or `[` are marked
    `ArgKind.Glob`. The resolver does **not** expand globs. The token
-   stays as-is in `Raw`; `Resolved` is null. Consumers that want the
-   glob's "covering directory" can use `Path.GetDirectoryName(Raw)` to
-   approximate.
+   stays as-is in `Raw`; `Resolved` is null.
+
+   **In a path-arg slot:** `IsPath = true`. Consumers can apply the
+   "covering directory" heuristic (`Path.GetDirectoryName(Raw)`) to
+   reason about the directory the glob resolves under (e.g.
+   `/tmp/*.bak` → `/tmp`).
+
+   **In a non-path slot:** `IsPath = false`.
+
+   Per locked interpretation #3, glob and DynamicSkip carry **distinct**
+   signals — globs preserve a useful covering-dir hint that DynamicSkip
+   tokens lack.
 
 5. **Relative path resolution.** Tokens not starting with `/` (or `\\` on
-   Windows) are joined to `BashParserOptions.WorkingDirectory`. If
-   `WorkingDirectory` is null, the token stays relative and `Resolved`
-   is null with `Kind = DynamicSkip`.
+   Windows, or a Windows drive letter `X:`) are joined to
+   `BashParserOptions.WorkingDirectory` (lazy fallback to
+   `Environment.CurrentDirectory` when null). On
+   `IOException` / path-format exceptions during resolution, fall through
+   to `Kind = DynamicSkip, IsPath = false, Resolved = null`.
 
-6. **Dynamic-skip predicates.** A token is `DynamicSkip` when:
-   - It contains an unresolved env var reference (other than `$HOME`).
-   - It contains glob metachars AND the resolver was asked for an
-     absolute resolution.
+6. **DynamicSkip predicates.** A token is `Kind = DynamicSkip,
+   IsPath = false, Resolved = null` when:
+   - It contains an unresolved env-var reference (other than `$HOME`)
+     in a slot the verb's rule classifies as a path.
    - Resolution throws an `IOException` or path-format exception.
 
-   `DynamicSkip` tokens have `Resolved = null`. Consumers must not use
-   `Raw` as a literal path.
+   Globs do NOT downgrade to DynamicSkip — they carry their own Kind so
+   consumers can still apply the covering-dir heuristic. Consumers must
+   not use `Raw` as a literal path for `DynamicSkip` tokens.
 
 ### Path-shape heuristic
 

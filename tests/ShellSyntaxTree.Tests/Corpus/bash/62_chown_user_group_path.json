@@ -1,0 +1,21 @@
+{
+  "name": "chown: user:group then path",
+  "input": "chown user:group /var/log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["chown"],
+        "args": [
+          { "raw": "user:group", "kind": "Literal", "isPath": false },
+          { "raw": "/var/log", "kind": "Literal", "isPath": true, "resolved": "/var/log" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §7: chown i=0 is user[:group], i>=1 are paths."
+}

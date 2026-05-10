@@ -9,12 +9,13 @@
         "verb": ["cat"],
         "args": [],
         "redirects": [
-          { "direction": "In", "target": "input.txt" },
-          { "direction": "Out", "target": "output.txt" }
+          { "direction": "In", "target": "/work/input.txt" },
+          { "direction": "Out", "target": "/work/output.txt" }
         ],
         "isSubshell": false,
         "isBashCWrapped": false
       }
     ]
-  }
+  },
+  "notes": "PR 4: redirect targets resolve against WorkingDirectory (/work in tests)."
 }

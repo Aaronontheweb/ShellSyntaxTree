@@ -1,0 +1,20 @@
+{
+  "name": "DynamicSkip: cmd ${PATH}/bin/foo",
+  "input": "cmd ${PATH}/bin/foo",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [
+          { "raw": "${PATH}/bin/foo", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Brace form ${PATH} is recognized the same as $PATH. `cmd` falls back to LooksLikePath which sees the / and treats as path-shaped → DynamicSkip."
+}

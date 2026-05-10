@@ -1,6 +1,6 @@
 {
-  "name": "Simple verb: cat /etc/hostname",
-  "input": "cat /etc/hostname",
+  "name": "DynamicSkip: cat $LOG_FILE",
+  "input": "cat $LOG_FILE",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -8,7 +8,7 @@
         "operator": "None",
         "verb": ["cat"],
         "args": [
-          { "raw": "/etc/hostname", "kind": "Literal", "isPath": true, "resolved": "/etc/hostname" }
+          { "raw": "$LOG_FILE", "kind": "DynamicSkip", "isPath": false }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -16,5 +16,5 @@
       }
     ]
   },
-  "notes": "PR 4: /etc/hostname is an absolute path arg for `cat` (FileVerb)."
+  "notes": "Bare env var in a path slot → DynamicSkip per locked interpretation #3."
 }

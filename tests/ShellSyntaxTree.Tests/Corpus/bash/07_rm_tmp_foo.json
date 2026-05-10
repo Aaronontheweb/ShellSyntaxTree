@@ -8,7 +8,7 @@
         "operator": "None",
         "verb": ["rm"],
         "args": [
-          { "raw": "/tmp/foo", "kind": "Literal", "isPath": false }
+          { "raw": "/tmp/foo", "kind": "Literal", "isPath": true, "resolved": "/tmp/foo" }
         ],
         "redirects": [],
         "isSubshell": false,

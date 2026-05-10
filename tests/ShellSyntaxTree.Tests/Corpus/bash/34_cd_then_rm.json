@@ -8,7 +8,7 @@
         "operator": "None",
         "verb": ["cd"],
         "args": [
-          { "raw": "/tmp", "kind": "Literal", "isPath": false }
+          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp" }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -18,7 +18,7 @@
         "operator": "AndIf",
         "verb": ["rm"],
         "args": [
-          { "raw": "temp.log", "kind": "Literal", "isPath": false }
+          { "raw": "temp.log", "kind": "Literal", "isPath": true, "resolved": "/work/temp.log" }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -26,5 +26,5 @@
       }
     ]
   },
-  "notes": "Glob handling lives in PR 4; uses literal filename here."
+  "notes": "PR 4: temp.log is a relative path arg for rm (FileVerb) resolving against the test cwd /work. PR 5 will swap that to /tmp via cd-attribution."
 }

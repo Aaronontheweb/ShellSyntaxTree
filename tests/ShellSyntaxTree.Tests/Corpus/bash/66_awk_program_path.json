@@ -1,0 +1,21 @@
+{
+  "name": "awk: program then path",
+  "input": "awk '{print $1}' input.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["awk"],
+        "args": [
+          { "raw": "'{print $1}'", "kind": "Literal", "isPath": false },
+          { "raw": "input.txt", "kind": "Literal", "isPath": true, "resolved": "/work/input.txt" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §7: awk i=0 is the program (single-quoted), i>=1 are paths."
+}

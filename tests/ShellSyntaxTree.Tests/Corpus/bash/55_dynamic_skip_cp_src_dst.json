@@ -1,0 +1,21 @@
+{
+  "name": "DynamicSkip: cp $SRC $DST",
+  "input": "cp $SRC $DST",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cp"],
+        "args": [
+          { "raw": "$SRC", "kind": "DynamicSkip", "isPath": false },
+          { "raw": "$DST", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Both cp args are env vars in path slots → DynamicSkip with IsPath=false."
+}

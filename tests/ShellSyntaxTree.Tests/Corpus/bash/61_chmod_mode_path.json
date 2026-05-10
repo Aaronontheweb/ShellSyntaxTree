@@ -1,0 +1,21 @@
+{
+  "name": "chmod: mode then path",
+  "input": "chmod 755 /etc/passwd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["chmod"],
+        "args": [
+          { "raw": "755", "kind": "Literal", "isPath": false },
+          { "raw": "/etc/passwd", "kind": "Literal", "isPath": true, "resolved": "/etc/passwd" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §7: chmod i=0 is mode, i>=1 are paths."
+}

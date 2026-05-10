@@ -9,17 +9,28 @@ using Xunit;
 namespace ShellSyntaxTree.Tests.Parsing;
 
 /// <summary>
-/// Unit tests for the PR 3 BashCommandParser core. These focus on the
-/// shape that the parser produces — verb chains, args, redirects,
-/// compound splitting, and SPEC §11 anomaly safe-fail. Path classification
-/// (PR 4) and cd-attribution / subshell-flagging (PR 5) are intentionally
-/// out of scope for this test file.
+/// Unit tests for the BashCommandParser core. PR 3 wired verb chains,
+/// args, redirects, compound splitting, and SPEC §11 anomaly safe-fail;
+/// PR 4 layers per-verb path classification, the resolver, and the
+/// flag-with-value-aware verb-chain probe on top. cd-attribution and
+/// subshell-flagging arrive in PR 5.
 /// </summary>
 public class BashCommandParserTests
 {
+    /// <summary>
+    /// Default-Parse helper that pins a fixed WorkingDirectory so resolved
+    /// paths in the test assertions are stable across host environments.
+    /// (The default <see cref="BashParserOptions"/> falls back to
+    /// <c>Environment.CurrentDirectory</c>, which the test runner picks
+    /// up as the test binary's working dir.)
+    /// </summary>
     private static ParsedCommand Parse(string input)
     {
-        var parser = new BashParser();
+        var parser = new BashParser(new BashParserOptions
+        {
+            HomeDirectory = "/home/test",
+            WorkingDirectory = "/work",
+        });
         return parser.Parse(input);
     }
 
@@ -249,11 +260,13 @@ public class BashCommandParserTests
     [Fact]
     public void Redirect_Append()
     {
+        // PR 4: relative redirect target resolves against WorkingDirectory.
         var result = Parse("cmd >> log");
         var clause = Assert.Single(result.Clauses);
         var redirect = Assert.Single(clause.Redirects);
         Assert.Equal(RedirectDirection.Append, redirect.Direction);
-        Assert.Equal("log", redirect.Target);
+        Assert.Equal("/work/log", redirect.Target);
+        Assert.False(redirect.IsDynamicSkip);
     }
 
     [Fact]
@@ -263,7 +276,7 @@ public class BashCommandParserTests
         var clause = Assert.Single(result.Clauses);
         var redirect = Assert.Single(clause.Redirects);
         Assert.Equal(RedirectDirection.In, redirect.Direction);
-        Assert.Equal("input", redirect.Target);
+        Assert.Equal("/work/input", redirect.Target);
     }
 
     [Fact]
@@ -273,7 +286,7 @@ public class BashCommandParserTests
         var clause = Assert.Single(result.Clauses);
         var redirect = Assert.Single(clause.Redirects);
         Assert.Equal(RedirectDirection.ErrOut, redirect.Direction);
-        Assert.Equal("err", redirect.Target);
+        Assert.Equal("/work/err", redirect.Target);
     }
 
     [Fact]
@@ -283,7 +296,7 @@ public class BashCommandParserTests
         var clause = Assert.Single(result.Clauses);
         var redirect = Assert.Single(clause.Redirects);
         Assert.Equal(RedirectDirection.ErrAppend, redirect.Direction);
-        Assert.Equal("err", redirect.Target);
+        Assert.Equal("/work/err", redirect.Target);
     }
 
     [Fact]
@@ -293,9 +306,9 @@ public class BashCommandParserTests
         var clause = Assert.Single(result.Clauses);
         Assert.Equal(2, clause.Redirects.Count);
         Assert.Equal(RedirectDirection.Out, clause.Redirects[0].Direction);
-        Assert.Equal("out", clause.Redirects[0].Target);
+        Assert.Equal("/work/out", clause.Redirects[0].Target);
         Assert.Equal(RedirectDirection.ErrOut, clause.Redirects[1].Direction);
-        Assert.Equal("err", clause.Redirects[1].Target);
+        Assert.Equal("/work/err", clause.Redirects[1].Target);
     }
 
     [Fact]
@@ -568,23 +581,133 @@ public class BashCommandParserTests
         Assert.Equal(new[] { "ls" }, result.Clauses[0].Verb.Tokens);
     }
 
-    // ---------------- Git -C flag-with-value retained as args ----------------
+    // ---------------- Git -C flag-with-value verb-chain probe ----------------
 
     [Fact]
-    public void Git_dash_C_keeps_flag_and_value_as_separate_args()
+    public void Git_dash_C_yields_two_token_verb_chain_per_spec_12_example()
     {
-        // PR 3: pairing exists but does not change Arg shape; PR 4 will
-        // mark the value as IsPath=true.
+        // PR 4 + locked interpretation #8 + SPEC §12 worked example:
+        // `git -C /repo log` skips the `-C /repo` flag-with-value pair while
+        // probing arity, so the verb chain captures both `git` and `log`.
+        // The flag and value still surface in Args in source order — and
+        // /repo carries IsPath=true via the FlagValueIsPath table.
         var result = Parse("git -C /repo log");
         var clause = Assert.Single(result.Clauses);
-        Assert.Equal(new[] { "git", "-C" }, clause.Verb.Tokens.Take(1).Concat(new[] { clause.Args[0].Raw }).ToArray());
-        // git's verb chain probe: first token "git", second token "-C" — but
-        // -C is a flag-shaped token and stops verb-chain probing. So verb
-        // chain is just ["git"], and -C / /repo / log are all args.
-        Assert.Equal(new[] { "git" }, clause.Verb.Tokens);
-        Assert.Equal(3, clause.Args.Count);
+        Assert.Equal(new[] { "git", "log" }, clause.Verb.Tokens);
+        Assert.Equal(2, clause.Args.Count);
         Assert.Equal("-C", clause.Args[0].Raw);
+        Assert.True(clause.Args[0].IsFlag);
         Assert.Equal("/repo", clause.Args[1].Raw);
-        Assert.Equal("log", clause.Args[2].Raw);
+        Assert.True(clause.Args[1].IsPath);
+        Assert.Equal("/repo", clause.Args[1].Resolved);
+        Assert.Equal(ArgKind.Literal, clause.Args[1].Kind);
+    }
+
+    // ---------------- Path classification + resolution ----------------
+
+    [Fact]
+    public void Absolute_path_arg_resolves_to_itself()
+    {
+        var result = Parse("cat /etc/hostname");
+        var clause = Assert.Single(result.Clauses);
+        var arg = Assert.Single(clause.Args);
+        Assert.True(arg.IsPath);
+        Assert.Equal("/etc/hostname", arg.Resolved);
+        Assert.Equal(ArgKind.Literal, arg.Kind);
+    }
+
+    [Fact]
+    public void Tilde_path_arg_expands_to_home()
+    {
+        var result = Parse("cat ~/file.txt");
+        var clause = Assert.Single(result.Clauses);
+        var arg = Assert.Single(clause.Args);
+        Assert.True(arg.IsPath);
+        Assert.Equal("/home/test/file.txt", arg.Resolved);
+        Assert.Equal(ArgKind.Tilde, arg.Kind);
+    }
+
+    [Fact]
+    public void Env_var_in_path_slot_becomes_dynamic_skip()
+    {
+        // SPEC §12 example: `rm $UNRESOLVED/foo`.
+        var result = Parse("rm $UNRESOLVED/foo");
+        var clause = Assert.Single(result.Clauses);
+        var arg = Assert.Single(clause.Args);
+        Assert.Equal(ArgKind.DynamicSkip, arg.Kind);
+        Assert.False(arg.IsPath);
+        Assert.Null(arg.Resolved);
+    }
+
+    [Fact]
+    public void Glob_in_path_slot_is_glob_kind_is_path_true()
+    {
+        // Locked interpretation #3: covering-directory signal preserved.
+        var result = Parse("rm /tmp/*.bak");
+        var clause = Assert.Single(result.Clauses);
+        var arg = Assert.Single(clause.Args);
+        Assert.Equal(ArgKind.Glob, arg.Kind);
+        Assert.True(arg.IsPath);
+        Assert.Null(arg.Resolved);
+    }
+
+    [Fact]
+    public void Chmod_mode_is_not_a_path()
+    {
+        var result = Parse("chmod 755 /etc/passwd");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(2, clause.Args.Count);
+        Assert.False(clause.Args[0].IsPath);
+        Assert.Equal("755", clause.Args[0].Raw);
+        Assert.True(clause.Args[1].IsPath);
+        Assert.Equal("/etc/passwd", clause.Args[1].Resolved);
+    }
+
+    [Fact]
+    public void Grep_first_arg_is_pattern_not_path()
+    {
+        var result = Parse("grep pattern /etc/hosts");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(2, clause.Args.Count);
+        Assert.False(clause.Args[0].IsPath);
+        Assert.True(clause.Args[1].IsPath);
+    }
+
+    [Fact]
+    public void Curl_url_is_not_a_path_but_output_flag_value_is()
+    {
+        var result = Parse("curl -o /tmp/out https://example.com");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(3, clause.Args.Count);
+        Assert.Equal("-o", clause.Args[0].Raw);
+        Assert.True(clause.Args[1].IsPath);
+        Assert.Equal("/tmp/out", clause.Args[1].Resolved);
+        Assert.False(clause.Args[2].IsPath);
+        Assert.Equal("https://example.com", clause.Args[2].Raw);
+    }
+
+    [Fact]
+    public void Find_root_is_path_predicate_args_are_not()
+    {
+        var result = Parse("find /var/log -name \"*.log\"");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(3, clause.Args.Count);
+        Assert.True(clause.Args[0].IsPath);
+        Assert.Equal("/var/log", clause.Args[0].Resolved);
+        Assert.Equal("-name", clause.Args[1].Raw);
+        Assert.False(clause.Args[2].IsPath);
+    }
+
+    [Fact]
+    public void Docker_volume_value_is_not_a_path_per_locked_interpretation_8()
+    {
+        var result = Parse("docker run -v /host:/container nginx");
+        var clause = Assert.Single(result.Clauses);
+        // verb chain probe: -v /host:/container should be consumed; verb = ["docker", "run"]
+        Assert.Equal(new[] { "docker", "run" }, clause.Verb.Tokens);
+        Assert.Equal(3, clause.Args.Count);
+        Assert.Equal("-v", clause.Args[0].Raw);
+        Assert.False(clause.Args[1].IsPath); // colon-joined volume mount, NOT a path
+        Assert.Equal("/host:/container", clause.Args[1].Raw);
     }
 }

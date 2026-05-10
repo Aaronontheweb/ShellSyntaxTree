@@ -9,12 +9,13 @@
         "verb": ["cmd"],
         "args": [],
         "redirects": [
-          { "direction": "Out", "target": "out" },
-          { "direction": "ErrOut", "target": "err" }
+          { "direction": "Out", "target": "/work/out" },
+          { "direction": "ErrOut", "target": "/work/err" }
         ],
         "isSubshell": false,
         "isBashCWrapped": false
       }
     ]
-  }
+  },
+  "notes": "PR 4: redirect targets resolve against WorkingDirectory (/work in tests)."
 }

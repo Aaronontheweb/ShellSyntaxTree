@@ -9,7 +9,7 @@
         "verb": ["ls"],
         "args": [
           { "raw": "-la", "kind": "Literal", "isPath": false, "isFlag": true },
-          { "raw": "/tmp", "kind": "Literal", "isPath": false, "isFlag": false }
+          { "raw": "/tmp", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/tmp" }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -17,5 +17,5 @@
       }
     ]
   },
-  "notes": "PR 3 keeps isPath=false; path classification arrives in PR 4."
+  "notes": "PR 4: /tmp is an absolute path arg → IsPath=true, Resolved=/tmp."
 }
