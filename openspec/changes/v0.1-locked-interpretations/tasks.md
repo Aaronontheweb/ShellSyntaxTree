@@ -20,36 +20,46 @@ the SPEC.md sections that get updated alongside the implementation.
 - [x] 1.6 Add both projects to `ShellSyntaxTree.slnx`
 - [x] 1.7 Bootstrap OpenSpec scaffolding (`openspec/`, change directories,
       this proposal/design/tasks/specs delta)
-- [ ] 1.8 Update `SPEC.md` §2/§3 to enumerate `Arg.IsCwdAttribution`;
+- [x] 1.8 Update `SPEC.md` §3 to enumerate `Arg.IsCwdAttribution`;
       annotate `VerbChain.Joined` to use `string.Join(" ", Tokens)` for
       cross-tfm compatibility (was `string.Join(' ', …)`, char overload
       missing on netstandard2.0)
-- [ ] 1.9 Update `IMPLEMENTATION_PLAN.md` — mark PR 1 in-progress;
+- [x] 1.9 Update `IMPLEMENTATION_PLAN.md` — mark PR 1 in-progress;
       reference this OpenSpec change
-- [ ] 1.10 Update `TOOLING.md` to list installed OpenSpec skills under
+- [x] 1.10 Update `TOOLING.md` to list installed OpenSpec skills under
        Helper Skills
-- [ ] 1.11 Run `pwsh ./scripts/Add-FileHeaders.ps1`; verify with `-Verify`
-- [ ] 1.12 `dotnet build -c Release` clean; `dotnet test -c Release`
-       all-green
-- [ ] 1.13 Commit (signed) and push `pr1-bootstrap`; open PR with
-       `gh pr merge --auto --squash` against `dev`
-- [ ] 1.14 On merge: archive this OpenSpec change to
+- [x] 1.11 Run `pwsh ./scripts/Add-FileHeaders.ps1`; verify with `-Verify`
+- [x] 1.12 `dotnet build -c Release` clean; `dotnet test -c Release`
+       all-green (18/18 tests passing)
+- [x] 1.13 Commit (signed) and push `pr1-bootstrap`; opened PR #4 with
+       `gh pr merge --auto --squash` against `dev`. Auto-merged at
+       2026-05-10T17:55:09Z (Linux 27s, Windows 1m19s).
+- [ ] 1.14 Archive this OpenSpec change to
        `openspec/changes/archive/2026-05-10-v0.1-locked-interpretations/`
+       (deferred: not all interpretations have landed yet — change spans
+       PRs 1–6. Archive when PR 6 merges.)
 
 ## 2. PR 2 — Lexer + opaque-region scanner (interpretation #2)
 
-- [ ] 2.1 Implement `Internal/Lexing/OpaqueRegionScanner.cs` — finds
-      balanced delimiters with quote-aware nesting; configurable open/close
-- [ ] 2.2 Implement `Internal/Bash/Lexing/BashLexer.cs` per SPEC §5
-- [ ] 2.3 Recognize `$(...)` and `` ` `` regions via the scanner; emit
-      `OpaqueSubstitution` token
-- [ ] 2.4 Recognize `$((` and `${var//` openers; emit `IsUnparseable`
-      sentinel
-- [ ] 2.5 Update `SPEC.md` §1 (note that command substitution is marked
-      DynamicSkip), §5 (lex rules for opaque regions), §11 (add arithmetic
-      and complex-param-expansion to IsUnparseable triggers)
-- [ ] 2.6 Open OpenSpec change `bash-lexer-opaque-regions` capturing the
-      §1/§5/§11 deltas in their final form
+- [x] 2.1 Implement `Internal/Lexing/OpaqueRegionScanner.cs` — finds
+      balanced delimiters with quote-aware nesting; `Scan` for `(`/`)`
+      style and `ScanSymmetric` for backtick style; honors `\X` escapes,
+      single-quote literal preservation, double-quote escape table
+- [x] 2.2 Implement `Internal/Bash/Lexing/BashLexer.cs` per SPEC §5;
+      single entry point `Tokenize(string) -> IReadOnlyList<BashToken>`
+- [x] 2.3 Recognize `$(...)` and backtick `` `...` `` regions via the
+      scanner; emit `OpaqueSubstitution` token
+- [x] 2.4 Recognize `$((` and `${var//` openers; emit
+      `UnparseableSentinel` token with reason naming the construct
+- [x] 2.5 Update `SPEC.md` §1 non-goals (command substitution → DynamicSkip),
+      §5 (add OPAQUE_SUBSTITUTION + UNPARSEABLE_SENTINEL token kinds, add
+      `<<-` operator, simple `${VAR}` absorbed into Word, newlines outside
+      heredoc treated as Whitespace), §11 (add arithmetic +
+      complex-param-expansion to IsUnparseable conditions list)
+- [ ] 2.6 Tests: 16 OpaqueRegionScanner tests + 62 BashLexer tests, all
+      green. Combined with PR 1's 18: 96/96 passing.
+- [ ] 2.7 Run header script; verify; commit (signed) and push `pr2-lexer`;
+      open PR with `gh pr merge --auto --squash`
 
 ## 3. PR 3 — Verb tables + parser core
 

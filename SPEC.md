@@ -48,6 +48,12 @@ command can consume it.
 - Variable expansion. We mark dynamic tokens, never resolve them.
 - Function definitions, here-docs body extraction, complex parameter
   expansion (`${var//pattern/replacement}`), arithmetic expansion.
+- Command-substitution evaluation. `$(cmd)` and backtick `` `cmd` `` are
+  recognized at the lex level and collapsed into a single
+  `Kind=DynamicSkip, IsPath=false` arg per locked interpretation #2 (see
+  `openspec/changes/archive/.../v0.1-locked-interpretations`). The
+  surrounding clause stays parseable so hard-deny rules still fire on
+  visible parts.
 - Performance tuning beyond "fast enough to invoke per shell call without
   noticeable latency" (~1ms per typical input).
 
@@ -359,14 +365,28 @@ quoted_string   := single-quoted | double-quoted
 The lexer produces tokens consumed by the parser. Token kinds:
 
 - **WORD** — sequence of non-whitespace, non-operator, non-quote chars.
-  Example: `git`, `/etc/foo`, `--force`, `~/path`, `$VAR`.
+  Example: `git`, `/etc/foo`, `--force`, `~/path`, `$VAR`. Simple
+  parameter expansion `${VAR}` (no `//` slash) is absorbed into a Word
+  token; the resolver in §8 decides `Kind`.
 - **QUOTED_STRING** — single- or double-quoted string. The lexer strips
   the quote delimiters from the token value. Example: `"hello world"`
   becomes the token value `hello world`.
 - **OPERATOR** — `&&`, `||`, `;`, `|`, `>`, `>>`, `<`, `2>`, `2>>`,
-  `(`, `)`, `<<`.
-- **WHITESPACE** — one or more spaces or tabs. Discarded after splitting.
+  `(`, `)`, `<<`, `<<-`.
+- **WHITESPACE** — one or more spaces or tabs (or newlines outside a
+  heredoc body). Discarded after splitting.
 - **CONTINUATION** — `\` + `\n`. Treated as whitespace.
+- **OPAQUE_SUBSTITUTION** — `$(cmd)` or backtick `` `cmd` ``. The full
+  substitution slice (including delimiters) becomes a single token.
+  Boundary tracking handles nested same-kind regions, nested quotes,
+  and `\X` escapes via a shared opaque-region scanner. The parser
+  consumes this token as `Arg{ Kind=DynamicSkip, IsPath=false,
+  Resolved=null }` per locked interpretation #2.
+- **UNPARSEABLE_SENTINEL** — `$((expr))` arithmetic expansion or
+  `${var//pat/repl}` complex parameter expansion. The lexer skips past
+  the matching close (`))` or `}` respectively) and emits a sentinel
+  whose reason names the rejected construct. The parser consumes this
+  token by setting outer `ParsedCommand.IsUnparseable = true` (see §11).
 
 ### Quote handling
 
@@ -759,7 +779,11 @@ Conditions that produce `IsUnparseable = true`:
   `then`, `fi`, `case`, `esac`).
 - Function definitions (`name() { ... }`).
 - Process substitution (`<(cmd)`, `>(cmd)`).
-- Recursion depth exceeded on `bash -c` chains.
+- Arithmetic expansion `$((expr))` (per §1 non-goal; lexer emits an
+  UNPARSEABLE_SENTINEL token; parser sets the outer flag).
+- Complex parameter expansion `${var//pat/repl}` (per §1 non-goal; same
+  mechanism).
+- Recursion depth exceeded on `bash -c` chains (>5 levels).
 
 Consumers (e.g. Netclaw's gate evaluator) route unparseable commands to a
 safe-fail path (prompt the user; offer only Once and Deny — no persistent

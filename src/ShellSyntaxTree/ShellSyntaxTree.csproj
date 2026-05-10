@@ -11,4 +11,9 @@
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
+  <!-- The test project exercises internal lexer / scanner types. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="ShellSyntaxTree.Tests" />
+  </ItemGroup>
+
 </Project>
