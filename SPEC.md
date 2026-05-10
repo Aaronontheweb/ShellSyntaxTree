@@ -209,9 +209,14 @@ public sealed record VerbChain
     public IReadOnlyList<string> Tokens { get; init; } = [];
 
     /// <summary>Convenience: tokens joined with spaces.</summary>
-    public string Joined => string.Join(' ', Tokens);
+    public string Joined => string.Join(" ", Tokens);
 }
 ```
+
+> **Note:** The single-space form `string.Join(" ", …)` is used (not the
+> `char` overload `string.Join(' ', …)`) so the implementation compiles
+> on both `netstandard2.0` and `net8.0`. The `char` overload is net5+
+> only.
 
 ### `Arg`
 
@@ -246,6 +251,14 @@ public sealed record Arg
     /// don't reapply per-verb rules.
     /// </summary>
     public bool IsPath { get; init; }
+
+    /// <summary>
+    /// True when this Arg is a synthetic attribution arg representing
+    /// the working directory inherited from a preceding `cd`/`chdir`
+    /// clause in the same compound. Default false. See §9 for
+    /// propagation semantics.
+    /// </summary>
+    public bool IsCwdAttribution { get; init; }
 }
 
 public enum ArgKind

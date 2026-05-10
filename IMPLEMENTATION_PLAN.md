@@ -11,25 +11,36 @@ bulldoze priorities.
 
 ## NOW (v0.1.0-alpha shipping path)
 
-### 1. Bootstrap projects
+> **Active OpenSpec change:** `v0.1-locked-interpretations` — captures
+> the eight planning-interview decisions (see
+> `openspec/changes/v0.1-locked-interpretations/`). Archived on PR 1
+> merge.
 
-- [ ] Create `src/ShellSyntaxTree/ShellSyntaxTree.csproj` (library,
-      multi-target `netstandard2.0;net8.0`)
-- [ ] Create `tests/ShellSyntaxTree.Tests/ShellSyntaxTree.Tests.csproj`
+### 1. Bootstrap projects (PR 1, in progress)
+
+- [x] Create `src/ShellSyntaxTree/ShellSyntaxTree.csproj` (library,
+      multi-target `netstandard2.0;net8.0`, `IsAotCompatible=true`)
+- [x] Create `tests/ShellSyntaxTree.Tests/ShellSyntaxTree.Tests.csproj`
       (xunit, target `net10.0`)
-- [ ] Add both to `ShellSyntaxTree.slnx`
-- [ ] `dotnet build` clean, `dotnet test` clean (zero tests OK)
+- [x] Add both to `ShellSyntaxTree.slnx`
+- [x] `dotnet build -c Release` clean, `dotnet test -c Release` clean
+      (18 PublicApiSnapshotTests passing)
 
-### 2. Public API skeleton (lock surface first)
+### 2. Public API skeleton (lock surface first) — PR 1, in progress
 
-- [ ] Implement public types from `SPEC.md` §2 verbatim:
+- [x] Implement public types from `SPEC.md` §2/§3 verbatim:
       `IShellParser`, `BashParser`, `BashParserOptions`, `ParsedCommand`,
       `Clause`, `VerbChain`, `Arg`, `Redirect`, and the three enums
-- [ ] `BashParser.Parse` throws `NotImplementedException` for now
-- [ ] `Arg` includes `IsCwdAttribution` per SPEC §9
-- [ ] Public API snapshot test (a single test that asserts each public
-      member exists with the expected shape — fast feedback when the
-      surface drifts)
+- [x] `BashParser.Parse` throws `NotImplementedException`; `Parse(null)`
+      throws `ArgumentNullException`
+- [x] `Arg` includes `IsCwdAttribution` per SPEC §9 (locked interpretation #1)
+- [x] PublicApiSnapshotTests reflection-based `[Fact]`s assert the surface
+      shape with strict namespace closure
+- [x] Bootstrap OpenSpec scaffolding (config, root spec stub, change
+      proposal/design/tasks/specs delta for `v0.1-locked-interpretations`)
+- [x] Copy OpenSpec authoring skills into `.claude/skills/`
+- [x] Update SPEC.md §3 to enumerate `Arg.IsCwdAttribution`; cross-tfm
+      note on `VerbChain.Joined`
 
 ### 3. BashLexer (SPEC §5)
 
