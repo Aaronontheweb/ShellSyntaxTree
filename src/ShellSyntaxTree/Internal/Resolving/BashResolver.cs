@@ -411,10 +411,10 @@ internal static class BashResolver
         (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 
     /// <summary>
-    /// Combine a base directory with a relative or rooted sub-path. Cross-
-    /// platform-safe: uses <see cref="Path.Combine(string, string)"/> and
-    /// strips a single leading separator from the sub-path so the combine
-    /// doesn't treat the sub-path as rooted on Windows.
+    /// Combine a base directory with a relative or rooted sub-path using
+    /// bash semantics — forward slashes everywhere, regardless of host OS.
+    /// Strips a single leading separator from the sub-path so the combine
+    /// doesn't treat the sub-path as rooted.
     /// </summary>
     private static string JoinPath(string baseDir, string sub)
     {
@@ -423,21 +423,26 @@ internal static class BashResolver
             return baseDir;
         }
 
-        // Path.Combine will discard baseDir if `sub` looks rooted. For the
-        // tilde-expansion case the sub came from `~/rest` so it starts with
-        // `/` or `\` — strip exactly one leading separator before combining.
+        // Sub-paths may be rooted (e.g. `~/rest` produces `/rest` after
+        // tilde expansion) — strip exactly one leading separator before
+        // combining so we don't lose baseDir.
         var s = sub;
         if (s.Length > 0 && (s[0] == '/' || s[0] == '\\'))
         {
             s = s.Substring(1);
         }
 
-        return Path.Combine(baseDir, s);
+        // Always forward-slash, always bash semantics.
+        return baseDir.TrimEnd('/', '\\') + "/" + s.Replace('\\', '/');
     }
 
     /// <summary>
     /// Resolve <paramref name="token"/> to an absolute path against the
     /// supplied options. Returns null on resolution failure (SPEC §8 step 6).
+    /// Always produces bash-style (forward-slash, no drive letter)
+    /// absolute paths regardless of host OS — `Path.GetFullPath` is
+    /// platform-aware and would produce `D:\foo` for `/foo` on Windows,
+    /// which is wrong for our bash-parsing semantics.
     /// </summary>
     private static string? TryResolveAbsolutePath(string token, BashParserOptions options)
     {
@@ -448,23 +453,24 @@ internal static class BashResolver
 
         try
         {
+            string combined;
             if (IsRootedPath(token))
             {
-                // Path.GetFullPath normalizes redundant separators / dot-segments
-                // without touching the filesystem.
-                return Path.GetFullPath(token);
+                combined = NormalizeToForwardSlashes(token);
             }
-
-            var wd = GetWorkingDirectory(options);
-            if (string.IsNullOrEmpty(wd))
+            else
             {
-                // No working directory available — surface as DynamicSkip
-                // rather than guess.
-                return null;
+                var wd = GetWorkingDirectory(options);
+                if (string.IsNullOrEmpty(wd))
+                {
+                    // No working directory available — surface as DynamicSkip
+                    // rather than guess.
+                    return null;
+                }
+                combined = JoinPath(wd, token);
             }
 
-            var combined = Path.Combine(wd, token);
-            return Path.GetFullPath(combined);
+            return NormalizePath(combined);
         }
         catch (ArgumentException)
         {
@@ -476,10 +482,107 @@ internal static class BashResolver
         }
         catch (NotSupportedException)
         {
-            // Path.GetFullPath throws this for invalid path characters on
-            // some runtimes — treat the same as ArgumentException.
             return null;
         }
+    }
+
+    /// <summary>
+    /// Normalize backslashes to forward slashes; preserve bash semantics
+    /// for `\\server\share` UNC paths by collapsing the leading `\\` to a
+    /// single `//`. (UNC paths are rare in bash but the heuristic preserves
+    /// them in a recognizable form for consumers.)
+    /// </summary>
+    private static string NormalizeToForwardSlashes(string token)
+    {
+        if (token.Length >= 2 && token[0] == '\\' && token[1] == '\\')
+        {
+            // UNC: \\server\share -> //server/share
+            return "//" + token.Substring(2).Replace('\\', '/');
+        }
+        return token.Replace('\\', '/');
+    }
+
+    /// <summary>
+    /// Bash-style path normalization: collapse `.`/`..` segments, deduplicate
+    /// adjacent slashes, preserve a leading `/` (or `//` for UNC), use
+    /// forward slashes throughout. Operates string-only — no filesystem I/O.
+    /// </summary>
+    private static string NormalizePath(string path)
+    {
+        if (string.IsNullOrEmpty(path))
+        {
+            return path;
+        }
+
+        var normalized = path.Replace('\\', '/');
+
+        // Detect leading "//" (UNC-like) vs single "/" vs Windows drive
+        // letter prefix (e.g. "C:/foo" — bash semantics still treat the
+        // drive prefix as opaque, but we keep it).
+        string prefix;
+        string rest;
+        if (normalized.Length >= 2 && normalized[0] == '/' && normalized[1] == '/')
+        {
+            prefix = "//";
+            rest = normalized.Substring(2);
+        }
+        else if (normalized.Length > 0 && normalized[0] == '/')
+        {
+            prefix = "/";
+            rest = normalized.Substring(1);
+        }
+        else if (normalized.Length >= 2 && IsAsciiLetter(normalized[0]) && normalized[1] == ':')
+        {
+            // Drive-letter prefix; keep as-is for non-bash-shaped inputs.
+            prefix = normalized.Substring(0, 2);
+            if (normalized.Length > 2 && normalized[2] == '/')
+            {
+                prefix += "/";
+                rest = normalized.Substring(3);
+            }
+            else
+            {
+                rest = normalized.Substring(2);
+            }
+        }
+        else
+        {
+            prefix = string.Empty;
+            rest = normalized;
+        }
+
+        var segments = rest.Split('/');
+        var stack = new System.Collections.Generic.List<string>();
+        foreach (var segment in segments)
+        {
+            if (segment.Length == 0 || segment == ".")
+            {
+                continue;
+            }
+            if (segment == "..")
+            {
+                if (stack.Count > 0 && stack[stack.Count - 1] != "..")
+                {
+                    stack.RemoveAt(stack.Count - 1);
+                }
+                else if (string.IsNullOrEmpty(prefix))
+                {
+                    // Relative path with leading `..`: keep it.
+                    stack.Add("..");
+                }
+                // Absolute path with leading `..`: silently drop (matches
+                // bash and POSIX `cd /; cd ..` -> `/`).
+                continue;
+            }
+            stack.Add(segment);
+        }
+
+        var joined = string.Join("/", stack);
+        if (prefix.Length == 0)
+        {
+            return joined.Length == 0 ? "." : joined;
+        }
+        return prefix + joined;
     }
 
     /// <summary>
