@@ -568,8 +568,8 @@ Some flags take values (`-o file`, `-C /repo`, `--output=file`). The parser
 must know which flags consume the next token as a value. Curated table:
 
 ```csharp
-internal static readonly IReadOnlyDictionary<string, IReadOnlySet<string>>
-    FlagsWithValue = new Dictionary<string, IReadOnlySet<string>>(
+internal static readonly IReadOnlyDictionary<string, HashSet<string>>
+    FlagsWithValue = new Dictionary<string, HashSet<string>>(
         StringComparer.OrdinalIgnoreCase)
 {
     ["git"]   = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-C", "--git-dir", "--work-tree" },
@@ -580,6 +580,16 @@ internal static readonly IReadOnlyDictionary<string, IReadOnlySet<string>>
     // Add as corpus surfaces real cases.
 };
 ```
+
+> **Note:** the value type is `HashSet<string>` (not `IReadOnlySet<string>`)
+> because `IReadOnlySet<string>` is .NET 5+ only and the library
+> multi-targets `netstandard2.0`. Internal-only — no public-API impact.
+
+> **Note (PR 3 → PR 4 follow-up):** the verb-chain probe must run *after*
+> the flag-with-value pair is consumed for invocations like
+> `git -C /repo log`. PR 3 ships the probe at token zero (the simpler
+> shape); PR 4 lands the flag-with-value-aware probe so `git -C /repo log`
+> produces `Verb.Tokens = ["git", "log"]` per SPEC §12's example.
 
 When a flag-with-value consumes the next token, the consumed token's
 `IsPath` flag is set if the value is path-shaped (per the resolver in §8).

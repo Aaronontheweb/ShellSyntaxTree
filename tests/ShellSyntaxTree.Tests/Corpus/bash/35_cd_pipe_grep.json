@@ -1,0 +1,37 @@
+{
+  "name": "Compound + pipe: cd /repo && cmd | grep foo",
+  "input": "cd /repo && cmd | grep foo",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/repo", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Pipe",
+        "verb": ["grep"],
+        "args": [
+          { "raw": "foo", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

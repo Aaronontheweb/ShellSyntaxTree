@@ -1,0 +1,19 @@
+{
+  "name": "Redirect In: cmd < /tmp/input",
+  "input": "cmd < /tmp/input",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [
+          { "direction": "In", "target": "/tmp/input" }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

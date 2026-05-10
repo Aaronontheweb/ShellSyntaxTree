@@ -1,0 +1,19 @@
+{
+  "name": "Simple verb: mkdir /tmp/foo",
+  "input": "mkdir /tmp/foo",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["mkdir"],
+        "args": [
+          { "raw": "/tmp/foo", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

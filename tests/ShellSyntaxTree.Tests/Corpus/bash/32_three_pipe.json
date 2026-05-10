@@ -1,0 +1,12 @@
+{
+  "name": "Three-stage pipe: cmd1 | cmd2 | cmd3",
+  "input": "cmd1 | cmd2 | cmd3",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      { "operator": "None", "verb": ["cmd1"], "args": [], "redirects": [], "isSubshell": false, "isBashCWrapped": false },
+      { "operator": "Pipe", "verb": ["cmd2"], "args": [], "redirects": [], "isSubshell": false, "isBashCWrapped": false },
+      { "operator": "Pipe", "verb": ["cmd3"], "args": [], "redirects": [], "isSubshell": false, "isBashCWrapped": false }
+    ]
+  }
+}

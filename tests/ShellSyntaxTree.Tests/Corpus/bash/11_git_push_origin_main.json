@@ -1,0 +1,21 @@
+{
+  "name": "Multi-token verb: git push origin main",
+  "input": "git push origin main",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "push"],
+        "args": [
+          { "raw": "origin", "kind": "Literal", "isPath": false },
+          { "raw": "main", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "git arity=2 → first two source tokens become the verb chain."
+}

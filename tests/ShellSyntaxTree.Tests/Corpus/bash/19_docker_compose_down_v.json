@@ -1,0 +1,19 @@
+{
+  "name": "Three-token verb with flag: docker compose down -v",
+  "input": "docker compose down -v",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["docker", "compose", "down"],
+        "args": [
+          { "raw": "-v", "kind": "Literal", "isPath": false, "isFlag": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

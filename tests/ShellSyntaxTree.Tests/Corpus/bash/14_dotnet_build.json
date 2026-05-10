@@ -1,0 +1,17 @@
+{
+  "name": "Multi-token verb: dotnet build",
+  "input": "dotnet build",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["dotnet", "build"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

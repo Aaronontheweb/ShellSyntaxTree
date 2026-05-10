@@ -1,0 +1,30 @@
+{
+  "name": "Compound: cd /tmp && rm temp.log",
+  "input": "cd /tmp && rm temp.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/tmp", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["rm"],
+        "args": [
+          { "raw": "temp.log", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Glob handling lives in PR 4; uses literal filename here."
+}

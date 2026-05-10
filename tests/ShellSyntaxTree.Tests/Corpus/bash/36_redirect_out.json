@@ -1,0 +1,19 @@
+{
+  "name": "Redirect Out: cmd > /tmp/out",
+  "input": "cmd > /tmp/out",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "/tmp/out" }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Multi-token verb: docker run nginx",
+  "input": "docker run nginx",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["docker", "run"],
+        "args": [
+          { "raw": "nginx", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

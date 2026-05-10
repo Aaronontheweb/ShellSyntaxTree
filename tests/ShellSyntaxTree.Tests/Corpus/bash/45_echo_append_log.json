@@ -1,0 +1,21 @@
+{
+  "name": "Append redirect: echo hi >> log.txt",
+  "input": "echo hi >> log.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "hi", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [
+          { "direction": "Append", "target": "log.txt" }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

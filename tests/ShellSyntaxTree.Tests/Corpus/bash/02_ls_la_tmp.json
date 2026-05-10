@@ -1,0 +1,21 @@
+{
+  "name": "ls with flag and path arg",
+  "input": "ls -la /tmp",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["ls"],
+        "args": [
+          { "raw": "-la", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "/tmp", "kind": "Literal", "isPath": false, "isFlag": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "PR 3 keeps isPath=false; path classification arrives in PR 4."
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Multi-token verb: git checkout dev",
+  "input": "git checkout dev",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "checkout"],
+        "args": [
+          { "raw": "dev", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

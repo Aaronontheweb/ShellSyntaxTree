@@ -1,0 +1,27 @@
+{
+  "name": "Redirect then AndIf: cmd > /tmp/a.txt && cmd2",
+  "input": "cmd > /tmp/a.txt && cmd2",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "/tmp/a.txt" }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd2"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

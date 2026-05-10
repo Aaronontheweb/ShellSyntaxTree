@@ -1,0 +1,19 @@
+{
+  "name": "Redirect ErrAppend: cmd 2>> /tmp/err",
+  "input": "cmd 2>> /tmp/err",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [
+          { "direction": "ErrAppend", "target": "/tmp/err" }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

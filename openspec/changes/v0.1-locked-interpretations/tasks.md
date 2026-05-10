@@ -63,16 +63,46 @@ the SPEC.md sections that get updated alongside the implementation.
 
 ## 3. PR 3 — Verb tables + parser core
 
-- [ ] 3.1 `Internal/Bash/Verbs/BashVerbs.cs` — `BashArity`, `CwdVerbs`,
-      `FileVerbs`, `FlagsWithValue` from SPEC §6
-- [ ] 3.2 `Internal/Bash/Parsing/BashCommandParser.cs` per SPEC §4
-- [ ] 3.3 Compound splitting; verb chain longest-prefix probe; flag/positional
-- [ ] 3.4 Heredoc skip (`<<DELIM` / `<<-DELIM`)
-- [ ] 3.5 Anomaly safe-fail per SPEC §11
-- [ ] 3.6 Wire opaque-substitution tokens into `Arg{ Kind=DynamicSkip }`
-      per interpretation #2
-- [ ] 3.7 Wire arithmetic/complex-param sentinels into
-      `ParsedCommand.IsUnparseable` per interpretation #2
+- [x] 3.1 `Internal/Bash/Verbs/BashVerbs.cs` — `BashArity`, `CwdVerbs`,
+      `FileVerbs`, `FlagsWithValue`, `ControlFlowKeywords` from SPEC §6
+- [x] 3.2 `Internal/Bash/Parsing/BashCommandParser.cs` per SPEC §4
+- [x] 3.3 Compound splitting on `&&`, `||`, `;`, `|`; verb chain
+      longest-prefix probe; flag/positional walking
+- [x] 3.4 Heredoc operator framework (lexer body-skip already in PR 2;
+      parser emits placeholder Redirect)
+- [x] 3.5 Anomaly safe-fail per SPEC §11 (control-flow keyword,
+      function definition, process substitution, unbalanced parens)
+- [x] 3.6 Wire `OpaqueSubstitution` tokens into
+      `Arg{ Kind=DynamicSkip, IsPath=false }` per interpretation #2
+- [x] 3.7 Wire `UnparseableSentinel` tokens into
+      `ParsedCommand.IsUnparseable=true` per interpretation #2
+- [x] 3.8 `BashParser.Parse` delegates to `BashCommandParser.Parse`;
+      placeholder `NotImplementedException` removed
+- [x] 3.9 `CorpusRunnerTests` skeleton (`[Theory] [MemberData]` over
+      `tests/.../Corpus/bash/*.json` with field-by-field comparison;
+      polished AstAssert lands in PR 6)
+- [x] 3.10 Test project copies `Corpus/bash/*.json` to bin output via
+       `<None Update CopyToOutputDirectory="PreserveNewest" />`
+- [x] 3.11 Authored 50 corpus entries: 10 simple-verb + 10 multi-token-verb
+       + 15 compound + 10 redirect + 5 unparseable. PR 4-5 will refine
+       expectations once path classification + cd-attribution land.
+- [x] 3.12 SPEC §7 updated: `FlagsWithValue` value type is `HashSet<string>`
+       (not `IReadOnlySet<string>`) for netstandard2.0 compat; PR 4
+       follow-up note on flag-with-value-aware verb-chain probing
+- [x] 3.13 53 parser unit tests + 50 corpus runner cases. With PR 1+2:
+       **199/199 passing**.
+
+### PR 3 follow-ups (tracked for PR 4)
+
+- Flag-with-value-aware verb-chain probe (`git -C /repo log` →
+  `Verb.Tokens = ["git", "log"]`); currently probe stops at the leading
+  flag and uses `["git"]`. SPEC §12 example expects the post-probe
+  shape, so PR 4 must move the probe to run after flag-with-value
+  consumption.
+- Per-verb path-arg rules + path-shape classification to populate
+  `IsPath`. Corpus entries currently have all literal args at
+  `IsPath=false`; PR 4 will update the corpus to reflect the new
+  classification.
 
 ## 4. PR 4 — Resolver + per-verb rules (interpretations #3 + #8)
 

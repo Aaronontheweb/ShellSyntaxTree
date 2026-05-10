@@ -1,0 +1,19 @@
+{
+  "name": "Simple verb: rm /tmp/foo",
+  "input": "rm /tmp/foo",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["rm"],
+        "args": [
+          { "raw": "/tmp/foo", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

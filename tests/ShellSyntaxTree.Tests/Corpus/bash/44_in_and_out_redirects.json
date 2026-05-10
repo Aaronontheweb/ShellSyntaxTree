@@ -1,0 +1,20 @@
+{
+  "name": "In + Out redirects: cat < input.txt > output.txt",
+  "input": "cat < input.txt > output.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cat"],
+        "args": [],
+        "redirects": [
+          { "direction": "In", "target": "input.txt" },
+          { "direction": "Out", "target": "output.txt" }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}
