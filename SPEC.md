@@ -680,8 +680,15 @@ The agent's natural idiom is `cd /target && cmd1 && cmd2`. Bash semantics:
 
 ### Rules
 
-1. **First clause is a `cd`-family verb** (per §6.2): the cd target becomes
-   the **attributed cwd** for subsequent clauses in the same compound.
+1. **First clause is a `cd` or `chdir` verb**: the cd target becomes the
+   **attributed cwd** for subsequent clauses in the same compound. **Only
+   `cd` and `chdir`** propagate attribution per locked interpretation #5.
+   `pushd`, `popd`, `push-location`, and `set-location` are still listed
+   in `CwdVerbs` so their first non-flag positional is path-classified
+   (the target shows up as `IsPath=true`), but they do **not** add a
+   synthetic attribution arg to subsequent clauses. A future v0.1.x or
+   v0.2 with PowerShell support may model `pushd`/`popd` as a proper
+   directory stack.
 2. **Subsequent clauses inherit the attributed cwd** as if it were
    prepended with `-C` semantics. Specifically: a synthetic `Arg` with
    `IsPath=true`, `Resolved=<cd target>`, and `Kind=Literal` is added to
@@ -693,16 +700,39 @@ The agent's natural idiom is `cd /target && cmd1 && cmd2`. Bash semantics:
 
 3. **A subsequent `cd`** in the same compound **replaces** the attributed
    cwd for clauses after it. (`cd /a && cmd1 && cd /b && cmd2` → cmd1
-   inherits `/a`, cmd2 inherits `/b`.)
+   inherits `/a`, cmd2 inherits `/b`.) The replacing `cd /b` itself still
+   *receives* `/a` as a synthetic attribution arg (rule 2) before becoming
+   the new source — additive semantics per rule 5.
 
 4. **Subshell boundaries reset attribution.** `cd /a && (cd /b && cmd1) && cmd2`:
    cmd1 (inside subshell) inherits `/b`; cmd2 (outside subshell) inherits
-   `/a` (the subshell's `cd /b` does not leak out).
+   `/a` (the subshell's `cd /b` does not leak out). A subshell *inherits*
+   outer attribution on entry (so `cd /a && (cmd)` still attributes cmd
+   to /a) but its own cd changes stay isolated.
 
 5. **Attribution does not change the clause's verb or original args.**
    The attribution is purely additive — the `cd` clause itself is still
    parsed normally, and subsequent clauses retain everything the user
    typed, plus the synthetic Arg.
+
+### Dynamic-cd attribution (locked interpretation #6)
+
+When the cd target itself is `Kind=DynamicSkip` (e.g. `cd $REPO`), we
+statically don't know the resolved cwd. To preserve the cwd-uncertainty
+signal for subsequent clauses:
+
+- A synthetic `Arg { Raw="<dynamic-cwd>", Resolved=null, Kind=DynamicSkip,
+  IsPath=false, IsCwdAttribution=true }` is appended to each subsequent
+  clause (instead of the literal-cd flavor).
+- Relative path args in subsequent clauses are not re-resolved against a
+  fall-back cwd; they surface as `Kind=DynamicSkip, IsPath=false,
+  Resolved=null` so consumers route to safe-fail rather than trust a
+  guessed working directory.
+
+Consumers that iterate `IsPath=true` args won't see the synthetic
+attribution arg; consumers that specifically check `IsCwdAttribution`
+can detect "this clause's cwd context is unknown" and elevate to
+user-prompt instead of treating it like a default-cwd command.
 
 ### Example
 
@@ -739,15 +769,11 @@ already see the resolved path in another arg.
 ### Subshells
 
 Subshells are clauses wrapped in parens: `(cd /a && cmd)`. The parser
-recognizes the parens, parses the inner command, and emits a single
-clause with:
-
-- `Verb` = empty (a subshell has no verb of its own)
-- `Args` = empty
-- `IsSubshell = true`
-- A nested `ParsedCommand` field — **but** since the AST should be flat
-  for consumer convenience, instead we **flatten** the subshell into the
-  parent's `Clauses` list with each inner clause's `IsSubshell=true`.
+recognizes the parens and **flattens** the subshell's inner clauses into
+the parent's `Clauses` list, marking each with `IsSubshell=true` so
+consumers can distinguish them from outer-compound clauses. A subshell
+*inherits* the outer compound's cd attribution on entry but its own cd
+changes stay isolated to the subshell (rule 4 above).
 
 Specifically: `(cd /b && cmd) && cmd2` produces three clauses:
 
@@ -779,7 +805,10 @@ by the recursion. Consumers that care that this came from a wrapper can
 inspect `IsBashCWrapped` on the surfaced clauses.
 
 **Recursion limit:** parse `bash -c "bash -c ..."` chains up to depth 5.
-Deeper nesting → mark the deepest clause as `IsUnparseable = true`.
+Deeper nesting → set the outer `ParsedCommand.IsUnparseable = true` with
+reason `"bash -c recursion depth exceeded (>5)"` per locked interpretation
+#4. (`Clause` has no `IsUnparseable` field; we surface the overflow on the
+top-level ParsedCommand so consumers safe-fail per §11.)
 
 ---
 

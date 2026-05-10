@@ -1,6 +1,6 @@
 {
-  "name": "Compound: cd /tmp && ls",
-  "input": "cd /tmp && ls",
+  "name": "cd-attribution: cd /tmp && mkdir foo (mkdir resolves against /tmp)",
+  "input": "cd /tmp && mkdir foo",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -16,8 +16,9 @@
       },
       {
         "operator": "AndIf",
-        "verb": ["ls"],
+        "verb": ["mkdir"],
         "args": [
+          { "raw": "foo", "kind": "Literal", "isPath": true, "resolved": "/tmp/foo" },
           { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp", "isCwdAttribution": true }
         ],
         "redirects": [],
@@ -26,5 +27,5 @@
       }
     ]
   },
-  "notes": "PR 5: ls inherits /tmp via the synthetic IsCwdAttribution arg."
+  "notes": "mkdir's relative `foo` resolves to /tmp/foo via the attributed cwd."
 }

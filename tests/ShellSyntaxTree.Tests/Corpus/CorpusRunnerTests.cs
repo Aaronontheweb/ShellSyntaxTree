@@ -171,6 +171,10 @@ public class CorpusRunnerTests
         Assert.True(expected.Raw == actual.Raw, diffPrefix + $"Raw mismatch. expected='{expected.Raw}', actual='{actual.Raw}'");
         Assert.True(expected.Kind == actual.Kind, diffPrefix + $"Kind mismatch. expected={expected.Kind}, actual={actual.Kind}");
         Assert.True(expected.IsPath == actual.IsPath, diffPrefix + $"IsPath mismatch. expected={expected.IsPath}, actual={actual.IsPath}");
+        Assert.True(
+            expected.IsCwdAttribution == actual.IsCwdAttribution,
+            diffPrefix + $"IsCwdAttribution mismatch. expected={expected.IsCwdAttribution}, actual={actual.IsCwdAttribution}");
+
         // isFlag is computed; assert when present so corpus can document it.
         if (expected.IsFlag.HasValue)
         {
@@ -275,6 +279,14 @@ public sealed record ExpectedArg
     /// <c>"__NULL__"</c> to assert that Resolved is null.
     /// </summary>
     public string? Resolved { get; init; }
+
+    /// <summary>
+    /// Expected <see cref="Arg.IsCwdAttribution"/>. Omit to assert
+    /// <c>false</c> (the default for normal user-emitted args); set to
+    /// <c>true</c> to assert the synthetic cd-attribution arg that PR 5
+    /// appends to subsequent clauses (SPEC §9 / locked interpretation #6).
+    /// </summary>
+    public bool IsCwdAttribution { get; init; }
 }
 
 public sealed record ExpectedRedirect

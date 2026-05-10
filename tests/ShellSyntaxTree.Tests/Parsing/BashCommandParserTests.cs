@@ -447,24 +447,107 @@ public class BashCommandParserTests
         Assert.Contains("process substitution", result.UnparseableReason!);
     }
 
-    // ---------------- bash -c framework ----------------
+    // ---------------- bash -c recursion ----------------
 
     [Fact]
-    public void Bash_c_treated_as_single_clause_in_pr3()
+    public void Bash_c_inner_compound_surfaces_inline_with_wrapper_flag()
     {
-        // PR 3: framework only — no recursion into the inner string. The
-        // outer clause is verb=[bash] with `-c` flag and a quoted-string
-        // arg. PR 5 will surface the inner clauses.
+        // PR 5: bash -c recursion. The outer bash -c clause is consumed and
+        // the inner command's clauses surface inline, each with
+        // IsBashCWrapped=true. The inner cd attributes only within the
+        // inner shell — outer attribution does not propagate in or out
+        // (v0.1 decision; bash -c spawns a fresh shell).
         var result = Parse("bash -c \"cd /a && cmd\"");
         Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+
+        Assert.Equal(new[] { "cd" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal("/a", result.Clauses[0].Args[0].Resolved);
+        Assert.True(result.Clauses[0].IsBashCWrapped);
+
+        Assert.Equal(new[] { "cmd" }, result.Clauses[1].Verb.Tokens);
+        Assert.Equal(CompoundOperator.AndIf, result.Clauses[1].Operator);
+        Assert.True(result.Clauses[1].IsBashCWrapped);
+
+        // The inner cmd inherits /a from the inner cd via attribution.
+        Assert.Single(result.Clauses[1].Args);
+        Assert.True(result.Clauses[1].Args[0].IsCwdAttribution);
+        Assert.Equal("/a", result.Clauses[1].Args[0].Resolved);
+    }
+
+    [Fact]
+    public void Sh_c_recurses_same_as_bash_c()
+    {
+        var result = Parse("sh -c \"echo hi\"");
+        Assert.False(result.IsUnparseable);
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "echo" }, clause.Verb.Tokens);
+        Assert.True(clause.IsBashCWrapped);
+    }
+
+    [Fact]
+    public void Bash_c_without_quoted_arg_stays_a_regular_bash_clause()
+    {
+        // Plain `bash script.sh` is *not* a wrapper — `-c` is missing or
+        // unfollowed by a quoted body. Parse as a normal bash clause.
+        var result = Parse("bash script.sh");
         var clause = Assert.Single(result.Clauses);
         Assert.Equal(new[] { "bash" }, clause.Verb.Tokens);
-        Assert.Equal(2, clause.Args.Count);
-        Assert.Equal("-c", clause.Args[0].Raw);
-        Assert.True(clause.Args[0].IsFlag);
-        // The inner string is preserved with quotes in Raw.
-        Assert.Equal("\"cd /a && cmd\"", clause.Args[1].Raw);
         Assert.False(clause.IsBashCWrapped);
+    }
+
+    [Fact]
+    public void Bash_c_recursion_depth_exceeded_marks_outer_unparseable()
+    {
+        // Build a 6-level deep bash -c chain. At each level we wrap the
+        // body in `bash -c "..."` and escape-quote the inner level.
+        // Depth 6 > cap 5 → outer ParsedCommand.IsUnparseable=true per
+        // locked interpretation #4.
+        var inner = "echo hi";
+        for (var depth = 0; depth < 6; depth++)
+        {
+            // Double-quote escape: each level escapes the existing
+            // double-quotes in the inner body. Bash double-quote semantics:
+            // `\"` represents a literal `"` inside a double-quoted string.
+            var escaped = inner.Replace("\\", "\\\\").Replace("\"", "\\\"");
+            inner = "bash -c \"" + escaped + "\"";
+        }
+
+        var result = Parse(inner);
+        Assert.True(result.IsUnparseable);
+        Assert.NotNull(result.UnparseableReason);
+        Assert.Contains("bash -c recursion", result.UnparseableReason!);
+    }
+
+    [Fact]
+    public void Bash_c_nested_depth_2_parses()
+    {
+        // `bash -c "bash -c \"echo hi\""` — depth 2, well under the cap.
+        var result = Parse("bash -c \"bash -c \\\"echo hi\\\"\"");
+        Assert.False(result.IsUnparseable);
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "echo" }, clause.Verb.Tokens);
+        Assert.True(clause.IsBashCWrapped);
+    }
+
+    [Fact]
+    public void Bash_c_with_outer_cd_does_not_propagate_into_inner_clauses()
+    {
+        // v0.1 decision: bash -c is a fresh shell. The outer `cd /outer`
+        // attribution is NOT injected into the inner clauses (per the PR 5
+        // brief). The inner `ls` has no IsCwdAttribution arg from /outer.
+        var result = Parse("cd /outer && bash -c \"ls\"");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+
+        // Outer cd.
+        Assert.Equal(new[] { "cd" }, result.Clauses[0].Verb.Tokens);
+
+        // Inner ls (surfaced from bash -c). No attribution arg.
+        Assert.Equal(new[] { "ls" }, result.Clauses[1].Verb.Tokens);
+        Assert.True(result.Clauses[1].IsBashCWrapped);
+        Assert.Equal(CompoundOperator.AndIf, result.Clauses[1].Operator);
+        Assert.Empty(result.Clauses[1].Args);
     }
 
     // ---------------- Empty / whitespace ----------------
@@ -486,22 +569,191 @@ public class BashCommandParserTests
         Assert.False(result.IsUnparseable);
     }
 
-    // ---------------- Subshell framework ----------------
+    // ---------------- Subshell ----------------
 
     [Fact]
-    public void Subshell_inner_clauses_surface_inline()
+    public void Subshell_inner_clauses_carry_IsSubshell_true()
     {
-        // PR 3: subshell parens are recognized; inner clauses are
-        // surfaced inline with IsSubshell=false (PR 5 will set the flag
-        // and add cd-attribution semantics).
+        // PR 5: every clause parsed inside a `(...)` subshell carries
+        // IsSubshell=true so consumers can distinguish them from outer
+        // clauses (SPEC §10).
         var result = Parse("(cmd1 && cmd2)");
         Assert.False(result.IsUnparseable);
         Assert.Equal(2, result.Clauses.Count);
         Assert.Equal(new[] { "cmd1" }, result.Clauses[0].Verb.Tokens);
         Assert.Equal(new[] { "cmd2" }, result.Clauses[1].Verb.Tokens);
         Assert.Equal(CompoundOperator.AndIf, result.Clauses[1].Operator);
+        Assert.True(result.Clauses[0].IsSubshell);
+        Assert.True(result.Clauses[1].IsSubshell);
+    }
+
+    [Fact]
+    public void Subshell_isolates_inner_cd_from_outer_compound()
+    {
+        // SPEC §10 example: `cd /a && (cd /b && cmd1) && cmd2`.
+        // - Clause 0: cd /a, outer.
+        // - Clause 1: cd /b inside subshell — inherits /a attribution.
+        // - Clause 2: cmd1 inside subshell — inherits /b (closer cd).
+        // - Clause 3: cmd2 outside subshell — inherits /a (the subshell's
+        //   /b doesn't leak out).
+        var result = Parse("cd /a && (cd /b && cmd1) && cmd2");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(4, result.Clauses.Count);
+
+        // cd /a
+        Assert.Equal(new[] { "cd" }, result.Clauses[0].Verb.Tokens);
         Assert.False(result.Clauses[0].IsSubshell);
-        Assert.False(result.Clauses[1].IsSubshell);
+        Assert.Equal("/a", result.Clauses[0].Args[0].Resolved);
+
+        // cd /b inside subshell — inherits /a from outer attribution.
+        Assert.Equal(new[] { "cd" }, result.Clauses[1].Verb.Tokens);
+        Assert.True(result.Clauses[1].IsSubshell);
+        Assert.Equal("/b", result.Clauses[1].Args[0].Resolved);
+        // The /a attribution arg follows the user-emitted /b.
+        Assert.Equal(2, result.Clauses[1].Args.Count);
+        Assert.True(result.Clauses[1].Args[1].IsCwdAttribution);
+        Assert.Equal("/a", result.Clauses[1].Args[1].Resolved);
+
+        // cmd1 inside subshell — sees /b.
+        Assert.Equal(new[] { "cmd1" }, result.Clauses[2].Verb.Tokens);
+        Assert.True(result.Clauses[2].IsSubshell);
+        Assert.Single(result.Clauses[2].Args);
+        Assert.True(result.Clauses[2].Args[0].IsCwdAttribution);
+        Assert.Equal("/b", result.Clauses[2].Args[0].Resolved);
+
+        // cmd2 outside — sees /a, NOT /b.
+        Assert.Equal(new[] { "cmd2" }, result.Clauses[3].Verb.Tokens);
+        Assert.False(result.Clauses[3].IsSubshell);
+        Assert.Single(result.Clauses[3].Args);
+        Assert.True(result.Clauses[3].Args[0].IsCwdAttribution);
+        Assert.Equal("/a", result.Clauses[3].Args[0].Resolved);
+    }
+
+    [Fact]
+    public void Sequential_cd_replaces_attribution()
+    {
+        // SPEC §9 rule 3: a second cd in the same compound replaces
+        // attribution for clauses after it. SPEC §9 rule 2 + §10 example:
+        // every clause after the first cd — including a second cd — gets
+        // the outer attribution arg appended; the second cd then *updates*
+        // the context for clauses that follow it.
+        var result = Parse("cd /a && cmd1 && cd /b && cmd2");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(4, result.Clauses.Count);
+
+        // cmd1 sees /a.
+        Assert.Equal("/a", result.Clauses[1].Args[0].Resolved);
+        Assert.True(result.Clauses[1].Args[0].IsCwdAttribution);
+
+        // cd /b — receives /a attribution (rule 2) before becoming the new
+        // source (rule 3). Args = [/b, /a-attribution].
+        Assert.Equal(new[] { "cd" }, result.Clauses[2].Verb.Tokens);
+        Assert.Equal(2, result.Clauses[2].Args.Count);
+        Assert.Equal("/b", result.Clauses[2].Args[0].Resolved);
+        Assert.False(result.Clauses[2].Args[0].IsCwdAttribution);
+        Assert.True(result.Clauses[2].Args[1].IsCwdAttribution);
+        Assert.Equal("/a", result.Clauses[2].Args[1].Resolved);
+
+        // cmd2 sees /b (rule 3 — replaced).
+        Assert.Single(result.Clauses[3].Args);
+        Assert.Equal("/b", result.Clauses[3].Args[0].Resolved);
+        Assert.True(result.Clauses[3].Args[0].IsCwdAttribution);
+    }
+
+    [Fact]
+    public void Cd_relative_path_args_resolve_under_attributed_cwd()
+    {
+        // SPEC §9 example: `cd /target && cat file.txt` → file.txt resolves
+        // to /target/file.txt, not to the daemon cwd's file.txt.
+        var result = Parse("cd /target && cat file.txt");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+
+        var cat = result.Clauses[1];
+        Assert.Equal(new[] { "cat" }, cat.Verb.Tokens);
+        Assert.Equal(2, cat.Args.Count);
+
+        // file.txt resolves against /target, not /work.
+        Assert.Equal("file.txt", cat.Args[0].Raw);
+        Assert.Equal("/target/file.txt", cat.Args[0].Resolved);
+
+        // Trailing synthetic attribution arg.
+        Assert.True(cat.Args[1].IsCwdAttribution);
+        Assert.Equal("/target", cat.Args[1].Resolved);
+    }
+
+    [Fact]
+    public void Pushd_parses_as_cwd_verb_but_does_not_propagate()
+    {
+        // Locked interpretation #5: only cd/chdir propagate attribution.
+        // pushd parses as a CwdVerb (its first positional is path-classified)
+        // but the next clause receives NO synthetic attribution arg.
+        var result = Parse("pushd /target && cmd");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(new[] { "pushd" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal("/target", result.Clauses[0].Args[0].Resolved);
+        Assert.True(result.Clauses[0].Args[0].IsPath);
+
+        // The cmd clause has no synthetic attribution arg.
+        Assert.Empty(result.Clauses[1].Args);
+    }
+
+    [Fact]
+    public void Two_sibling_subshells_track_independent_attribution()
+    {
+        // `(cd /a && cmd1) && (cd /b && cmd2)` — each subshell has its own
+        // attribution state; neither leaks to the other and the outer
+        // compound's attribution stays unset throughout.
+        var result = Parse("(cd /a && cmd1) && (cd /b && cmd2)");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(4, result.Clauses.Count);
+
+        // First subshell: cd /a → cmd1 (sees /a).
+        Assert.Equal(new[] { "cd" }, result.Clauses[0].Verb.Tokens);
+        Assert.True(result.Clauses[0].IsSubshell);
+
+        Assert.Equal(new[] { "cmd1" }, result.Clauses[1].Verb.Tokens);
+        Assert.True(result.Clauses[1].IsSubshell);
+        Assert.Single(result.Clauses[1].Args);
+        Assert.True(result.Clauses[1].Args[0].IsCwdAttribution);
+        Assert.Equal("/a", result.Clauses[1].Args[0].Resolved);
+
+        // Second subshell: cd /b → cmd2 (sees /b, NOT /a).
+        Assert.Equal(new[] { "cd" }, result.Clauses[2].Verb.Tokens);
+        Assert.True(result.Clauses[2].IsSubshell);
+        // cd /b shouldn't have a /a attribution (separate subshell).
+        Assert.Single(result.Clauses[2].Args);
+
+        Assert.Equal(new[] { "cmd2" }, result.Clauses[3].Verb.Tokens);
+        Assert.True(result.Clauses[3].IsSubshell);
+        Assert.Single(result.Clauses[3].Args);
+        Assert.True(result.Clauses[3].Args[0].IsCwdAttribution);
+        Assert.Equal("/b", result.Clauses[3].Args[0].Resolved);
+    }
+
+    [Fact]
+    public void Cd_dynamic_target_marks_subsequent_relative_paths_as_dynamic_skip()
+    {
+        // Locked interpretation #6: `cd $REPO && rm file.txt` — the cwd is
+        // statically unknown, so file.txt cannot be safely resolved.
+        var result = Parse("cd $REPO && rm file.txt");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+
+        // cd target is DynamicSkip.
+        Assert.Equal(ArgKind.DynamicSkip, result.Clauses[0].Args[0].Kind);
+
+        // rm's file.txt is a relative path → DynamicSkip with no resolution.
+        var rm = result.Clauses[1];
+        Assert.Equal(2, rm.Args.Count);
+        Assert.Equal("file.txt", rm.Args[0].Raw);
+        Assert.Equal(ArgKind.DynamicSkip, rm.Args[0].Kind);
+        Assert.Null(rm.Args[0].Resolved);
+
+        // Synthetic attribution arg is the DynamicSkip flavor.
+        Assert.True(rm.Args[1].IsCwdAttribution);
+        Assert.Equal(ArgKind.DynamicSkip, rm.Args[1].Kind);
     }
 
     // ---------------- Quoted args round-trip ----------------

@@ -1,0 +1,20 @@
+{
+  "name": "Nested subshells: ((echo deep))",
+  "input": "((echo deep))",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "deep", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": true,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Two levels of parens; the inner clause is still IsSubshell=true."
+}

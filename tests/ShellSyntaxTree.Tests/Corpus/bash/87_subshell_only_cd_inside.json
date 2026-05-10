@@ -1,6 +1,6 @@
 {
-  "name": "Compound: cd /tmp && ls",
-  "input": "cd /tmp && ls",
+  "name": "Subshell isolation: (cd /tmp) && cmd (subshell cd doesn't leak)",
+  "input": "(cd /tmp) && cmd",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,20 +11,18 @@
           { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp" }
         ],
         "redirects": [],
-        "isSubshell": false,
+        "isSubshell": true,
         "isBashCWrapped": false
       },
       {
         "operator": "AndIf",
-        "verb": ["ls"],
-        "args": [
-          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp", "isCwdAttribution": true }
-        ],
+        "verb": ["cmd"],
+        "args": [],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": false
       }
     ]
   },
-  "notes": "PR 5: ls inherits /tmp via the synthetic IsCwdAttribution arg."
+  "notes": "Subshell-local cd; on exit the outer compound has no attribution to apply."
 }

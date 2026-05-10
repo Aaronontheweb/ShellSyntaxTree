@@ -1,0 +1,28 @@
+{
+  "name": "cd-attribution: pushd /target && cmd (pushd does not propagate)",
+  "input": "pushd /target && cmd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["pushd"],
+        "args": [
+          { "raw": "/target", "kind": "Literal", "isPath": true, "resolved": "/target" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Locked interpretation #5: pushd parses as a CwdVerb (target IsPath=true) but doesn't propagate attribution. cmd has no synthetic arg."
+}

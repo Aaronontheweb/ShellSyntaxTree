@@ -1,0 +1,20 @@
+{
+  "name": "sh -c recursion: sh -c \"ls /tmp\"",
+  "input": "sh -c \"ls /tmp\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["ls"],
+        "args": [
+          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": true
+      }
+    ]
+  },
+  "notes": "sh -c is treated identically to bash -c (SPEC §10)."
+}

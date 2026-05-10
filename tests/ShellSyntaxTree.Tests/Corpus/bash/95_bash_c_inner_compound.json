@@ -1,0 +1,34 @@
+{
+  "name": "bash -c inner compound: bash -c \"a && b && c\"",
+  "input": "bash -c \"a && b && c\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["a"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": true
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["b"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": true
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["c"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": true
+      }
+    ]
+  },
+  "notes": "Inner compound surfaces as three IsBashCWrapped=true clauses."
+}

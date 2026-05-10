@@ -1,0 +1,30 @@
+{
+  "name": "cd-attribution: chdir /target && cmd (chdir also propagates)",
+  "input": "chdir /target && cmd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["chdir"],
+        "args": [
+          { "raw": "/target", "kind": "Literal", "isPath": true, "resolved": "/target" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd"],
+        "args": [
+          { "raw": "/target", "kind": "Literal", "isPath": true, "resolved": "/target", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Locked interpretation #5: chdir is the other propagating CwdVerb (forward-compat with PowerShell-style invocation)."
+}

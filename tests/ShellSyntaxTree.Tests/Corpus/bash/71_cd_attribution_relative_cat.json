@@ -1,0 +1,31 @@
+{
+  "name": "cd-attribution: cd /target && cat file.txt",
+  "input": "cd /target && cat file.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/target", "kind": "Literal", "isPath": true, "resolved": "/target" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "file.txt", "kind": "Literal", "isPath": true, "resolved": "/target/file.txt" },
+          { "raw": "/target", "kind": "Literal", "isPath": true, "resolved": "/target", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §9 example: file.txt resolves against /target via attribution."
+}

@@ -1,6 +1,6 @@
 {
-  "name": "Compound: cd /tmp && ls",
-  "input": "cd /tmp && ls",
+  "name": "cd-attribution: cd - && cmd (cd dash → dynamic)",
+  "input": "cd - && cmd",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -8,7 +8,7 @@
         "operator": "None",
         "verb": ["cd"],
         "args": [
-          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp" }
+          { "raw": "-", "kind": "Literal", "isPath": false, "isFlag": true }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -16,15 +16,13 @@
       },
       {
         "operator": "AndIf",
-        "verb": ["ls"],
-        "args": [
-          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp", "isCwdAttribution": true }
-        ],
+        "verb": ["cmd"],
+        "args": [],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": false
       }
     ]
   },
-  "notes": "PR 5: ls inherits /tmp via the synthetic IsCwdAttribution arg."
+  "notes": "`cd -` swaps to previous dir; we don't track that, so cd has only the dash flag (no non-flag positional). Attribution stays unset; cmd receives no synthetic arg."
 }

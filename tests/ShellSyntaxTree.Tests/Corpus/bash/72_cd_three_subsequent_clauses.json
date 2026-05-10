@@ -1,6 +1,6 @@
 {
-  "name": "Three-clause compound: cd /repo && git status && git push",
-  "input": "cd /repo && git status && git push",
+  "name": "cd-attribution: cd /repo && a && b && c",
+  "input": "cd /repo && a && b && c",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -16,7 +16,7 @@
       },
       {
         "operator": "AndIf",
-        "verb": ["git", "status"],
+        "verb": ["a"],
         "args": [
           { "raw": "/repo", "kind": "Literal", "isPath": true, "resolved": "/repo", "isCwdAttribution": true }
         ],
@@ -26,7 +26,17 @@
       },
       {
         "operator": "AndIf",
-        "verb": ["git", "push"],
+        "verb": ["b"],
+        "args": [
+          { "raw": "/repo", "kind": "Literal", "isPath": true, "resolved": "/repo", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["c"],
         "args": [
           { "raw": "/repo", "kind": "Literal", "isPath": true, "resolved": "/repo", "isCwdAttribution": true }
         ],
@@ -36,5 +46,5 @@
       }
     ]
   },
-  "notes": "PR 5: both git status and git push inherit /repo as attribution."
+  "notes": "Attribution propagates to every subsequent clause in the compound."
 }

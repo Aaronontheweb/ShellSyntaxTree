@@ -1,0 +1,20 @@
+{
+  "name": "bash -c simple: bash -c \"echo hi\"",
+  "input": "bash -c \"echo hi\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "hi", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": true
+      }
+    ]
+  },
+  "notes": "bash -c wrapper consumed; inner echo surfaces with IsBashCWrapped=true."
+}

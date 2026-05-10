@@ -68,7 +68,23 @@ internal static class BashResolver
     /// <see cref="Arg.IsPath"/>.
     /// </returns>
     internal static (ArgKind Kind, string? Resolved, bool IsPath) Resolve(
-        string raw, bool treatAsPath, BashParserOptions options)
+        string raw, bool treatAsPath, BashParserOptions options) =>
+        Resolve(raw, treatAsPath, options, workingDirectoryUnknown: false);
+
+    /// <summary>
+    /// Internal extended-resolver entry point. PR 5 adds the
+    /// <paramref name="workingDirectoryUnknown"/> flag for the
+    /// dynamic-cd-attribution case (locked interpretation #6): when the
+    /// preceding clause did <c>cd $VAR</c>, we statically don't know the
+    /// working directory of subsequent clauses, so relative-path args
+    /// resolve to <c>DynamicSkip</c> instead of falling back to the
+    /// daemon cwd.
+    /// </summary>
+    internal static (ArgKind Kind, string? Resolved, bool IsPath) Resolve(
+        string raw,
+        bool treatAsPath,
+        BashParserOptions options,
+        bool workingDirectoryUnknown)
     {
         if (raw is null)
         {
@@ -171,7 +187,7 @@ internal static class BashResolver
         }
 
         // Path slot: try to normalize to an absolute path.
-        var resolved = TryResolveAbsolutePath(working, options);
+        var resolved = TryResolveAbsolutePath(working, options, workingDirectoryUnknown);
         if (resolved is null)
         {
             // Resolution failed (IOException / ArgumentException / format) —
@@ -444,7 +460,8 @@ internal static class BashResolver
     /// platform-aware and would produce `D:\foo` for `/foo` on Windows,
     /// which is wrong for our bash-parsing semantics.
     /// </summary>
-    private static string? TryResolveAbsolutePath(string token, BashParserOptions options)
+    private static string? TryResolveAbsolutePath(
+        string token, BashParserOptions options, bool workingDirectoryUnknown)
     {
         if (string.IsNullOrEmpty(token))
         {
@@ -457,6 +474,15 @@ internal static class BashResolver
             if (IsRootedPath(token))
             {
                 combined = NormalizeToForwardSlashes(token);
+            }
+            else if (workingDirectoryUnknown)
+            {
+                // Locked interpretation #6: caller (cd-attribution stage)
+                // signaled that the working directory of subsequent clauses
+                // is statically unknown. Don't fall back to the daemon cwd
+                // — surface as DynamicSkip so the consumer routes to
+                // safe-fail.
+                return null;
             }
             else
             {

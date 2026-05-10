@@ -17,7 +17,9 @@
       {
         "operator": "AndIf",
         "verb": ["cmd"],
-        "args": [],
+        "args": [
+          { "raw": "/repo", "kind": "Literal", "isPath": true, "resolved": "/repo", "isCwdAttribution": true }
+        ],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": false
@@ -26,7 +28,8 @@
         "operator": "Pipe",
         "verb": ["grep"],
         "args": [
-          { "raw": "foo", "kind": "Literal", "isPath": false }
+          { "raw": "foo", "kind": "Literal", "isPath": false },
+          { "raw": "/repo", "kind": "Literal", "isPath": true, "resolved": "/repo", "isCwdAttribution": true }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -34,5 +37,5 @@
       }
     ]
   },
-  "notes": "PR 4: cd target /repo resolves; grep i=0 is the pattern (IsPath=false)."
+  "notes": "PR 5: every clause after `cd /repo` (across both && and |) inherits the /repo attribution."
 }
