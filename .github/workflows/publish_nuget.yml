@@ -8,11 +8,13 @@ on:
 
 permissions:
   contents: write
+  id-token: write   # Required for NuGet trusted publishing (OIDC token exchange).
 
 jobs:
   publish-nuget:
     name: publish-nuget
     runs-on: ubuntu-latest
+    environment: nuget   # Must match the environment named in the nuget.org Trusted Publisher policy.
 
     steps:
       - name: "Checkout"
@@ -41,8 +43,29 @@ jobs:
       - name: "dotnet pack"
         run: dotnet pack /p:PackageVersion=${{ env.PACKAGE_VERSION }} -c Release -o ./output
 
+      - name: "NuGet login (OIDC)"
+        # Exchanges the workflow's OIDC token for a short-lived NuGet API key
+        # under the Trusted Publisher policy configured on nuget.org.
+        # Requires:
+        #   - permissions.id-token: write at the workflow level (above)
+        #   - environment: nuget on this job (matches the policy)
+        #   - NUGET_USER repo secret = the package owner's nuget.org username
+        # See https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing
+        uses: NuGet/login@v1
+        id: nuget-login
+        with:
+          user: ${{ secrets.NUGET_USER }}
+
       - name: "dotnet nuget push"
-        run: dotnet nuget push "output/*.nupkg" -k ${{ secrets.NUGET_KEY }} -s https://api.nuget.org/v3/index.json --skip-duplicate
+        run: |
+          dotnet nuget push "output/*.nupkg" \
+            --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+          dotnet nuget push "output/*.snupkg" \
+            --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
 
       - name: "Extract latest release notes"
         shell: pwsh
@@ -64,7 +87,9 @@ jobs:
           name: "ShellSyntaxTree ${{ github.ref_name }}"
           tag_name: ${{ github.ref_name }}
           body_path: RELEASE_NOTES_LATEST.md
-          files: output/*.nupkg
+          files: |
+            output/*.nupkg
+            output/*.snupkg
           draft: false
           prerelease: ${{ contains(github.ref_name, '-') }}
         env:
