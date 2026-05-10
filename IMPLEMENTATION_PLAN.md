@@ -42,14 +42,26 @@ bulldoze priorities.
 - [x] Update SPEC.md §3 to enumerate `Arg.IsCwdAttribution`; cross-tfm
       note on `VerbChain.Joined`
 
-### 3. BashLexer (SPEC §5)
+### 3. BashLexer + opaque-region scanner — PR 2, in progress
 
-- [ ] Token kinds: WORD, QUOTED_STRING, OPERATOR, WHITESPACE,
-      CONTINUATION
-- [ ] Quote handling (single literal, double with `\"`, `\\`, `\$`)
-- [ ] Escape handling outside quotes
-- [ ] Operator boundaries (no whitespace required)
-- [ ] Heavy unit tests on tokenization
+- [x] `Internal/Lexing/OpaqueRegionScanner.cs` — shared, grammar-agnostic;
+      `Scan` for `(`/`)` style + `ScanSymmetric` for backtick; quote-aware,
+      escape-aware, nesting-aware
+- [x] `Internal/Bash/Lexing/{BashLexer,BashToken,BashTokenKind}.cs`
+- [x] Token kinds: Word, QuotedString, Operator, Whitespace, Continuation,
+      OpaqueSubstitution, UnparseableSentinel
+- [x] Quote handling (single literal, double with `\"`, `\\`, `\$`,
+      `\` + newline)
+- [x] Escape handling outside quotes
+- [x] Operator boundaries (no whitespace required); `<<-` heredoc variant
+- [x] `$(…)` and backticks → `OpaqueSubstitution` (locked interpretation #2)
+- [x] `$((expr))` and `${var//pat/repl}` → `UnparseableSentinel`
+- [x] Heredoc body skip per SPEC §4
+- [x] 78 lexer + scanner unit tests (combined with PR 1's 18 → 96/96
+      passing)
+- [x] SPEC §1 / §5 / §11 updated for token kinds + non-goal additions
+- [x] OpenSpec change `v0.1-locked-interpretations` tasks.md updated
+      (Phase 2 marked [x])
 
 ### 4. Verb tables (SPEC §6, data only)
 
