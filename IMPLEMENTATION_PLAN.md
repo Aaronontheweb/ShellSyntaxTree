@@ -169,24 +169,36 @@ bulldoze priorities.
 - [x] Wired into `pr_validation.yml` via standard `dotnet test`
       (no separate job)
 
-### 13. Release v0.1.0-alpha
+### 13. Release v0.1.0-alpha — PR 7 in flight
 
-- [ ] `RELEASE_NOTES.md` updated with v0.1.0-alpha section
-- [ ] Tag `v0.1.0-alpha`; verify `publish_nuget.yml` produces and pushes
-      the package
+- [x] `RELEASE_NOTES.md` updated with v0.1.0-alpha section
+- [x] `dotnet pack -c Release -o ./bin/nuget` produces clean
+      `ShellSyntaxTree.0.1.0-alpha.nupkg` + `.snupkg` with embedded
+      README, icon, SourceLink metadata
+- [ ] **STOP after PR 7 merges** — await user go-ahead before pushing
+      `v0.1.0-alpha` tag (the tag → nuget.org publish is irreversible)
+- [ ] On user go-ahead: `git tag v0.1.0-alpha && git push origin v0.1.0-alpha`
+- [ ] Verify `publish_nuget.yml` produces release on tag push and the
+      package appears on nuget.org
 
 ### 14. Netclaw integration smoke (SPEC §17 #7-#8)
 
-- [ ] Add `<PackageReference Include="ShellSyntaxTree">` to a Netclaw
-      project; verify `IShellParser` resolves in DI
+- [ ] In netclaw repo: `dotnet add package ShellSyntaxTree --version 0.1.0-alpha`
+- [ ] Wire `IShellParser` into Netclaw DI; replace minimal call site in
+      `src/Netclaw.Security/ShellApprovalSemantics.cs`
 - [ ] One Netclaw integration test exercises a real corpus entry through
       the live matcher and gets the expected gate decision
+- [ ] Update this repo's IMPLEMENTATION_PLAN.md: mark SPEC §17 #7–#8
+      satisfied
 
-### 15. NuGet package icon
+### 15. NuGet package icon — PR 7, complete
 
-- [ ] Generate a fitting icon via `/generate-image` (HCTI)
-- [ ] Place at `assets/icon.png`; wire into `Directory.Build.props`
-      (`PackageIcon` + a packed `<None>` item)
+- [x] Icon already generated as `assets/icon.png` (ShellSyntaxTree-themed
+      AST tree on dark green background with `>_` shell prompt motif —
+      512x512 PNG, ~98 KB; created during template bootstrap)
+- [x] `Directory.Build.props` wires `<PackageIcon>icon.png</PackageIcon>`
+      + a packed `<None>` item (already present from bootstrap)
+- [x] `dotnet pack` validation: icon embedded in `.nupkg` confirmed
 - [ ] Re-pack to validate icon embeds
 
 ---
