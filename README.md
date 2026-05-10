@@ -1,70 +1,84 @@
-# build-system-template
-Akka.NET project build system template that provides standardized build and CI/CD configuration for all Akka.NET projects.
+# ShellSyntaxTree
 
-## Build System Overview
-This repository contains our standardized build system setup that can be used across all Akka.NET projects. Here are the key components and practices we follow:
+A focused .NET library that parses shell command strings into a structured AST.
+Purpose-built for **security gate evaluators** — tools that inspect agent-emitted
+shell commands and decide whether to allow, prompt for, or deny execution.
 
-### CI/CD Configuration
-We primarily use GitHub Actions for our CI/CD pipelines, but also maintain Azure DevOps pipeline examples. You can find the configuration examples in:
-- `.github/workflows/` - GitHub Actions pipeline examples
-- `.azuredevops/` - Azure DevOps pipeline examples
+ShellSyntaxTree is **not** a shell interpreter. It does not execute, expand,
+or evaluate commands. It returns an AST (verb chain, args with path
+classification, redirects, compound operators, `cd`-in-compound propagation,
+`bash -c` recursion) that consumers walk to make policy decisions.
 
-### SDK Version Management
-We use `global.json` to pin the .NET SDK version for both CI/CD environments and local development. This ensures consistent builds across all environments and developers.
+The original consumer is [Netclaw](https://github.com/netclaw-dev/netclaw)'s
+approval policy. Any tool that needs to reason about the shape of an
+agent-emitted shell command — without running it — is welcome to consume it.
 
-### .NET Tools
-We use local .NET tools to enhance our build and documentation process. The tools are configured in `.config/dotnet-tools.json` and include:
+## Status
 
-- [Incrementalist](https://github.com/petabridge/Incrementalist) (v1.0.0-beta4) - Used for determining which projects need to be rebuilt based on Git changes
-- [DocFx](https://dotnet.github.io/docfx/) (v2.78.3) - Used for generating documentation
+**v0.1 — pre-alpha.** Public API surface and behavior are specified in
+[`SPEC.md`](./SPEC.md). Implementation is in progress.
 
-To restore these tools in your local environment, run:
-```powershell
+## Why not `tree-sitter-bash`?
+
+Native dependencies, AOT trim concerns, and IDE-grade fidelity we don't need.
+We want unsupported constructs to mark `IsUnparseable = true` so consumers
+route to safe-fail. See [`SPEC.md` Appendix B](./SPEC.md) for the full
+trade-off analysis.
+
+## Public API surface (locked for v0.1)
+
+```csharp
+namespace ShellSyntaxTree;
+
+public interface IShellParser { ParsedCommand Parse(string command); }
+public sealed class BashParser : IShellParser { /* ... */ }
+public sealed record BashParserOptions { /* HomeDirectory, WorkingDirectory */ }
+
+public sealed record ParsedCommand { /* Source, Clauses, IsUnparseable, ... */ }
+public sealed record Clause       { /* Operator, Verb, Args, Redirects, ... */ }
+public sealed record VerbChain    { /* Tokens */ }
+public sealed record Arg          { /* Raw, Resolved, Kind, IsPath, ... */ }
+public sealed record Redirect     { /* Direction, Target */ }
+
+public enum ArgKind            { Literal, EnvVar, Glob, Tilde, DynamicSkip }
+public enum RedirectDirection  { In, Out, Append, ErrOut, ErrAppend }
+public enum CompoundOperator   { None, AndIf, OrIf, Sequence, Pipe }
+```
+
+PowerShell and Windows `cmd` parsers are deferred to later versions; the
+`IShellParser` seam is already in place so consumers don't have to refactor
+when they ship.
+
+## Multi-targeting
+
+`netstandard2.0` for broad consumer compatibility, `net8.0` for modern
+runtimes. Tests target `net10.0`.
+
+## Repository layout
+
+```
+src/ShellSyntaxTree/                 # library (TBD)
+tests/ShellSyntaxTree.Tests/         # xunit tests + corpus runner (TBD)
+tests/ShellSyntaxTree.Tests/Corpus/  # JSON test corpus (acceptance contract)
+SPEC.md                              # the implementation specification
+PROJECT_CONTEXT.md                   # what this is, who it serves
+TOOLING.md                           # available tooling and how to access it
+AGENTS.md / CLAUDE.md                # agent operating constitution
+IMPLEMENTATION_PLAN.md               # NOW / NEXT / LATER work tracker
+```
+
+## Building
+
+```bash
 dotnet tool restore
+dotnet build -c Release
+dotnet test  -c Release
+dotnet pack  -c Release -o ./bin/nuget
 ```
 
-This command is automatically executed in our CI/CD pipelines (both GitHub Actions and Azure DevOps) to ensure tools are available during builds.
+`global.json` pins the SDK version. Targeting requires .NET 10 SDK or later
+(`.slnx` solution format).
 
-### Centralized Package and Build Management
-We utilize two key MSBuild files for centralized configuration:
+## License
 
-1. `Directory.Packages.props` - Implements [Central Package Version Management](https://learn.microsoft.com/nuget/consume-packages/Central-Package-Management) for consistent NuGet package versions across all projects in the solution.
-
-2. `Directory.Build.props` - Defines common build properties, including:
-   - Copyright and author information
-   - Source linking configuration
-   - NuGet package metadata
-   - Common compiler settings
-   - Target framework definitions
-
-### Code Coverage Configuration
-The `coverlet.runsettings` file configures code coverage collection using Coverlet, with settings for:
-- Multiple coverage report formats (JSON, Cobertura, LCOV, TeamCity, OpenCover)
-- Test assembly exclusions
-- Source linking integration
-- Performance optimizations
-
-### Release Management
-Our release process is streamlined through:
-- `RELEASE_NOTES.md` - Contains version history and release notes
-- `build.ps1` - PowerShell script that processes release notes and updates version information
-- Supporting scripts in `/scripts`:
-  - `bumpVersion.ps1` - Updates version numbers
-  - `getReleaseNotes.ps1` - Parses release notes
-
-The build system primarily relies on standard `dotnet` CLI commands, with the PowerShell scripts mainly handling release note processing and version management.
-
-### Solution Format
-We prefer the new `.slnx` XML-based solution format over the traditional `.sln` format. This requires .NET 9 SDK or later. The new format is more concise and easier to work with. You can migrate existing solutions using:
-
-```powershell
-dotnet sln migrate
-```
-
-For more information about the new `.slnx` format, see the [official announcement](https://devblogs.microsoft.com/dotnet/introducing-slnx-support-dotnet-cli/).
-
-## Getting Started
-1. Ensure you have the correct .NET SDK version installed (check `global.json`)
-2. Clone this repository
-3. Run `dotnet build` to verify the build system
-4. Customize the configuration files for your specific project needs
+[Apache-2.0](./LICENSE). Copyright © 2026 Aaron Stannard.

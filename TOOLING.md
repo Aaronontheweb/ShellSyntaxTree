@@ -1,0 +1,136 @@
+# Tooling Inventory — ShellSyntaxTree
+
+What's available to agents working in this repo, how to access it, and what
+it enables. Update this file when tooling actually changes; keep it concise.
+
+## Runtime and Build
+
+| Tool | Access | Purpose |
+|---|---|---|
+| .NET SDK | pinned by `global.json` (10.x line, `rollForward: major`) | build, test, pack, restore |
+| `dotnet` CLI | shell | every build action |
+| Local .NET tools | `.config/dotnet-tools.json` (run `dotnet tool restore`) | currently `incrementalist` (selective rebuilds) |
+
+DocFX and `build.ps1` (Akka template release-notes injector) were intentionally
+removed — this repo does not need them.
+
+## Test Stack
+
+| Tool | Access | Purpose |
+|---|---|---|
+| xUnit 2.9.x | NuGet via Central Package Management | unit + corpus tests |
+| `Microsoft.NET.Test.Sdk` 17.11+ | NuGet | test discovery |
+| `coverlet.collector` | NuGet | code coverage |
+
+The corpus runner (SPEC §13) is a single `[Theory] [MemberData]` test that
+enumerates `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` and asserts each
+parses to its declared `expected` AST.
+
+## Source Control and CI
+
+| Tool | Access | Purpose |
+|---|---|---|
+| `git` | shell | everything |
+| `gh` CLI | shell | issues, PRs, releases, tag pushes |
+| GitHub Actions | `.github/workflows/` | `pr_validation.yml` (build + test + pack on PR/push), `publish_nuget.yml` (pack + push + release on `v*.*.*` tags) |
+| GitHub Dependabot | `.github/dependabot.yml` | NuGet bumps |
+
+## NuGet
+
+| Tool | Access | Purpose |
+|---|---|---|
+| `NuGet.Config` | repo root | feed configuration (currently `nuget.org`) |
+| `dotnet pack` | shell | produces `.nupkg` and `.snupkg` (symbol package) |
+| `dotnet nuget push` | CI only (`NUGET_KEY` secret) | publishes to `nuget.org` on tag |
+| Central Package Management | `Directory.Packages.props` | single source of truth for package versions |
+
+## Source-Level Conventions
+
+- `Directory.Build.props` enforces: `Nullable=enable`, `LangVersion=latest`,
+  `TreatWarningsAsErrors=true`. Any new project inherits these.
+- Solution format is `.slnx` (`ShellSyntaxTree.slnx`).
+- Every `.cs` file under `src/` and `tests/` carries a copyright header.
+  Use `scripts/Add-FileHeaders.ps1` to add them; CI runs the same script
+  with `-Verify` and fails the build on missing headers.
+
+### Copyright header script
+
+| Command | Purpose |
+|---|---|
+| `pwsh ./scripts/Add-FileHeaders.ps1` | Add Aaron Stannard copyright headers to all `.cs` files missing them under `src/` and `tests/` |
+| `pwsh ./scripts/Add-FileHeaders.ps1 -WhatIf` | Preview which files would be modified |
+| `pwsh ./scripts/Add-FileHeaders.ps1 -Verify` | CI mode: exit 1 if any file is missing a header |
+
+The script auto-detects file creation year via `git log --diff-filter=A`
+and falls back to the current year for new files.
+
+## External Resources
+
+| Resource | Access | Purpose |
+|---|---|---|
+| Netclaw repo | local at `/home/petabridge/repositories/stannardlabs/netclaw` (also `github.com/netclaw-dev/netclaw`) | reference for the consumer contract; read `src/Netclaw.Security/ShellApprovalSemantics.cs` and `ShellTokenizer.cs` to see the surface ShellSyntaxTree replaces |
+| Daemon dogfood logs (Netclaw) | `~/.netclaw/logs/daemon-*.log` (operator's machine; not in CI) | corpus seed source — strict sanitization required (SPEC §14) before any entry lands in the public corpus |
+
+## dotnet-skills Marketplace
+
+Install-once skill bundle that surfaces curated .NET guidance. Prefer
+retrieval-led reasoning (open the skill) over pretraining for any non-trivial
+.NET work. Routing for this repo:
+
+| Topic | Skill |
+|---|---|
+| Project layout / `.slnx` / `Directory.Build.props` / SourceLink | `dotnet-skills:project-structure` |
+| Central Package Management, `dotnet add/remove` | `dotnet-skills:package-management` |
+| Modern C# (records, pattern matching, value objects, Span/Memory) | `dotnet-skills:csharp-coding-standards` |
+| Public API stability and extend-only design | `dotnet-skills:csharp-api-design` |
+| Type/perf design (sealed classes, readonly structs, etc.) | `dotnet-skills:csharp-type-design-performance` |
+| xUnit + corpus discipline | (no dedicated skill; corpus contract is in SPEC §13) |
+| Snapshot/golden testing | `dotnet-skills:snapshot-testing` |
+| Reward-hacking detector after code changes | `dotnet-skills:slopwatch` |
+| Coverage / risk hot-spots | `dotnet-skills:crap-analysis` |
+| Decompile a NuGet to confirm behavior | `dotnet-skills:ilspy-decompile` |
+| Marketplace publishing workflow (skills, not this lib) | `dotnet-skills:marketplace-publishing` |
+
+Skills are advisory. Open the skill, apply the parts that fit ShellSyntaxTree,
+note conflicts back here.
+
+## Specialist Agents
+
+Available via the `Agent` tool:
+
+- `dotnet-skills:dotnet-concurrency-specialist` — only relevant if the
+  parser ever grows mutable state (currently it shouldn't).
+- `dotnet-skills:dotnet-performance-analyst` — for the "fast enough"
+  budget (~1 ms typical) if it's ever in doubt.
+- `dotnet-skills:dotnet-benchmark-designer` — if benchmarks become
+  needed (SPEC explicitly defers performance tuning).
+- `pr-review-specialist` — coordinated PR review, especially for the
+  initial public-API-locking PR.
+
+## Helper Skills (Claude Code)
+
+| Skill | When to use |
+|---|---|
+| `/init` | (already done — generated CLAUDE.md companion) |
+| `/commit` | Branch-and-commit hygiene (creates feature branch off `dev` if needed) |
+| `/pr` | Open PR against `dev` |
+| `/review-pr` | Pre-flight review before requesting human review |
+| `/security-review` | Targeted security review — relevant for this library |
+| `/generate-image` | HCTI-backed image generation; used to mint the NuGet package icon |
+
+## Image Generation (HCTI)
+
+Used to mint the package icon. Output goes to `assets/icon.png` (or similar)
+and is wired into `Directory.Build.props` via `PackageIcon`. The icon is the
+only graphical artifact this repo needs.
+
+## Working Assumptions
+
+- Single maintainer (Aaron Stannard). No org-wide review SLA.
+- CI is the only place that publishes packages; local `dotnet nuget push` is
+  not used.
+- Dogfood log sanitization happens on the operator's machine before any
+  corpus entry is committed. CI enforces a regex audit; it does not
+  sanitize.
+- No external API/secret credentials are required to build or test.
+  Publishing to nuget.org requires the `NUGET_KEY` repo secret.
