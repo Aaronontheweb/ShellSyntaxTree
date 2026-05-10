@@ -41,8 +41,37 @@ parses to its declared `expected` AST.
 |---|---|---|
 | `NuGet.Config` | repo root | feed configuration (currently `nuget.org`) |
 | `dotnet pack` | shell | produces `.nupkg` and `.snupkg` (symbol package) |
-| `dotnet nuget push` | CI only (`NUGET_KEY` secret) | publishes to `nuget.org` on tag |
+| `dotnet nuget push` | CI only (`NuGet/login@v1` OIDC) | publishes to `nuget.org` on tag |
 | Central Package Management | `Directory.Packages.props` | single source of truth for package versions |
+
+### NuGet trusted publishing
+
+`publish_nuget.yml` uses
+[trusted publishing](https://learn.microsoft.com/en-us/nuget/nuget-org/trusted-publishing)
+— no long-lived API key in repo secrets. The workflow exchanges its
+OIDC token for a short-lived API key via the `NuGet/login@v1` action.
+
+Required configuration (one-time, on `nuget.org`):
+
+1. Sign in to nuget.org → **Account → Trusted Publisher Policies** →
+   **Add new policy**.
+2. Publisher: GitHub Actions. Repository owner: `Aaronontheweb`.
+   Repository: `ShellSyntaxTree`. Workflow file: `publish_nuget.yml`.
+   Environment: `nuget`. Optional package-name pattern:
+   `ShellSyntaxTree*`.
+
+Required configuration (one-time, in repo settings):
+
+1. **Settings → Environments → New environment** → name `nuget`.
+   Optional protection: restrict deployment to tags matching
+   `v*.*.*`.
+2. **Settings → Secrets and variables → Actions → New repository
+   secret** — `NUGET_USER` set to the nuget.org account username
+   that owns the package. The legacy `NUGET_KEY` secret can be
+   deleted once trusted publishing is verified.
+
+The workflow's `permissions: id-token: write` and `environment: nuget`
+declarations are required for the OIDC exchange to succeed.
 
 ## Source-Level Conventions
 
