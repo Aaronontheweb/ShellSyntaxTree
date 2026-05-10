@@ -1,0 +1,18 @@
+{
+  "name": "Three-token verb: bun run my-script",
+  "input": "bun run my-script",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["bun", "run", "my-script"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "BashArity['bun run'] = 3 → all three source tokens become the verb chain."
+}

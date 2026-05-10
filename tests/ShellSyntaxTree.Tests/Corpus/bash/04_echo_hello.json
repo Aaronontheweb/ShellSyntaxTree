@@ -1,0 +1,19 @@
+{
+  "name": "Simple verb: echo hello",
+  "input": "echo hello",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "hello", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

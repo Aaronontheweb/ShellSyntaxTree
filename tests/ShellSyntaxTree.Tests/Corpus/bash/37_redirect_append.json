@@ -1,0 +1,19 @@
+{
+  "name": "Redirect Append: cmd >> /tmp/log",
+  "input": "cmd >> /tmp/log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [
+          { "direction": "Append", "target": "/tmp/log" }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

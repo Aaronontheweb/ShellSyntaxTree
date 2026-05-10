@@ -1,0 +1,17 @@
+{
+  "name": "Simple verb: pwd",
+  "input": "pwd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["pwd"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

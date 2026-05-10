@@ -10,11 +10,7 @@ namespace ShellSyntaxTree;
 /// <summary>Bash implementation of <see cref="IShellParser"/>.</summary>
 public sealed class BashParser : IShellParser
 {
-    // Stored for use by the lexer/parser passes landing in PRs 2-5; the v0.1.0-alpha
-    // skeleton only locks the public API surface — see SPEC §17 acceptance criteria.
-#pragma warning disable IDE0052, CA1823 // intentionally retained until PR 2 wires this in
     private readonly BashParserOptions _options;
-#pragma warning restore IDE0052, CA1823
 
     /// <summary>
     /// Create a parser with default options.
@@ -46,7 +42,6 @@ public sealed class BashParser : IShellParser
             throw new ArgumentNullException(nameof(command));
         }
 
-        throw new NotImplementedException(
-            "BashParser.Parse will be implemented in PR 2-5; this stub locks the public API surface.");
+        return Internal.Bash.Parsing.BashCommandParser.Parse(command, _options);
     }
 }

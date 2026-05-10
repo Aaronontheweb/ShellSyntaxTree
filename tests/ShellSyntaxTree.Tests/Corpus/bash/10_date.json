@@ -1,0 +1,17 @@
+{
+  "name": "Simple verb: date",
+  "input": "date",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["date"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

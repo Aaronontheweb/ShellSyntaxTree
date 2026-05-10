@@ -1,0 +1,8 @@
+{
+  "name": "Unparseable: complex parameter expansion",
+  "input": "echo ${PATH//:/\\n}",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "complex parameter expansion"
+  }
+}

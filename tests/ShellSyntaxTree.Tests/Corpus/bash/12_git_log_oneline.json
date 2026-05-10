@@ -1,0 +1,19 @@
+{
+  "name": "Multi-token verb: git log --oneline",
+  "input": "git log --oneline",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "log"],
+        "args": [
+          { "raw": "--oneline", "kind": "Literal", "isPath": false, "isFlag": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

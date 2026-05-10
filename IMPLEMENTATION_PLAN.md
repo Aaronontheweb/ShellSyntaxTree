@@ -63,22 +63,33 @@ bulldoze priorities.
 - [x] OpenSpec change `v0.1-locked-interpretations` tasks.md updated
       (Phase 2 marked [x])
 
-### 4. Verb tables (SPEC §6, data only)
+### 4. Verb tables (SPEC §6, data only) — PR 3, complete
 
-- [ ] `BashArity` (multi-token verbs)
-- [ ] `CwdVerbs` (`cd`, `chdir`, `popd`, `pushd`, ...)
-- [ ] `FileVerbs` (cat, grep, find, ls, ...)
-- [ ] `FlagsWithValue` (per-verb flags that consume the next token)
-- [ ] Probe order: longest-match-first when joining 1, 2, 3 tokens
+- [x] `BashArity` (multi-token verbs) per SPEC §6.1
+- [x] `CwdVerbs` (`cd`, `chdir`, `popd`, `pushd`, `push-location`,
+      `set-location`)
+- [x] `FileVerbs` (full SPEC §6.3 list)
+- [x] `FlagsWithValue` (`git`, `curl`, `wget`, `docker`, `tar`)
+- [x] `ControlFlowKeywords` (for IsUnparseable detection)
+- [x] Probe order: longest-match-first (3-token, then 2-token, then
+      1-token); SPEC note added that flag-with-value-aware probing
+      arrives in PR 4
 
-### 5. BashParser core (SPEC §4)
+### 5. BashParser core (SPEC §4) — PR 3, complete
 
-- [ ] Compound splitting on `&&`, `||`, `;`, `|`
-- [ ] Verb chain extraction using `BashArity`
-- [ ] Args + redirects per clause
-- [ ] Subshell `( ... )` handling
-- [ ] `bash -c "..."` recursion (capped at depth 5)
-- [ ] Anomaly safe-fail (SPEC §11): never throw on well-formed input
+- [x] Compound splitting on `&&`, `||`, `;`, `|`
+- [x] Verb chain extraction using `BashArity` (PR 4 will refine for
+      flag-with-value pairs)
+- [x] Args + redirects per clause (literal-only mode; path classification
+      arrives in PR 4)
+- [x] Subshell `( ... )` framework (inner clauses parse inline;
+      `IsSubshell` flag stays false until PR 5)
+- [x] `bash -c "..."` framework (single-clause mode in PR 3; PR 5 wires
+      recursion + `IsBashCWrapped`)
+- [x] Anomaly safe-fail (SPEC §11): never throw on well-formed input;
+      strict empty-Clauses on anomaly (PR 6 may relax to partial recovery)
+- [x] CorpusRunnerTests skeleton + 50 corpus entries
+- [x] `BashParser.Parse` delegates to `BashCommandParser.Parse`
 
 ### 6. Resolver (SPEC §8)
 

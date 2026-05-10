@@ -1,0 +1,27 @@
+{
+  "name": "Compound: make && make install",
+  "input": "make && make install",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["make"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["make"],
+        "args": [
+          { "raw": "install", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

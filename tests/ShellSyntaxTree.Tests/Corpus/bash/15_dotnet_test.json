@@ -1,0 +1,17 @@
+{
+  "name": "Multi-token verb: dotnet test",
+  "input": "dotnet test",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["dotnet", "test"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

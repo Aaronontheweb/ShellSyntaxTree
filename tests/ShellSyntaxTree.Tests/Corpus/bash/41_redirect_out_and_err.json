@@ -1,0 +1,20 @@
+{
+  "name": "Multiple redirects: cmd > out 2> err",
+  "input": "cmd > out 2> err",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "out" },
+          { "direction": "ErrOut", "target": "err" }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

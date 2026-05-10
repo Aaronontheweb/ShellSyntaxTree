@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable: for-loop control flow",
+  "input": "for i in 1 2; do echo $i; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "'for'"
+  },
+  "notes": "SPEC §11: control-flow keyword as the verb sets outer IsUnparseable."
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Unparseable: arithmetic expansion",
+  "input": "echo $((1+2))",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "arithmetic expansion"
+  }
+}

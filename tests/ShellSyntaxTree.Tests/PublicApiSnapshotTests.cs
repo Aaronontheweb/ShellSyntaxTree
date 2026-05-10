@@ -71,10 +71,14 @@ public class PublicApiSnapshotTests
     }
 
     [Fact]
-    public void BashParser_Parse_throws_NotImplementedException_in_v0_1_alpha()
+    public void BashParser_Parse_returns_ParsedCommand_for_simple_input()
     {
         var parser = new BashParser();
-        Assert.Throws<NotImplementedException>(() => parser.Parse("ls"));
+        var result = parser.Parse("ls");
+        Assert.NotNull(result);
+        Assert.Equal("ls", result.Source);
+        Assert.False(result.IsUnparseable);
+        Assert.Single(result.Clauses);
     }
 
     [Fact]

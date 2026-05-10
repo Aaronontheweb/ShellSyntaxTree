@@ -1,0 +1,36 @@
+{
+  "name": "Three-clause compound: cd /repo && git status && git push",
+  "input": "cd /repo && git status && git push",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/repo", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["git", "status"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["git", "push"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "PR 3: no cd-attribution. PR 5 will append /repo to subsequent clauses."
+}

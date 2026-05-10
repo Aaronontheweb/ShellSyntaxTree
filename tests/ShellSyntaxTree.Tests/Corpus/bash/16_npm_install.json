@@ -1,0 +1,17 @@
+{
+  "name": "Multi-token verb: npm install",
+  "input": "npm install",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["npm", "install"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

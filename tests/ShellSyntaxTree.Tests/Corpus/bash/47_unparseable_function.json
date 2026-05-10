@@ -1,0 +1,8 @@
+{
+  "name": "Unparseable: function definition",
+  "input": "func() { echo hi; }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "function definition"
+  }
+}

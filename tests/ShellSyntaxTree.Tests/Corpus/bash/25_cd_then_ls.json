@@ -1,0 +1,28 @@
+{
+  "name": "Compound: cd /tmp && ls",
+  "input": "cd /tmp && ls",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/tmp", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["ls"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "PR 3: no cd-attribution arg. PR 5 will append the synthetic /tmp arg to clause 1."
+}

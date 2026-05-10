@@ -1,0 +1,19 @@
+{
+  "name": "Simple verb: touch file",
+  "input": "touch file",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["touch"],
+        "args": [
+          { "raw": "file", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  }
+}

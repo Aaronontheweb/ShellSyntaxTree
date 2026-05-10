@@ -1,0 +1,20 @@
+{
+  "name": "Simple verb: cat /etc/hostname",
+  "input": "cat /etc/hostname",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "/etc/hostname", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "isPath=false in PR 3; PR 4 will mark as path."
+}
