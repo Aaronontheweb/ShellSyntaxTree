@@ -30,7 +30,15 @@ public class CorpusRunnerTests
         Assert.False(string.IsNullOrEmpty(entry.Name), $"Corpus entry {fileName} has no name.");
         Assert.NotNull(entry.Expected);
 
-        var parser = new BashParser();
+        // Pin HomeDirectory and WorkingDirectory so corpus entries with
+        // relative-path resolution have stable expected values across
+        // hosts (Linux CI, Windows CI, dev machines). The values mirror
+        // the BashCommandParserTests harness.
+        var parser = new BashParser(new BashParserOptions
+        {
+            HomeDirectory = "/home/test",
+            WorkingDirectory = "/work",
+        });
         var actual = parser.Parse(entry.Input);
 
         AssertParsedCommandEqual(entry.Expected!, actual, fileName);
@@ -168,6 +176,21 @@ public class CorpusRunnerTests
         {
             Assert.True(expected.IsFlag.Value == actual.IsFlag, diffPrefix + $"IsFlag mismatch. expected={expected.IsFlag}, actual={actual.IsFlag}");
         }
+
+        // Resolved comparison: opt-in via the corpus author. Use the
+        // sentinel "__NULL__" to assert that Resolved is null; omit the
+        // field entirely (default null) to skip the check.
+        if (expected.Resolved is not null)
+        {
+            if (expected.Resolved == "__NULL__")
+            {
+                Assert.True(actual.Resolved is null, diffPrefix + $"Resolved expected null, actual='{actual.Resolved}'");
+            }
+            else
+            {
+                Assert.True(expected.Resolved == actual.Resolved, diffPrefix + $"Resolved mismatch. expected='{expected.Resolved}', actual='{actual.Resolved}'");
+            }
+        }
     }
 
     private static void AssertRedirectEqual(ExpectedRedirect expected, Redirect actual, string diffPrefix)
@@ -244,6 +267,14 @@ public sealed record ExpectedArg
     public bool IsPath { get; init; }
 
     public bool? IsFlag { get; init; }
+
+    /// <summary>
+    /// Expected <see cref="Arg.Resolved"/> value. Omit (leave null) to skip
+    /// the comparison; provide explicitly (including empty string) to pin
+    /// a literal value. The corpus author may use the special sentinel
+    /// <c>"__NULL__"</c> to assert that Resolved is null.
+    /// </summary>
+    public string? Resolved { get; init; }
 }
 
 public sealed record ExpectedRedirect

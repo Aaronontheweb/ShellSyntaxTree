@@ -8,7 +8,7 @@
         "operator": "None",
         "verb": ["cd"],
         "args": [
-          { "raw": "/repo", "kind": "Literal", "isPath": false }
+          { "raw": "/repo", "kind": "Literal", "isPath": true, "resolved": "/repo" }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -33,5 +33,6 @@
         "isBashCWrapped": false
       }
     ]
-  }
+  },
+  "notes": "PR 4: cd target /repo resolves; grep i=0 is the pattern (IsPath=false)."
 }

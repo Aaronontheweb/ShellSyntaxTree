@@ -11,11 +11,12 @@
           { "raw": "hi", "kind": "Literal", "isPath": false }
         ],
         "redirects": [
-          { "direction": "Append", "target": "log.txt" }
+          { "direction": "Append", "target": "/work/log.txt" }
         ],
         "isSubshell": false,
         "isBashCWrapped": false
       }
     ]
-  }
+  },
+  "notes": "PR 4: redirect target resolves; `echo` is not a FileVerb so `hi` stays IsPath=false."
 }

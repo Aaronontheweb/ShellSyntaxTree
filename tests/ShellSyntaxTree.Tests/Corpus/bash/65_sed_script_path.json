@@ -1,0 +1,21 @@
+{
+  "name": "sed: script then path",
+  "input": "sed 's/foo/bar/' file.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["sed"],
+        "args": [
+          { "raw": "'s/foo/bar/'", "kind": "Literal", "isPath": false },
+          { "raw": "file.txt", "kind": "Literal", "isPath": true, "resolved": "/work/file.txt" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §7: sed i=0 is the script (single-quoted), i>=1 are paths."
+}

@@ -8,12 +8,13 @@
         "operator": "None",
         "verb": ["touch"],
         "args": [
-          { "raw": "file", "kind": "Literal", "isPath": false }
+          { "raw": "file", "kind": "Literal", "isPath": true, "resolved": "/work/file" }
         ],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": false
       }
     ]
-  }
+  },
+  "notes": "PR 4: touch is a FileVerb; relative path `file` resolves against the test WorkingDirectory /work."
 }

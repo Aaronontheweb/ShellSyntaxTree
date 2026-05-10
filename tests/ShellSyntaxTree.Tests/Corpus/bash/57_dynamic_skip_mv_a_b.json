@@ -1,0 +1,21 @@
+{
+  "name": "DynamicSkip: mv $A $B",
+  "input": "mv $A $B",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["mv"],
+        "args": [
+          { "raw": "$A", "kind": "DynamicSkip", "isPath": false },
+          { "raw": "$B", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Single-letter env vars trigger DynamicSkip just like multi-letter ones."
+}

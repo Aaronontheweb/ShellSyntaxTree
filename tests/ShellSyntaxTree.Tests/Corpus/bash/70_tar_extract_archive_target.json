@@ -1,0 +1,22 @@
+{
+  "name": "tar: -xf archive.tar.gz /target",
+  "input": "tar -xf archive.tar.gz /target",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["tar"],
+        "args": [
+          { "raw": "-xf", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "archive.tar.gz", "kind": "Literal", "isPath": true, "resolved": "/work/archive.tar.gz" },
+          { "raw": "/target", "kind": "Literal", "isPath": true, "resolved": "/target" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Locked interpretation #8: tar default rule treats all non-flag positionals as paths. -xf is *not* in the FlagsWithValue table (only -f / --file are), so positional classification handles archive.tar.gz."
+}

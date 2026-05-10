@@ -1,0 +1,22 @@
+{
+  "name": "find: root path then predicate",
+  "input": "find /var/log -name \"*.log\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["find"],
+        "args": [
+          { "raw": "/var/log", "kind": "Literal", "isPath": true, "resolved": "/var/log" },
+          { "raw": "-name", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "\"*.log\"", "kind": "Glob", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §7: find i=0 is the path root (IsPath=true); subsequent args are predicate args (IsPath=false). The quoted glob inside `-name` still gets Kind=Glob via the resolver but with IsPath=false because find's predicate slot is not a path."
+}

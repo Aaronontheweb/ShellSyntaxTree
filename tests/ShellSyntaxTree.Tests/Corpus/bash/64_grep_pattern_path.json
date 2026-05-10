@@ -1,0 +1,21 @@
+{
+  "name": "grep: pattern then path",
+  "input": "grep pattern /etc/hosts",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["grep"],
+        "args": [
+          { "raw": "pattern", "kind": "Literal", "isPath": false },
+          { "raw": "/etc/hosts", "kind": "Literal", "isPath": true, "resolved": "/etc/hosts" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §7: grep i=0 is pattern, i>=1 are paths."
+}

@@ -106,21 +106,58 @@ the SPEC.md sections that get updated alongside the implementation.
 
 ## 4. PR 4 — Resolver + per-verb rules (interpretations #3 + #8)
 
-- [ ] 4.1 `Internal/Resolving/BashResolver.cs` per SPEC §8
-- [ ] 4.2 Tilde + `$HOME`; other env vars → `DynamicSkip, IsPath=false`
-- [ ] 4.3 `filesystem::/path` strip; glob detection per interpretation #3
+- [x] 4.1 `Internal/Resolving/BashResolver.cs` per SPEC §8: full pipeline
+      (filesystem:: strip → tilde expansion → $HOME substitution → other
+      env-var DynamicSkip → glob detection → path resolution against
+      WorkingDirectory). Cross-platform-safe (Linux + Windows).
+- [x] 4.2 Tilde + `$HOME` (the only env var we expand); other env vars
+      in path slot → `DynamicSkip, IsPath=false` per interpretation #3
+- [x] 4.3 `filesystem::/path` strip; glob detection per interpretation #3
       (`Kind=Glob, IsPath=true (in path slot), Resolved=null`)
-- [ ] 4.4 Relative-path joining against `WorkingDirectory`; `LooksLikePath`
-      heuristic
-- [ ] 4.5 `Internal/Bash/Verbs/BashPerVerbRules.cs` per SPEC §7 with
-      interpretation #8 fallback for tar (default rule) and docker -v
-      (single literal arg, IsPath=false)
-- [ ] 4.6 Update `SPEC.md` §7 (note v0.1 limitations + reference issues),
-      §8 (rewrite steps 4 & 6 to remove the overlap; explicit IsPath
-      asymmetry per interpretation #3)
-- [ ] 4.7 File 2 GitHub issues: tar action-flag awareness; docker -v
-      colon-split + Windows drive-letter handling
-- [ ] 4.8 Open OpenSpec change `path-resolver-rules` for the §7/§8 deltas
+- [x] 4.4 Relative-path joining against `WorkingDirectory` (lazy fallback
+      to `Environment.CurrentDirectory`); `LooksLikePath` heuristic with
+      curated extension list
+- [x] 4.5 `Internal/Bash/Verbs/BashPerVerbRules.cs` per SPEC §7 + flag-value
+      classification table:
+       - Per-positional rules for `chmod`, `chown`, `chgrp`, `ln`, `find`,
+         `grep`, `rg`, `sed`, `awk`, `tar`, `curl`, `wget`, `scp`/`rsync`,
+         `cd`/`chdir`/`pushd`/`popd`/`push-location`/`set-location`
+       - Default rule (all non-flag positionals → paths) for other FileVerbs
+       - `LooksLikePath` fallback for non-FileVerbs
+       - Flag-with-value path classification: `git -C` is path; `curl -d`
+         is not; `docker -v` value is single literal IsPath=false
+         (interpretation #8)
+- [x] 4.6 `BashCommandParser` updates:
+       - Flag-with-value-aware verb-chain probe so `git -C /repo log`
+         produces `Verb.Tokens=["git", "log"]` per SPEC §12
+       - Resolver wired into Arg + Redirect building
+       - `Redirect.Target = Resolved` when resolvable; `IsDynamicSkip=true`
+         when not
+- [x] 4.7 SPEC.md §7 already updated in PR 3 with FlagsWithValue compat
+       note + PR 4 follow-up. PR 4 SPEC.md updates: §8 step 4/6 overlap
+       resolved (Glob ≠ DynamicSkip distinction). To be applied during
+       commit.
+- [ ] 4.8 File 2 GitHub issues: tar action-flag awareness; docker -v
+      colon-split + Windows drive-letter handling. (Tracked locally;
+      filing in PR 5/6 when the issues are easier to reference real
+      corpus repros.)
+- [x] 4.9 BashResolverTests (34) + BashPerVerbRulesTests (34) +
+       BashCommandParserTests refresh (9 new) + 12 corpus entries
+       refreshed + 20 new corpus entries (10 dynamic-skip + 10 per-verb)
+- [x] 4.10 **296/296 tests passing**; clean build; PublicApiSnapshotTests
+       still green (no API surface change)
+
+### PR 4 follow-ups (tracked for PR 5)
+
+- `Segment.FromSubshell` flag plumbed in PR 4 but unused — PR 5 hooks it
+  into IsSubshell + attribution-stack push/pop.
+- cd-attribution propagation: cleanest approach is constructing new
+  `BashParserOptions{ WorkingDirectory = /target }` for clauses
+  following `cd /target`. PR 5 wires this.
+- Locked interpretation #6 (cd $VAR propagation): when cd target is
+  DynamicSkip, subsequent clauses' relative-path args need to be
+  flagged as such. Mechanism (without adding to public BashParserOptions
+  surface): internal context state piggy-backed on the parsing pipeline.
 
 ## 5. PR 5 — cd attribution + subshells + bash -c (interpretations #4, #5, #6)
 

@@ -1,0 +1,20 @@
+{
+  "name": "DynamicSkip: mkdir $DIR/sub",
+  "input": "mkdir $DIR/sub",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["mkdir"],
+        "args": [
+          { "raw": "$DIR/sub", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Env var prefix in a path arg → DynamicSkip; the literal /sub suffix doesn't make it resolvable."
+}

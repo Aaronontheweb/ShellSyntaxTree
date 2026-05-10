@@ -91,22 +91,28 @@ bulldoze priorities.
 - [x] CorpusRunnerTests skeleton + 50 corpus entries
 - [x] `BashParser.Parse` delegates to `BashCommandParser.Parse`
 
-### 6. Resolver (SPEC §8)
+### 6. Resolver (SPEC §8) — PR 4, complete
 
-- [ ] Tilde + `$HOME` expansion against `BashParserOptions.HomeDirectory`
-- [ ] All other `$VAR` / `${VAR}` → `DynamicSkip`
-- [ ] `filesystem::/path` prefix stripping
-- [ ] Glob detection (don't expand)
-- [ ] Relative path joining against `BashParserOptions.WorkingDirectory`
-- [ ] `LooksLikePath` heuristic per §8
+- [x] Tilde + `$HOME` expansion against `BashParserOptions.HomeDirectory`
+- [x] All other `$VAR` / `${VAR}` → `DynamicSkip` (in path slots) /
+      `EnvVar` (in non-path slots)
+- [x] `filesystem::/path` prefix stripping
+- [x] Glob detection (don't expand); locked interp #3 distinguishes
+      Glob (IsPath=true in path slot) vs DynamicSkip (IsPath=false)
+- [x] Relative path joining against `BashParserOptions.WorkingDirectory`
+- [x] `LooksLikePath` heuristic per §8 with curated extension list
+- [x] SPEC §8 step 4/6 overlap resolved
 
-### 7. Per-verb path-arg rules (SPEC §7)
+### 7. Per-verb path-arg rules (SPEC §7) — PR 4, complete
 
-- [ ] Default: every non-flag positional after the verb chain is a path
-- [ ] Per-verb overrides: `chmod`, `chown`, `chgrp`, `ln`, `find`,
-      `grep`, `rg`, `sed`, `awk`, `tar`, `curl`/`wget`, `scp`/`rsync`,
-      `cd`-family
-- [ ] Flag-with-value handling (`-o file`, `git -C /repo`, `--output=file`)
+- [x] Default: every non-flag positional after the verb chain is a path
+- [x] Per-verb overrides: `chmod`, `chown`, `chgrp`, `ln`, `find`,
+      `grep`, `rg`, `sed`, `awk`, `tar` (default fallback per #8),
+      `curl`/`wget`, `scp`/`rsync`, `cd`-family
+- [x] Flag-with-value handling (`-o file`, `git -C /repo`,
+      `--output=file`); `git -C /repo log` → Verb=["git", "log"]
+- [x] Flag-value path classification table (`git -C` is path; `curl -d`
+      is body data; `docker -v` is single literal IsPath=false per #8)
 
 ### 8. cd-in-compound propagation (SPEC §9)
 

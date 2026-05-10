@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="BashCommandParser.cs" company="Aaron Stannard">
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
@@ -7,24 +7,17 @@ using System;
 using System.Collections.Generic;
 using ShellSyntaxTree.Internal.Bash.Lexing;
 using ShellSyntaxTree.Internal.Bash.Verbs;
+using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
 /// <summary>
 /// Translates a <see cref="BashLexer"/> token stream into the public
-/// <see cref="ParsedCommand"/> AST. The parser is intentionally narrow:
-/// PR 3 wires verb chains, args, redirects, compound splitting, and the
-/// safe-fail anomaly behavior in SPEC §11. It does <em>not</em> apply
-/// per-verb path classification or path resolution (PR 4) and stops short
-/// of the full subshell / <c>bash -c</c> recursion treatment described in
-/// SPEC §10 (PR 5 lands that surface flattening + IsBashCWrapped /
-/// IsSubshell attribution + cd-in-compound propagation).
+/// <see cref="ParsedCommand"/> AST. PR 4 wires per-verb path classification
+/// (SPEC §7), the resolver (SPEC §8), and the flag-with-value-aware verb-
+/// chain probe on top of the PR 3 core. PR 5 will land subshell flag
+/// flipping, <c>bash -c</c> recursion, and cd-in-compound propagation.
 /// </summary>
-/// <remarks>
-/// PR 3 scope: subshell + <c>bash -c</c> framework only — see comments
-/// next to <see cref="ParseClauseSegment"/> and the segment splitter for
-/// where PR 5 will land real attribution and inner-string flattening.
-/// </remarks>
 internal static class BashCommandParser
 {
     /// <summary>
@@ -39,10 +32,10 @@ internal static class BashCommandParser
             throw new ArgumentNullException(nameof(source));
         }
 
-        // options is currently unused by PR 3 — the resolver lands in PR 4
-        // and consumes HomeDirectory / WorkingDirectory. Discarding here
-        // keeps the call sites stable for the full pipeline.
-        _ = options;
+        if (options is null)
+        {
+            throw new ArgumentNullException(nameof(options));
+        }
 
         if (source.Length == 0)
         {
@@ -58,9 +51,9 @@ internal static class BashCommandParser
 
         // Step 1: lift any UnparseableSentinel to the outer ParsedCommand.
         // SPEC §11 step 3 says we may also return whatever clauses were
-        // parsed up to that point — for PR 3 we keep it strictly safe-fail
-        // (empty Clauses) so consumers don't get a half-built AST whose
-        // shape changes when PR 5 wires recursion. The reason text comes
+        // parsed up to that point — we keep it strictly safe-fail (empty
+        // Clauses) so consumers don't get a half-built AST whose shape
+        // changes when PR 5 wires recursion. The reason text comes
         // straight from the lexer.
         for (var i = 0; i < tokens.Count; i++)
         {
@@ -78,9 +71,7 @@ internal static class BashCommandParser
         }
 
         // Step 2: split the (filtered, non-whitespace) token stream into
-        // clause segments at top-level &&, ||, ;, and |. Subshell and
-        // bash -c boundaries are recognized as framework only — see
-        // SplitIntoSegments.
+        // clause segments at top-level &&, ||, ;, and |.
         var significant = FilterSignificant(tokens);
 
         // Step 3: detect anomalies that map straight to outer IsUnparseable.
@@ -107,13 +98,11 @@ internal static class BashCommandParser
             };
         }
 
-        // Step 4: parse each segment into a Clause. Any per-clause anomaly
-        // (control-flow keyword as the verb, function definition shape,
-        // process substitution) flips the outer IsUnparseable.
+        // Step 4: parse each segment into a Clause.
         var clauses = new List<Clause>(segments.Count);
         foreach (var segment in segments)
         {
-            var clauseOrError = ParseClauseSegment(segment, source);
+            var clauseOrError = ParseClauseSegment(segment, source, options);
             if (clauseOrError.Error is not null)
             {
                 return new ParsedCommand
@@ -125,8 +114,6 @@ internal static class BashCommandParser
                 };
             }
 
-            // ParseClauseSegment produces a list because subshell framework
-            // emits one Clause per inner segment; see comments inside.
             foreach (var clause in clauseOrError.Clauses)
             {
                 clauses.Add(clause);
@@ -145,9 +132,6 @@ internal static class BashCommandParser
 
     private static List<BashToken> FilterSignificant(IReadOnlyList<BashToken> tokens)
     {
-        // Whitespace and Continuation are source-fidelity tokens — irrelevant
-        // for parser logic. Drop them. The remaining list is what every
-        // subsequent step walks.
         var filtered = new List<BashToken>(tokens.Count);
         foreach (var t in tokens)
         {
@@ -167,8 +151,7 @@ internal static class BashCommandParser
     private static bool TryDetectAnomaly(IReadOnlyList<BashToken> tokens, out string? reason)
     {
         // Function definition: `name() { ... }`. Trigger = a Word followed
-        // by an immediately-adjacent `(` and `)`. SPEC §11 + locked
-        // interpretation: outer IsUnparseable.
+        // by an immediately-adjacent `(` and `)`.
         for (var i = 0; i + 2 < tokens.Count; i++)
         {
             var a = tokens[i];
@@ -185,9 +168,7 @@ internal static class BashCommandParser
             }
         }
 
-        // Process substitution: `<(cmd)` or `>(cmd)`. The lexer doesn't
-        // emit a dedicated token for these; they show up as `<` or `>`
-        // operators followed *immediately* by `(` (no whitespace between).
+        // Process substitution: `<(cmd)` or `>(cmd)`.
         for (var i = 0; i + 1 < tokens.Count; i++)
         {
             var a = tokens[i];
@@ -208,34 +189,15 @@ internal static class BashCommandParser
 
     // ---------------------------------------------------------------- segment split
 
-    /// <summary>
-    /// One contiguous piece of significant tokens that becomes a single
-    /// <see cref="Clause"/>. Carries the operator that <em>preceded</em>
-    /// the segment in the source, plus a flag for the subshell-framework
-    /// pass-through (see <see cref="ParseClauseSegment"/>).
-    /// </summary>
     private sealed class Segment
     {
         public CompoundOperator PrecedingOperator { get; init; }
 
         public List<BashToken> Tokens { get; init; } = new();
 
-        /// <summary>
-        /// True when this segment came from inside a subshell <c>(...)</c>
-        /// region. PR 3 surfaces inner clauses without setting
-        /// <c>IsSubshell</c> per the explicit note in the task — that's
-        /// PR 5's job. The flag lives on the segment for forward-compat.
-        /// </summary>
         public bool FromSubshell { get; init; }
     }
 
-    /// <summary>
-    /// Walk the significant token list and split on top-level compound
-    /// operators. Tracks paren depth so operators inside a subshell stay
-    /// part of the inner segments. PR 3: subshell inner clauses surface
-    /// inline (no IsSubshell flag); PR 5 will land real attribution +
-    /// IsBashCWrapped / IsSubshell flag flipping + bash -c recursion.
-    /// </summary>
     private static List<Segment> SplitIntoSegments(
         IReadOnlyList<BashToken> tokens,
         string source,
@@ -245,8 +207,6 @@ internal static class BashCommandParser
         var current = new Segment { PrecedingOperator = CompoundOperator.None };
 
         var depth = 0;
-        // SubshellRegion stack tracks "we entered a subshell" to mark inner
-        // segments' FromSubshell. Empty when at top level.
         var subshellDepthStack = new Stack<int>();
 
         for (var i = 0; i < tokens.Count; i++)
@@ -259,8 +219,6 @@ internal static class BashCommandParser
 
                 if (op == "(")
                 {
-                    // Open subshell: flush current segment if it has content,
-                    // then mark the new context as "inside a subshell."
                     if (current.Tokens.Count > 0)
                     {
                         segments.Add(current);
@@ -268,14 +226,11 @@ internal static class BashCommandParser
                     }
                     else
                     {
-                        // Inherit FromSubshell from the new (deeper) context.
                         current = new Segment { PrecedingOperator = current.PrecedingOperator, FromSubshell = true };
                     }
 
                     subshellDepthStack.Push(depth);
                     depth++;
-                    // The opening paren itself is not part of any clause's
-                    // tokens. Continue.
                     continue;
                 }
 
@@ -293,16 +248,11 @@ internal static class BashCommandParser
                         subshellDepthStack.Pop();
                     }
 
-                    // Flush the inner segment and start a new top-level (or
-                    // deeper-but-still-subshell) segment.
                     if (current.Tokens.Count > 0)
                     {
                         segments.Add(current);
                     }
 
-                    // After the close paren, the next operator/token decides
-                    // the next segment's preceding operator. We default to
-                    // None and let the operator dispatch below overwrite it.
                     current = new Segment
                     {
                         PrecedingOperator = CompoundOperator.None,
@@ -311,17 +261,10 @@ internal static class BashCommandParser
                     continue;
                 }
 
-                // Compound operators only split when at top level relative to
-                // the current "shell" — a subshell is its own scope, but its
-                // operators still split the inner segments. Concretely: any
-                // depth (including inside subshells) treats &&/||/;/| as a
-                // splitter for the segment they live in.
                 if (op == "&&" || op == "||" || op == ";" || op == "|")
                 {
                     if (current.Tokens.Count == 0 && current.PrecedingOperator != CompoundOperator.None)
                     {
-                        // Two operators in a row, e.g. `&& &&`. Treat as
-                        // unparseable.
                         error = $"unexpected operator '{op}' at position {t.SourceStart}";
                         return segments;
                     }
@@ -349,8 +292,6 @@ internal static class BashCommandParser
 
         if (depth != 0)
         {
-            // Find the position of the unmatched '(' for a useful diagnostic.
-            // We don't track it precisely; use the source length as a fallback.
             error = $"unbalanced parens at position {source.Length}";
             return segments;
         }
@@ -375,11 +316,6 @@ internal static class BashCommandParser
 
     // ---------------------------------------------------------------- clause parse
 
-    /// <summary>
-    /// Either a list of clauses (success) or an error reason (failure).
-    /// Multi-clause results are reserved for the subshell framework — a
-    /// single segment can produce one clause for non-subshell input.
-    /// </summary>
     private readonly struct ClauseResult
     {
         public IReadOnlyList<Clause> Clauses { get; }
@@ -399,33 +335,82 @@ internal static class BashCommandParser
         public static ClauseResult Fail(string reason) => new(Array.Empty<Clause>(), reason);
     }
 
-    private static ClauseResult ParseClauseSegment(Segment segment, string source)
+    private static ClauseResult ParseClauseSegment(Segment segment, string source, BashParserOptions options)
     {
-        // Empty segment (e.g. trailing `;`): just drop it. We materialize
-        // an empty clause only when the segment carries a preceding
-        // operator AND tokens; the splitter already prevents the "operator
-        // with no tokens" case via the `unexpected operator` error.
         if (segment.Tokens.Count == 0)
         {
             return ClauseResult.Empty();
         }
 
-        // Verb chain extraction. Probe the first 1–3 verb-eligible tokens
-        // against BashVerbs.BashArity. PR 3 keeps things simple: only
-        // consecutive Word/QuotedString/OpaqueSubstitution tokens at the
-        // very start qualify as verb candidates. Redirect operators or any
-        // other operator immediately end the verb chain.
+        // ---- Verb-chain extraction with flag-with-value awareness ----
+        //
+        // PR 4 follow-up to the PR 3 probe: a token like `git -C /repo log`
+        // shouldn't truncate the verb chain at `-C`. We greedily consume
+        // any flag-with-value pair owned by the tentative first verb
+        // (`tokens[0]`) before probing arity. The consumed flag + value
+        // pair stays in the segment for arg-extraction; only the verb
+        // probe sees a "compressed" view of the segment.
+        //
+        // Locked interpretation #8 / SPEC §12: `git -C /repo log` →
+        // Verb=["git", "log"], Args=[-C, /repo]. The flag and its value
+        // appear in source order in the Args list, with /repo carrying
+        // IsPath=true via the FlagValueIsPath table.
         var verbCandidateValues = new List<string>(3);
         var verbCandidateIndices = new List<int>(3);
+        var consumedFlagValueIndices = new HashSet<int>();
+
+        // Look up the would-be verb so we know which flags are
+        // "owned" by it. We only honor the flag-with-value skip when the
+        // first token is a known Word verb — quoted strings and opaque
+        // substitutions don't carry verb identity.
+        string? tentativeVerb = null;
+        if (segment.Tokens.Count > 0
+            && segment.Tokens[0].Kind == BashTokenKind.Word
+            && !IsFlagWord(segment.Tokens[0]))
+        {
+            tentativeVerb = segment.Tokens[0].Value;
+        }
+
+        var hasFlagsTable = tentativeVerb is not null
+            && BashVerbs.FlagsWithValue.TryGetValue(tentativeVerb, out _);
+
         for (var i = 0; i < segment.Tokens.Count && verbCandidateValues.Count < 3; i++)
         {
             var t = segment.Tokens[i];
             if (t.Kind == BashTokenKind.Word || t.Kind == BashTokenKind.QuotedString)
             {
-                // A flag-like word stops verb-chain probing — flags belong
-                // to args, never to verbs.
                 if (IsFlagWord(t))
                 {
+                    // Skip-through case: this is a flag-with-value pair owned
+                    // by the tentative verb. Skip both the flag and its
+                    // immediate value and keep probing arity. Only Word
+                    // tokens qualify as flags (quoted "-x" stays literal).
+                    if (hasFlagsTable
+                        && tentativeVerb is not null
+                        && BashVerbs.FlagsWithValue[tentativeVerb].Contains(StripEqualsValue(t.Value))
+                        && i + 1 < segment.Tokens.Count
+                        && (segment.Tokens[i + 1].Kind == BashTokenKind.Word
+                            || segment.Tokens[i + 1].Kind == BashTokenKind.QuotedString))
+                    {
+                        // The two-token `-C /repo` form. Equals-form
+                        // `--git-dir=/repo` is a single token and never enters
+                        // this branch — but the verb-probe still ends at it
+                        // (next iteration sees IsFlagWord and breaks below).
+                        if (HasInlineEqualsValue(t.Value))
+                        {
+                            // `--flag=value` — single token. Don't consume
+                            // the next, and let the normal arg-extraction
+                            // path split on `=`. End the verb-probe here.
+                            break;
+                        }
+
+                        consumedFlagValueIndices.Add(i);
+                        consumedFlagValueIndices.Add(i + 1);
+                        i++; // skip the value too on the next loop step
+                        continue;
+                    }
+
+                    // Plain flag with no path-value to skip → stops the verb probe.
                     break;
                 }
 
@@ -439,30 +424,33 @@ internal static class BashCommandParser
 
         if (verbCandidateValues.Count == 0)
         {
-            // No verb tokens at all. Could be a redirect-only clause
-            // (`> /tmp/out` is rare but technically valid bash). Return an
-            // empty-verb clause; consumers can detect this with
-            // `Verb.Tokens.Count == 0`.
-            var redirectsOnly = ExtractRedirectsAndArgs(
-                segment.Tokens, 0, source, out var emptyArgs, out var emptyRedirects, out var redirectError);
+            // Redirect-only clause.
+            ExtractRedirectsAndArgs(
+                segment.Tokens,
+                0,
+                source,
+                options,
+                verb: new VerbChain(),
+                consumedFlagValueIndices: consumedFlagValueIndices,
+                out var emptyArgs,
+                out var emptyRedirects,
+                out var redirectError);
             if (redirectError is not null)
             {
                 return ClauseResult.Fail(redirectError);
             }
 
-            _ = redirectsOnly;
             return ClauseResult.Ok(new Clause
             {
                 Operator = segment.PrecedingOperator,
                 Verb = new VerbChain(),
                 Args = emptyArgs,
                 Redirects = emptyRedirects,
-                IsSubshell = false, // PR 5 will set this for FromSubshell segments.
-                IsBashCWrapped = false, // PR 5.
+                IsSubshell = false,
+                IsBashCWrapped = false,
             });
         }
 
-        // Anomaly: control-flow keyword as the leading verb.
         var firstVerb = verbCandidateValues[0];
         if (BashVerbs.ControlFlowKeywords.Contains(firstVerb))
         {
@@ -476,25 +464,33 @@ internal static class BashCommandParser
             arity = 1;
         }
 
-        // Build the verb chain.
         var verbTokens = new List<string>(arity);
         for (var k = 0; k < arity; k++)
         {
             verbTokens.Add(verbCandidateValues[k]);
         }
 
-        // Position in segment.Tokens immediately after the verb chain.
-        var argStart = verbCandidateIndices[arity - 1] + 1;
+        var verbChain = new VerbChain { Tokens = verbTokens };
 
-        // Determine the verb name we use to drive flag-with-value lookups.
-        // SPEC §7's table is keyed on the *first* token (`git`, `docker`,
-        // `tar`, ...). Multi-token verbs share the first-token's table.
-        var verbKeyForFlags = verbTokens[0];
+        // The arg-extraction starts immediately after the last verb-chain
+        // *position* in the original segment, so the consumed flag-value
+        // pair (which sits *before* that position when it precedes the
+        // verb-chain extension) still gets emitted as Args in source order.
+        // Concretely: for `git -C /repo log`, the verb-chain positions are
+        // 0 and 3; we walk all of segment.Tokens from position 0 and emit
+        // -C, /repo as args while skipping the verb-position tokens.
+        var argStart = 0;
+        var verbPositions = new HashSet<int>(verbCandidateIndices.GetRange(0, arity));
 
-        var argsAndRedirects = ExtractRedirectsAndArgs(
+        ExtractRedirectsAndArgs(
             segment.Tokens,
             argStart,
             source,
+            options,
+            verb: verbChain,
+            consumedFlagValueIndices: consumedFlagValueIndices,
+            skipIndices: verbPositions,
+            verbKeyForFlagValuePaths: verbTokens[0],
             out var args,
             out var redirects,
             out var argError);
@@ -503,21 +499,14 @@ internal static class BashCommandParser
             return ClauseResult.Fail(argError);
         }
 
-        _ = argsAndRedirects;
-
-        // Apply flag-with-value pairing. Per SPEC §7 the *value* arg's
-        // IsPath classification lands in PR 4; for PR 3 both flag and
-        // value remain in Args with default-literal kind.
-        args = ApplyFlagsWithValue(verbKeyForFlags, args);
-
         var clause = new Clause
         {
             Operator = segment.PrecedingOperator,
-            Verb = new VerbChain { Tokens = verbTokens },
+            Verb = verbChain,
             Args = args,
             Redirects = redirects,
-            IsSubshell = false, // PR 3: framework only; PR 5 sets this for FromSubshell segments.
-            IsBashCWrapped = false, // PR 3: framework only; PR 5 lands real bash -c recursion.
+            IsSubshell = false,
+            IsBashCWrapped = false,
         };
 
         return ClauseResult.Ok(clause);
@@ -525,8 +514,6 @@ internal static class BashCommandParser
 
     private static bool IsFlagWord(BashToken token)
     {
-        // A leading '-' marks a flag. QuotedString tokens are never flags
-        // — quoting a leading dash is the user's signal "treat as literal."
         if (token.Kind != BashTokenKind.Word)
         {
             return false;
@@ -535,37 +522,101 @@ internal static class BashCommandParser
         return token.Value.Length > 0 && token.Value[0] == '-';
     }
 
+    /// <summary>
+    /// For an equals-form flag like <c>--output=file.txt</c>, return the
+    /// flag portion (<c>--output</c>) so the FlagsWithValue table lookup
+    /// matches. For plain flags returns the input unchanged.
+    /// </summary>
+    private static string StripEqualsValue(string flag)
+    {
+        var eq = flag.IndexOf('=');
+        return eq > 0 ? flag.Substring(0, eq) : flag;
+    }
+
+    private static bool HasInlineEqualsValue(string flag) =>
+        flag.IndexOf('=') > 0;
+
     // ---------------------------------------------------------------- args + redirects
 
-    private static int ExtractRedirectsAndArgs(
+    /// <summary>
+    /// Extract args and redirects from <paramref name="segmentTokens"/>
+    /// starting at <paramref name="start"/>. Honors:
+    /// <list type="bullet">
+    ///   <item>SPEC §7 per-verb path-arg classification via <see cref="BashPerVerbRules.IsPositionalPathArg"/>.</item>
+    ///   <item>SPEC §8 path resolution via <see cref="BashResolver.Resolve"/>.</item>
+    ///   <item>The flag-with-value table to decide whether a consumed value is a path.</item>
+    /// </list>
+    /// </summary>
+    private static void ExtractRedirectsAndArgs(
         IReadOnlyList<BashToken> segmentTokens,
         int start,
         string source,
+        BashParserOptions options,
+        VerbChain verb,
+        HashSet<int> consumedFlagValueIndices,
+        out IReadOnlyList<Arg> args,
+        out IReadOnlyList<Redirect> redirects,
+        out string? error)
+    {
+        ExtractRedirectsAndArgs(
+            segmentTokens,
+            start,
+            source,
+            options,
+            verb,
+            consumedFlagValueIndices,
+            skipIndices: null,
+            verbKeyForFlagValuePaths: verb.Tokens is null || verb.Tokens.Count == 0 ? null : verb.Tokens[0],
+            out args,
+            out redirects,
+            out error);
+    }
+
+    private static void ExtractRedirectsAndArgs(
+        IReadOnlyList<BashToken> segmentTokens,
+        int start,
+        string source,
+        BashParserOptions options,
+        VerbChain verb,
+        HashSet<int> consumedFlagValueIndices,
+        HashSet<int>? skipIndices,
+        string? verbKeyForFlagValuePaths,
         out IReadOnlyList<Arg> args,
         out IReadOnlyList<Redirect> redirects,
         out string? error)
     {
         var argList = new List<Arg>();
         var redirectList = new List<Redirect>();
+        var positionalIndex = 0;
         var i = start;
+
+        // Tracks "next non-flag arg is the value of this flag" — used to
+        // attribute path-classification to the value of a flag-with-value
+        // pair (e.g. `curl -o /tmp/out https://x` → /tmp/out gets IsPath).
+        string? pendingFlagForValue = null;
+
         while (i < segmentTokens.Count)
         {
+            // Skip verb-chain positions when the caller asked us to (the
+            // flag-with-value-aware verb-chain probe leaves the verb tokens
+            // interleaved with consumed flag-value pairs).
+            if (skipIndices is not null && skipIndices.Contains(i))
+            {
+                i++;
+                continue;
+            }
+
             var t = segmentTokens[i];
             if (t.Kind == BashTokenKind.Operator)
             {
                 if (TryMapRedirect(t.OperatorText, out var dir))
                 {
-                    // Heredoc operators come through as a redirect operator
-                    // followed by a Word delimiter. PR 3 emits the redirect
-                    // as Direction=In, Target=<delim> with no special flag —
-                    // sufficient to keep clause boundaries while we ship
-                    // the rest of the parser.
                     if (i + 1 >= segmentTokens.Count)
                     {
                         error = $"redirect operator '{t.OperatorText}' missing target at position {t.SourceStart}";
                         args = argList;
                         redirects = redirectList;
-                        return i;
+                        return;
                     }
 
                     var target = segmentTokens[i + 1];
@@ -574,29 +625,14 @@ internal static class BashCommandParser
                         error = $"redirect operator '{t.OperatorText}' missing target at position {t.SourceStart}";
                         args = argList;
                         redirects = redirectList;
-                        return i;
+                        return;
                     }
 
-                    var isDynamic = target.Kind == BashTokenKind.OpaqueSubstitution;
-                    var redirectTarget = target.Kind == BashTokenKind.OpaqueSubstitution
-                        ? target.Value
-                        : SourceSlice(source, target);
-
-                    redirectList.Add(new Redirect
-                    {
-                        Direction = dir,
-                        Target = redirectTarget,
-                        IsDynamicSkip = isDynamic,
-                    });
-
+                    BuildRedirect(dir, target, source, options, redirectList);
                     i += 2;
                     continue;
                 }
 
-                // Heredoc operators show up as `<<` / `<<-` from the lexer.
-                // PR 3 treats them like the In redirect for the purpose of
-                // pinning a placeholder; the body is already dropped by the
-                // lexer so the next token is the delimiter Word.
                 if (t.OperatorText == "<<" || t.OperatorText == "<<-")
                 {
                     if (i + 1 >= segmentTokens.Count)
@@ -604,7 +640,7 @@ internal static class BashCommandParser
                         error = $"heredoc operator '{t.OperatorText}' missing delimiter at position {t.SourceStart}";
                         args = argList;
                         redirects = redirectList;
-                        return i;
+                        return;
                     }
 
                     var delim = segmentTokens[i + 1];
@@ -619,24 +655,32 @@ internal static class BashCommandParser
                     continue;
                 }
 
-                // Any other operator inside a clause segment is unexpected.
                 error = $"unexpected operator '{t.OperatorText}' at position {t.SourceStart}";
                 args = argList;
                 redirects = redirectList;
-                return i;
+                return;
             }
 
-            // Args.
+            // Tokens pre-consumed by the verb-chain probe as part of a
+            // flag-with-value pair still pass through this loop and surface
+            // as args in source order. The pending-flag state machine
+            // attributes their path classification correctly without
+            // requiring a special branch here.
+            _ = consumedFlagValueIndices;
+
             switch (t.Kind)
             {
                 case BashTokenKind.Word:
                 {
-                    // Equals-form flag-with-value: `--output=file` splits on
-                    // the first `=`. Both halves enter Args. The path-shape
-                    // classification lives in PR 4.
-                    var raw = SourceSlice(source, t);
+                    var sourceRaw = SourceSlice(source, t);
+
+                    // Equals-form flag-with-value: `--output=file.txt`. The
+                    // flag half is a Literal arg with IsFlag=true (Raw
+                    // starts with '-'); the value half is classified per
+                    // the flag-value path rule.
                     if (TrySplitEqualsFlag(t.Value, out var flagPart, out var valuePart))
                     {
+                        // Flag arg.
                         argList.Add(new Arg
                         {
                             Raw = flagPart,
@@ -644,45 +688,128 @@ internal static class BashCommandParser
                             Kind = ArgKind.Literal,
                             IsPath = false,
                         });
+
+                        // Value arg — classify via FlagValueIsPath if the
+                        // verb owns the flag, otherwise fall back to plain
+                        // literal (the equals-form is its own visible split,
+                        // so we don't apply LooksLikePath here).
+                        var valueIsPath = verbKeyForFlagValuePaths is not null
+                            && BashPerVerbRules.ValueOfFlagIsPath(verbKeyForFlagValuePaths, flagPart);
+                        var (vKind, vResolved, vIsPath) = BashResolver.Resolve(valuePart, valueIsPath, options);
                         argList.Add(new Arg
                         {
                             Raw = valuePart,
+                            Resolved = vResolved,
+                            Kind = vKind,
+                            IsPath = vIsPath,
+                        });
+
+                        // The split form doesn't propagate to a "next-arg is
+                        // the value" pending-state — the value already
+                        // landed in argList.
+                        break;
+                    }
+
+                    if (IsFlag(sourceRaw))
+                    {
+                        // Plain flag arg. Don't bump positionalIndex.
+                        argList.Add(new Arg
+                        {
+                            Raw = sourceRaw,
                             Resolved = null,
                             Kind = ArgKind.Literal,
                             IsPath = false,
                         });
+
+                        // If this flag takes a value (per the verb's table),
+                        // mark the *next* non-flag arg as that value. We
+                        // do this whether or not the verb-chain probe
+                        // pre-consumed it; pre-consumed pairs are also
+                        // routed through this branch, so the pending state
+                        // attributes correctly.
+                        if (verbKeyForFlagValuePaths is not null
+                            && BashVerbs.FlagsWithValue.TryGetValue(verbKeyForFlagValuePaths, out var flagsTable)
+                            && flagsTable.Contains(sourceRaw))
+                        {
+                            pendingFlagForValue = sourceRaw;
+                        }
+                        else
+                        {
+                            pendingFlagForValue = null;
+                        }
+
+                        break;
+                    }
+
+                    // Non-flag positional. Classify path / resolve.
+                    bool treatAsPath;
+                    if (pendingFlagForValue is not null && verbKeyForFlagValuePaths is not null)
+                    {
+                        // This is the value of a preceding flag — use the
+                        // flag-value rule, NOT the positional-index rule.
+                        treatAsPath = BashPerVerbRules.ValueOfFlagIsPath(
+                            verbKeyForFlagValuePaths, pendingFlagForValue);
+                        pendingFlagForValue = null;
                     }
                     else
                     {
-                        argList.Add(new Arg
-                        {
-                            Raw = raw,
-                            Resolved = null,
-                            Kind = ArgKind.Literal,
-                            IsPath = false,
-                        });
+                        treatAsPath = BashPerVerbRules.IsPositionalPathArg(verb, positionalIndex, t.Value);
+                        positionalIndex++;
                     }
+
+                    var (kind, resolved, isPath) = BashResolver.Resolve(t.Value, treatAsPath, options);
+                    argList.Add(new Arg
+                    {
+                        Raw = sourceRaw,
+                        Resolved = resolved,
+                        Kind = kind,
+                        IsPath = isPath,
+                    });
 
                     break;
                 }
 
                 case BashTokenKind.QuotedString:
                 {
+                    var sourceRaw = SourceSlice(source, t);
+
+                    // Quoted strings never act as flags (a leading dash in
+                    // a quoted string is the user's signal "literal"). They
+                    // still classify as positional path / non-path through
+                    // the per-verb rule + resolver.
+                    bool treatAsPath;
+                    if (pendingFlagForValue is not null && verbKeyForFlagValuePaths is not null)
+                    {
+                        treatAsPath = BashPerVerbRules.ValueOfFlagIsPath(
+                            verbKeyForFlagValuePaths, pendingFlagForValue);
+                        pendingFlagForValue = null;
+                    }
+                    else
+                    {
+                        treatAsPath = BashPerVerbRules.IsPositionalPathArg(verb, positionalIndex, t.Value);
+                        positionalIndex++;
+                    }
+
+                    var (kind, resolved, isPath) = BashResolver.Resolve(t.Value, treatAsPath, options);
                     argList.Add(new Arg
                     {
-                        Raw = SourceSlice(source, t),
-                        Resolved = null,
-                        Kind = ArgKind.Literal,
-                        IsPath = false,
+                        Raw = sourceRaw,
+                        Resolved = resolved,
+                        Kind = kind,
+                        IsPath = isPath,
                     });
                     break;
                 }
 
                 case BashTokenKind.OpaqueSubstitution:
                 {
-                    // Locked interpretation #2: opaque region collapses to
-                    // a single DynamicSkip arg; the surrounding clause
-                    // continues to parse normally.
+                    // Locked interpretation #2 — opaque region collapses to
+                    // a single DynamicSkip arg. Don't bump positionalIndex
+                    // — the opaque region replaces what would otherwise be
+                    // one positional and the IsPath signal doesn't apply.
+                    // Bump the positional counter for the SPEC §12 rm
+                    // example so a *subsequent* positional gets the right
+                    // index, though.
                     argList.Add(new Arg
                     {
                         Raw = t.Value,
@@ -690,14 +817,12 @@ internal static class BashCommandParser
                         Kind = ArgKind.DynamicSkip,
                         IsPath = false,
                     });
+                    positionalIndex++;
+                    pendingFlagForValue = null;
                     break;
                 }
 
                 default:
-                    // UnparseableSentinel is filtered earlier; Whitespace /
-                    // Continuation are filtered in FilterSignificant. Any
-                    // other kind would be a parser bug, but stay quiet —
-                    // dropping unknown kinds is safer than crashing.
                     break;
             }
 
@@ -707,8 +832,59 @@ internal static class BashCommandParser
         args = argList;
         redirects = redirectList;
         error = null;
-        return i;
     }
+
+    private static void BuildRedirect(
+        RedirectDirection direction,
+        BashToken target,
+        string source,
+        BashParserOptions options,
+        List<Redirect> redirectList)
+    {
+        if (target.Kind == BashTokenKind.OpaqueSubstitution)
+        {
+            // Opaque region as redirect target → always DynamicSkip.
+            // Target carries the raw opaque slice for diagnostics.
+            redirectList.Add(new Redirect
+            {
+                Direction = direction,
+                Target = target.Value,
+                IsDynamicSkip = true,
+            });
+            return;
+        }
+
+        var raw = SourceSlice(source, target);
+
+        // Redirect targets are always treated as paths. SPEC §8 +
+        // locked interpretation #3: a glob target stays IsPath=true with
+        // Kind=Glob; an env-var target becomes DynamicSkip; a literal
+        // resolves against WorkingDirectory.
+        var (kind, resolved, _) = BashResolver.Resolve(target.Value, treatAsPath: true, options);
+
+        bool isDynamic;
+        string redirectTarget;
+        if (kind == ArgKind.DynamicSkip)
+        {
+            isDynamic = true;
+            redirectTarget = raw;
+        }
+        else
+        {
+            isDynamic = false;
+            redirectTarget = resolved ?? raw;
+        }
+
+        redirectList.Add(new Redirect
+        {
+            Direction = direction,
+            Target = redirectTarget,
+            IsDynamicSkip = isDynamic,
+        });
+    }
+
+    private static bool IsFlag(string raw) =>
+        raw.Length > 0 && raw[0] == '-';
 
     private static bool TryMapRedirect(string? op, out RedirectDirection direction)
     {
@@ -737,9 +913,6 @@ internal static class BashCommandParser
 
     private static bool TrySplitEqualsFlag(string raw, out string flagPart, out string valuePart)
     {
-        // Only split when the leading character is '-' (so `KEY=value`
-        // stays a single arg, but `--output=file` becomes two). The split
-        // happens at the *first* '=' to preserve values that contain '='.
         if (raw.Length < 2 || raw[0] != '-')
         {
             flagPart = "";
@@ -750,7 +923,6 @@ internal static class BashCommandParser
         var eq = raw.IndexOf('=');
         if (eq <= 0 || eq == raw.Length - 1)
         {
-            // No '=' or trailing '=' (no value to split off).
             flagPart = "";
             valuePart = "";
             return false;
@@ -759,24 +931,6 @@ internal static class BashCommandParser
         flagPart = raw.Substring(0, eq);
         valuePart = raw.Substring(eq + 1);
         return true;
-    }
-
-    private static IReadOnlyList<Arg> ApplyFlagsWithValue(string verbKey, IReadOnlyList<Arg> args)
-    {
-        if (!BashVerbs.FlagsWithValue.TryGetValue(verbKey, out var flagsWithValue))
-        {
-            return args;
-        }
-
-        // PR 3 doesn't change Arg shape based on the pairing — both flag
-        // and value remain in Args with default-literal kind. The pairing
-        // matters in PR 4 for IsPath classification. We still walk the
-        // list so the structural shape stays identical with what PR 4 will
-        // produce; the assignment is currently a no-op but locks the loop
-        // in place.
-        var unused = flagsWithValue;
-        _ = unused;
-        return args;
     }
 
     private static string SourceSlice(string source, BashToken token)

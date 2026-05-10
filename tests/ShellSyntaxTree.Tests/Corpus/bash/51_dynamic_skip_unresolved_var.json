@@ -1,0 +1,20 @@
+{
+  "name": "DynamicSkip: rm $UNRESOLVED/foo (SPEC §12 example)",
+  "input": "rm $UNRESOLVED/foo",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["rm"],
+        "args": [
+          { "raw": "$UNRESOLVED/foo", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §12 dynamic-skip worked example. Locked interpretation #3 — env var in path slot → DynamicSkip with IsPath=false."
+}

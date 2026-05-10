@@ -1,0 +1,21 @@
+{
+  "name": "chmod with mode then $TARGET",
+  "input": "chmod 755 $TARGET",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["chmod"],
+        "args": [
+          { "raw": "755", "kind": "Literal", "isPath": false },
+          { "raw": "$TARGET", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "chmod i=0 is mode (IsPath=false); i=1 is the path slot — env var → DynamicSkip."
+}

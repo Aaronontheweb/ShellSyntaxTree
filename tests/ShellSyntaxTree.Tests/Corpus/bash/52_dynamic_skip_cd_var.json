@@ -1,6 +1,6 @@
 {
-  "name": "Compound: cd /tmp && ls",
-  "input": "cd /tmp && ls",
+  "name": "DynamicSkip: cd $REPO && cmd",
+  "input": "cd $REPO && cmd",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -8,7 +8,7 @@
         "operator": "None",
         "verb": ["cd"],
         "args": [
-          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp" }
+          { "raw": "$REPO", "kind": "DynamicSkip", "isPath": false }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -16,7 +16,7 @@
       },
       {
         "operator": "AndIf",
-        "verb": ["ls"],
+        "verb": ["cmd"],
         "args": [],
         "redirects": [],
         "isSubshell": false,
@@ -24,5 +24,5 @@
       }
     ]
   },
-  "notes": "PR 4: cd target resolves. PR 5 will append the synthetic /tmp arg to clause 1."
+  "notes": "cd target is an unresolved env var → DynamicSkip. PR 5 will append the matching attribution arg."
 }

@@ -1,0 +1,20 @@
+{
+  "name": "Glob in path slot: rm /tmp/*.bak",
+  "input": "rm /tmp/*.bak",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["rm"],
+        "args": [
+          { "raw": "/tmp/*.bak", "kind": "Glob", "isPath": true, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Locked interpretation #3: glob in path slot stays IsPath=true so the consumer can apply the covering-directory heuristic (Path.GetDirectoryName)."
+}

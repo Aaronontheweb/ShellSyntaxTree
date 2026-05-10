@@ -1,0 +1,21 @@
+{
+  "name": "git -C /repo log (SPEC §12 example)",
+  "input": "git -C /repo log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "log"],
+        "args": [
+          { "raw": "-C", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "/repo", "kind": "Literal", "isPath": true, "resolved": "/repo" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §12 worked example. PR 4 flag-with-value-aware verb-chain probe: `-C /repo` is consumed before the arity probe, so the chain captures both `git` and `log`."
+}

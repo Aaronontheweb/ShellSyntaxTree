@@ -1,0 +1,22 @@
+{
+  "name": "curl: -o /tmp/out https://example.com",
+  "input": "curl -o /tmp/out https://example.com",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["curl"],
+        "args": [
+          { "raw": "-o", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "/tmp/out", "kind": "Literal", "isPath": true, "resolved": "/tmp/out" },
+          { "raw": "https://example.com", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §7 flag-with-value: -o consumes a path value (/tmp/out is the saved file). The URL positional is IsPath=false per the curl override."
+}
