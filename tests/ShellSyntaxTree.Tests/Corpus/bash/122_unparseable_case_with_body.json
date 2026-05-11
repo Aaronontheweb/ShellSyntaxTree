@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable: case keyword precedence (case x in a) ;; esac)",
+  "input": "case x in a) ;; esac",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "'case'"
+  },
+  "notes": "v0.1.2 / B4: SPEC §11 precedence — control-flow keyword detection runs BEFORE paren-balance. Previously this input tripped 'unbalanced parens at position N' because the `)` in `a)` reached SplitIntoSegments before ParseClauseSegment's first-verb check could fire. The anomaly pass now scans the token stream for control-flow keywords at verb position (start of input or after a clause separator) and short-circuits with the helpful reason."
+}

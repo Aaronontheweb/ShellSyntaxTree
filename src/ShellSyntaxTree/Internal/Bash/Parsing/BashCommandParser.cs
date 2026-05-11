@@ -511,6 +511,36 @@ internal static class BashCommandParser
 
     private static bool TryDetectAnomaly(IReadOnlyList<BashToken> tokens, out string? reason)
     {
+        // Control-flow keyword at verb position runs FIRST (SPEC §11
+        // precedence). A keyword like `case x in a) ;; esac` would
+        // otherwise trip the paren-balance check in SplitIntoSegments
+        // before we get to ParseClauseSegment's per-clause keyword check
+        // — and the resulting "unbalanced parens" reason hides the real
+        // cause. Verb position = index 0 OR immediately after a clause
+        // separator (`&&`, `||`, `;`, `|`, or the `(` that opens a
+        // subshell). This intentionally skips `case` / `for` / etc.
+        // appearing as POSITIONAL ARGS (e.g. `echo case`), matching the
+        // ParseClauseSegment scoping.
+        var nextIsVerbSlot = true;
+        foreach (var t in tokens)
+        {
+            if (t.Kind == BashTokenKind.Operator)
+            {
+                nextIsVerbSlot = t.OperatorText is "&&" or "||" or ";" or "|" or "(";
+                continue;
+            }
+
+            if (nextIsVerbSlot
+                && t.Kind == BashTokenKind.Word
+                && BashVerbs.ControlFlowKeywords.Contains(t.Value))
+            {
+                reason = $"control-flow keyword '{t.Value}' is not supported in v0.1";
+                return true;
+            }
+
+            nextIsVerbSlot = false;
+        }
+
         // Function definition: `name() { ... }`. Trigger = a Word followed
         // by an immediately-adjacent `(` and `)`.
         for (var i = 0; i + 2 < tokens.Count; i++)

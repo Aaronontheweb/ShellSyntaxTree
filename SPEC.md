@@ -862,6 +862,23 @@ Conditions that produce `IsUnparseable = true`:
   mechanism).
 - Recursion depth exceeded on `bash -c` chains (>5 levels).
 
+**Diagnostic precedence.** When multiple conditions could fire on a
+single input (e.g. `case x in a) ;; esac` is both a control-flow
+keyword AND has unbalanced parens), the parser checks them in this
+order so the most informative reason wins:
+
+1. Lexer-emitted `UnparseableSentinel` tokens (unbalanced quote /
+   unterminated heredoc / arithmetic / complex parameter expansion).
+2. Control-flow keyword at verb position (start of input or
+   immediately after a clause separator `&&`, `||`, `;`, `|`, or
+   `(`). Catches `case x in a) ;; esac` before the `)` triggers a
+   paren-balance error.
+3. Function definition pattern (`Word` immediately followed by `(`,
+   `)`).
+4. Process substitution (`<(` or `>(` adjacent).
+5. Segment-split errors (unbalanced parens, unexpected operator).
+6. `bash -c` recursion depth cap.
+
 Consumers (e.g. Netclaw's gate evaluator) route unparseable commands to a
 safe-fail path (prompt the user; offer only Once and Deny — no persistent
 grants on shapes the parser can't model).

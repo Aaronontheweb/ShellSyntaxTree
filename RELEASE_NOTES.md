@@ -1,6 +1,6 @@
 #### 0.1.2-alpha May 11th 2026 ####
 
-Two parser correctness fixes. Public API unchanged.
+Three parser correctness fixes. Public API unchanged.
 
 **Fixed**
 
@@ -19,17 +19,31 @@ Two parser correctness fixes. Public API unchanged.
   non-trailing position. Forward-slash behavior is unchanged — `dir/`
   still classifies as a path (trailing `/` is a meaningful bash
   directory hint).
+- **Control-flow keyword detection precedes paren-balance (B4).**
+  Previously `case x in a) ;; esac` produced `IsUnparseable=true` with
+  reason `unbalanced parens at position N` because the `)` in `a)`
+  tripped `SplitIntoSegments` before the per-clause keyword check
+  could fire. The anomaly pass now scans the token stream for
+  control-flow keywords at verb position (start of input or after
+  `&&` / `||` / `;` / `|` / `(`) and short-circuits with the helpful
+  `control-flow keyword 'case' is not supported in v0.1` reason
+  before downstream checks run. SPEC §11 now pins the full diagnostic
+  precedence order.
 
 **Behavior notes**
 
 - Public API surface is unchanged (no `PublicApiSnapshotTests` delta).
 - SPEC.md §8: new "Step 0: Single-quoted bypass" preamble; LooksLikePath
   heuristic updated to call out the trailing-backslash carve-out.
+- SPEC.md §11: new "Diagnostic precedence" section enumerating the
+  order in which unparseable conditions are checked.
 - Corpus entries 104 (`echo 'literal $HOME'`) and 109 (`echo "trailing
-  backslash\\"`) updated to the corrected outputs. Three new entries
-  (119–121) pin the regression guards: single-quoted absolute paths
+  backslash\\"`) updated to the corrected outputs. Four new entries
+  (119–122) pin the regression guards: single-quoted absolute paths
   still resolve, `cd dir/` still classifies as a path, single-quoted
-  `$VAR` stays literal under `rm`.
+  `$VAR` stays literal under `rm`, and `case x in a) ;; esac` now
+  reports the control-flow keyword reason instead of a paren-balance
+  error.
 
 #### 0.1.1-alpha May 11th 2026 ####
 
