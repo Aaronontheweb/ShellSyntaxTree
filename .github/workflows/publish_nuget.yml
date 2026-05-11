@@ -2,9 +2,10 @@ name: Publish NuGet
 
 on:
   push:
+    # Fire on ALL tag pushes so the format guard (below) catches mistakes
+    # like `v0.1.0-alpha` loudly instead of silently no-op-ing.
     tags:
-      - 'v*.*.*'
-      - 'v*.*.*-*'
+      - '*'
 
 permissions:
   contents: write
@@ -17,6 +18,24 @@ jobs:
     environment: nuget   # Must match the environment named in the nuget.org Trusted Publisher policy.
 
     steps:
+      - name: "Assert tag is a bare version number"
+        shell: bash
+        run: |
+          # ShellSyntaxTree convention: tags are SemVer version numbers WITHOUT
+          # a leading 'v'. E.g., `0.1.0-alpha`, NOT `v0.1.0-alpha`. The tag is
+          # the package version verbatim.
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" == v* ]]; then
+            echo "::error::Tag '$TAG' starts with 'v'. ShellSyntaxTree tags must be bare SemVer version numbers (e.g., '0.1.0-alpha', not 'v0.1.0-alpha'). Delete this tag and retag without the leading 'v'."
+            exit 1
+          fi
+          if ! [[ "$TAG" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9._-]+)?$ ]]; then
+            echo "::error::Tag '$TAG' is not a valid SemVer version. Expected '<major>.<minor>.<patch>' or '<major>.<minor>.<patch>-<prerelease>' (e.g., '1.0.0' or '0.2.0-beta.1')."
+            exit 1
+          fi
+          echo "PACKAGE_VERSION=${TAG}" >> "$GITHUB_ENV"
+          echo "Tag '$TAG' is a valid bare version. Publishing package version: ${TAG}"
+
       - name: "Checkout"
         uses: actions/checkout@v6.0.2
         with:
@@ -30,15 +49,6 @@ jobs:
 
       - name: "Restore .NET tools"
         run: dotnet tool restore
-
-      - name: "Compute package version from tag"
-        shell: bash
-        run: |
-          # tag form is vX.Y.Z or vX.Y.Z-suffix
-          TAG="${GITHUB_REF_NAME}"
-          VERSION="${TAG#v}"
-          echo "PACKAGE_VERSION=${VERSION}" >> "$GITHUB_ENV"
-          echo "Publishing package version: ${VERSION}"
 
       - name: "dotnet pack"
         run: dotnet pack /p:PackageVersion=${{ env.PACKAGE_VERSION }} -c Release -o ./output

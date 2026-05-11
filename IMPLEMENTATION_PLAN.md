@@ -9,7 +9,7 @@ bulldoze priorities.
 
 ---
 
-## NOW (v0.1.0-alpha shipping path)
+## NOW (0.1.0-alpha shipping path)
 
 > **Active OpenSpec change:** `v0.1-locked-interpretations` — captures
 > the eight planning-interview decisions (see
@@ -169,15 +169,16 @@ bulldoze priorities.
 - [x] Wired into `pr_validation.yml` via standard `dotnet test`
       (no separate job)
 
-### 13. Release v0.1.0-alpha — PR 7 in flight
+### 13. Release 0.1.0-alpha — PR 7 in flight
 
-- [x] `RELEASE_NOTES.md` updated with v0.1.0-alpha section
+- [x] `RELEASE_NOTES.md` updated with 0.1.0-alpha section
 - [x] `dotnet pack -c Release -o ./bin/nuget` produces clean
       `ShellSyntaxTree.0.1.0-alpha.nupkg` + `.snupkg` with embedded
       README, icon, SourceLink metadata
 - [ ] **STOP after PR 7 merges** — await user go-ahead before pushing
-      `v0.1.0-alpha` tag (the tag → nuget.org publish is irreversible)
-- [ ] On user go-ahead: `git tag v0.1.0-alpha && git push origin v0.1.0-alpha`
+      `0.1.0-alpha` tag (the tag → nuget.org publish is irreversible)
+- [ ] On user go-ahead: `git tag 0.1.0-alpha && git push origin 0.1.0-alpha`
+      (tags are bare SemVer, no `v` prefix — `publish_nuget.yml` asserts this)
 - [ ] Verify `publish_nuget.yml` produces release on tag push and the
       package appears on nuget.org
 
@@ -203,7 +204,7 @@ bulldoze priorities.
 
 ---
 
-## NEXT (v0.1.x — additive, post-alpha)
+## NEXT (0.1.x — additive, post-alpha)
 
 - Seed 50–100 corpus entries from sanitized real-world dogfood logs
   (SPEC §14 workflow)
@@ -214,7 +215,7 @@ bulldoze priorities.
 - Performance sanity check (~1 ms typical) with a tiny BenchmarkDotNet
   harness — only if anything in the daemon hot path complains
 
-## LATER (v0.2+ — out of v0.1 scope)
+## LATER (0.2+ — out of 0.1 scope)
 
 - PowerShell parser (`PwshParser : IShellParser`) — first time we exercise
   the multi-shell seam

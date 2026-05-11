@@ -173,11 +173,14 @@ dotnet pack  -c Release -o ./bin/nuget
 
 ## Versioning
 
-- **v0.1.0-alpha** — first publishable cut. Bash-only.
-- **v0.1.x** — additive (more verb table entries, more corpus, bug
+Tags are bare SemVer version numbers — no `v` prefix. The release
+workflow asserts this and fails fast on misformatted tags.
+
+- **0.1.0-alpha** — first publishable cut. Bash-only.
+- **0.1.x** — additive (more verb table entries, more corpus, bug
   fixes).
-- **v0.2.0** — first PowerShell parser.
-- **v1.0.0** — when an external consumer beyond Netclaw ships against
+- **0.2.0** — first PowerShell parser.
+- **1.0.0** — when an external consumer beyond Netclaw ships against
   it without finding API gaps.
 
 ## License
