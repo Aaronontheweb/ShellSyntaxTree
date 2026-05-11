@@ -1,3 +1,24 @@
+#### 0.1.1-alpha May 11th 2026 ####
+
+Bug fix release for v0.1.0-alpha consumers.
+
+**Fixed**
+
+- **`2>&1` fd-dup redirects no longer produce phantom `<cwd>/&1` file
+  targets.** The parser now recognizes POSIX fd-dup / fd-close shorthand
+  (`&N`, `&N-`, `&-`) on redirect targets and carries the raw token
+  verbatim on `Redirect.Target` with `Redirect.IsDynamicSkip = true`.
+  Existing consumers that already skip redirects with
+  `IsDynamicSkip = true` get correct behavior with no code changes.
+  (B1)
+
+**Behavior notes**
+
+- Public API surface is unchanged. `Redirect.Target` xmldoc and SPEC.md
+  §3 / §4 are clarified to document the fd-dup rule.
+- The Blazor sample's basename-startswith-`&` workaround has been
+  removed; the sample now relies solely on `Redirect.IsDynamicSkip`.
+
 #### 0.1.0-alpha May 10th 2026 ####
 
 First publishable cut of ShellSyntaxTree — a focused .NET library that

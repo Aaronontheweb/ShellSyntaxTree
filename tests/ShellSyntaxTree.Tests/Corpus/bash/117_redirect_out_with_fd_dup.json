@@ -1,0 +1,21 @@
+{
+  "name": "Redirect: cmd > /tmp/log 2>&1 (file + fd-dup pair)",
+  "input": "cmd > /tmp/log 2>&1",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "/tmp/log", "isDynamicSkip": false },
+          { "direction": "ErrOut", "target": "&1", "isDynamicSkip": true }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Most common real-world idiom: redirect stdout to a file AND merge stderr into stdout. The file redirect resolves as a path; the fd-dup carries '&1' verbatim with IsDynamicSkip=true."
+}

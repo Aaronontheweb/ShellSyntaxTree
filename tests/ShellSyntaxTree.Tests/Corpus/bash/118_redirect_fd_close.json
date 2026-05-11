@@ -1,0 +1,20 @@
+{
+  "name": "Redirect fd-close: cmd 2>&-",
+  "input": "cmd 2>&-",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [
+          { "direction": "ErrOut", "target": "&-", "isDynamicSkip": true }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "fd-close form: '>&-' closes the source fd. Same parser treatment as fd-dup — target is the verbatim '&-' and IsDynamicSkip=true."
+}
