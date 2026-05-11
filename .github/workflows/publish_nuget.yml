@@ -80,12 +80,18 @@ jobs:
       - name: "Extract latest release notes"
         shell: pwsh
         run: |
+          # RELEASE_NOTES.md uses `#### X.Y.Z[-suffix] <date> ####` per-section
+          # headings. Capture only the BODY of the first section (no heading)
+          # so the GitHub release page doesn't duplicate the version string in
+          # both the title and the first line of the body, and so a stale
+          # hand-typed date in the heading doesn't fight the published date
+          # GitHub renders automatically.
           if (-not (Test-Path RELEASE_NOTES.md)) {
             "No release notes available." | Set-Content RELEASE_NOTES_LATEST.md
             exit 0
           }
           $content = Get-Content RELEASE_NOTES.md -Raw
-          if ($content -match '(?s)(####.+?)(?=\n####|\z)') {
+          if ($content -match '(?s)####[^\r\n]*\r?\n+(.+?)(?=\r?\n####|\z)') {
             $Matches[1].Trim() | Set-Content RELEASE_NOTES_LATEST.md
           } else {
             $content | Set-Content RELEASE_NOTES_LATEST.md
