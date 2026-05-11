@@ -11,10 +11,11 @@ bulldoze priorities.
 
 ## NOW (0.1.0-alpha shipping path)
 
-> **Active OpenSpec change:** `v0.1-locked-interpretations` — captures
-> the eight planning-interview decisions (see
-> `openspec/changes/v0.1-locked-interpretations/`). Archived on PR 1
-> merge.
+> **OpenSpec change `v0.1-locked-interpretations`:** archived
+> 2026-05-11 (post-alpha housekeeping PR) under
+> `openspec/changes/archive/2026-05-11-v0.1-locked-interpretations/`.
+> Captured the eight planning-interview decisions; superseded by
+> shipped 0.1.0-alpha behavior.
 
 ### 1. Bootstrap projects (PR 1, in progress)
 
@@ -169,18 +170,20 @@ bulldoze priorities.
 - [x] Wired into `pr_validation.yml` via standard `dotnet test`
       (no separate job)
 
-### 13. Release 0.1.0-alpha — PR 7 in flight
+### 13. Release 0.1.0-alpha — shipped 2026-05-11
 
 - [x] `RELEASE_NOTES.md` updated with 0.1.0-alpha section
 - [x] `dotnet pack -c Release -o ./bin/nuget` produces clean
       `ShellSyntaxTree.0.1.0-alpha.nupkg` + `.snupkg` with embedded
       README, icon, SourceLink metadata
-- [ ] **STOP after PR 7 merges** — await user go-ahead before pushing
-      `0.1.0-alpha` tag (the tag → nuget.org publish is irreversible)
-- [ ] On user go-ahead: `git tag 0.1.0-alpha && git push origin 0.1.0-alpha`
-      (tags are bare SemVer, no `v` prefix — `publish_nuget.yml` asserts this)
-- [ ] Verify `publish_nuget.yml` produces release on tag push and the
-      package appears on nuget.org
+- [x] User go-ahead received; tag pushed: `0.1.0-alpha` → commit
+      `41e9433` (PR #19) on 2026-05-11
+- [x] `publish_nuget.yml` workflow run completed `success` at
+      2026-05-11T13:58:20Z; GitHub Release "ShellSyntaxTree 0.1.0-alpha"
+      cut at 14:08:47Z (Pre-release); package live on nuget.org
+- **Post-alpha CI follow-ups** (improve future releases, not retroactive):
+  - PR #19: `chore(ci): assert tags are bare version numbers (no v prefix)`
+  - PR #20: `chore(ci): strip section heading from extracted release notes`
 
 ### 14. Netclaw integration smoke (SPEC §17 #7-#8)
 
