@@ -69,7 +69,14 @@ internal static class BashResolver
     /// </returns>
     internal static (ArgKind Kind, string? Resolved, bool IsPath) Resolve(
         string raw, bool treatAsPath, BashParserOptions options) =>
-        Resolve(raw, treatAsPath, options, workingDirectoryUnknown: false);
+        Resolve(raw, treatAsPath, options, workingDirectoryUnknown: false, isLiteralBytes: false);
+
+    internal static (ArgKind Kind, string? Resolved, bool IsPath) Resolve(
+        string raw,
+        bool treatAsPath,
+        BashParserOptions options,
+        bool workingDirectoryUnknown) =>
+        Resolve(raw, treatAsPath, options, workingDirectoryUnknown, isLiteralBytes: false);
 
     /// <summary>
     /// Internal extended-resolver entry point. PR 5 adds the
@@ -78,19 +85,42 @@ internal static class BashResolver
     /// preceding clause did <c>cd $VAR</c>, we statically don't know the
     /// working directory of subsequent clauses, so relative-path args
     /// resolve to <c>DynamicSkip</c> instead of falling back to the
-    /// daemon cwd.
+    /// daemon cwd. v0.1.2 adds <paramref name="isLiteralBytes"/> so the
+    /// parser can tell the resolver "this token came from a single-quoted
+    /// string — treat its bytes as opaque literals per SPEC §5"; that
+    /// suppresses tilde / <c>$HOME</c> / <c>$VAR</c> / glob /
+    /// <c>filesystem::</c> handling so <c>'$HOME'</c> no longer expands.
     /// </summary>
     internal static (ArgKind Kind, string? Resolved, bool IsPath) Resolve(
         string raw,
         bool treatAsPath,
         BashParserOptions options,
-        bool workingDirectoryUnknown)
+        bool workingDirectoryUnknown,
+        bool isLiteralBytes)
     {
         if (raw is null)
         {
             // Defensive — public surface guarantees Arg.Raw is non-null.
             // Treat as a literal empty token.
             return (ArgKind.Literal, null, false);
+        }
+
+        if (isLiteralBytes)
+        {
+            // Single-quoted token per SPEC §5: contents are literal bytes.
+            // No tilde / $HOME / $VAR / glob / filesystem:: handling. If
+            // this slot is a path AND the literal value happens to look
+            // like one (e.g. `cat '/etc/passwd'`), still normalize it; the
+            // user typed an absolute path inside single quotes.
+            if (!treatAsPath)
+            {
+                return (ArgKind.Literal, null, false);
+            }
+
+            var resolvedLiteral = TryResolveAbsolutePath(raw, options, workingDirectoryUnknown);
+            return resolvedLiteral is null
+                ? (ArgKind.DynamicSkip, null, false)
+                : (ArgKind.Literal, resolvedLiteral, true);
         }
 
         // Step 1: filesystem::/path prefix stripping. Some agent tools emit
@@ -242,8 +272,20 @@ internal static class BashResolver
             return true;
         }
 
-        // Any directory separator.
-        if (token.IndexOf('/') >= 0 || token.IndexOf('\\') >= 0)
+        // Forward slash anywhere counts (trailing `/` is a meaningful
+        // bash directory hint, e.g. `cd dir/`).
+        if (token.IndexOf('/') >= 0)
+        {
+            return true;
+        }
+
+        // Backslash counts when it appears at a non-trailing position. A
+        // lone trailing `\` is typically a double-quote escape-collapse
+        // artifact (e.g. lexed `"foo\\"` → Value `foo\`), not a real
+        // path signal — accepting it would falsely classify
+        // `echo "trailing\\"` as a path.
+        var backslash = token.IndexOf('\\');
+        if (backslash >= 0 && backslash < token.Length - 1)
         {
             return true;
         }

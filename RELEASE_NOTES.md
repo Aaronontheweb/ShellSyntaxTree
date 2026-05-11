@@ -1,3 +1,36 @@
+#### 0.1.2-alpha May 11th 2026 ####
+
+Two parser correctness fixes. Public API unchanged.
+
+**Fixed**
+
+- **Single-quoted strings are now literal per SPEC §5 (B2).** Previously
+  `echo '$HOME'` produced `Kind=Tilde` because the resolver substituted
+  `$HOME` uniformly regardless of quote style. Now the lexer marks
+  single-quoted `QuotedString` tokens with the internal `IsSingleQuoted`
+  flag, and the resolver bypasses tilde / `$HOME` / `$VAR` / glob /
+  `filesystem::` handling for them. `echo '$HOME'` stays `Kind=Literal`,
+  `Resolved=null`; `cat '/etc/passwd'` still resolves a path. Matches
+  bash semantics.
+- **`LooksLikePath` no longer false-positives on a lone trailing
+  backslash (B3).** A double-quoted token like `"foo\\"` lexes to
+  Value `foo\`; the trailing `\` is an escape-collapse artifact, not a
+  meaningful path signal. The heuristic now requires a backslash at a
+  non-trailing position. Forward-slash behavior is unchanged — `dir/`
+  still classifies as a path (trailing `/` is a meaningful bash
+  directory hint).
+
+**Behavior notes**
+
+- Public API surface is unchanged (no `PublicApiSnapshotTests` delta).
+- SPEC.md §8: new "Step 0: Single-quoted bypass" preamble; LooksLikePath
+  heuristic updated to call out the trailing-backslash carve-out.
+- Corpus entries 104 (`echo 'literal $HOME'`) and 109 (`echo "trailing
+  backslash\\"`) updated to the corrected outputs. Three new entries
+  (119–121) pin the regression guards: single-quoted absolute paths
+  still resolve, `cd dir/` still classifies as a path, single-quoted
+  `$VAR` stays literal under `rm`.
+
 #### 0.1.1-alpha May 11th 2026 ####
 
 Bug fix release for v0.1.0-alpha consumers.

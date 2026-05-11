@@ -36,4 +36,16 @@ internal readonly record struct BashToken(
     string? OperatorText,
     int SourceStart,
     int SourceLength,
-    string? UnparseableReason);
+    string? UnparseableReason)
+{
+    /// <summary>
+    /// True when this is a single-quoted <see cref="BashTokenKind.QuotedString"/>.
+    /// Bash semantics: contents are literal bytes — no variable expansion,
+    /// no glob handling, no <c>filesystem::</c> stripping. The resolver
+    /// consults this flag to bypass meta-character processing on the
+    /// token's <see cref="Value"/>. Default <c>false</c> for every other
+    /// kind and for double-quoted strings (which allow <c>$HOME</c>
+    /// substitution per SPEC §8 step 3).
+    /// </summary>
+    public bool IsSingleQuoted { get; init; }
+}

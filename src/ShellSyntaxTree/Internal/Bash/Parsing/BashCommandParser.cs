@@ -1190,7 +1190,11 @@ internal static class BashCommandParser
                         positionalIndex++;
                     }
 
-                    var (kind, resolved, isPath) = BashResolver.Resolve(t.Value, treatAsPath, options, workingDirectoryUnknown);
+                    // Single-quoted tokens carry literal bytes per SPEC §5
+                    // — bypass tilde / $HOME / $VAR / glob handling so
+                    // `'$HOME'` doesn't expand.
+                    var (kind, resolved, isPath) = BashResolver.Resolve(
+                        t.Value, treatAsPath, options, workingDirectoryUnknown, t.IsSingleQuoted);
                     argList.Add(new Arg
                     {
                         Raw = sourceRaw,

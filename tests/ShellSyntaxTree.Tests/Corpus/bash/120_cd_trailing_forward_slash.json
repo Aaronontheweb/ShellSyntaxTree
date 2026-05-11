@@ -1,0 +1,20 @@
+{
+  "name": "Path: cd dir/ (trailing forward slash still classifies as path)",
+  "input": "cd dir/",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "dir/", "kind": "Literal", "isPath": true, "resolved": "/work/dir" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "v0.1.2 / B3 regression guard: the LooksLikePath heuristic now treats a lone trailing backslash as a non-signal, but a trailing forward slash is a meaningful bash directory hint (`cd dir/` is common). Confirm `dir/` still resolves as a path."
+}
