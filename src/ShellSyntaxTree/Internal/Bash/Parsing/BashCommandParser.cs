@@ -1255,6 +1255,23 @@ internal static class BashCommandParser
             return;
         }
 
+        if (IsFdDupTarget(target.Value))
+        {
+            // POSIX fd-dup / fd-close shorthand: `&N`, `&N-`, `&-`. These
+            // duplicate or close a file descriptor; they are NOT file paths
+            // and MUST NOT be path-resolved (else `2>&1` would resolve to
+            // `<cwd>/&1`, a phantom file). Carry the raw token verbatim and
+            // mark IsDynamicSkip=true so consumers iterating redirects as
+            // paths skip them by default.
+            redirectList.Add(new Redirect
+            {
+                Direction = direction,
+                Target = target.Value,
+                IsDynamicSkip = true,
+            });
+            return;
+        }
+
         var raw = SourceSlice(source, target);
 
         // Redirect targets are always treated as paths. SPEC §8 +
@@ -1286,6 +1303,45 @@ internal static class BashCommandParser
 
     private static bool IsFlag(string raw) =>
         raw.Length > 0 && raw[0] == '-';
+
+    private static bool IsFdDupTarget(string value)
+    {
+        // Recognized shapes (POSIX `[n]>&word` / `[n]<&word`):
+        //   &-        close fd
+        //   &N        duplicate fd N (one or more digits)
+        //   &N-       duplicate fd N, then close the source (move semantics)
+        // Anything else (e.g. `&foo`, `&`, `&1bad`) falls through and is
+        // treated as an ordinary redirect target — currently the lexer
+        // already treats bare `&` followed by a word char as part of a
+        // Word token, so we only need to recognize these well-formed cases.
+        if (value.Length < 2 || value[0] != '&')
+        {
+            return false;
+        }
+
+        if (value.Length == 2 && value[1] == '-')
+        {
+            return true;
+        }
+
+        var i = 1;
+        while (i < value.Length && value[i] >= '0' && value[i] <= '9')
+        {
+            i++;
+        }
+
+        if (i == 1)
+        {
+            return false;
+        }
+
+        if (i == value.Length)
+        {
+            return true;
+        }
+
+        return i == value.Length - 1 && value[i] == '-';
+    }
 
     private static bool TryMapRedirect(string? op, out RedirectDirection direction)
     {

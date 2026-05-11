@@ -124,20 +124,10 @@ public static class MermaidRenderer
                     var redirect = clause.Redirects[r];
                     if (redirect.IsDynamicSkip)
                     {
-                        continue;
-                    }
-
-                    // `2>&1` and similar `N>&M` fd-dup targets aren't files;
-                    // the parser resolves `&1` against the cwd into something
-                    // like `/work/&1`, so check the basename, not the prefix.
-                    // v0.1.x candidate: have the parser surface fd-dup targets
-                    // distinctly (e.g. IsFdDup) so consumers don't have to
-                    // string-match.
-                    var basename = redirect.Target.LastIndexOf('/') is var lastSlash and >= 0
-                        ? redirect.Target[(lastSlash + 1)..]
-                        : redirect.Target;
-                    if (basename.StartsWith('&'))
-                    {
+                        // Skips both env-var-style dynamic targets AND the
+                        // fd-dup / fd-close forms (`2>&1`, `2>&-`), which
+                        // the parser surfaces with IsDynamicSkip=true as of
+                        // v0.1.1.
                         continue;
                     }
 

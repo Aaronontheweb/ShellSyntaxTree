@@ -1,0 +1,20 @@
+{
+  "name": "Redirect fd-dup: cmd 2>&1",
+  "input": "cmd 2>&1",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd"],
+        "args": [],
+        "redirects": [
+          { "direction": "ErrOut", "target": "&1", "isDynamicSkip": true }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "v0.1.1 / B1: POSIX fd-dup targets (&N) are NOT path-resolved. Target carries the verbatim '&1' and IsDynamicSkip=true tells consumers iterating redirects-as-paths to skip."
+}

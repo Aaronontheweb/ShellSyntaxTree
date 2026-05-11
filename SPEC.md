@@ -292,9 +292,17 @@ public enum ArgKind
 public sealed record Redirect
 {
     public RedirectDirection Direction { get; init; }
-    /// <summary>Target path (resolved per Arg conventions).</summary>
+    /// <summary>
+    /// Redirect target. Normally a path resolved per Arg conventions
+    /// (§8); for fd-dup / fd-close shorthand (`&N`, `&N-`, `&-`)
+    /// the raw token is carried verbatim and IsDynamicSkip is true.
+    /// </summary>
     public string Target { get; init; } = "";
-    /// <summary>True when target is a dynamic token (skip).</summary>
+    /// <summary>
+    /// True when the target is opaque to path resolution — a dynamic
+    /// token (env var, command substitution) or an fd-dup / fd-close
+    /// form. Consumers MUST NOT treat Target as a path when this is true.
+    /// </summary>
     public bool IsDynamicSkip { get; init; }
 }
 
@@ -354,6 +362,11 @@ quoted_string   := single-quoted | double-quoted
 - Heredocs (`<<EOF ... EOF`) are recognized as a redirect operator but the
   body is **skipped** (not extracted). The clause containing the heredoc
   parses normally with the heredoc body removed.
+- Redirect targets matching the POSIX fd-dup / fd-close shorthand —
+  `&N`, `&N-`, or `&-` (where `N` is one or more decimal digits) — are
+  NOT path-resolved. The parser carries the raw token (e.g. `&1`) on
+  `Redirect.Target` and sets `Redirect.IsDynamicSkip = true`. This
+  prevents `2>&1` from being incorrectly resolved to `<cwd>/&1`.
 - Function definitions, `for`/`while`/`do`/`done`/`then`/`fi`/`case`/`esac`
   control-flow keywords, and arithmetic expansion `$(( ... ))` cause
   `IsUnparseable = true`. We don't support these in v0.1.
