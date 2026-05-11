@@ -1,5 +1,5 @@
 {
-  "name": "Quote: echo \"trailing backslash\\\\\" (escaped backslash inside double-quote)",
+  "name": "Quote: echo \"trailing backslash\\\\\" (trailing-only backslash isn't a path)",
   "input": "echo \"trailing backslash\\\\\"",
   "expected": {
     "isUnparseable": false,
@@ -8,7 +8,7 @@
         "operator": "None",
         "verb": ["echo"],
         "args": [
-          { "raw": "\"trailing backslash\\\\\"", "kind": "Literal", "isPath": true, "resolved": "/work/trailing backslash" }
+          { "raw": "\"trailing backslash\\\\\"", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -16,5 +16,5 @@
       }
     ]
   },
-  "notes": "Inside double quotes \\\\ collapses to a single literal \\. The post-escape Value is `trailing backslash\\` — which contains a directory-separator character (backslash) so LooksLikePath returns true even though echo isn't a FileVerb. The resolver normalizes the trailing \\ away during path normalization → /work/trailing backslash. Documented v0.1 behavior; SPEC clarification candidate: should LooksLikePath ignore trailing-only backslashes?"
+  "notes": "v0.1.2 / B3: inside double quotes \\\\ collapses to a single literal \\. The post-escape Value is `trailing backslash\\` — but LooksLikePath now requires a backslash at a non-trailing position, so the lone trailing artifact no longer falsely classifies this as a path. Kind=Literal, IsPath=false, Resolved=null."
 }

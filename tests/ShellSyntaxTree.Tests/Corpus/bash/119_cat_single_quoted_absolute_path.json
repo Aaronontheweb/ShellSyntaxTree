@@ -1,0 +1,20 @@
+{
+  "name": "Quote: cat '/etc/passwd' (single-quoted absolute path still resolves)",
+  "input": "cat '/etc/passwd'",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "'/etc/passwd'", "kind": "Literal", "isPath": true, "resolved": "/etc/passwd" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "v0.1.2 / B2: single-quoting suppresses meta-character expansion (tilde / $VAR / glob) but a single-quoted absolute path still resolves through the path-arg slot. cat is a FileVerb so the positional is a path slot; the literal bytes happen to be a rooted absolute path."
+}

@@ -619,6 +619,14 @@ path, then the verb chain continues with `log`.
 For each Arg with potential path content, the resolver attempts to produce
 a normalized absolute path. Resolution order:
 
+0. **Single-quoted bypass.** If the source token came from a single-quoted
+   string (per §5: bytes are preserved literally — no escape processing,
+   no variable expansion), the resolver skips steps 1–5 entirely. Kind is
+   `Literal`; `IsPath` is `true` and `Resolved` is set only when the slot
+   is a path AND `TryResolveAbsolutePath` on the raw bytes succeeds. So
+   `cat '/etc/passwd'` still produces a resolved path, but `echo '$HOME'`
+   stays literal — `$HOME` is not expanded inside single quotes.
+
 1. **Tilde expansion.** `~` → `BashParserOptions.HomeDirectory`.
    `~/foo` → `<home>/foo`. `~user` not supported → `DynamicSkip`.
 
@@ -675,11 +683,16 @@ LooksLikePath(token) =
 || token starts with '\\' or '<letter>:' (Windows absolute)
 || token starts with './' or '../' (Unix relative)
 || token starts with '~' (Tilde)
-|| token contains '/' or '\\' anywhere
+|| token contains '/' anywhere
+|| token contains '\\' at a NON-TRAILING position
 || token ends with a known file extension (.json, .md, .txt, .conf, ...)
 || token is in the args of a FileVerb at a position the per-verb rule
    marks as a path
 ```
+
+A lone trailing `\\` is excluded because it commonly appears as a
+double-quote escape-collapse artifact (`"foo\\"` lexes to Value `foo\\`)
+and is not a meaningful path signal on its own.
 
 The per-verb rule wins when present; the heuristic is the fallback.
 

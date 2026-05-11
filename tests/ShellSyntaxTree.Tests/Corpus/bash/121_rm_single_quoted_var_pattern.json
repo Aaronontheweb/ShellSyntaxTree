@@ -1,0 +1,20 @@
+{
+  "name": "Quote: rm '$VAR/file.txt' (single-quoted env var stays literal)",
+  "input": "rm '$VAR/file.txt'",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["rm"],
+        "args": [
+          { "raw": "'$VAR/file.txt'", "kind": "Literal", "isPath": true, "resolved": "/work/$VAR/file.txt" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "v0.1.2 / B2: inside single quotes the `$VAR` token is literal — the resolver does NOT trigger the DynamicSkip path for unresolved env vars. The literal bytes `$VAR/file.txt` resolve under cwd as `/work/$VAR/file.txt` and Kind stays Literal. This matches bash semantics: `rm '$VAR/file.txt'` deletes the file literally named `$VAR/file.txt`."
+}
