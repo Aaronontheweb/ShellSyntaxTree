@@ -496,7 +496,9 @@ internal static class BashCommandParser
         var filtered = new List<BashToken>(tokens.Count);
         foreach (var t in tokens)
         {
-            if (t.Kind == BashTokenKind.Whitespace || t.Kind == BashTokenKind.Continuation)
+            if (t.Kind == BashTokenKind.Whitespace
+                || t.Kind == BashTokenKind.Continuation
+                || t.Kind == BashTokenKind.Comment)
             {
                 continue;
             }

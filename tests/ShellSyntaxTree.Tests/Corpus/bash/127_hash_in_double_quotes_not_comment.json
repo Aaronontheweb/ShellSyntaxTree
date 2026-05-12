@@ -1,0 +1,20 @@
+{
+  "name": "# inside double quotes is literal, not a comment",
+  "input": "echo \"hash is #1234\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "\"hash is #1234\"", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #25 / SPEC §5: `#` is comment-start only at a word boundary. Inside double quotes it's a literal character."
+}

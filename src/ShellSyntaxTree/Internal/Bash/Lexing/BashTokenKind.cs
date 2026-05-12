@@ -38,6 +38,15 @@ internal enum BashTokenKind
     /// whitespace by the parser. SPEC §5.</summary>
     Continuation,
 
+    /// <summary>A bash line comment — <c>#</c> at a word boundary
+    /// through end-of-line (the terminating newline is preserved as
+    /// a separate <see cref="Whitespace"/> token so statement
+    /// boundaries are unaffected). Emitted for source fidelity; the
+    /// parser drops these in <c>FilterSignificant</c> alongside
+    /// <see cref="Whitespace"/> and <see cref="Continuation"/>.
+    /// SPEC §5.</summary>
+    Comment,
+
     /// <summary>An opaque region — <c>$(…)</c> or backtick-quoted
     /// <c>`…`</c>. The parser consumes one of these as a single
     /// <c>Arg{ Kind = DynamicSkip, IsPath = false }</c> per the v0.1

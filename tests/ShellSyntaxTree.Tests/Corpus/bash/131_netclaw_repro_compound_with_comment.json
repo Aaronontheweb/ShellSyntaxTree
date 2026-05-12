@@ -1,0 +1,44 @@
+{
+  "name": "Netclaw repro: leading comment + curl|jq pipeline with ||-fallback",
+  "input": "# Get open PRs from the upstream repo\ncurl -s \"https://api.github.com/repos/sample-org/sample-repo/pulls?state=open\" | jq -r '.[] | \"PR\"' 2>/dev/null || echo \"API failed, trying alternative...\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["curl"],
+        "args": [
+          { "raw": "-s", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "\"https://api.github.com/repos/sample-org/sample-repo/pulls?state=open\"", "kind": "Glob", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Pipe",
+        "verb": ["jq"],
+        "args": [
+          { "raw": "-r", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "'.[] | \"PR\"'", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [
+          { "direction": "ErrOut", "target": "/dev/null" }
+        ],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "OrIf",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "\"API failed, trying alternative...\"", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #25 follow-up: leading comment + `||`-fallback that surfaced the approval-state desync cascade (verb-chain extracted as `# Get` at persistence time → cache miss at retry-authorization → tool fails after user clicked Approve). Paths and org names sanitized per SPEC §14."
+}

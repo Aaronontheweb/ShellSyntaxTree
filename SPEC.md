@@ -357,6 +357,11 @@ quoted_string   := single-quoted | double-quoted
 
 - Whitespace between tokens is one or more spaces or tabs.
 - `\` followed by a newline is a line continuation (treat as whitespace).
+- Bash line comments (`#` at a word boundary through end-of-line) are
+  whitespace-equivalent at the lexer level — they emit a Comment token
+  for source fidelity but are filtered alongside Whitespace by the
+  parser, so they do not appear in the grammar. See §5 "Comment
+  handling" for boundary rules.
 - `\` before a metachar inside a double-quoted string escapes the metachar.
 - Single-quoted strings preserve all bytes literally — no escape processing.
 - Heredocs (`<<EOF ... EOF`) are recognized as a redirect operator but the
@@ -400,6 +405,14 @@ The lexer produces tokens consumed by the parser. Token kinds:
   the matching close (`))` or `}` respectively) and emits a sentinel
   whose reason names the rejected construct. The parser consumes this
   token by setting outer `ParsedCommand.IsUnparseable = true` (see §11).
+- **COMMENT** — `#` at a word boundary (start of input, or preceded by
+  whitespace, a newline, an operator, or any other lexer-recognized
+  boundary) starts a line comment running to (but not including) the
+  next newline. The lexer emits a single Comment token covering the
+  `#` and the comment text, for source fidelity. The parser drops
+  Comment tokens in `FilterSignificant` alongside Whitespace and
+  Continuation — comments produce no clauses, args, redirects, or
+  flags. See "Comment handling" below for boundary rules.
 
 ### Quote handling
 
@@ -427,6 +440,36 @@ The lexer produces tokens consumed by the parser. Token kinds:
 Operators terminate the current token. `cd /tmp&&ls` lexes as
 `[cd, /tmp, &&, ls]` — no whitespace required around operators. The lexer
 must handle this.
+
+### Comment handling
+
+- An unquoted `#` that appears at a **word boundary** starts a comment
+  that runs to (but does not include) the next newline. A word boundary
+  is: start of input, or the position immediately after a whitespace
+  run, a newline, an operator (`&&`, `||`, `;`, `|`, `>`, `>>`, `<`,
+  `2>`, `2>>`, `(`, `)`, `<<`, `<<-`), a quoted string, or an opaque
+  substitution. Equivalently: `#` is comment-start everywhere the
+  outer lexer dispatch loop sits, because every other lexer rule has
+  already consumed its territory before `#` is considered.
+- `#` **inside** single or double quotes is a literal character (no
+  comment).
+- `#` in the **interior** of an unquoted word (e.g. `abc#def`) is a
+  literal character. `ReadWord` consumes the whole word before the
+  outer loop can see the embedded `#`; there is no re-scanning.
+- `\#` (backslash-escaped `#` outside quotes) is consumed by the
+  normal escape rule — the backslash is dropped and `#` becomes a
+  regular word character. Equivalent example: `cmd \#abc` produces
+  one Word token `#abc`.
+- The terminating newline is **not** consumed by the Comment token.
+  It survives as a Whitespace token, preserving statement-boundary
+  semantics for the parser (see §4).
+- A Comment token's `Value` includes the leading `#` for source
+  fidelity. `SourceStart` / `SourceLength` cover the same range.
+- **Effect on parsing**: comment-only input parses to
+  `Clauses = []`, `IsUnparseable = false` — mirroring empty-input
+  behavior. A comment leading, trailing, or interleaved with a clause
+  contributes no tokens to the verb chain, args, or redirects of any
+  clause.
 
 ---
 

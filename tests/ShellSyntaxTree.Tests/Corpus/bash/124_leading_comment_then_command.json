@@ -1,0 +1,18 @@
+{
+  "name": "Leading comment followed by a single command",
+  "input": "# fetch the latest\ngit pull",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "pull"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #25: comment-as-verb regression. The leading explanatory line must not leak into the verb chain; v0.1.3 lexer skips `#`-to-EOL."
+}

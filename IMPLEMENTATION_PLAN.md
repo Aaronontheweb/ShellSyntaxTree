@@ -205,10 +205,32 @@ bulldoze priorities.
 - [x] `dotnet pack` validation: icon embedded in `.nupkg` confirmed
 - [ ] Re-pack to validate icon embeds
 
+### 16. Bash line comments (#25) — 0.1.3-alpha
+
+- [x] `BashTokenKind.Comment` enum member (internal)
+- [x] `BashLexer.ConsumeLineComment` helper; `#` dispatch in main scan loop
+- [x] `BashCommandParser.FilterSignificant` drops Comment tokens
+- [x] SPEC.md §4 BNF note + §5 "Comment handling" subsection
+- [x] 10 new lexer unit tests + 8 new parser unit tests
+- [x] 9 new corpus entries (123–131) including both Netclaw repros
+      (sanitized paths per SPEC §14)
+- [x] `Directory.Build.props` `VersionPrefix` 0.1.2 → 0.1.3
+- [x] `RELEASE_NOTES.md` 0.1.3-alpha section
+- [ ] Cut 0.1.3-alpha tag once branch is merged
+
 ---
 
 ## NEXT (0.1.x — additive, post-alpha)
 
+- Newline-as-statement-separator at the parser level (SPEC §4 gap
+  surfaced by #25). The lexer already emits Whitespace tokens for
+  newlines with the intent of acting as separators (see the lexer
+  comment at the newline branch), but `BashCommandParser.SplitIntoSegments`
+  only splits on `&&` / `||` / `;` / `|`. As a result, `cmd1\ncmd2`
+  currently parses to one clause `[cmd1]` with `cmd2` as an argument.
+  v0.1.3 corpus entry 126 works around this with an explicit `;`;
+  the long-term fix is to bridge newline-Whitespace tokens to the
+  segment splitter as synthetic `;` separators.
 - Seed 50–100 corpus entries from sanitized real-world dogfood logs
   (SPEC §14 workflow)
 - Expand verb tables as corpus surfaces real commands

@@ -567,6 +567,145 @@ public class BashLexerTests
             ops);
     }
 
+    // ------------------------------------------------------------ comments (SPEC §5)
+
+    [Fact]
+    public void Comment_only_input_lexes_as_single_comment_token()
+    {
+        var tokens = BashLexer.Tokenize("# just a note");
+        var t = Assert.Single(tokens);
+        Assert.Equal(BashTokenKind.Comment, t.Kind);
+        Assert.Equal("# just a note", t.Value);
+        Assert.Equal(0, t.SourceStart);
+        Assert.Equal(13, t.SourceLength);
+    }
+
+    [Fact]
+    public void Leading_comment_followed_by_newline_and_command_emits_three_significant_tokens()
+    {
+        // `# fetch\ngit pull` → Comment, Whitespace(\n), Word(git), Whitespace, Word(pull)
+        var all = BashLexer.Tokenize("# fetch\ngit pull");
+        Assert.Equal(BashTokenKind.Comment, all[0].Kind);
+        Assert.Equal("# fetch", all[0].Value);
+        Assert.Equal(BashTokenKind.Whitespace, all[1].Kind);
+        Assert.Equal(BashTokenKind.Word, all[2].Kind);
+        Assert.Equal("git", all[2].Value);
+    }
+
+    [Fact]
+    public void Inline_trailing_comment_does_not_swallow_preceding_word()
+    {
+        var nonWs = LexNonWs("git pull   # update local");
+        // Comment is preserved in this view because LexNonWs only filters
+        // Whitespace/Continuation. The Comment is still in the stream;
+        // the parser is what drops it.
+        Assert.Equal(3, nonWs.Length);
+        Assert.Equal(BashTokenKind.Word, nonWs[0].Kind);
+        Assert.Equal("git", nonWs[0].Value);
+        Assert.Equal(BashTokenKind.Word, nonWs[1].Kind);
+        Assert.Equal("pull", nonWs[1].Value);
+        Assert.Equal(BashTokenKind.Comment, nonWs[2].Kind);
+        Assert.Equal("# update local", nonWs[2].Value);
+    }
+
+    [Fact]
+    public void Hash_in_middle_of_unquoted_word_is_literal_not_comment()
+    {
+        // bash treats `#` as comment-start only at a "word boundary". A `#`
+        // already inside a word (no preceding whitespace/operator) is just
+        // another word character.
+        var tokens = LexNonWs("echo abc#def");
+        Assert.Equal(2, tokens.Length);
+        Assert.Equal(BashTokenKind.Word, tokens[0].Kind);
+        Assert.Equal("echo", tokens[0].Value);
+        Assert.Equal(BashTokenKind.Word, tokens[1].Kind);
+        Assert.Equal("abc#def", tokens[1].Value);
+    }
+
+    [Fact]
+    public void Hash_inside_double_quotes_is_literal_not_comment()
+    {
+        var tokens = LexNonWs("echo \"hash is #1234\"");
+        Assert.Equal(2, tokens.Length);
+        Assert.Equal(BashTokenKind.Word, tokens[0].Kind);
+        Assert.Equal(BashTokenKind.QuotedString, tokens[1].Kind);
+        Assert.Equal("hash is #1234", tokens[1].Value);
+        // No Comment token anywhere.
+        Assert.DoesNotContain(
+            BashLexer.Tokenize("echo \"hash is #1234\""),
+            t => t.Kind == BashTokenKind.Comment);
+    }
+
+    [Fact]
+    public void Hash_inside_single_quotes_is_literal_not_comment()
+    {
+        var tokens = LexNonWs("echo 'use #foo'");
+        Assert.Equal(2, tokens.Length);
+        Assert.Equal(BashTokenKind.Word, tokens[0].Kind);
+        Assert.Equal(BashTokenKind.QuotedString, tokens[1].Kind);
+        Assert.Equal("use #foo", tokens[1].Value);
+        Assert.True(tokens[1].IsSingleQuoted);
+        Assert.DoesNotContain(
+            BashLexer.Tokenize("echo 'use #foo'"),
+            t => t.Kind == BashTokenKind.Comment);
+    }
+
+    [Fact]
+    public void Backslash_escaped_hash_is_consumed_by_ReadWord_not_comment()
+    {
+        // `\#abc` — escape processing strips the backslash; the word
+        // is `#abc`. This must NOT trip the comment branch because
+        // ReadWord has already consumed the backslash by the time the
+        // outer-loop dispatch would see `#`.
+        var tokens = LexNonWs("\\#abc");
+        var t = Assert.Single(tokens);
+        Assert.Equal(BashTokenKind.Word, t.Kind);
+        Assert.Equal("#abc", t.Value);
+    }
+
+    [Fact]
+    public void Comment_starts_immediately_after_operator_without_whitespace()
+    {
+        // `cmd &&# foo` — bash treats `#` as comment-start because `&&`
+        // ended the previous token; `#` is at a word boundary.
+        var all = BashLexer.Tokenize("cmd &&# foo");
+        // Word(cmd), Whitespace, Operator(&&), Comment(# foo)
+        Assert.Equal(4, all.Count);
+        Assert.Equal(BashTokenKind.Word, all[0].Kind);
+        Assert.Equal(BashTokenKind.Whitespace, all[1].Kind);
+        Assert.Equal(BashTokenKind.Operator, all[2].Kind);
+        Assert.Equal("&&", all[2].OperatorText);
+        Assert.Equal(BashTokenKind.Comment, all[3].Kind);
+        Assert.Equal("# foo", all[3].Value);
+    }
+
+    [Fact]
+    public void Comment_at_EOF_without_trailing_newline_terminates_naturally()
+    {
+        var tokens = BashLexer.Tokenize("echo hi # done");
+        // Word(echo), Whitespace, Word(hi), Whitespace, Comment(# done)
+        Assert.Equal(5, tokens.Count);
+        Assert.Equal(BashTokenKind.Comment, tokens[4].Kind);
+        Assert.Equal("# done", tokens[4].Value);
+        Assert.Equal(14, tokens[4].SourceStart + tokens[4].SourceLength);
+    }
+
+    [Fact]
+    public void Comment_does_not_consume_terminating_newline()
+    {
+        // The newline must stay in the stream so the parser still sees
+        // a statement boundary between `# a` and `cmd`.
+        var tokens = BashLexer.Tokenize("# a\ncmd");
+        Assert.Equal(BashTokenKind.Comment, tokens[0].Kind);
+        Assert.Equal("# a", tokens[0].Value);
+        Assert.Equal(BashTokenKind.Whitespace, tokens[1].Kind);
+        // The Whitespace token covers the newline.
+        Assert.Equal(3, tokens[1].SourceStart);
+        Assert.Equal(1, tokens[1].SourceLength);
+        Assert.Equal(BashTokenKind.Word, tokens[2].Kind);
+        Assert.Equal("cmd", tokens[2].Value);
+    }
+
     // ------------------------------------------------------------ misc
 
     [Fact]

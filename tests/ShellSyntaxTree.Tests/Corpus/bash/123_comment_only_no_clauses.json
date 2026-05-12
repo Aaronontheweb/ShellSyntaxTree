@@ -1,0 +1,9 @@
+{
+  "name": "Comment-only input produces zero clauses",
+  "input": "# just a note",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": []
+  },
+  "notes": "Issue #25 / SPEC §5: a comment-only script is whitespace-equivalent — zero significant tokens → zero clauses, not IsUnparseable."
+}
