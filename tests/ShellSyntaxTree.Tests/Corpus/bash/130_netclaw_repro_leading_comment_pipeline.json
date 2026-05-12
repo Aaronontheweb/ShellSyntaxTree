@@ -1,16 +1,15 @@
 {
-  "name": "Netclaw repro: leading comment + git ... | awk | tr | sort pipeline",
+  "name": "Netclaw repro: leading comment + git worktree list | awk | tr | sort pipeline",
   "input": "# Extract all unique branch names from worktrees\ngit -C /home/user/repos/sample-repo worktree list | awk '{print $NF}' | tr -d '[]' | sort -u",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["git", "worktree"],
+        "verb": ["git", "worktree", "list"],
         "args": [
           { "raw": "-C", "kind": "Literal", "isPath": false, "isFlag": true },
-          { "raw": "/home/user/repos/sample-repo", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/home/user/repos/sample-repo" },
-          { "raw": "list", "kind": "Literal", "isPath": false, "isFlag": false, "resolved": "__NULL__" }
+          { "raw": "/home/user/repos/sample-repo", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/home/user/repos/sample-repo" }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -49,5 +48,5 @@
       }
     ]
   },
-  "notes": "Issue #25 — original Netclaw repro, paths sanitized per SPEC §14 (user repo path → /home/user/repos/sample-repo). Without the v0.1.3 comment-skip fix this entry parsed Clause 0 with verb `[#, Extract]` — the failure mode that broke approval-prompt rendering for agents authoring scripts with explanatory comments."
+  "notes": "Issue #25 — original Netclaw repro, paths sanitized per SPEC §14. Without the v0.1.3 comment-skip fix, Clause 0's verb parsed as `[#, Extract]`. Updated for issue #27 / v0.1.4-alpha: the greedy heuristic now walks past the consumed `-C /repo` flag-value pair and captures `worktree list` as part of the verb chain instead of leaving `list` as a stranded positional arg."
 }

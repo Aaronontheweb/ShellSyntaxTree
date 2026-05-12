@@ -202,8 +202,10 @@ public sealed record Clause
 ### `VerbChain`
 
 The verb of a clause. Multi-token to handle commands like `git push`,
-`docker compose up`, `bun run`, `dotnet test`. Length determined by the
-`BashArity` table (see §6).
+`docker compose up`, `dotnet ef migrations add`. Length determined by the
+greedy verb-chain heuristic in §6.1 — consecutive verb-like Word tokens
+from the start of the clause, transparently consuming flag-with-value
+pairs, with a 1-token carveout for FILE verbs.
 
 ```csharp
 public sealed record VerbChain
@@ -343,7 +345,12 @@ clause          := subshell | bash_c_wrapper | simple_clause
 subshell        := "(" command ")"
 bash_c_wrapper  := ("bash" | "sh") "-c" QUOTED_STRING
 simple_clause   := verb_chain arg* redirect*
-verb_chain      := word{1..N}        // N = BashArity[word_0]
+verb_chain      := verb_like_word (FW_pair? verb_like_word)*
+                                     // greedy walk per §6.1; FW_pair is a
+                                     // flag-with-value pair owned by word_0
+                                     // (transparent to the walk); stops at
+                                     // the first non-verb-like token. For
+                                     // word_0 ∈ FileVerbs, exactly 1 token.
 arg             := word | flag | quoted_string
 flag            := "-" letter+ | "--" word
 redirect        := redirect_op target
@@ -479,57 +486,118 @@ must handle this.
 
 These are **data**, not logic. Implement as `static readonly` collections.
 
-### 6.1 BashArity
+### 6.1 Verb-chain extraction (greedy heuristic)
 
-How many tokens form the verb chain for known commands. Defaults to 1
-when not in the table.
+Per issue #27 (locked in v0.1.4-alpha), the parser does not consult a
+static arity table. Instead, it walks consecutive verb-like Word tokens
+from the start of the clause and stops at the first token that doesn't
+look like a subcommand. This naturally scales to unknown CLIs
+(`freshdesk ticket list`, `kubectl get pods`, `dotnet ef migrations add`)
+without curated table entries.
 
-```csharp
-internal static readonly IReadOnlyDictionary<string, int> BashArity =
-    new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-{
-    // Two-token verbs
-    ["git"] = 2,             // git push, git log, git checkout
-    ["dotnet"] = 2,          // dotnet test, dotnet build
-    ["npm"] = 2,             // npm install, npm run
-    ["yarn"] = 2,            // yarn add, yarn install
-    ["pnpm"] = 2,            // pnpm add, pnpm install
-    ["cargo"] = 2,           // cargo build, cargo test
-    ["go"] = 2,              // go build, go test, go run
-    ["kubectl"] = 2,         // kubectl apply, kubectl get
-    ["helm"] = 2,            // helm install, helm upgrade
-    ["systemctl"] = 2,       // systemctl start, systemctl status
-    ["service"] = 2,         // service nginx
-    ["pip"] = 2,             // pip install, pip uninstall
-    ["pip3"] = 2,            // pip3 install
-    ["brew"] = 2,            // brew install, brew upgrade
-    ["apt"] = 2,             // apt install, apt update
-    ["apt-get"] = 2,         // apt-get install
-    ["yum"] = 2,             // yum install
-    ["dnf"] = 2,             // dnf install
-    ["pacman"] = 2,          // pacman -S, pacman -Syu (the -S is the verb)
-    ["aws"] = 2,             // aws s3, aws ec2 (top-level)
-    ["gcloud"] = 2,          // gcloud compute, gcloud auth
-    ["az"] = 2,              // az vm, az storage
+#### IsVerbLikeToken predicate
 
-    // Three-token verbs
-    ["docker"] = 2,          // docker run, docker ps; "docker compose up" handled below
-    ["docker compose"] = 3,  // docker compose up, docker compose down
-    ["docker-compose"] = 2,  // legacy single-token form
-    ["bun"] = 2,             // bun run, bun install
-    ["bun run"] = 3,         // bun run my-script (treat as 3-tuple verb)
-    ["nuget"] = 2,           // nuget push, nuget pack
-};
-```
+A token is "verb-like" when **all** of these hold:
 
-The table is not exhaustive. Missing verbs default to 1 token. Add entries
-as the corpus surfaces real commands.
+- `Kind == BashTokenKind.Word` (quoted strings are values, never verbs at
+  index ≥ 1).
+- Length is in `[1, 64]` characters.
+- First character is an ASCII lowercase letter `[a-z]`.
+- Remaining characters are drawn from `[a-z0-9._-]` only.
 
-**Implementation note:** The parser must look up multi-token verbs by
-joining the first 1, 2, then 3 tokens and probing the table from longest
-to shortest. So `docker compose up nginx` first probes `docker compose up`
-(not in table; arity defaults wouldn't fire), then probes `docker compose`
-(in table → arity 3) → verb chain is the first 3 tokens.
+The predicate is implemented in `BashVerbs.IsVerbLikeToken`. The leading
+lowercase requirement mirrors real CLI subcommand convention; the
+character allow-list naturally excludes flags (`-x` starts with `-`),
+paths (`/`, `\`, `~`), env-var refs (`$VAR`), URLs (`://`), globs
+(`* ? [`), and user-named identifiers (uppercase first char like
+`InitialCreate`).
+
+#### Walk algorithm
+
+For a clause whose first token is a Word `firstVerb`:
+
+1. Append `firstVerb` to the verb chain (it does not need to satisfy
+   `IsVerbLikeToken` — bare commands like `Curl` or `_init` are still
+   commands).
+2. Iterate the remaining tokens in order. For each token `t`:
+   - If `t.Kind != Word`: **stop**.
+   - If `t` is a flag (`IsFlagWord`):
+     - If `firstVerb` has a `FlagsWithValue` entry containing
+       `StripEqualsValue(t.Value)` AND the next token is `Word` or
+       `QuotedString` AND `t.Value` has no inline `=`: consume both as a
+       flag-value pair, mark their indices for `consumedFlagValueIndices`,
+       and continue walking.
+     - Otherwise: **stop**.
+   - If `firstVerb ∈ FileVerbs`: **stop** (1-token carveout — see below).
+   - If `!IsVerbLikeToken(t)`: **stop**.
+   - Otherwise: append `t.Value` to the verb chain and continue.
+
+If the first token is a `QuotedString` (e.g. `"git" push origin main`),
+emit a 1-token verb chain `[firstVerb]` and skip the walk entirely. Bash
+treats the quoted form as a verb-identity carrier; remaining tokens are
+arg-list material.
+
+#### FileVerb 1-token carveout
+
+For verbs in §6.3 `FileVerbs` (file-mutation, file-read, editors,
+compression, shell loaders, etc.), the verb chain stops at exactly one
+token. The flag-with-value consumption still runs so the value of
+`curl -o file`, `tar -C /path`, `git -C /repo` style flags picks up
+`IsPath=true` via the `FlagValueIsPath` mechanism.
+
+The carveout exists because FileVerbs use SPEC §7 per-verb positional
+rules to classify args as paths. Without it, a bare-name target like
+`cat README` would over-extract — `README` is shape-wise verb-like —
+and lose the `IsPath=true` classification downstream consumers depend
+on for zone-gate evaluation.
+
+#### Examples
+
+| Input | Verb chain | Args |
+|---|---|---|
+| `git push origin main` | `[git, push, origin, main]` | `[]` (over-extracts; see §6.1.1) |
+| `git -C /repo worktree list --porcelain` | `[git, worktree, list]` | `[-C, /repo, --porcelain]` |
+| `freshdesk ticket list --status open` | `[freshdesk, ticket, list]` | `[--status, open]` |
+| `kubectl get pods my-pod` | `[kubectl, get, pods, my-pod]` | `[]` |
+| `aws s3 cp src dst` | `[aws, s3, cp, src, dst]` | `[]` (bare-word path args over-extract) |
+| `dotnet ef migrations add InitialCreate` | `[dotnet, ef, migrations, add]` | `[InitialCreate]` (stops at uppercase) |
+| `cat /etc/passwd` | `[cat]` | `[/etc/passwd]` (FileVerb carveout) |
+| `cat README` | `[cat]` | `[README]` (FileVerb carveout preserves IsPath) |
+| `ls -la /tmp` | `[ls]` | `[-la, /tmp]` (FileVerb carveout) |
+| `chmod 755 file` | `[chmod]` | `[755, file]` (digit-start kills walk; FileVerb anyway) |
+| `echo hello` | `[echo, hello]` | `[]` (echo is not a FileVerb; over-extracts) |
+
+### 6.1.1 Consumer pattern-matching guidance
+
+`Clause.Verb` is a **convenience hint, not a security contract**.
+The parser deliberately over-extracts on bare-word args because no
+syntactic rule disambiguates `origin` (a branch name) from `worktree`
+(a subcommand verb) without per-CLI semantic knowledge — and we will
+not bake per-CLI knowledge into the parser.
+
+Consumers needing security-grade verb identification should pattern-prefix
+match against the raw token stream:
+
+> A command matches an approval pattern `P` if and only if the first
+> `len(P.verb_prefix)` tokens of the command equal `P.verb_prefix`.
+
+This punts depth choice to the consumer (via the pattern they author)
+and accommodates the parser's over-extraction transparently:
+
+- Pattern `git push *` (verb-prefix length 2) matches `git push origin
+  main` because the first two command tokens are `[git, push]`.
+- Pattern `kubectl get pods *` (verb-prefix length 3) matches
+  `kubectl get pods my-pod` because the first three tokens are
+  `[kubectl, get, pods]`.
+- Auto-proposed patterns for unknown commands should default to
+  the **full** extracted verb chain (greedy match), which is the
+  security-correct default: a subsequent variation re-prompts rather
+  than silently auto-grants. Operators wanting broader grants opt in
+  explicitly.
+
+False-negative (re-prompt) is recoverable. False-positive (silent
+destructive grant) is not. Narrow-by-default favors the recoverable
+failure mode.
 
 ### 6.2 CWD verbs
 
@@ -643,11 +711,12 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
 > because `IReadOnlySet<string>` is .NET 5+ only and the library
 > multi-targets `netstandard2.0`. Internal-only — no public-API impact.
 
-> **Note (PR 3 → PR 4 follow-up):** the verb-chain probe must run *after*
-> the flag-with-value pair is consumed for invocations like
-> `git -C /repo log`. PR 3 ships the probe at token zero (the simpler
-> shape); PR 4 lands the flag-with-value-aware probe so `git -C /repo log`
-> produces `Verb.Tokens = ["git", "log"]` per SPEC §12's example.
+> **Note:** the verb-chain walk consumes flag-with-value pairs
+> transparently. For `git -C /repo log`, the walk consumes `-C /repo`
+> before evaluating the next token; `log` is then verb-like and extends
+> the chain, producing `Verb.Tokens = ["git", "log"]` per §12's example.
+> The same mechanic lets `git -C /repo worktree list` extract the full
+> 3-token chain per §6.1.
 
 When a flag-with-value consumes the next token, the consumed token's
 `IsPath` flag is set if the value is path-shaped (per the resolver in §8).
@@ -959,21 +1028,41 @@ ParsedCommand {
 }
 ```
 
-### Multi-token verb
+### Multi-token verb (greedy over-extraction)
 
 Input: `git push origin main`
 
 ```
 Clauses = [
   Clause {
-    Verb = VerbChain { Tokens = ["git", "push"] },
+    Verb = VerbChain { Tokens = ["git", "push", "origin", "main"] },
+    Args = []
+  }
+]
+```
+
+The greedy heuristic absorbs `origin` and `main` because they're
+syntactically indistinguishable from subcommand verbs (lowercase
+identifiers, no path-shape). Consumers gating on `git push *` use
+pattern-prefix length 2 — see §6.1.1.
+
+Input: `freshdesk ticket list --status open`
+
+```
+Clauses = [
+  Clause {
+    Verb = VerbChain { Tokens = ["freshdesk", "ticket", "list"] },
     Args = [
-      Arg { Raw = "origin", Kind = Literal, IsPath = false },
-      Arg { Raw = "main", Kind = Literal, IsPath = false }
+      Arg { Raw = "--status", Kind = Literal, IsFlag = true },
+      Arg { Raw = "open", Kind = Literal, IsPath = false }
     ]
   }
 ]
 ```
+
+The walk stops at `--status` (a flag with no `FlagsWithValue` entry for
+`freshdesk`). The full subcommand stack is captured without requiring a
+curated table entry — the canonical benefit motivating the change.
 
 ### Compound with cd attribution
 
@@ -1235,10 +1324,14 @@ Adapt for ShellSyntaxTree:
 
 ### Versioning
 
-- **v0.1.0-alpha** — first publishable cut. Bash-only. Public API surface
-  per §2 is locked; internal changes are free.
-- **v0.1.x** — additive changes (more verb table entries, more corpus,
-  bug fixes).
+- **v0.1.x-alpha** — pre-release alpha cycle. Public API surface per §2 is
+  locked; internal data and behavior are subject to course-correction
+  while real-world feedback lands (e.g. v0.1.4-alpha replaces the
+  `BashArity` static table with the greedy verb-chain heuristic per
+  issue #27).
+- **v0.1.0** — first publishable non-alpha cut. Bash-only.
+- **v0.1.x** (post-0.1.0) — additive changes only (more verb table
+  entries, more corpus, bug fixes that don't shift parsed-AST shape).
 - **v0.2.0** — first PowerShell parser implementation.
 - **v1.0.0** — ready when at least one external consumer beyond Netclaw
   ships against it without finding API gaps.
@@ -1275,7 +1368,7 @@ A natural order for the implementer:
    but throw `NotImplementedException` on `Parse()`. Lock the surface
    first.
 4. **Implement BashLexer** (§5). Heavy unit tests on tokenization.
-5. **Implement BashArity / FILE / CWD verb tables** (§6) as static data.
+5. **Implement FILE / CWD verb tables and IsVerbLikeToken predicate** (§6) as static data + helper.
 6. **Implement BashParser** (§4). One production at a time; unit-test
    each.
 7. **Implement Resolver** (§8). Unit-test each resolution rule.

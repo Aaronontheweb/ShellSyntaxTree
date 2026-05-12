@@ -1,20 +1,18 @@
 {
-  "name": "bash -c simple: bash -c \"echo hi\"",
+  "name": "bash -c simple with greedy verb chain: bash -c \"echo hi\"",
   "input": "bash -c \"echo hi\"",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["echo"],
-        "args": [
-          { "raw": "hi", "kind": "Literal", "isPath": false }
-        ],
+        "verb": ["echo", "hi"],
+        "args": [],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": true
       }
     ]
   },
-  "notes": "bash -c wrapper consumed; inner echo surfaces with IsBashCWrapped=true."
+  "notes": "bash -c wrapper consumed; inner echo surfaces with IsBashCWrapped=true. Issue #27: `hi` is verb-like and absorbed into the inner clause's verb chain."
 }

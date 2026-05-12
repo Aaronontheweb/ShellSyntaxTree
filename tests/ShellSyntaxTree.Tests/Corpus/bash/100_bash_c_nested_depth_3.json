@@ -1,20 +1,18 @@
 {
-  "name": "bash -c nested depth 3: three wrappers consumed",
+  "name": "bash -c nested depth 3 with greedy verb chain: three wrappers consumed",
   "input": "bash -c \"bash -c \\\"bash -c \\\\\\\"echo deep\\\\\\\"\\\"\"",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["echo"],
-        "args": [
-          { "raw": "deep", "kind": "Literal", "isPath": false }
-        ],
+        "verb": ["echo", "deep"],
+        "args": [],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": true
       }
     ]
   },
-  "notes": "Three nested bash -c wrappers all consumed; innermost echo surfaces flat. Depth 3 is under the cap of 5; the BashCommandParserTests cover the depth-6 overflow case."
+  "notes": "Three nested bash -c wrappers all consumed; innermost echo surfaces flat. Depth 3 is under the cap of 5; the BashCommandParserTests cover the depth-6 overflow case. Issue #27: `deep` absorbed into the verb chain."
 }

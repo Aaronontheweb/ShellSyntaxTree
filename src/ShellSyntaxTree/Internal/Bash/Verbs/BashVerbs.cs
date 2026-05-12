@@ -1,10 +1,11 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="BashVerbs.cs" company="Aaron Stannard">
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using ShellSyntaxTree.Internal.Bash.Lexing;
 
 namespace ShellSyntaxTree.Internal.Bash.Verbs;
 
@@ -16,62 +17,6 @@ namespace ShellSyntaxTree.Internal.Bash.Verbs;
 /// </summary>
 internal static class BashVerbs
 {
-    /// <summary>
-    /// How many tokens form the verb chain for known commands. Defaults to
-    /// 1 when not in the table. SPEC §6.1.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Per the SPEC §6.1 implementation note, the parser must look up
-    /// multi-token verbs by joining the first 1, 2, then 3 tokens and
-    /// probing the table from <em>longest to shortest</em>. So
-    /// <c>docker compose up nginx</c> first probes <c>docker compose up</c>
-    /// (not in table), then <c>docker compose</c> (arity 3 — match). The
-    /// matched key's value <em>is</em> the verb chain length, so e.g.
-    /// <c>docker compose</c>'s value of 3 means "consume three source
-    /// tokens as the verb chain."
-    /// </para>
-    /// <para>
-    /// The table is non-exhaustive. Verbs not listed default to a 1-token
-    /// chain. Add entries as the corpus surfaces real commands.
-    /// </para>
-    /// </remarks>
-    internal static readonly IReadOnlyDictionary<string, int> BashArity =
-        new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-        {
-            // Two-token verbs.
-            ["git"] = 2,
-            ["dotnet"] = 2,
-            ["npm"] = 2,
-            ["yarn"] = 2,
-            ["pnpm"] = 2,
-            ["cargo"] = 2,
-            ["go"] = 2,
-            ["kubectl"] = 2,
-            ["helm"] = 2,
-            ["systemctl"] = 2,
-            ["service"] = 2,
-            ["pip"] = 2,
-            ["pip3"] = 2,
-            ["brew"] = 2,
-            ["apt"] = 2,
-            ["apt-get"] = 2,
-            ["yum"] = 2,
-            ["dnf"] = 2,
-            ["pacman"] = 2,
-            ["aws"] = 2,
-            ["gcloud"] = 2,
-            ["az"] = 2,
-            ["docker"] = 2,
-            ["docker-compose"] = 2,
-            ["bun"] = 2,
-            ["nuget"] = 2,
-
-            // Three-token verbs.
-            ["docker compose"] = 3,
-            ["bun run"] = 3,
-        };
-
     /// <summary>
     /// Verbs whose first non-flag positional arg becomes the cwd for
     /// subsequent clauses in the same compound. SPEC §6.2.
@@ -175,52 +120,56 @@ internal static class BashVerbs
         };
 
     /// <summary>
-    /// Resolve the verb-chain length for a token sequence at <paramref name="start"/>.
-    /// Implements the longest-prefix probe from SPEC §6.1: try the first 3
-    /// tokens, then 2, then 1, returning the matching arity.
+    /// SPEC §6.1: returns <c>true</c> when <paramref name="token"/> has the
+    /// shape of a CLI subcommand verb — a bare lowercase identifier
+    /// containing only ASCII letters, digits, hyphens, dots, and underscores.
+    /// Used to terminate the greedy verb-chain walk at the first token that
+    /// looks like a value rather than another subcommand.
     /// </summary>
-    /// <param name="tokens">Source-order list of verb-candidate tokens.</param>
-    /// <param name="start">Index into <paramref name="tokens"/> where the verb chain begins.</param>
-    /// <returns>
-    /// 1, 2, or 3 — the number of tokens that form the verb chain.
-    /// Defaults to 1 when no match is found (per SPEC §6.1) or when fewer
-    /// than the probed-prefix length tokens remain.
-    /// </returns>
-    internal static int ProbeArity(IReadOnlyList<string> tokens, int start)
+    /// <remarks>
+    /// Strict allow-list (leading <c>[a-z]</c>, body <c>[a-z0-9._-]</c>)
+    /// over the more obvious negation-of-LooksLikePath because it stays
+    /// conservative for unknown shapes: a token like <c>readme.md</c>
+    /// satisfies the allow-list and would extend an unknown CLI's verb
+    /// chain, but the FileVerb carveout in <c>BashCommandParser</c>
+    /// short-circuits the common case (<c>cat readme.md</c>) before the
+    /// allow-list ever runs. Quoted strings are excluded so the user's
+    /// intent to treat bytes literally is preserved. The 64-char bound
+    /// is a defensive cap against pathological inputs.
+    /// </remarks>
+    internal static bool IsVerbLikeToken(in BashToken token)
     {
-        var available = tokens.Count - start;
-        if (available <= 0)
+        if (token.Kind != BashTokenKind.Word)
         {
-            return 0;
+            return false;
         }
 
-        // Three-token probe.
-        if (available >= 3)
+        var v = token.Value;
+        if (v.Length == 0 || v.Length > 64)
         {
-            var key3 = tokens[start] + " " + tokens[start + 1] + " " + tokens[start + 2];
-            if (BashArity.TryGetValue(key3, out var arity3) && arity3 == 3)
+            return false;
+        }
+
+        var first = v[0];
+        if (!(first >= 'a' && first <= 'z'))
+        {
+            return false;
+        }
+
+        for (var i = 1; i < v.Length; i++)
+        {
+            var c = v[i];
+            var ok =
+                (c >= 'a' && c <= 'z') ||
+                (c >= '0' && c <= '9') ||
+                c == '-' || c == '.' || c == '_';
+            if (!ok)
             {
-                return 3;
+                return false;
             }
         }
 
-        // Two-token probe.
-        if (available >= 2)
-        {
-            var key2 = tokens[start] + " " + tokens[start + 1];
-            if (BashArity.TryGetValue(key2, out var arity2))
-            {
-                return Math.Min(arity2, available);
-            }
-        }
-
-        // Single-token probe (default arity 1).
-        if (BashArity.TryGetValue(tokens[start], out var arity1))
-        {
-            return Math.Min(arity1, available);
-        }
-
-        return 1;
+        return true;
     }
 
     /// <summary>

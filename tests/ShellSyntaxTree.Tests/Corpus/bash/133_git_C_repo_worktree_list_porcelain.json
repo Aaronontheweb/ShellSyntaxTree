@@ -1,0 +1,22 @@
+{
+  "name": "Greedy verb chain past consumed flag-value: git -C /repo worktree list --porcelain",
+  "input": "git -C /repo worktree list --porcelain",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "worktree", "list"],
+        "args": [
+          { "raw": "-C", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "/repo", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/repo" },
+          { "raw": "--porcelain", "kind": "Literal", "isPath": false, "isFlag": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #27: the heuristic must walk PAST a consumed flag-with-value pair to extract trailing verb-like tokens. `-C /repo` is consumed via FlagsWithValue[git]; `worktree` and `list` are then both verb-like; `--porcelain` stops the walk. /repo carries IsPath=true via the FlagValueIsPath mechanism."
+}

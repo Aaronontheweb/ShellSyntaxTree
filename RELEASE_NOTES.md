@@ -1,3 +1,71 @@
+#### 0.1.4-alpha May 12th 2026 ####
+
+Greedy verb-chain extraction. Public API surface (`VerbChain`, `Clause`)
+unchanged; the *content* of `Clause.Verb.Tokens` changes for many inputs.
+
+**BEHAVIOR CHANGE: verb-chain length is no longer table-driven (#27)**
+
+- The `BashArity` static lookup table and `ProbeArity()` method have been
+  **removed**. The parser walks consecutive verb-like Word tokens from
+  the start of each clause, transparently consuming flag-with-value
+  pairs (e.g. `git -C /repo`), and stops at the first non-verb-like
+  token, the first plain flag, or the first non-Word token.
+- A token is "verb-like" when its kind is `Word`, length 1–64, first
+  character is an ASCII lowercase letter, and remaining characters are
+  in `[a-z0-9._-]`. The strict allow-list naturally excludes flags,
+  paths (`/`, `\`, `~`), env-var refs (`$VAR`), URLs (`://`), globs,
+  numeric tokens, and uppercase user-named identifiers like migration
+  names — without requiring per-case predicate logic. See SPEC §6.1.
+- For known FILE verbs (`cat`, `ls`, `bash`, `cd`, `chmod`, `grep`,
+  `find`, …) the verb chain stops at exactly one token to preserve
+  per-verb positional-arg classification. The flag-with-value
+  consumption still runs so `tar -C /path` and `curl -o file` style
+  values still pick up `IsPath=true` via `FlagValueIsPath`.
+
+Examples that change:
+
+- `git push origin main` → verb `[git, push, origin, main]` (was
+  `[git, push]`).
+- `git worktree list` (and arbitrary CLI subcommand chains) → fully
+  extracted as `[git, worktree, list]` (was `[git, worktree]`).
+- `freshdesk ticket list --status open` → `[freshdesk, ticket, list]`
+  (was `[freshdesk]` because freshdesk wasn't in the BashArity table).
+- `kubectl get pods my-pod` → `[kubectl, get, pods, my-pod]` (was
+  `[kubectl, get]`).
+- `aws s3 cp src dst` → `[aws, s3, cp, src, dst]` (was `[aws, s3]`).
+- `dotnet ef migrations add InitialCreate` → `[dotnet, ef, migrations,
+  add]` (was `[dotnet, ef]`). `InitialCreate` stays in args because the
+  predicate rejects uppercase first character.
+- `cat README` → still `[cat]` (FileVerb carveout preserves `IsPath` on
+  bare-name targets).
+- `echo hello` → `[echo, hello]` (echo is not a FILE verb).
+
+`Clause.Verb` is now documented as a **convenience hint, not a security
+contract** (SPEC §6.1.1). Consumers needing security-grade verb
+identification should pattern-prefix match against the raw token
+stream: a command matches an approval pattern *P* iff the first
+`len(P.verb_prefix)` command tokens equal `P.verb_prefix`. This punts
+depth choice to the consumer and accommodates the parser's deliberate
+over-extraction on bare-word args. Auto-proposed patterns should default
+to the full extracted verb chain (greedy match): a subsequent variation
+re-prompts rather than silently auto-grants.
+
+**Behavior notes**
+
+- Public API surface is unchanged (no `PublicApiSnapshotTests` delta).
+- SPEC.md updates: §3 `VerbChain`, §4 grammar, §6.1 verb-chain
+  extraction (rewritten end-to-end), new §6.1.1 consumer
+  pattern-matching guidance, §7 flag-with-value note, §12 worked
+  examples, §15 versioning, §16 implementation sequencing.
+- Corpus: 7 new entries (132–138) pin the issue #27 headline cases;
+  10 existing entries flipped to the new shape (`04_echo_hello`,
+  `11_git_push_origin_main`, `13_git_checkout_dev`, `17_docker_run_nginx`,
+  `27_make_install`, `45_echo_append_log`, `84_subshell_nested`,
+  `91_bash_c_simple`, `96_bash_c_nested_depth_2`,
+  `100_bash_c_nested_depth_3`, `130_netclaw_repro_leading_comment_pipeline`).
+- Unit tests: 8 pinned `BashCommandParserTests` cases updated to the new
+  expected verb chains.
+
 #### 0.1.3-alpha May 12th 2026 ####
 
 Bash line comment handling. Public API unchanged.

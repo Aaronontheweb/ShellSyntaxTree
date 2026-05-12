@@ -769,89 +769,96 @@ internal static class BashCommandParser
             return ClauseResult.Empty();
         }
 
-        // ---- Verb-chain extraction with flag-with-value awareness ----
-        //
-        // PR 4 follow-up to the PR 3 probe: a token like `git -C /repo log`
-        // shouldn't truncate the verb chain at `-C`. We greedily consume
-        // any flag-with-value pair owned by the tentative first verb
-        // (`tokens[0]`) before probing arity. The consumed flag + value
-        // pair stays in the segment for arg-extraction; only the verb
-        // probe sees a "compressed" view of the segment.
-        //
-        // Locked interpretation #8 / SPEC §12: `git -C /repo log` →
-        // Verb=["git", "log"], Args=[-C, /repo]. The flag and its value
-        // appear in source order in the Args list, with /repo carrying
-        // IsPath=true via the FlagValueIsPath table.
-        var verbCandidateValues = new List<string>(3);
-        var verbCandidateIndices = new List<int>(3);
+        // Verb-chain extraction per SPEC §6.1. The FileVerb carveout is
+        // load-bearing: downstream per-verb positional-arg classification
+        // depends on the verb chain staying 1 token for FILE verbs so
+        // bare-name targets like `cat README` still surface as Args with
+        // IsPath=true. Flag-with-value consumption must run *before* the
+        // carveout gate so `tar -C /repo` still attributes IsPath to /repo.
         var consumedFlagValueIndices = new HashSet<int>();
+        var verbTokens = new List<string>(4);
+        var verbPositions = new HashSet<int>();
 
-        // Look up the would-be verb so we know which flags are
-        // "owned" by it. We only honor the flag-with-value skip when the
-        // first token is a known Word verb — quoted strings and opaque
-        // substitutions don't carry verb identity.
-        string? tentativeVerb = null;
-        if (segment.Tokens.Count > 0
-            && segment.Tokens[0].Kind == BashTokenKind.Word
-            && !IsFlagWord(segment.Tokens[0]))
+        var firstToken = segment.Tokens[0];
+        string? firstVerb = null;
+        if (firstToken.Kind == BashTokenKind.Word && !IsFlagWord(firstToken))
         {
-            tentativeVerb = segment.Tokens[0].Value;
+            firstVerb = firstToken.Value;
+            verbTokens.Add(firstVerb);
+            verbPositions.Add(0);
+        }
+        else if (firstToken.Kind == BashTokenKind.QuotedString)
+        {
+            // Quoted command (`"git" push`): emit a 1-token chain and skip
+            // the walk. Bash semantics treat the quoted form as a verb
+            // identity carrier; remaining tokens are arg-list material.
+            verbTokens.Add(firstToken.Value);
+            verbPositions.Add(0);
         }
 
-        var hasFlagsTable = tentativeVerb is not null
-            && BashVerbs.FlagsWithValue.TryGetValue(tentativeVerb, out _);
+        BashVerbs.FlagsWithValue.TryGetValue(firstVerb ?? string.Empty, out var flagsForVerb);
+        var fileVerbCarveout = firstVerb is not null
+            && BashVerbs.FileVerbs.Contains(firstVerb);
 
-        for (var i = 0; i < segment.Tokens.Count && verbCandidateValues.Count < 3; i++)
+        if (firstVerb is not null)
         {
-            var t = segment.Tokens[i];
-            if (t.Kind == BashTokenKind.Word || t.Kind == BashTokenKind.QuotedString)
+            for (var i = 1; i < segment.Tokens.Count; i++)
             {
-                if (IsFlagWord(t))
+                var t = segment.Tokens[i];
+                if (t.Kind != BashTokenKind.Word)
                 {
-                    // Skip-through case: this is a flag-with-value pair owned
-                    // by the tentative verb. Skip both the flag and its
-                    // immediate value and keep probing arity. Only Word
-                    // tokens qualify as flags (quoted "-x" stays literal).
-                    if (hasFlagsTable
-                        && tentativeVerb is not null
-                        && BashVerbs.FlagsWithValue[tentativeVerb].Contains(StripEqualsValue(t.Value))
-                        && i + 1 < segment.Tokens.Count
-                        && (segment.Tokens[i + 1].Kind == BashTokenKind.Word
-                            || segment.Tokens[i + 1].Kind == BashTokenKind.QuotedString))
-                    {
-                        // The two-token `-C /repo` form. Equals-form
-                        // `--git-dir=/repo` is a single token and never enters
-                        // this branch — but the verb-probe still ends at it
-                        // (next iteration sees IsFlagWord and breaks below).
-                        if (HasInlineEqualsValue(t.Value))
-                        {
-                            // `--flag=value` — single token. Don't consume
-                            // the next, and let the normal arg-extraction
-                            // path split on `=`. End the verb-probe here.
-                            break;
-                        }
-
-                        consumedFlagValueIndices.Add(i);
-                        consumedFlagValueIndices.Add(i + 1);
-                        i++; // skip the value too on the next loop step
-                        continue;
-                    }
-
-                    // Plain flag with no path-value to skip → stops the verb probe.
                     break;
                 }
 
-                verbCandidateValues.Add(t.Value);
-                verbCandidateIndices.Add(i);
-                continue;
-            }
+                if (IsFlagWord(t))
+                {
+                    if (flagsForVerb is null)
+                    {
+                        break;
+                    }
 
-            break;
+                    var eq = t.Value.IndexOf('=');
+                    var flagKey = eq > 0 ? t.Value.Substring(0, eq) : t.Value;
+                    if (!flagsForVerb.Contains(flagKey))
+                    {
+                        break;
+                    }
+
+                    if (eq > 0)
+                    {
+                        // `--flag=value` is a single token; arg-extraction
+                        // splits on `=`. Stop the walk here.
+                        break;
+                    }
+
+                    if (i + 1 >= segment.Tokens.Count
+                        || (segment.Tokens[i + 1].Kind != BashTokenKind.Word
+                            && segment.Tokens[i + 1].Kind != BashTokenKind.QuotedString))
+                    {
+                        break;
+                    }
+
+                    consumedFlagValueIndices.Add(i);
+                    consumedFlagValueIndices.Add(i + 1);
+                    i++;
+                    continue;
+                }
+
+                if (fileVerbCarveout || !BashVerbs.IsVerbLikeToken(t))
+                {
+                    break;
+                }
+
+                verbTokens.Add(t.Value);
+                verbPositions.Add(i);
+            }
         }
 
-        if (verbCandidateValues.Count == 0)
+        if (verbTokens.Count == 0)
         {
-            // Redirect-only clause.
+            // Redirect-only clause: no verb identified (e.g. clause starts
+            // with an operator, opaque substitution, or a leading flag with
+            // no Word firstVerb).
             ExtractRedirectsAndArgs(
                 segment.Tokens,
                 0,
@@ -879,40 +886,17 @@ internal static class BashCommandParser
             });
         }
 
-        var firstVerb = verbCandidateValues[0];
-        if (BashVerbs.ControlFlowKeywords.Contains(firstVerb))
+        if (BashVerbs.ControlFlowKeywords.Contains(verbTokens[0]))
         {
             return ClauseResult.Fail(
-                $"control-flow keyword '{firstVerb}' is not supported in v0.1");
-        }
-
-        var arity = BashVerbs.ProbeArity(verbCandidateValues, 0);
-        if (arity <= 0)
-        {
-            arity = 1;
-        }
-
-        var verbTokens = new List<string>(arity);
-        for (var k = 0; k < arity; k++)
-        {
-            verbTokens.Add(verbCandidateValues[k]);
+                $"control-flow keyword '{verbTokens[0]}' is not supported in v0.1");
         }
 
         var verbChain = new VerbChain { Tokens = verbTokens };
 
-        // The arg-extraction starts immediately after the last verb-chain
-        // *position* in the original segment, so the consumed flag-value
-        // pair (which sits *before* that position when it precedes the
-        // verb-chain extension) still gets emitted as Args in source order.
-        // Concretely: for `git -C /repo log`, the verb-chain positions are
-        // 0 and 3; we walk all of segment.Tokens from position 0 and emit
-        // -C, /repo as args while skipping the verb-position tokens.
-        var argStart = 0;
-        var verbPositions = new HashSet<int>(verbCandidateIndices.GetRange(0, arity));
-
         ExtractRedirectsAndArgs(
             segment.Tokens,
-            argStart,
+            0,
             source,
             options,
             verb: verbChain,
@@ -950,20 +934,6 @@ internal static class BashCommandParser
 
         return token.Value.Length > 0 && token.Value[0] == '-';
     }
-
-    /// <summary>
-    /// For an equals-form flag like <c>--output=file.txt</c>, return the
-    /// flag portion (<c>--output</c>) so the FlagsWithValue table lookup
-    /// matches. For plain flags returns the input unchanged.
-    /// </summary>
-    private static string StripEqualsValue(string flag)
-    {
-        var eq = flag.IndexOf('=');
-        return eq > 0 ? flag.Substring(0, eq) : flag;
-    }
-
-    private static bool HasInlineEqualsValue(string flag) =>
-        flag.IndexOf('=') > 0;
 
     // ---------------------------------------------------------------- args + redirects
 

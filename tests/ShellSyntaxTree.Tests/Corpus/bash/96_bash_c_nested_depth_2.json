@@ -1,20 +1,18 @@
 {
-  "name": "bash -c nested depth 2: bash -c \"bash -c \\\"echo hi\\\"\"",
+  "name": "bash -c nested depth 2 with greedy verb chain: bash -c \"bash -c \\\"echo hi\\\"\"",
   "input": "bash -c \"bash -c \\\"echo hi\\\"\"",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["echo"],
-        "args": [
-          { "raw": "hi", "kind": "Literal", "isPath": false }
-        ],
+        "verb": ["echo", "hi"],
+        "args": [],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": true
       }
     ]
   },
-  "notes": "Two wrappers consumed; the innermost echo surfaces flat. Depth 2 well under the cap of 5."
+  "notes": "Two wrappers consumed; the innermost echo surfaces flat. Depth 2 well under the cap of 5. Issue #27: `hi` absorbed into the verb chain."
 }

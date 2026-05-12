@@ -1,15 +1,13 @@
 {
-  "name": "Append redirect: echo hi >> log.txt",
+  "name": "Append redirect with greedy verb chain: echo hi >> log.txt",
   "input": "echo hi >> log.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["echo"],
-        "args": [
-          { "raw": "hi", "kind": "Literal", "isPath": false }
-        ],
+        "verb": ["echo", "hi"],
+        "args": [],
         "redirects": [
           { "direction": "Append", "target": "/work/log.txt" }
         ],
@@ -18,5 +16,5 @@
       }
     ]
   },
-  "notes": "PR 4: redirect target resolves; `echo` is not a FileVerb so `hi` stays IsPath=false."
+  "notes": "Issue #27: `echo` is not a FILE verb so the greedy heuristic absorbs `hi` into the verb chain. Redirect operators (`>>`) stop the walk regardless of the absorbed-arg shape; the redirect target still resolves to /work/log.txt via the existing resolver path."
 }

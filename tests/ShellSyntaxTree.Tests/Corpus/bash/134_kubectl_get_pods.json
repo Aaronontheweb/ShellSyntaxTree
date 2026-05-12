@@ -1,0 +1,18 @@
+{
+  "name": "Greedy verb chain: kubectl get pods",
+  "input": "kubectl get pods",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["kubectl", "get", "pods"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #27: kubectl resource-type pluralizations (`pods`, `services`, `deployments`) used to be silently truncated under the BashArity=2 default for kubectl. The greedy heuristic captures the full subcommand stack."
+}
