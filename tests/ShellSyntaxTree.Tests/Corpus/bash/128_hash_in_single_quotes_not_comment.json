@@ -1,0 +1,20 @@
+{
+  "name": "# inside single quotes is literal, not a comment",
+  "input": "echo 'use #foo'",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "'use #foo'", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #25 / SPEC §5: `#` inside single quotes is a literal byte (single-quote literalness rule)."
+}

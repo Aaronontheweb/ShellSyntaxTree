@@ -1,0 +1,53 @@
+{
+  "name": "Netclaw repro: leading comment + git ... | awk | tr | sort pipeline",
+  "input": "# Extract all unique branch names from worktrees\ngit -C /home/user/repos/sample-repo worktree list | awk '{print $NF}' | tr -d '[]' | sort -u",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "worktree"],
+        "args": [
+          { "raw": "-C", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "/home/user/repos/sample-repo", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/home/user/repos/sample-repo" },
+          { "raw": "list", "kind": "Literal", "isPath": false, "isFlag": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Pipe",
+        "verb": ["awk"],
+        "args": [
+          { "raw": "'{print $NF}'", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Pipe",
+        "verb": ["tr"],
+        "args": [
+          { "raw": "-d", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "'[]'", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Pipe",
+        "verb": ["sort"],
+        "args": [
+          { "raw": "-u", "kind": "Literal", "isPath": false, "isFlag": true }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #25 — original Netclaw repro, paths sanitized per SPEC §14 (user repo path → /home/user/repos/sample-repo). Without the v0.1.3 comment-skip fix this entry parsed Clause 0 with verb `[#, Extract]` — the failure mode that broke approval-prompt rendering for agents authoring scripts with explanatory comments."
+}

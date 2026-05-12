@@ -1,0 +1,20 @@
+{
+  "name": "# in the interior of an unquoted word is literal",
+  "input": "echo abc#def",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "abc#def", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #25 / SPEC §5: `#` is comment-start only at a word boundary (start-of-input or preceded by whitespace/operator). Mid-word `#` is consumed by ReadWord and stays literal."
+}

@@ -1,3 +1,43 @@
+#### 0.1.3-alpha May 12th 2026 ####
+
+Bash line comment handling. Public API unchanged.
+
+**Fixed**
+
+- **Bash line comments are now recognized and skipped (#25).** `BashLexer`
+  treats `#` at a word boundary (start of input, or preceded by
+  whitespace, a newline, or any operator) as the start of a comment
+  that runs to the next newline. The comment text is emitted as a new
+  internal `BashTokenKind.Comment` token for source fidelity and is
+  filtered by the parser alongside `Whitespace` / `Continuation`, so
+  it contributes no verb, args, redirects, or flags to any clause.
+  Comment-only input parses to `Clauses = []`, `IsUnparseable = false`,
+  matching the existing empty-/whitespace-only path. Quoting and
+  escape rules are honored: `#` inside single or double quotes is
+  literal, `#` in the interior of an unquoted word (e.g. `abc#def`)
+  is literal, and `\#` outside quotes is literal.
+
+  Before this fix, `# Extract worktree branches\ngit worktree list`
+  parsed to a single clause with verb chain `[#, Extract]` — the
+  comment text leaked into downstream approval prompts and broke
+  approval-state caching in consumers that did asymmetric verb-chain
+  extraction (persistence-time vs. retry-authorization saw different
+  verb sets, causing tool calls to fail after the user had already
+  clicked Approve).
+
+**Behavior notes**
+
+- Public API surface is unchanged (no `PublicApiSnapshotTests` delta).
+- SPEC.md §4 / §5: new "Comment handling" subsection in §5 documents
+  the boundary rules; §4 BNF notes that comments are
+  whitespace-equivalent at the lexer level.
+- Corpus: 9 new entries (123–131) pin every case from the issue
+  report, plus the two Netclaw repros (sanitized paths per §14).
+- v0.1 still does not treat top-level newlines as statement separators
+  (SPEC §4 gap, tracked separately in IMPLEMENTATION_PLAN NEXT) — a
+  comment between two commands on separate lines requires an explicit
+  `;` separator to split into two clauses.
+
 #### 0.1.2-alpha May 11th 2026 ####
 
 Three parser correctness fixes. Public API unchanged.

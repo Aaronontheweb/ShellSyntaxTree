@@ -1,0 +1,18 @@
+{
+  "name": "Inline trailing comment is dropped from the clause",
+  "input": "git pull   # update local",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "pull"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #25 / SPEC §5: a `#` preceded by whitespace starts a comment. The trailing text becomes a Comment token and is filtered out by the parser."
+}

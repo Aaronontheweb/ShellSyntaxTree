@@ -1,0 +1,26 @@
+{
+  "name": "Comment between two ;-separated commands",
+  "input": "git pull ; # now build\ndotnet build",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "pull"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["dotnet", "build"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #25: comment on its own line between two clauses must not pollute either verb chain. v0.1 uses `;` (not `\\n`) as the statement separator — newline-as-separator is a separate SPEC §4 gap tracked in IMPLEMENTATION_PLAN NEXT."
+}

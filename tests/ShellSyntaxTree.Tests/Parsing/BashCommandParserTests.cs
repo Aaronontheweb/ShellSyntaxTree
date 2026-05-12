@@ -569,6 +569,102 @@ public class BashCommandParserTests
         Assert.False(result.IsUnparseable);
     }
 
+    // ---------------- Comments (SPEC §5, issue #25) ----------------
+
+    [Fact]
+    public void Comment_only_input_returns_empty_clauses()
+    {
+        // Mirrors the empty/whitespace-only path: zero clauses, not
+        // unparseable. SPEC §5 — comments are whitespace-equivalent.
+        var result = Parse("# just a note");
+        Assert.Equal("# just a note", result.Source);
+        Assert.Empty(result.Clauses);
+        Assert.False(result.IsUnparseable);
+    }
+
+    [Fact]
+    public void Leading_comment_does_not_pollute_verb_chain()
+    {
+        // The exact failure mode from issue #25: a leading explanatory
+        // comment was being parsed as the verb of the next clause,
+        // surfacing as `# Extract` in downstream approval prompts.
+        // BashArity collapses `git worktree` to a 2-token verb in v0.1
+        // (the deeper `git worktree list` subcommand is not in the table,
+        // so `list` lands as a positional arg — see SPEC §6.1).
+        var result = Parse("# Extract worktree branches\ngit worktree list");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "git", "worktree" }, clause.Verb.Tokens);
+        Assert.Equal("list", clause.Args[0].Raw);
+        Assert.False(result.IsUnparseable);
+    }
+
+    [Fact]
+    public void Inline_trailing_comment_is_dropped_from_clause()
+    {
+        var result = Parse("git pull   # update local");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "git", "pull" }, clause.Verb.Tokens);
+        Assert.Empty(clause.Args);
+    }
+
+    [Fact]
+    public void Comment_between_two_statements_preserves_both_clauses()
+    {
+        // v0.1 does not treat top-level newlines as statement separators
+        // (SPEC §4 gap — separate from #25). Use explicit `;` so the
+        // separator survives FilterSignificant.
+        var result = Parse("git pull ; # now build\ndotnet build");
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(new[] { "git", "pull" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal(new[] { "dotnet", "build" }, result.Clauses[1].Verb.Tokens);
+        Assert.False(result.IsUnparseable);
+    }
+
+    [Fact]
+    public void Hash_inside_double_quotes_remains_literal_arg()
+    {
+        var result = Parse("echo \"hash is #1234\"");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "echo" }, clause.Verb.Tokens);
+        var arg = Assert.Single(clause.Args);
+        Assert.Equal("\"hash is #1234\"", arg.Raw);
+    }
+
+    [Fact]
+    public void Hash_inside_single_quotes_remains_literal_arg()
+    {
+        var result = Parse("echo 'use #foo'");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "echo" }, clause.Verb.Tokens);
+        var arg = Assert.Single(clause.Args);
+        Assert.Equal("'use #foo'", arg.Raw);
+    }
+
+    [Fact]
+    public void Hash_mid_word_remains_literal_arg()
+    {
+        // Per bash: `#` is a comment-start only at a word boundary.
+        // `abc#def` is a single word with a literal `#`.
+        var result = Parse("echo abc#def");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "echo" }, clause.Verb.Tokens);
+        var arg = Assert.Single(clause.Args);
+        Assert.Equal("abc#def", arg.Raw);
+    }
+
+    [Fact]
+    public void Comment_inside_orif_compound_does_not_break_clause_split()
+    {
+        // Issue #25 follow-up comment: a leading comment + ||-fallback
+        // would persist `[# Get, echo]` at one pass but `[# Get, curl, jq]`
+        // at another. After the fix both passes see `curl`/`echo`.
+        var result = Parse("# Get open PRs\ncurl example || echo \"failed\"");
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(new[] { "curl" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal(new[] { "echo" }, result.Clauses[1].Verb.Tokens);
+        Assert.False(result.IsUnparseable);
+    }
+
     // ---------------- Subshell ----------------
 
     [Fact]

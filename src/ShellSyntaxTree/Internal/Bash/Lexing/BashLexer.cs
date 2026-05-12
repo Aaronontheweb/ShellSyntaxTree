@@ -183,6 +183,18 @@ internal static class BashLexer
                 continue;
             }
 
+            // ---- line comment ----
+            // Reaching this branch implies a word boundary (quotes,
+            // operators, and opaque regions are dispatched above), so `#`
+            // here starts a comment to EOL. Mid-word `#` is consumed by
+            // ReadWord, and `\#` by its escape handling — neither reaches
+            // this point. SPEC §5.
+            if (c == '#')
+            {
+                i = ConsumeLineComment(src, i, tokens);
+                continue;
+            }
+
             // ---- word ----
             i = ReadWord(src, i, tokens);
         }
@@ -390,6 +402,26 @@ internal static class BashLexer
             length,
             null));
         return start + length;
+    }
+
+    // Consume `#` through (but not including) the next newline. The
+    // terminating newline stays in the stream so the outer loop emits it
+    // as a Whitespace token, preserving SPEC §4 clause-boundary
+    // semantics. Value is "" to match Whitespace/Continuation — callers
+    // that need the literal text can slice the source via
+    // SourceStart/SourceLength.
+    private static int ConsumeLineComment(
+        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
+    {
+        var i = start;
+        while (i < src.Length && src[i] != '\n' && src[i] != '\r')
+        {
+            i++;
+        }
+
+        tokens.Add(new BashToken(
+            BashTokenKind.Comment, "", null, start, i - start, null));
+        return i;
     }
 
     private static int ConsumeArithmetic(
