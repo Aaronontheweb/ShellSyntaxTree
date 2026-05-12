@@ -1,0 +1,21 @@
+{
+  "name": "Greedy verb chain: freshdesk ticket list --status open (unknown CLI)",
+  "input": "freshdesk ticket list --status open",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["freshdesk", "ticket", "list"],
+        "args": [
+          { "raw": "--status", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "open", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #27 headline: unknown/private CLIs (freshdesk, internal tools) used to truncate to a 1-token verb chain. The greedy heuristic walks verb-like Word tokens (lowercase[a-z0-9._-]) and stops at the first flag, so the canonical subcommand stack `freshdesk ticket list` extracts fully without requiring a curated table entry."
+}

@@ -95,13 +95,17 @@ public class BashCommandParserTests
     // ---------------- Multi-token verb chains ----------------
 
     [Fact]
-    public void Two_token_verb_git_push()
+    public void Greedy_verb_chain_absorbs_bare_word_args_git_push_origin_main()
     {
+        // Issue #27: documented over-extraction. `origin` and `main` are
+        // syntactically indistinguishable from subcommand verbs (lowercase
+        // identifiers, no path-shape). Consumers gating on `git push *`
+        // use pattern-prefix length (2) — see SPEC §6.1.1.
         var result = Parse("git push origin main");
         Assert.False(result.IsUnparseable);
         var clause = Assert.Single(result.Clauses);
-        Assert.Equal(new[] { "git", "push" }, clause.Verb.Tokens);
-        Assert.Equal(new[] { "origin", "main" }, clause.Args.Select(a => a.Raw).ToArray());
+        Assert.Equal(new[] { "git", "push", "origin", "main" }, clause.Verb.Tokens);
+        Assert.Empty(clause.Args);
     }
 
     [Fact]
@@ -114,13 +118,18 @@ public class BashCommandParserTests
     }
 
     [Fact]
-    public void Three_token_verb_docker_compose_up()
+    public void Greedy_verb_chain_walks_through_docker_compose_up_nginx()
     {
+        // Issue #27: `docker compose up nginx` over-extracts because `nginx`
+        // is a verb-like lowercase identifier. The previous BashArity
+        // approach capped the chain at 3 tokens for `docker compose`; the
+        // greedy heuristic walks until a non-verb-like token. Consumers
+        // gating on `docker compose up *` use pattern-prefix length (3).
         var result = Parse("docker compose up nginx");
         Assert.False(result.IsUnparseable);
         var clause = Assert.Single(result.Clauses);
-        Assert.Equal(new[] { "docker", "compose", "up" }, clause.Verb.Tokens);
-        Assert.Equal(new[] { "nginx" }, clause.Args.Select(a => a.Raw).ToArray());
+        Assert.Equal(new[] { "docker", "compose", "up", "nginx" }, clause.Verb.Tokens);
+        Assert.Empty(clause.Args);
     }
 
     [Fact]
@@ -134,13 +143,17 @@ public class BashCommandParserTests
     }
 
     [Fact]
-    public void Two_token_verb_docker_run()
+    public void Greedy_verb_chain_absorbs_docker_run_image_name()
     {
+        // Issue #27: `nginx` is a docker image name but syntactically a
+        // verb-like identifier. A registry-qualified image like
+        // `registry.example.com/ns/nginx:1.25` would stop the walk via
+        // path-shape rejection.
         var result = Parse("docker run nginx");
         Assert.False(result.IsUnparseable);
         var clause = Assert.Single(result.Clauses);
-        Assert.Equal(new[] { "docker", "run" }, clause.Verb.Tokens);
-        Assert.Equal(new[] { "nginx" }, clause.Args.Select(a => a.Raw).ToArray());
+        Assert.Equal(new[] { "docker", "run", "nginx" }, clause.Verb.Tokens);
+        Assert.Empty(clause.Args);
     }
 
     [Fact]
@@ -153,12 +166,17 @@ public class BashCommandParserTests
     }
 
     [Fact]
-    public void Default_arity_when_verb_unknown()
+    public void Unknown_verb_with_bare_word_args_extracts_full_chain()
     {
+        // Issue #27: under the greedy heuristic, unknown verbs (not in any
+        // table) extract the full chain of consecutive verb-like tokens.
+        // This is the strict-better-than-default-arity-1 behavior the
+        // issue motivates — `freshdesk ticket list` and similar private
+        // CLIs surface their full subcommand stack without curation.
         var result = Parse("totally-unknown-verb foo bar");
         var clause = Assert.Single(result.Clauses);
-        Assert.Equal(new[] { "totally-unknown-verb" }, clause.Verb.Tokens);
-        Assert.Equal(new[] { "foo", "bar" }, clause.Args.Select(a => a.Raw).ToArray());
+        Assert.Equal(new[] { "totally-unknown-verb", "foo", "bar" }, clause.Verb.Tokens);
+        Assert.Empty(clause.Args);
     }
 
     [Fact]
@@ -481,7 +499,9 @@ public class BashCommandParserTests
         var result = Parse("sh -c \"echo hi\"");
         Assert.False(result.IsUnparseable);
         var clause = Assert.Single(result.Clauses);
-        Assert.Equal(new[] { "echo" }, clause.Verb.Tokens);
+        // Issue #27: `hi` is verb-like and absorbed into the inner clause's
+        // verb chain (echo is not a FILE verb).
+        Assert.Equal(new[] { "echo", "hi" }, clause.Verb.Tokens);
         Assert.True(clause.IsBashCWrapped);
     }
 
@@ -526,7 +546,8 @@ public class BashCommandParserTests
         var result = Parse("bash -c \"bash -c \\\"echo hi\\\"\"");
         Assert.False(result.IsUnparseable);
         var clause = Assert.Single(result.Clauses);
-        Assert.Equal(new[] { "echo" }, clause.Verb.Tokens);
+        // Issue #27: `hi` absorbed into the verb chain.
+        Assert.Equal(new[] { "echo", "hi" }, clause.Verb.Tokens);
         Assert.True(clause.IsBashCWrapped);
     }
 
@@ -587,14 +608,14 @@ public class BashCommandParserTests
     {
         // The exact failure mode from issue #25: a leading explanatory
         // comment was being parsed as the verb of the next clause,
-        // surfacing as `# Extract` in downstream approval prompts.
-        // BashArity collapses `git worktree` to a 2-token verb in v0.1
-        // (the deeper `git worktree list` subcommand is not in the table,
-        // so `list` lands as a positional arg — see SPEC §6.1).
+        // surfacing as `# Extract` in downstream approval prompts. Issue
+        // #27 follow-up: the greedy verb-chain heuristic now captures
+        // `worktree` and `list` together — the parser used to truncate
+        // the chain at the BashArity=2 default for git.
         var result = Parse("# Extract worktree branches\ngit worktree list");
         var clause = Assert.Single(result.Clauses);
-        Assert.Equal(new[] { "git", "worktree" }, clause.Verb.Tokens);
-        Assert.Equal("list", clause.Args[0].Raw);
+        Assert.Equal(new[] { "git", "worktree", "list" }, clause.Verb.Tokens);
+        Assert.Empty(clause.Args);
         Assert.False(result.IsUnparseable);
     }
 
@@ -1051,11 +1072,15 @@ public class BashCommandParserTests
     {
         var result = Parse("docker run -v /host:/container nginx");
         var clause = Assert.Single(result.Clauses);
-        // verb chain probe: -v /host:/container should be consumed; verb = ["docker", "run"]
-        Assert.Equal(new[] { "docker", "run" }, clause.Verb.Tokens);
-        Assert.Equal(3, clause.Args.Count);
+        // Issue #27 follow-up: the verb-chain walker consumes `-v
+        // /host:/container` as a flag-with-value pair, then `nginx`
+        // (verb-like) extends the chain. Verb = ["docker", "run", "nginx"];
+        // the volume-mount value still surfaces as an arg with IsPath=false
+        // per locked interpretation #8 (colon-joined target is not a path).
+        Assert.Equal(new[] { "docker", "run", "nginx" }, clause.Verb.Tokens);
+        Assert.Equal(2, clause.Args.Count);
         Assert.Equal("-v", clause.Args[0].Raw);
-        Assert.False(clause.Args[1].IsPath); // colon-joined volume mount, NOT a path
+        Assert.False(clause.Args[1].IsPath);
         Assert.Equal("/host:/container", clause.Args[1].Raw);
     }
 }

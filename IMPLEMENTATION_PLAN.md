@@ -216,7 +216,36 @@ bulldoze priorities.
       (sanitized paths per SPEC §14)
 - [x] `Directory.Build.props` `VersionPrefix` 0.1.2 → 0.1.3
 - [x] `RELEASE_NOTES.md` 0.1.3-alpha section
-- [ ] Cut 0.1.3-alpha tag once branch is merged
+- [x] Cut 0.1.3-alpha tag once branch is merged
+
+### 17. Greedy verb-chain extraction (#27) — 0.1.4-alpha
+
+- [x] Remove `BashArity` static table and `ProbeArity()` method from
+      `BashVerbs.cs`
+- [x] Add `BashVerbs.IsVerbLikeToken` predicate (strict allow-list:
+      Word kind, length 1–64, leading `[a-z]`, body `[a-z0-9._-]`)
+- [x] Rewrite verb-extraction loop in
+      `BashCommandParser.ParseClauseSegment` (greedy walk + FileVerb
+      1-token carveout + flag-with-value consumption)
+- [x] 7 new corpus entries (132–138) for the issue #27 headline cases:
+      `freshdesk ticket list`, `git -C /repo worktree list --porcelain`,
+      `kubectl get pods`, `kubectl get pods my-pod`, `aws s3 cp src dst`,
+      `dotnet ef migrations add InitialCreate`, `cat README`
+      (FileVerb-carveout proof)
+- [x] 11 existing corpus entries flipped to new shape: `04_echo_hello`,
+      `11_git_push_origin_main`, `13_git_checkout_dev`,
+      `17_docker_run_nginx`, `27_make_install`, `45_echo_append_log`,
+      `84_subshell_nested`, `91_bash_c_simple`,
+      `96_bash_c_nested_depth_2`, `100_bash_c_nested_depth_3`,
+      `130_netclaw_repro_leading_comment_pipeline`
+- [x] 8 unit-test cases updated in `BashCommandParserTests.cs` to match
+      the new expected verb chains
+- [x] SPEC.md updates: §3 `VerbChain`, §4 grammar, §6.1 rewritten end-to-end,
+      new §6.1.1 consumer pattern-matching guidance, §7 flag-with-value
+      note, §12 worked examples, §15 versioning, §16 sequencing
+- [x] `Directory.Build.props` `VersionPrefix` 0.1.3 → 0.1.4
+- [x] `RELEASE_NOTES.md` 0.1.4-alpha section
+- [ ] Cut 0.1.4-alpha tag once branch is merged
 
 ---
 

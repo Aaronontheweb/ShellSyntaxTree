@@ -1,19 +1,18 @@
 {
-  "name": "Simple verb: echo hello",
+  "name": "Simple verb: echo hello (greedy walk absorbs bare-word arg)",
   "input": "echo hello",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["echo"],
-        "args": [
-          { "raw": "hello", "kind": "Literal", "isPath": false }
-        ],
+        "verb": ["echo", "hello"],
+        "args": [],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": false
       }
     ]
-  }
+  },
+  "notes": "Issue #27: `echo` is not a FILE verb, so the greedy heuristic walks verb-like tokens past it. `hello` matches the verb-like predicate (lowercase identifier, no path-shape) and is absorbed into the verb chain. Over-extraction is documented and acceptable; consumers wanting to gate on `echo *` use pattern-prefix matching against the first token."
 }

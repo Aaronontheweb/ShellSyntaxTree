@@ -1,5 +1,5 @@
 {
-  "name": "Compound: make && make install",
+  "name": "Compound with greedy verb chain: make && make install",
   "input": "make && make install",
   "expected": {
     "isUnparseable": false,
@@ -14,14 +14,13 @@
       },
       {
         "operator": "AndIf",
-        "verb": ["make"],
-        "args": [
-          { "raw": "install", "kind": "Literal", "isPath": false }
-        ],
+        "verb": ["make", "install"],
+        "args": [],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": false
       }
     ]
-  }
+  },
+  "notes": "Issue #27: `install` is a verb-like lowercase identifier so the greedy heuristic absorbs it into the second clause's verb chain. `make` is not a FILE verb."
 }

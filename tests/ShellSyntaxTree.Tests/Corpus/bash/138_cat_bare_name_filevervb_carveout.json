@@ -1,0 +1,20 @@
+{
+  "name": "FileVerb 1-token carveout: cat README (bare-name preserves IsPath)",
+  "input": "cat README",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "README", "kind": "Literal", "isPath": true, "resolved": "/work/README" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #27 / FileVerb carveout: for known FILE verbs (`cat`, `ls`, `bash`, `cd`, `chmod`, `grep`, `find`, …) the heuristic stops after the first verb token so per-verb positional-arg classification still fires. `README` itself would also stop the walk under the strict predicate (uppercase first letter), but consider `cat hello` or `bash myscript` — bare-name targets whose shape *would* be verb-like. The carveout is what guarantees those targets remain as Args with IsPath=true, preserving the zone-gate semantics downstream consumers depend on."
+}

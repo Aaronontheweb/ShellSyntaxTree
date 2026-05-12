@@ -1,21 +1,18 @@
 {
-  "name": "Multi-token verb: git push origin main",
+  "name": "Greedy verb chain: git push origin main (over-extracts on bare-word remote+branch)",
   "input": "git push origin main",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["git", "push"],
-        "args": [
-          { "raw": "origin", "kind": "Literal", "isPath": false },
-          { "raw": "main", "kind": "Literal", "isPath": false }
-        ],
+        "verb": ["git", "push", "origin", "main"],
+        "args": [],
         "redirects": [],
         "isSubshell": false,
         "isBashCWrapped": false
       }
     ]
   },
-  "notes": "git arity=2 → first two source tokens become the verb chain."
+  "notes": "Issue #27: documented over-extraction. `origin` and `main` are syntactically indistinguishable from subcommand verbs without per-CLI knowledge. Consumers gating on `git push *` use pattern-prefix length (2) rather than relying on the parser to guess depth."
 }
