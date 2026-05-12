@@ -43,18 +43,8 @@ internal static class BashVerbs
     /// modulo per-verb overrides in SPEC §7. SPEC §6.3.
     /// </summary>
     /// <remarks>
-    /// <para>
     /// CWD verbs are also FILE verbs (their target is a path), included
     /// here for closure so a single membership check suffices.
-    /// </para>
-    /// <para>
-    /// Issue #27: this set ALSO acts as the "stop at 1-token verb chain"
-    /// carveout in <c>BashCommandParser.ParseClauseSegment</c>. The
-    /// greedy verb-chain heuristic would otherwise over-extract bare-name
-    /// targets (<c>cat hello</c>, <c>bash myscript</c>, <c>ln src dst</c>)
-    /// into the verb chain and lose the per-verb path-arg classification
-    /// downstream consumers depend on for zone-gate evaluation.
-    /// </para>
     /// </remarks>
     internal static readonly HashSet<string> FileVerbs =
         new(StringComparer.OrdinalIgnoreCase)
@@ -130,29 +120,22 @@ internal static class BashVerbs
         };
 
     /// <summary>
-    /// Issue #27 / SPEC §6.1: returns <c>true</c> when <paramref name="token"/>
-    /// has the shape of a CLI subcommand verb — a bare lowercase identifier
+    /// SPEC §6.1: returns <c>true</c> when <paramref name="token"/> has the
+    /// shape of a CLI subcommand verb — a bare lowercase identifier
     /// containing only ASCII letters, digits, hyphens, dots, and underscores.
     /// Used to terminate the greedy verb-chain walk at the first token that
     /// looks like a value rather than another subcommand.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// The shape predicate is intentionally strict: leading ASCII lowercase
-    /// letter, then only <c>[a-z0-9._-]</c>. This rejects flags (start with
-    /// <c>-</c>), env-var refs (<c>$</c>), path-shapes (<c>/</c>, <c>\</c>,
-    /// <c>~</c>), URLs (<c>:</c>), glob metachars (<c>*</c>, <c>?</c>,
-    /// <c>[</c>), uppercase-starting tokens (user-named identifiers like
-    /// migration names), and tokens that begin with a digit (numeric
-    /// modes / version literals). It tolerates real subcommand shapes
-    /// (<c>my-pod</c>, <c>s3</c>, <c>apt-get</c>, <c>python3.11</c>).
-    /// </para>
-    /// <para>
-    /// Quoted strings are not verb-like even when their inner value would
-    /// pass — quoting signals the user wanted the bytes as a literal
-    /// value. The walk also rejects empty tokens and tokens longer than
-    /// 64 characters as a defensive bound against pathological inputs.
-    /// </para>
+    /// Strict allow-list (leading <c>[a-z]</c>, body <c>[a-z0-9._-]</c>)
+    /// over the more obvious negation-of-LooksLikePath because it stays
+    /// conservative for unknown shapes: a token like <c>readme.md</c>
+    /// satisfies the allow-list and would extend an unknown CLI's verb
+    /// chain, but the FileVerb carveout in <c>BashCommandParser</c>
+    /// short-circuits the common case (<c>cat readme.md</c>) before the
+    /// allow-list ever runs. Quoted strings are excluded so the user's
+    /// intent to treat bytes literally is preserved. The 64-char bound
+    /// is a defensive cap against pathological inputs.
     /// </remarks>
     internal static bool IsVerbLikeToken(in BashToken token)
     {
