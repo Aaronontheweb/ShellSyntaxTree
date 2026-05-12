@@ -41,8 +41,10 @@ internal enum BashTokenKind
     /// <summary>A bash line comment — <c>#</c> at a word boundary
     /// through end-of-line (the terminating newline is preserved as
     /// a separate <see cref="Whitespace"/> token so statement
-    /// boundaries are unaffected). Emitted for source fidelity; the
-    /// parser drops these in <c>FilterSignificant</c> alongside
+    /// boundaries are unaffected). Emitted for source fidelity with
+    /// empty <see cref="BashToken.Value"/>; <see cref="BashToken.SourceStart"/>
+    /// and <see cref="BashToken.SourceLength"/> identify the slice.
+    /// The parser drops these in <c>FilterSignificant</c> alongside
     /// <see cref="Whitespace"/> and <see cref="Continuation"/>.
     /// SPEC §5.</summary>
     Comment,

@@ -575,7 +575,6 @@ public class BashLexerTests
         var tokens = BashLexer.Tokenize("# just a note");
         var t = Assert.Single(tokens);
         Assert.Equal(BashTokenKind.Comment, t.Kind);
-        Assert.Equal("# just a note", t.Value);
         Assert.Equal(0, t.SourceStart);
         Assert.Equal(13, t.SourceLength);
     }
@@ -586,7 +585,7 @@ public class BashLexerTests
         // `# fetch\ngit pull` → Comment, Whitespace(\n), Word(git), Whitespace, Word(pull)
         var all = BashLexer.Tokenize("# fetch\ngit pull");
         Assert.Equal(BashTokenKind.Comment, all[0].Kind);
-        Assert.Equal("# fetch", all[0].Value);
+        Assert.Equal(7, all[0].SourceLength);
         Assert.Equal(BashTokenKind.Whitespace, all[1].Kind);
         Assert.Equal(BashTokenKind.Word, all[2].Kind);
         Assert.Equal("git", all[2].Value);
@@ -605,7 +604,8 @@ public class BashLexerTests
         Assert.Equal(BashTokenKind.Word, nonWs[1].Kind);
         Assert.Equal("pull", nonWs[1].Value);
         Assert.Equal(BashTokenKind.Comment, nonWs[2].Kind);
-        Assert.Equal("# update local", nonWs[2].Value);
+        Assert.Equal(11, nonWs[2].SourceStart);
+        Assert.Equal(14, nonWs[2].SourceLength);
     }
 
     [Fact]
@@ -625,15 +625,13 @@ public class BashLexerTests
     [Fact]
     public void Hash_inside_double_quotes_is_literal_not_comment()
     {
+        // The count-equality below would fail if a stray Comment token
+        // appeared, so a separate DoesNotContain isn't needed.
         var tokens = LexNonWs("echo \"hash is #1234\"");
         Assert.Equal(2, tokens.Length);
         Assert.Equal(BashTokenKind.Word, tokens[0].Kind);
         Assert.Equal(BashTokenKind.QuotedString, tokens[1].Kind);
         Assert.Equal("hash is #1234", tokens[1].Value);
-        // No Comment token anywhere.
-        Assert.DoesNotContain(
-            BashLexer.Tokenize("echo \"hash is #1234\""),
-            t => t.Kind == BashTokenKind.Comment);
     }
 
     [Fact]
@@ -645,9 +643,6 @@ public class BashLexerTests
         Assert.Equal(BashTokenKind.QuotedString, tokens[1].Kind);
         Assert.Equal("use #foo", tokens[1].Value);
         Assert.True(tokens[1].IsSingleQuoted);
-        Assert.DoesNotContain(
-            BashLexer.Tokenize("echo 'use #foo'"),
-            t => t.Kind == BashTokenKind.Comment);
     }
 
     [Fact]
@@ -676,7 +671,8 @@ public class BashLexerTests
         Assert.Equal(BashTokenKind.Operator, all[2].Kind);
         Assert.Equal("&&", all[2].OperatorText);
         Assert.Equal(BashTokenKind.Comment, all[3].Kind);
-        Assert.Equal("# foo", all[3].Value);
+        Assert.Equal(6, all[3].SourceStart);
+        Assert.Equal(5, all[3].SourceLength);
     }
 
     [Fact]
@@ -686,7 +682,6 @@ public class BashLexerTests
         // Word(echo), Whitespace, Word(hi), Whitespace, Comment(# done)
         Assert.Equal(5, tokens.Count);
         Assert.Equal(BashTokenKind.Comment, tokens[4].Kind);
-        Assert.Equal("# done", tokens[4].Value);
         Assert.Equal(14, tokens[4].SourceStart + tokens[4].SourceLength);
     }
 
@@ -697,7 +692,8 @@ public class BashLexerTests
         // a statement boundary between `# a` and `cmd`.
         var tokens = BashLexer.Tokenize("# a\ncmd");
         Assert.Equal(BashTokenKind.Comment, tokens[0].Kind);
-        Assert.Equal("# a", tokens[0].Value);
+        Assert.Equal(0, tokens[0].SourceStart);
+        Assert.Equal(3, tokens[0].SourceLength);
         Assert.Equal(BashTokenKind.Whitespace, tokens[1].Kind);
         // The Whitespace token covers the newline.
         Assert.Equal(3, tokens[1].SourceStart);

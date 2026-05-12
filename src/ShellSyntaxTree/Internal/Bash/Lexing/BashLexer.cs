@@ -184,15 +184,11 @@ internal static class BashLexer
             }
 
             // ---- line comment ----
-            // Reaching this branch means `c` is at a fresh dispatch position
-            // — whitespace, newlines, operators, quotes, and opaque regions
-            // are already handled above — so `#` here is at a "word
-            // boundary" in bash terms and starts a comment to EOL. A `#`
-            // in the interior of a word never reaches this branch because
-            // ReadWord consumes the whole word before the outer loop
-            // resumes. Bash semantics: backslash-escaped `\#` is consumed
-            // by ReadWord's escape handling and never reaches here either.
-            // SPEC §5.
+            // Reaching this branch implies a word boundary (quotes,
+            // operators, and opaque regions are dispatched above), so `#`
+            // here starts a comment to EOL. Mid-word `#` is consumed by
+            // ReadWord, and `\#` by its escape handling — neither reaches
+            // this point. SPEC §5.
             if (c == '#')
             {
                 i = ConsumeLineComment(src, i, tokens);
@@ -411,7 +407,9 @@ internal static class BashLexer
     // Consume `#` through (but not including) the next newline. The
     // terminating newline stays in the stream so the outer loop emits it
     // as a Whitespace token, preserving SPEC §4 clause-boundary
-    // semantics. The Value retains the leading `#` for source fidelity.
+    // semantics. Value is "" to match Whitespace/Continuation — callers
+    // that need the literal text can slice the source via
+    // SourceStart/SourceLength.
     private static int ConsumeLineComment(
         ReadOnlySpan<char> src, int start, List<BashToken> tokens)
     {
@@ -421,14 +419,8 @@ internal static class BashLexer
             i++;
         }
 
-        var length = i - start;
         tokens.Add(new BashToken(
-            BashTokenKind.Comment,
-            src.Slice(start, length).ToString(),
-            null,
-            start,
-            length,
-            null));
+            BashTokenKind.Comment, "", null, start, i - start, null));
         return i;
     }
 

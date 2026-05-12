@@ -463,8 +463,10 @@ must handle this.
 - The terminating newline is **not** consumed by the Comment token.
   It survives as a Whitespace token, preserving statement-boundary
   semantics for the parser (see §4).
-- A Comment token's `Value` includes the leading `#` for source
-  fidelity. `SourceStart` / `SourceLength` cover the same range.
+- A Comment token's `Value` is empty (matching `Whitespace` /
+  `Continuation`); `SourceStart` / `SourceLength` identify the slice
+  including the leading `#` so callers that need the literal text can
+  recover it from the original input span.
 - **Effect on parsing**: comment-only input parses to
   `Clauses = []`, `IsUnparseable = false` — mirroring empty-input
   behavior. A comment leading, trailing, or interleaved with a clause
