@@ -1,3 +1,14 @@
+#### 0.1.4 May 15th 2026 ####
+
+Stable promotion of 0.1.4-alpha. No code changes from the alpha; this release
+drops the pre-release suffix to signal that the v0.1 public API surface is
+considered production-ready for Bash parsing use cases (see SPEC.md §17
+acceptance criteria). Consumers on any `0.1.x-alpha` can upgrade directly.
+
+See the 0.1.4-alpha notes below for the full list of changes in this version.
+
+---
+
 #### 0.1.4-alpha May 12th 2026 ####
 
 Greedy verb-chain extraction. Public API surface (`VerbChain`, `Clause`)
