@@ -631,15 +631,20 @@ internal static class BashCommandParser
         var segments = new List<Segment>();
         var subshellStack = new List<int> { 0 }; // ID 0 is the top-level command.
         var nextSubshellId = 1;
+        var depth = 0;
 
-        var current = new Segment
+        // Shared factory for the segment opened at every clause boundary:
+        // FromSubshell / SubshellDepth / SubshellStack are uniform (driven
+        // by the current `depth`), so only the preceding operator varies.
+        Segment OpenSegment(CompoundOperator precedingOperator) => new()
         {
-            PrecedingOperator = CompoundOperator.None,
-            SubshellDepth = 0,
+            PrecedingOperator = precedingOperator,
+            FromSubshell = depth > 0,
+            SubshellDepth = depth,
             SubshellStack = subshellStack.ToArray(),
         };
 
-        var depth = 0;
+        var current = OpenSegment(CompoundOperator.None);
 
         for (var i = 0; i < tokens.Count; i++)
         {
@@ -658,13 +663,7 @@ internal static class BashCommandParser
                 }
 
                 segments.Add(current);
-                current = new Segment
-                {
-                    PrecedingOperator = CompoundOperator.Sequence,
-                    FromSubshell = depth > 0,
-                    SubshellDepth = depth,
-                    SubshellStack = subshellStack.ToArray(),
-                };
+                current = OpenSegment(CompoundOperator.Sequence);
                 continue;
             }
 
@@ -681,15 +680,9 @@ internal static class BashCommandParser
 
                     depth++;
                     subshellStack.Add(nextSubshellId++);
-                    current = new Segment
-                    {
-                        PrecedingOperator = current.Tokens.Count > 0
-                            ? CompoundOperator.Sequence
-                            : current.PrecedingOperator,
-                        FromSubshell = true,
-                        SubshellDepth = depth,
-                        SubshellStack = subshellStack.ToArray(),
-                    };
+                    current = OpenSegment(current.Tokens.Count > 0
+                        ? CompoundOperator.Sequence
+                        : current.PrecedingOperator);
                     continue;
                 }
 
@@ -709,13 +702,7 @@ internal static class BashCommandParser
                         segments.Add(current);
                     }
 
-                    current = new Segment
-                    {
-                        PrecedingOperator = CompoundOperator.None,
-                        FromSubshell = depth > 0,
-                        SubshellDepth = depth,
-                        SubshellStack = subshellStack.ToArray(),
-                    };
+                    current = OpenSegment(CompoundOperator.None);
                     continue;
                 }
 
@@ -732,13 +719,7 @@ internal static class BashCommandParser
                         segments.Add(current);
                     }
 
-                    current = new Segment
-                    {
-                        PrecedingOperator = MapOperator(op),
-                        FromSubshell = depth > 0,
-                        SubshellDepth = depth,
-                        SubshellStack = subshellStack.ToArray(),
-                    };
+                    current = OpenSegment(MapOperator(op));
                     continue;
                 }
 
