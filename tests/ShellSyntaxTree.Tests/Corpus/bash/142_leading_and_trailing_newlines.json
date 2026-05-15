@@ -1,0 +1,26 @@
+{
+  "name": "Leading and trailing newlines are ignored",
+  "input": "\ncmd1\ncmd2\n",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd1"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["cmd2"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §4: a leading newline does not create a clause (first clause keeps Operator=None); a trailing newline does not create a phantom clause."
+}

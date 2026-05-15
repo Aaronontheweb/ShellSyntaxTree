@@ -631,9 +631,10 @@ public class BashCommandParserTests
     [Fact]
     public void Comment_between_two_statements_preserves_both_clauses()
     {
-        // v0.1 does not treat top-level newlines as statement separators
-        // (SPEC §4 gap — separate from #25). Use explicit `;` so the
-        // separator survives FilterSignificant.
+        // The `;` and the trailing newline are both statement separators;
+        // the comment between them must not pollute either verb chain. The
+        // newline after the comment lands on the segment the `;` already
+        // opened, so it collapses — still exactly two clauses.
         var result = Parse("git pull ; # now build\ndotnet build");
         Assert.Equal(2, result.Clauses.Count);
         Assert.Equal(new[] { "git", "pull" }, result.Clauses[0].Verb.Tokens);
@@ -684,6 +685,169 @@ public class BashCommandParserTests
         Assert.Equal(new[] { "curl" }, result.Clauses[0].Verb.Tokens);
         Assert.Equal(new[] { "echo" }, result.Clauses[1].Verb.Tokens);
         Assert.False(result.IsUnparseable);
+    }
+
+    // ---------------- Newline statement separators (SPEC §4) ----------------
+
+    [Fact]
+    public void Newline_separates_two_clauses_as_Sequence()
+    {
+        var result = Parse("ls\npwd");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(CompoundOperator.None, result.Clauses[0].Operator);
+        Assert.Equal(new[] { "ls" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal(CompoundOperator.Sequence, result.Clauses[1].Operator);
+        Assert.Equal(new[] { "pwd" }, result.Clauses[1].Verb.Tokens);
+    }
+
+    [Fact]
+    public void Newline_separates_three_clauses()
+    {
+        var result = Parse("cmd1\ncmd2\ncmd3");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(3, result.Clauses.Count);
+        Assert.Equal(CompoundOperator.None, result.Clauses[0].Operator);
+        Assert.Equal(CompoundOperator.Sequence, result.Clauses[1].Operator);
+        Assert.Equal(CompoundOperator.Sequence, result.Clauses[2].Operator);
+    }
+
+    [Fact]
+    public void Blank_lines_do_not_create_empty_clauses()
+    {
+        var result = Parse("cmd1\n\n\ncmd2");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(new[] { "cmd1" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal(new[] { "cmd2" }, result.Clauses[1].Verb.Tokens);
+    }
+
+    [Fact]
+    public void Leading_newline_keeps_first_clause_operator_None()
+    {
+        var result = Parse("\ncmd1\ncmd2");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(CompoundOperator.None, result.Clauses[0].Operator);
+        Assert.Equal(new[] { "cmd1" }, result.Clauses[0].Verb.Tokens);
+    }
+
+    [Fact]
+    public void Trailing_newline_does_not_create_a_phantom_clause()
+    {
+        var result = Parse("cmd1\n");
+        Assert.False(result.IsUnparseable);
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "cmd1" }, clause.Verb.Tokens);
+    }
+
+    [Fact]
+    public void Newline_after_AndIf_does_not_create_an_empty_clause()
+    {
+        // `cmd1 &&\ncmd2` — bash allows a newline right after a compound
+        // operator; the newline must not produce an empty clause, and the
+        // && must survive onto cmd2.
+        var result = Parse("cmd1 &&\ncmd2");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(CompoundOperator.AndIf, result.Clauses[1].Operator);
+        Assert.Equal(new[] { "cmd2" }, result.Clauses[1].Verb.Tokens);
+    }
+
+    [Fact]
+    public void Newline_after_Pipe_does_not_create_an_empty_clause()
+    {
+        var result = Parse("cmd1 |\ncmd2");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(CompoundOperator.Pipe, result.Clauses[1].Operator);
+    }
+
+    [Fact]
+    public void Newline_after_Semicolon_does_not_create_an_empty_clause()
+    {
+        var result = Parse("cmd1 ;\ncmd2");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(CompoundOperator.Sequence, result.Clauses[1].Operator);
+    }
+
+    [Fact]
+    public void Newline_inside_subshell_separates_inner_clauses()
+    {
+        var result = Parse("(cmd1\ncmd2)");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.True(result.Clauses[0].IsSubshell);
+        Assert.True(result.Clauses[1].IsSubshell);
+        Assert.Equal(CompoundOperator.Sequence, result.Clauses[1].Operator);
+    }
+
+    [Fact]
+    public void Newline_inside_double_quotes_is_a_single_arg()
+    {
+        // A newline inside a quoted string is literal content, not a
+        // separator — the whole thing stays one clause with one arg.
+        var result = Parse("echo \"a\nb\"");
+        Assert.False(result.IsUnparseable);
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "echo" }, clause.Verb.Tokens);
+        Assert.Single(clause.Args);
+    }
+
+    [Fact]
+    public void Continuation_newline_is_not_a_separator()
+    {
+        // `\` + newline is a line continuation — the two source lines
+        // remain a single clause.
+        var result = Parse("echo one \\\ntwo");
+        Assert.False(result.IsUnparseable);
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "echo", "one", "two" }, clause.Verb.Tokens);
+    }
+
+    [Fact]
+    public void Comment_then_newline_separates_clauses()
+    {
+        // A trailing comment ends at the newline; the newline still
+        // separates the two statements — the bare-newline form of the
+        // explicit-`;` workaround in corpus entry 126.
+        var result = Parse("git pull # done\ndotnet build");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(new[] { "git", "pull" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal(new[] { "dotnet", "build" }, result.Clauses[1].Verb.Tokens);
+    }
+
+    [Fact]
+    public void Whitespace_and_newline_only_input_returns_empty_clauses()
+    {
+        var result = Parse("  \n  ");
+        Assert.False(result.IsUnparseable);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
+    public void Heredoc_terminator_newline_separates_following_clause()
+    {
+        // The newline after the heredoc terminator is a statement
+        // separator: `rest` is its own clause, not an arg of `cmd`.
+        var result = Parse("cmd <<EOF\nbody\nEOF\nrest");
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(new[] { "rest" }, result.Clauses[1].Verb.Tokens);
+        Assert.Equal(CompoundOperator.Sequence, result.Clauses[1].Operator);
+    }
+
+    [Fact]
+    public void Control_flow_keyword_after_newline_marks_outer_unparseable()
+    {
+        // A control-flow keyword opening a newline-separated clause must
+        // still safe-fail per SPEC §11 — TryDetectAnomaly treats the
+        // newline as a verb-slot boundary.
+        var result = Parse("echo hi\nfor i in 1 2 3");
+        Assert.True(result.IsUnparseable);
+        Assert.Contains("'for'", result.UnparseableReason!);
     }
 
     // ---------------- Subshell ----------------

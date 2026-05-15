@@ -496,7 +496,12 @@ internal static class BashCommandParser
         var filtered = new List<BashToken>(tokens.Count);
         foreach (var t in tokens)
         {
-            if (t.Kind == BashTokenKind.Whitespace
+            // A newline-bearing Whitespace token is a statement separator
+            // (SPEC §4) — it survives filtering so SplitIntoSegments can
+            // split clauses on it, exactly like an explicit ';'. Plain
+            // space/tab Whitespace, Continuation, and Comment carry no
+            // structural signal and are dropped.
+            if ((t.Kind == BashTokenKind.Whitespace && !t.IsStatementSeparator)
                 || t.Kind == BashTokenKind.Continuation
                 || t.Kind == BashTokenKind.Comment)
             {
@@ -529,6 +534,16 @@ internal static class BashCommandParser
             if (t.Kind == BashTokenKind.Operator)
             {
                 nextIsVerbSlot = t.OperatorText is "&&" or "||" or ";" or "|" or "(";
+                continue;
+            }
+
+            // A retained Whitespace token is a newline statement separator
+            // (SPEC §4); the word after it sits at a verb slot, exactly as
+            // it would after ';'. Without this, a control-flow keyword that
+            // opens a newline-separated clause would slip past detection.
+            if (t.Kind == BashTokenKind.Whitespace)
+            {
+                nextIsVerbSlot = true;
                 continue;
             }
 
@@ -629,6 +644,29 @@ internal static class BashCommandParser
         for (var i = 0; i < tokens.Count; i++)
         {
             var t = tokens[i];
+
+            // A retained Whitespace token is a newline statement separator
+            // (SPEC §4), equivalent to ';'. Unlike a stray ';', a newline
+            // on an empty pending segment is NOT an error — it simply
+            // collapses, so blank lines, leading newlines, and a newline
+            // right after a compound operator never produce an empty clause.
+            if (t.Kind == BashTokenKind.Whitespace)
+            {
+                if (current.Tokens.Count == 0)
+                {
+                    continue;
+                }
+
+                segments.Add(current);
+                current = new Segment
+                {
+                    PrecedingOperator = CompoundOperator.Sequence,
+                    FromSubshell = depth > 0,
+                    SubshellDepth = depth,
+                    SubshellStack = subshellStack.ToArray(),
+                };
+                continue;
+            }
 
             if (t.Kind == BashTokenKind.Operator)
             {

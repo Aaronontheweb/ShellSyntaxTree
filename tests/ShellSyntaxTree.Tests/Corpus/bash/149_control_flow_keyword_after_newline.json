@@ -1,0 +1,9 @@
+{
+  "name": "Control-flow keyword after a newline is unparseable",
+  "input": "echo hi\nfor i in 1 2 3",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "'for'"
+  },
+  "notes": "SPEC §4/§11: a newline opens a new clause; a control-flow keyword at that verb slot safe-fails just as it would after ';'."
+}

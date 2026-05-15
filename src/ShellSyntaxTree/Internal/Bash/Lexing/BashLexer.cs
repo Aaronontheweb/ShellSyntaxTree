@@ -90,7 +90,8 @@ internal static class BashLexer
                 }
 
                 tokens.Add(new BashToken(
-                    BashTokenKind.Whitespace, "", null, start, i - start, null));
+                    BashTokenKind.Whitespace, "", null, start, i - start, null)
+                    { IsStatementSeparator = true });
                 continue;
             }
 
@@ -770,7 +771,8 @@ internal static class BashLexer
                 if (j < src.Length && src[j] == '\n')
                 {
                     tokens.Add(new BashToken(
-                        BashTokenKind.Whitespace, "", null, j, 1, null));
+                        BashTokenKind.Whitespace, "", null, j, 1, null)
+                        { IsStatementSeparator = true });
                     return j + 1;
                 }
 

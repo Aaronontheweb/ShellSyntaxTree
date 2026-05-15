@@ -340,7 +340,7 @@ is unparseable (`ParsedCommand.IsUnparseable = true`).
 
 ```
 command         := clause (compound_op clause)*
-compound_op     := "&&" | "||" | ";" | "|"
+compound_op     := "&&" | "||" | ";" | "|" | NEWLINE
 clause          := subshell | bash_c_wrapper | simple_clause
 subshell        := "(" command ")"
 bash_c_wrapper  := ("bash" | "sh") "-c" QUOTED_STRING
@@ -363,6 +363,13 @@ quoted_string   := single-quoted | double-quoted
 **Notes:**
 
 - Whitespace between tokens is one or more spaces or tabs.
+- A bare newline outside quotes, heredoc bodies, line continuations, and
+  `$(...)` / backtick substitutions is a **statement separator** —
+  semantically equivalent to `;`, producing `CompoundOperator.Sequence`.
+  Consecutive newlines, leading and trailing newlines, and a newline
+  immediately following a compound operator all collapse: they never
+  yield an empty clause. The newline after a heredoc terminator likewise
+  separates the heredoc's clause from what follows.
 - `\` followed by a newline is a line continuation (treat as whitespace).
 - Bash line comments (`#` at a word boundary through end-of-line) are
   whitespace-equivalent at the lexer level — they emit a Comment token
@@ -398,8 +405,12 @@ The lexer produces tokens consumed by the parser. Token kinds:
   becomes the token value `hello world`.
 - **OPERATOR** — `&&`, `||`, `;`, `|`, `>`, `>>`, `<`, `2>`, `2>>`,
   `(`, `)`, `<<`, `<<-`.
-- **WHITESPACE** — one or more spaces or tabs (or newlines outside a
-  heredoc body). Discarded after splitting.
+- **WHITESPACE** — one or more spaces, tabs, or newlines (newlines inside
+  a skipped heredoc body are not tokenized). A whitespace run that
+  contains a newline — including the newline after a heredoc terminator —
+  is flagged as a **statement separator**; the parser retains those
+  tokens past `FilterSignificant` and splits clauses on them per §4. A
+  pure space/tab run carries no flag and is discarded after splitting.
 - **CONTINUATION** — `\` + `\n`. Treated as whitespace.
 - **OPAQUE_SUBSTITUTION** — `$(cmd)` or backtick `` `cmd` ``. The full
   substitution slice (including delimiters) becomes a single token.
@@ -1330,8 +1341,11 @@ Adapt for ShellSyntaxTree:
   `BashArity` static table with the greedy verb-chain heuristic per
   issue #27).
 - **v0.1.0** — first publishable non-alpha cut. Bash-only.
-- **v0.1.x** (post-0.1.0) — additive changes only (more verb table
-  entries, more corpus, bug fixes that don't shift parsed-AST shape).
+- **v0.1.x** (post-0.1.0) — additive changes and SPEC-conformance fixes
+  (more verb table entries, more corpus, bug fixes). A fix may shift the
+  parsed-AST shape when the prior shape violated this SPEC — e.g. v0.1.5
+  makes a bare newline a statement separator per §4. The §2 public API
+  surface stays locked.
 - **v0.2.0** — first PowerShell parser implementation.
 - **v1.0.0** — ready when at least one external consumer beyond Netclaw
   ships against it without finding API gaps.
@@ -1385,6 +1399,10 @@ A natural order for the implementer:
 
 Estimated implementation effort: 600-800 LOC of source + 400-600 LOC of
 test infrastructure + 100-150 corpus entries (~50 KB JSON).
+
+Post-v0.1.0 increments (e.g. v0.1.5 newline-as-statement-separator) are
+sequenced through `IMPLEMENTATION_PLAN.md` — §16 records the one-time
+v0.1.0 build order, not the ongoing changelog.
 
 ---
 

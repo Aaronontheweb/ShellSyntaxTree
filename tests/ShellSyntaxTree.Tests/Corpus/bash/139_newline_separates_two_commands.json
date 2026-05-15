@@ -1,0 +1,26 @@
+{
+  "name": "Newline separates two commands",
+  "input": "ls\npwd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["ls"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["pwd"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §4: a bare newline is a statement separator equivalent to ';' — the second clause carries CompoundOperator.Sequence."
+}

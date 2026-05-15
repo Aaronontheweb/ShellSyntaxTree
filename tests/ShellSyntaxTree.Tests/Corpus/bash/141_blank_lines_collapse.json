@@ -1,0 +1,26 @@
+{
+  "name": "Blank lines collapse — no empty clauses",
+  "input": "cmd1\n\n\ncmd2",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd1"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["cmd2"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §4: consecutive newlines collapse into a single separator — blank lines never produce an empty clause."
+}

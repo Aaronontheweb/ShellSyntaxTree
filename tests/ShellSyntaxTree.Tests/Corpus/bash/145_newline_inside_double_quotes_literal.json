@@ -1,0 +1,20 @@
+{
+  "name": "Newline inside double quotes is literal, not a separator",
+  "input": "echo \"a\nb\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "\"a\nb\"", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §4/§5: a newline inside a quoted string is literal content — the command stays one clause with a single quoted arg."
+}
