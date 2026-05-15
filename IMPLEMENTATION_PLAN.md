@@ -185,15 +185,15 @@ bulldoze priorities.
   - PR #19: `chore(ci): assert tags are bare version numbers (no v prefix)`
   - PR #20: `chore(ci): strip section heading from extracted release notes`
 
-### 14. Netclaw integration smoke (SPEC §17 #7-#8)
+### 14. Netclaw integration smoke (SPEC §17 #7-#8) — complete
 
-- [ ] In netclaw repo: `dotnet add package ShellSyntaxTree --version 0.1.0-alpha`
-- [ ] Wire `IShellParser` into Netclaw DI; replace minimal call site in
+- [x] In netclaw repo: `dotnet add package ShellSyntaxTree --version 0.1.0-alpha`
+- [x] Wire `IShellParser` into Netclaw DI; replace minimal call site in
       `src/Netclaw.Security/ShellApprovalSemantics.cs`
-- [ ] One Netclaw integration test exercises a real corpus entry through
+- [x] One Netclaw integration test exercises a real corpus entry through
       the live matcher and gets the expected gate decision
-- [ ] Update this repo's IMPLEMENTATION_PLAN.md: mark SPEC §17 #7–#8
-      satisfied
+- [x] SPEC §17 #7–#8 satisfied (confirmed by Aaron 2026-05-15: all shipped
+      alpha versions are working in Netclaw production)
 
 ### 15. NuGet package icon — PR 7, complete
 
@@ -203,7 +203,7 @@ bulldoze priorities.
 - [x] `Directory.Build.props` wires `<PackageIcon>icon.png</PackageIcon>`
       + a packed `<None>` item (already present from bootstrap)
 - [x] `dotnet pack` validation: icon embedded in `.nupkg` confirmed
-- [ ] Re-pack to validate icon embeds
+- [x] Re-pack to validate icon embeds
 
 ### 16. Bash line comments (#25) — 0.1.3-alpha
 
@@ -245,7 +245,7 @@ bulldoze priorities.
       note, §12 worked examples, §15 versioning, §16 sequencing
 - [x] `Directory.Build.props` `VersionPrefix` 0.1.3 → 0.1.4
 - [x] `RELEASE_NOTES.md` 0.1.4-alpha section
-- [ ] Cut 0.1.4-alpha tag once branch is merged
+- [x] Cut 0.1.4-alpha tag once branch is merged
 
 ---
 
