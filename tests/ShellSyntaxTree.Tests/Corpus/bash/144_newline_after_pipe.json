@@ -1,0 +1,26 @@
+{
+  "name": "Newline after pipe does not create an empty clause",
+  "input": "cmd1 |\ncmd2",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd1"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "Pipe",
+        "verb": ["cmd2"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §4: a newline immediately after a pipe collapses — the | carries onto the next clause."
+}

@@ -1,6 +1,6 @@
 {
-  "name": "Comment between two ;-separated commands",
-  "input": "git pull ; # now build\ndotnet build",
+  "name": "Trailing comment then newline separates clauses",
+  "input": "git pull # done\ndotnet build",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -22,5 +22,5 @@
       }
     ]
   },
-  "notes": "Issue #25: a comment between two clauses must not pollute either verb chain. The ';' and the trailing newline are both statement separators (SPEC §4); the newline after the comment lands on the segment the ';' already opened, so it collapses — still exactly two clauses."
+  "notes": "SPEC §4/§5: a trailing comment ends at the newline; the newline still separates the two statements. Bare-newline form of the explicit-';' workaround in corpus entry 126."
 }

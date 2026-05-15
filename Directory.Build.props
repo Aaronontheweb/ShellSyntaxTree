@@ -7,8 +7,8 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <VersionPrefix>0.1.4</VersionPrefix>
-    <VersionSuffix></VersionSuffix>
+    <VersionPrefix>0.1.5</VersionPrefix>
+    <VersionSuffix>beta</VersionSuffix>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Target framework matrix -->

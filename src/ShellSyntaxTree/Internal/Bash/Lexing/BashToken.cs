@@ -48,4 +48,14 @@ internal readonly record struct BashToken(
     /// substitution per SPEC §8 step 3).
     /// </summary>
     public bool IsSingleQuoted { get; init; }
+
+    /// <summary>
+    /// True when this <see cref="BashTokenKind.Whitespace"/> token contains
+    /// a newline and therefore acts as a statement separator equivalent to
+    /// <c>;</c> per SPEC §4. The lexer sets this on the newline branch and
+    /// on the heredoc-terminator newline; the parser retains these tokens
+    /// past <c>FilterSignificant</c> and splits clauses on them. Default
+    /// <c>false</c> for plain space/tab whitespace and every other kind.
+    /// </summary>
+    public bool IsStatementSeparator { get; init; }
 }

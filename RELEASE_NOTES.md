@@ -1,3 +1,56 @@
+#### 0.1.5-beta May 15th 2026 ####
+
+Newline-as-statement-separator. Public API surface unchanged; the
+*content* of `ParsedCommand.Clauses` changes for any input that spans
+multiple lines. Shipped as a **beta** prerelease so Netclaw can validate
+the AST-shape change against its live gate evaluator before this is
+promoted to a stable `0.1.5`.
+
+**BEHAVIOR CHANGE: a bare newline now separates clauses (SPEC §4)**
+
+- A bare newline outside quotes, heredoc bodies, line continuations, and
+  `$()` / backtick substitutions is now a statement separator equivalent
+  to `;` — the clause after it carries `CompoundOperator.Sequence`.
+  Before this release `BashCommandParser` only split clauses on `&&` /
+  `||` / `;` / `|`, so `cmd1\ncmd2` parsed to a single clause `[cmd1]`
+  with `cmd2` wrongly absorbed as an argument.
+- The lexer flags the newline-bearing `Whitespace` token — and the
+  newline after a heredoc terminator — with a new internal
+  `IsStatementSeparator` bit; `FilterSignificant` retains those tokens
+  and `SplitIntoSegments` splits clauses on them.
+- Consecutive newlines, leading and trailing newlines, and a newline
+  immediately after a compound operator (`cmd1 &&\ncmd2`) all collapse —
+  they never produce an empty clause.
+- A heredoc followed by a command on the next line now parses to two
+  clauses (previously the heredoc clause and the following command
+  merged into one).
+- A control-flow keyword opening a newline-separated clause
+  (`echo hi\nfor i in 1 2 3`) safe-fails to `IsUnparseable=true`, exactly
+  as it would after `;`.
+
+Examples that change:
+
+- `cmd1\ncmd2` → two clauses `[cmd1]`, `[cmd2]` (was one clause `[cmd1]`
+  with `cmd2` as an arg).
+- `git pull # done\ndotnet build` → two clauses (was one).
+
+**Behavior notes**
+
+- Public API surface is unchanged (no `PublicApiSnapshotTests` delta).
+- SPEC.md updates: §4 grammar (`compound_op` includes `NEWLINE`, new
+  notes bullet), §5 `WHITESPACE` tokenization, §15 versioning, §16
+  sequencing note.
+- Corpus: 11 new entries (139–149) covering newline separation, blank
+  lines, leading/trailing newlines, newline after an operator, newline
+  inside quotes and subshells, line continuation, comment-then-newline,
+  and the control-flow-after-newline safe-fail. Entry 126's note is
+  corrected — newline-as-separator is no longer a pending gap.
+- Unit tests: 8 new `BashLexerTests` cases + 14 new
+  `BashCommandParserTests` cases; the stale comment in
+  `Comment_between_two_statements_preserves_both_clauses` is corrected.
+
+---
+
 #### 0.1.4 May 15th 2026 ####
 
 Stable promotion of 0.1.4-alpha. No code changes from the alpha; this release

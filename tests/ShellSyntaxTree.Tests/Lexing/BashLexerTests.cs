@@ -702,6 +702,92 @@ public class BashLexerTests
         Assert.Equal("cmd", tokens[2].Value);
     }
 
+    // ------------------------------------------------------------ newline separators (SPEC §4)
+
+    [Fact]
+    public void Newline_whitespace_token_is_flagged_statement_separator()
+    {
+        // `a\nb` → Word(a), Whitespace(\n), Word(b). The newline-bearing
+        // Whitespace token carries IsStatementSeparator=true so the parser
+        // can split clauses on it, exactly like an explicit ';'.
+        var tokens = BashLexer.Tokenize("a\nb");
+        Assert.Equal(3, tokens.Count);
+        Assert.Equal(BashTokenKind.Whitespace, tokens[1].Kind);
+        Assert.True(tokens[1].IsStatementSeparator);
+    }
+
+    [Theory]
+    [InlineData("a b")]
+    [InlineData("a\tb")]
+    public void Space_and_tab_whitespace_is_not_a_statement_separator(string input)
+    {
+        // Only newline-bearing Whitespace separates statements; plain
+        // space/tab runs carry no structural signal.
+        var tokens = BashLexer.Tokenize(input);
+        Assert.Equal(BashTokenKind.Whitespace, tokens[1].Kind);
+        Assert.False(tokens[1].IsStatementSeparator);
+    }
+
+    [Fact]
+    public void Consecutive_newlines_lex_as_one_flagged_whitespace_token()
+    {
+        // `a\n\n\nb` — the newline run collapses into a single Whitespace
+        // token; blank lines never produce empty clauses downstream.
+        var tokens = BashLexer.Tokenize("a\n\n\nb");
+        Assert.Equal(3, tokens.Count);
+        Assert.Equal(BashTokenKind.Whitespace, tokens[1].Kind);
+        Assert.True(tokens[1].IsStatementSeparator);
+        Assert.Equal(3, tokens[1].SourceLength);
+    }
+
+    [Fact]
+    public void Crlf_newline_is_a_flagged_statement_separator()
+    {
+        var tokens = BashLexer.Tokenize("a\r\nb");
+        Assert.Equal(3, tokens.Count);
+        Assert.Equal(BashTokenKind.Whitespace, tokens[1].Kind);
+        Assert.True(tokens[1].IsStatementSeparator);
+    }
+
+    [Fact]
+    public void Continuation_token_is_not_a_statement_separator()
+    {
+        // `\` + newline is a line continuation (SPEC §5), not a separator.
+        var tokens = BashLexer.Tokenize("cmd \\\nfoo");
+        Assert.Contains(tokens, t => t.Kind == BashTokenKind.Continuation);
+        Assert.DoesNotContain(tokens, t => t.IsStatementSeparator);
+    }
+
+    [Fact]
+    public void Newline_inside_double_quotes_does_not_emit_a_separator()
+    {
+        // A newline inside a quoted string is literal content — the lexer
+        // never reaches the newline branch.
+        var tokens = BashLexer.Tokenize("echo \"a\nb\"");
+        Assert.DoesNotContain(tokens, t => t.IsStatementSeparator);
+        var quoted = tokens.Single(t => t.Kind == BashTokenKind.QuotedString);
+        Assert.Equal("a\nb", quoted.Value);
+    }
+
+    [Fact]
+    public void Newline_inside_single_quotes_does_not_emit_a_separator()
+    {
+        var tokens = BashLexer.Tokenize("echo 'a\nb'");
+        Assert.DoesNotContain(tokens, t => t.IsStatementSeparator);
+        var quoted = tokens.Single(t => t.Kind == BashTokenKind.QuotedString);
+        Assert.Equal("a\nb", quoted.Value);
+    }
+
+    [Fact]
+    public void Newline_inside_opaque_substitution_does_not_emit_a_separator()
+    {
+        // `$(...)` is one opaque token; an interior newline stays inside it.
+        var tokens = BashLexer.Tokenize("$(echo\nfoo)");
+        Assert.DoesNotContain(tokens, t => t.IsStatementSeparator);
+        var sub = Assert.Single(tokens);
+        Assert.Equal(BashTokenKind.OpaqueSubstitution, sub.Kind);
+    }
+
     // ------------------------------------------------------------ misc
 
     [Fact]

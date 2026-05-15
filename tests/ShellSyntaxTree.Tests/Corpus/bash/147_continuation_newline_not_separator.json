@@ -1,0 +1,18 @@
+{
+  "name": "Backslash-newline continuation is not a separator",
+  "input": "echo one \\\ntwo",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo", "one", "two"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §5: a backslash + newline is a line continuation, not a statement separator — the two source lines remain one clause."
+}

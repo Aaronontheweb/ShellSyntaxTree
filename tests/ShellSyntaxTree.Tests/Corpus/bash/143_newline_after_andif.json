@@ -1,0 +1,26 @@
+{
+  "name": "Newline after && does not create an empty clause",
+  "input": "cmd1 &&\ncmd2",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cmd1"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cmd2"],
+        "args": [],
+        "redirects": [],
+        "isSubshell": false,
+        "isBashCWrapped": false
+      }
+    ]
+  },
+  "notes": "SPEC §4: a newline immediately after a compound operator collapses — the && carries onto the next clause with no empty clause between them."
+}

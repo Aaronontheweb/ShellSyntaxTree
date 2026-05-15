@@ -247,19 +247,31 @@ bulldoze priorities.
 - [x] `RELEASE_NOTES.md` 0.1.4-alpha section
 - [x] Cut 0.1.4-alpha tag once branch is merged
 
+### 18. Newline-as-statement-separator — 0.1.5-beta
+
+- [x] `BashToken.IsStatementSeparator` init-property (internal)
+- [x] `BashLexer` flags the newline-branch Whitespace token and the
+      heredoc-terminator Whitespace token
+- [x] `BashCommandParser`: `FilterSignificant` retains flagged
+      Whitespace; `SplitIntoSegments` splits on it as a `Sequence`
+      boundary (an empty pending segment collapses — no empty clause);
+      `TryDetectAnomaly` treats it as a verb-slot boundary
+- [x] SPEC.md §4 grammar + notes, §5 `WHITESPACE` bullet, §15
+      versioning, §16 sequencing note
+- [x] 8 new `BashLexerTests` + 14 new `BashCommandParserTests`; stale
+      comment in `Comment_between_two_statements_preserves_both_clauses`
+      corrected
+- [x] 11 new corpus entries (139–149); entry 126 note corrected
+- [x] `Directory.Build.props` `VersionPrefix` 0.1.4 → 0.1.5,
+      `VersionSuffix` → `beta`
+- [x] `RELEASE_NOTES.md` 0.1.5-beta section
+- [ ] Cut 0.1.5-beta tag once branch is merged; promote to stable
+      0.1.5 after Netclaw validates the behavior change
+
 ---
 
 ## NEXT (0.1.x — additive, post-alpha)
 
-- Newline-as-statement-separator at the parser level (SPEC §4 gap
-  surfaced by #25). The lexer already emits Whitespace tokens for
-  newlines with the intent of acting as separators (see the lexer
-  comment at the newline branch), but `BashCommandParser.SplitIntoSegments`
-  only splits on `&&` / `||` / `;` / `|`. As a result, `cmd1\ncmd2`
-  currently parses to one clause `[cmd1]` with `cmd2` as an argument.
-  v0.1.3 corpus entry 126 works around this with an explicit `;`;
-  the long-term fix is to bridge newline-Whitespace tokens to the
-  segment splitter as synthetic `;` separators.
 - Seed 50–100 corpus entries from sanitized real-world dogfood logs
   (SPEC §14 workflow)
 - Expand verb tables as corpus surfaces real commands
