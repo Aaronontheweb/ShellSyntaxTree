@@ -1,3 +1,14 @@
+#### 0.1.5 May 16th 2026 ####
+
+Stable promotion of 0.1.5-beta. No code changes from the beta; this release
+drops the pre-release suffix now that the newline-as-statement-separator
+behavior change (SPEC §4) has been validated against Netclaw's live gate
+evaluator. Consumers on `0.1.5-beta` can upgrade directly.
+
+See the 0.1.5-beta notes below for the full list of changes in this version.
+
+---
+
 #### 0.1.5-beta May 15th 2026 ####
 
 Newline-as-statement-separator. Public API surface unchanged; the
