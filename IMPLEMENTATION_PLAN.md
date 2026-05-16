@@ -265,7 +265,7 @@ bulldoze priorities.
 - [x] `Directory.Build.props` `VersionPrefix` 0.1.4 → 0.1.5,
       `VersionSuffix` → `beta`
 - [x] `RELEASE_NOTES.md` 0.1.5-beta section
-- [ ] Cut 0.1.5-beta tag once branch is merged; promote to stable
+- [x] Cut 0.1.5-beta tag once branch is merged; promote to stable
       0.1.5 after Netclaw validates the behavior change
 
 ---
