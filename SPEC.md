@@ -3,6 +3,7 @@
 **Status:** Draft for v0.1. Approved decisions; implementation pending.
 **Audience:** Whoever (human or agent) implements ShellSyntaxTree v0.1.
 **Read this end-to-end before writing any code.**
+**PowerShell support is specified separately in `SPEC.POWERSHELL.md` (v0.2.0).**
 
 This document specifies the public API, AST, grammar, verb tables, resolver
 semantics, and corpus contract for ShellSyntaxTree v0.1. The library is a
