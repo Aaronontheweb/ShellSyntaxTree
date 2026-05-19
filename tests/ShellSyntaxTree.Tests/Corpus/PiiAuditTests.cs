@@ -176,13 +176,6 @@ public class PiiAuditTests
     }
 
     /// <summary>
-    /// Decide whether a JSON string at <paramref name="fieldPath"/> is in
-    /// scope for the audit. SPEC §14: scan <c>input</c>, <c>notes</c>,
-    /// and any <c>raw</c> nested under args. Skip synthetic fields like
-    /// <c>resolved</c>, <c>target</c>, etc. — those carry parser-produced
-    /// paths (e.g. <c>/home/test/file</c>) that we explicitly want to allow.
-    /// </summary>
-    /// <summary>
     /// True when a long alphanumeric run has too few distinct characters to
     /// be a credential — e.g. the repeated-character filler of the
     /// over-cap corpus entry. A real API key has high character diversity.
@@ -202,6 +195,13 @@ public class PiiAuditTests
         return true;
     }
 
+    /// <summary>
+    /// Decide whether a JSON string at <paramref name="fieldPath"/> is in
+    /// scope for the audit. SPEC §14: scan <c>input</c>, <c>notes</c>,
+    /// and any <c>raw</c> nested under args. Skip synthetic fields like
+    /// <c>resolved</c>, <c>target</c>, etc. — those carry parser-produced
+    /// paths (e.g. <c>/home/test/file</c>) that we explicitly want to allow.
+    /// </summary>
     private static bool ShouldScan(string fieldPath)
     {
         if (fieldPath == "input") return true;

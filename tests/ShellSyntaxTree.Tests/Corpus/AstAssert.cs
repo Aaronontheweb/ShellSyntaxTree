@@ -6,7 +6,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using Xunit.Sdk;
 
 namespace ShellSyntaxTree.Tests.Corpus;
@@ -289,41 +288,4 @@ internal static class AstAssert
         sb.Append(']');
         return sb.ToString();
     }
-
-    /// <summary>
-    /// Diagnostic dump of a live <see cref="ParsedCommand"/> as indented
-    /// JSON. Useful when authoring new corpus entries — drop into a
-    /// test, dump the actual output, and mirror it into JSON.
-    /// </summary>
-    internal static string Dump(ParsedCommand actual) =>
-        JsonSerializer.Serialize(new
-        {
-            actual.Source,
-            actual.IsUnparseable,
-            actual.UnparseableReason,
-            Clauses = actual.Clauses.Select(c => new
-            {
-                Operator = c.Operator.ToString(),
-                Verb = c.Verb.Tokens,
-                c.Verb.CanonicalVerb,
-                c.Verb.IsDynamic,
-                Args = c.Args.Select(a => new
-                {
-                    a.Raw,
-                    Kind = a.Kind.ToString(),
-                    a.IsPath,
-                    a.IsFlag,
-                    a.IsCwdAttribution,
-                    a.Resolved,
-                }),
-                Redirects = c.Redirects.Select(r => new
-                {
-                    Direction = r.Direction.ToString(),
-                    r.Target,
-                    r.IsDynamicSkip,
-                }),
-                c.IsSubshell,
-                c.IsCommandStringWrapped,
-            }),
-        }, new JsonSerializerOptions { WriteIndented = true });
 }

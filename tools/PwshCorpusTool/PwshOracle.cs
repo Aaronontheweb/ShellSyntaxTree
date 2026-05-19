@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace ShellSyntaxTree.Tools.PwshCorpus;
 
@@ -37,32 +38,8 @@ $counts = foreach ($s in @($inputs)) {
 ";
 
     /// <summary>True when a <c>pwsh</c> executable is on PATH.</summary>
-    public static bool IsAvailable()
-    {
-        try
-        {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "pwsh",
-                Arguments = "-NoProfile -NoLogo -Command \"exit 0\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-            });
-
-            if (process is null)
-            {
-                return false;
-            }
-
-            process.WaitForExit(15000);
-            return process.HasExited && process.ExitCode == 0;
-        }
-        catch (Exception)
-        {
-            return false;
-        }
-    }
+    public static bool IsAvailable() =>
+        TryRunPwsh("-NoProfile -NoLogo -Command \"exit 0\"", 15000, out _);
 
     /// <summary>
     /// Parse-error count from real <c>pwsh</c> for each input — 0 means the
@@ -83,23 +60,10 @@ $counts = foreach ($s in @($inputs)) {
             File.WriteAllText(scriptPath, OracleScript);
             File.WriteAllText(inputPath, JsonSerializer.Serialize(inputs));
 
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = "pwsh",
-                Arguments = $"-NoProfile -NoLogo -File \"{scriptPath}\" \"{inputPath}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                StandardOutputEncoding = Encoding.UTF8,
-            });
-
-            if (process is null)
+            if (!TryRunPwsh($"-NoProfile -NoLogo -File \"{scriptPath}\" \"{inputPath}\"", 120000, out var stdout))
             {
                 return null;
             }
-
-            var stdout = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(120000);
 
             var counts = JsonSerializer.Deserialize<int[]>(stdout.Trim());
             if (counts is null || counts.Length != inputs.Count)
@@ -111,10 +75,6 @@ $counts = foreach ($s in @($inputs)) {
             return counts;
         }
         catch (JsonException)
-        {
-            return null;
-        }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
         {
             return null;
         }
@@ -132,12 +92,32 @@ $counts = foreach ($s in @($inputs)) {
     /// </summary>
     public static IReadOnlyList<string>? GetAliasNames()
     {
+        if (!TryRunPwsh(
+                "-NoProfile -NoLogo -Command \"Get-Alias | ForEach-Object Name\"", 60000, out var stdout))
+        {
+            return null;
+        }
+
+        return stdout.Split(
+            new[] { '\r', '\n' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    /// <summary>
+    /// Run <c>pwsh</c> with <paramref name="arguments"/> and capture stdout.
+    /// Returns false when <c>pwsh</c> is absent, the run times out, or it
+    /// exits non-zero. stderr is drained concurrently so a chatty child can
+    /// never deadlock on a full pipe buffer; a timed-out child is killed.
+    /// </summary>
+    private static bool TryRunPwsh(string arguments, int timeoutMs, out string stdout)
+    {
+        stdout = string.Empty;
         try
         {
             using var process = Process.Start(new ProcessStartInfo
             {
                 FileName = "pwsh",
-                Arguments = "-NoProfile -NoLogo -Command \"Get-Alias | ForEach-Object Name\"",
+                Arguments = arguments,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 UseShellExecute = false,
@@ -146,18 +126,37 @@ $counts = foreach ($s in @($inputs)) {
 
             if (process is null)
             {
-                return null;
+                return false;
             }
 
-            var stdout = process.StandardOutput.ReadToEnd();
-            process.WaitForExit(60000);
-            return stdout.Split(
-                new[] { '\r', '\n' },
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            // Start draining stderr before the blocking stdout read.
+            Task<string> stderr = process.StandardError.ReadToEndAsync();
+            stdout = process.StandardOutput.ReadToEnd();
+
+            if (!process.WaitForExit(timeoutMs))
+            {
+                KillQuietly(process);
+                return false;
+            }
+
+            stderr.Wait(5000);
+            return process.ExitCode == 0;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
         {
-            return null;
+            return false;
+        }
+    }
+
+    private static void KillQuietly(Process process)
+    {
+        try
+        {
+            process.Kill(entireProcessTree: true);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            // The child already exited, or could not be killed — best effort.
         }
     }
 
