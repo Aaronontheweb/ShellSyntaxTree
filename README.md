@@ -2,16 +2,17 @@
 
 [![NuGet](https://img.shields.io/nuget/v/ShellSyntaxTree.svg)](https://www.nuget.org/packages/ShellSyntaxTree/)
 
-A focused .NET library that parses bash command strings into a structured
-AST. Purpose-built for tools that need to **reason about shell commands
-without running them** — approval gates for LLM-emitted commands, CI/CD
-script auditors, sandbox policy generators, audit-log analytics.
+A focused .NET library that parses **bash and PowerShell** command strings
+into a structured AST. Purpose-built for tools that need to **reason about
+shell commands without running them** — approval gates for LLM-emitted
+commands, CI/CD script auditors, sandbox policy generators, audit-log
+analytics.
 
 Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 `netstandard2.0` and `net8.0`.
 
 ```bash
-dotnet add package ShellSyntaxTree --version 0.1.0-alpha
+dotnet add package ShellSyntaxTree --version 0.2.0-alpha
 ```
 
 ## What you get
@@ -94,18 +95,22 @@ AndIf rm
       path: /etc/passwd
 ```
 
-## Public API surface (locked for v0.1)
+## Public API surface
 
 ```csharp
 namespace ShellSyntaxTree;
 
 public interface IShellParser { ParsedCommand Parse(string command); }
 public sealed class BashParser : IShellParser { /* … */ }
-public sealed record BashParserOptions { /* HomeDirectory, WorkingDirectory */ }
+public sealed class PwshParser : IShellParser { /* … */ }   // v0.2.0
+
+public abstract record ShellParserOptions { /* HomeDirectory, WorkingDirectory */ }
+public sealed record BashParserOptions : ShellParserOptions;
+public sealed record PwshParserOptions : ShellParserOptions;
 
 public sealed record ParsedCommand { /* Source, Clauses, IsUnparseable, … */ }
-public sealed record Clause        { /* Operator, Verb, Args, Redirects, … */ }
-public sealed record VerbChain     { /* Tokens, Joined */ }
+public sealed record Clause        { /* Operator, Verb, Args, Redirects, IsSubshell, IsCommandStringWrapped */ }
+public sealed record VerbChain     { /* Tokens, Joined, CanonicalVerb, IsDynamic */ }
 public sealed record Arg           { /* Raw, Resolved, Kind, IsPath, IsCwdAttribution, IsFlag */ }
 public sealed record Redirect      { /* Direction, Target, IsDynamicSkip */ }
 
@@ -114,11 +119,12 @@ public enum RedirectDirection  { In, Out, Append, ErrOut, ErrAppend }
 public enum CompoundOperator   { None, AndIf, OrIf, Sequence, Pipe }
 ```
 
-PowerShell and Windows `cmd` parsers are deferred to later versions; the
-`IShellParser` seam is in place so consumers don't refactor when they
-ship.
+Both parsers emit the **same** `ParsedCommand` AST — a consumer walks a
+PowerShell parse exactly as it walks a bash one. A Windows `cmd` parser
+remains deferred.
 
-Full behavioral contract: [`SPEC.md`](./SPEC.md).
+Behavioral contract: [`SPEC.md`](./SPEC.md) (bash + shared surface) and
+[`SPEC.POWERSHELL.md`](./SPEC.POWERSHELL.md) (PowerShell).
 
 ## Samples
 
@@ -129,6 +135,9 @@ Two runnable samples live under [`samples/`](./samples).
 ```bash
 dotnet run --project samples/ShellSyntaxTree.Cli.Sample -- explain "cd /repo && rm /etc/passwd"
 dotnet run --project samples/ShellSyntaxTree.Cli.Sample -- audit "cd /repo && rm /etc/passwd"
+
+# --shell pwsh routes the same explain / audit logic through PwshParser:
+dotnet run --project samples/ShellSyntaxTree.Cli.Sample -- explain --shell pwsh "gci C:\logs | rm"
 ```
 
 `explain` pretty-prints the AST with `[flag]` / `[path]` / `[cwd-attr]` /
@@ -141,11 +150,11 @@ for the policy code — ~50 lines.
 
 ### `ShellSyntaxTree.Web.Sample` — Blazor WebAssembly Mermaid visualizer
 
-Paste a bash script, watch the parsed AST render as a Mermaid flowchart
-in your browser. Everything runs client-side — pasted scripts never
-leave your machine. Useful for "what does this script actually do?"
-moments and for understanding how the library models constructs like
-subshells and `bash -c` recursion.
+Paste a bash or PowerShell script, watch the parsed AST render as a
+Mermaid flowchart in your browser. Everything runs client-side — pasted
+scripts never leave your machine. Useful for "what does this script
+actually do?" moments and for understanding how the library models
+constructs like subshells and `bash -c` / `pwsh -Command` recursion.
 
 ```bash
 dotnet run --project samples/ShellSyntaxTree.Web.Sample
@@ -154,10 +163,11 @@ dotnet run --project samples/ShellSyntaxTree.Web.Sample
 
 ![Build script preset](./assets/sample-web-build-script.png)
 
-The visualizer ships preset scripts demonstrating compound commands,
-subshell isolation, `bash -c` recursion, dynamic-cwd attribution, and
-unparseable inputs (control-flow, function definitions). Each preset
-shows what the library produces in a single click.
+A shell selector switches between the bash and PowerShell parsers; each
+ships preset scripts demonstrating compound commands, subshell isolation,
+command-string recursion, alias resolution, dynamic-cwd attribution, and
+unparseable inputs. Each preset shows what the library produces in a
+single click.
 
 ## Building from source
 
@@ -176,10 +186,12 @@ dotnet pack  -c Release -o ./bin/nuget
 Tags are bare SemVer version numbers — no `v` prefix. The release
 workflow asserts this and fails fast on misformatted tags.
 
-- **0.1.0-alpha** — first publishable cut. Bash-only.
-- **0.1.x** — additive (more verb table entries, more corpus, bug
-  fixes).
-- **0.2.0** — first PowerShell parser.
+- **0.1.x** — bash parser. Additive after `0.1.0` (more verb table
+  entries, more corpus, bug fixes).
+- **0.2.0** — first PowerShell parser (`PwshParser`). Adds the shared
+  `ShellParserOptions` base and the additive `VerbChain.CanonicalVerb` /
+  `VerbChain.IsDynamic` fields; renames `Clause.IsBashCWrapped` →
+  `IsCommandStringWrapped` (breaking — see [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)).
 - **1.0.0** — when an external consumer beyond Netclaw ships against
   it without finding API gaps.
 
@@ -193,12 +205,13 @@ workflow asserts this and fails fast on misformatted tags.
 
 | Path | What |
 |---|---|
-| `src/ShellSyntaxTree/` | The library |
+| `src/ShellSyntaxTree/` | The library (bash + PowerShell parsers) |
 | `tests/ShellSyntaxTree.Tests/` | xUnit unit tests + corpus runner |
-| `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` | 115 corpus entries — the acceptance contract |
+| `tests/ShellSyntaxTree.Tests/Corpus/<shell>/*.json` | Corpus entries — the acceptance contract (bash + powershell) |
 | `samples/ShellSyntaxTree.Cli.Sample/` | Console explainer + audit policy |
 | `samples/ShellSyntaxTree.Web.Sample/` | Blazor WASM Mermaid visualizer |
-| `SPEC.md` | Locked v0.1 contract |
-| `openspec/` | Change-proposal history (rationale for v0.1 design decisions) |
+| `tools/PwshCorpusTool/` | PowerShell corpus authoring aid |
+| `SPEC.md`, `SPEC.POWERSHELL.md` | The behavioral contract |
+| `openspec/` | Change-proposal history (rationale for design decisions) |
 | `PROJECT_CONTEXT.md`, `TOOLING.md`, `AGENTS.md` | Repo governance — for autonomous agents |
 | `IMPLEMENTATION_PLAN.md` | NOW / NEXT / LATER work tracker |

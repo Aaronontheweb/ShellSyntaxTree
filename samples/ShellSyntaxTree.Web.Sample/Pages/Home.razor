@@ -7,14 +7,22 @@
 <div class="app-shell">
     <header class="app-header">
         <h1>ShellSyntaxTree Mermaid Visualizer</h1>
-        <p>Paste a bash script — see what ShellSyntaxTree parses out. Everything runs in your browser; nothing is sent anywhere.</p>
+        <p>Paste a bash or PowerShell script — see what ShellSyntaxTree parses out. Everything runs in your browser; nothing is sent anywhere.</p>
     </header>
 
     <div class="layout">
         <section class="panel">
             <h2>Input</h2>
+            <div class="action-row">
+                <label>Shell:
+                    <select value="@_shell" @onchange="OnShellChanged">
+                        <option value="bash">bash</option>
+                        <option value="pwsh">PowerShell</option>
+                    </select>
+                </label>
+            </div>
             <div class="preset-row">
-                @foreach (var preset in Presets.All)
+                @foreach (var preset in Presets.For(_shell))
                 {
                     <button type="button" @onclick="() => UsePreset(preset.Script)">@preset.Name</button>
                 }
@@ -89,6 +97,7 @@
     private enum Tab { Diagram, Source, Ast, Unparseable }
 
     private string _script = string.Empty;
+    private string _shell = "bash";
     private string _mermaidSource = string.Empty;
     private string _astText = string.Empty;
     private int _unparseableCount;
@@ -100,7 +109,13 @@
 
     protected override void OnInitialized()
     {
-        UsePreset(Presets.All[0].Script);
+        UsePreset(Presets.For(_shell)[0].Script);
+    }
+
+    private void OnShellChanged(ChangeEventArgs e)
+    {
+        _shell = e.Value?.ToString() == "pwsh" ? "pwsh" : "bash";
+        UsePreset(Presets.For(_shell)[0].Script);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -135,7 +150,7 @@
 
     private void RenderNow()
     {
-        var parser = new BashParser();
+        IShellParser parser = _shell == "pwsh" ? new PwshParser() : new BashParser();
         var commands = ScriptSplitter.Split(_script).ToList();
         var parses = new List<ParsedCommand>(commands.Count);
 

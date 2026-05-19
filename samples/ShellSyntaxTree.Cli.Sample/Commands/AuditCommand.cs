@@ -5,9 +5,9 @@ namespace ShellSyntaxTree.Cli.Sample.Commands;
 
 internal static class AuditCommand
 {
-    public static int Run(string command)
+    public static int Run(string command, string shell)
     {
-        var parser = new BashParser();
+        var parser = ShellParserFactory.Create(shell);
         var parsed = parser.Parse(command);
 
         var anyDeny = false;

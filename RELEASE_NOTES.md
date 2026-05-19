@@ -1,3 +1,87 @@
+#### 0.2.0-alpha May 19th 2026 ####
+
+First **PowerShell** parser. ShellSyntaxTree now ships two `IShellParser`
+implementations — `BashParser` (unchanged) and the new `PwshParser` — both
+emitting the same `ParsedCommand` AST a consumer already walks for bash.
+Shipped as an **alpha** prerelease so Netclaw can validate the new parser
+and the breaking `Clause` rename before promotion to a stable `0.2.0`.
+
+**BREAKING: `Clause.IsBashCWrapped` renamed to `Clause.IsCommandStringWrapped`**
+
+The v0.1 field `Clause.IsBashCWrapped` is renamed `Clause.IsCommandStringWrapped`.
+The meaning is unchanged and now shell-neutral — *true when the clause is the
+result of recursing into a command-string wrapper*: bash `bash -c "..."` /
+`sh -c "..."`, or PowerShell `pwsh -Command "..."` / `pwsh -EncodedCommand ...`.
+
+| Old (v0.1) | New (v0.2.0) |
+|---|---|
+| `Clause.IsBashCWrapped` | `Clause.IsCommandStringWrapped` |
+
+A breaking AST change on a `0.x` minor is permitted by `SPEC.md` Appendix A
+when `RELEASE_NOTES.md` carries the old→new mapping (above) and Netclaw is
+updated in lockstep. Consumers: rename every `IsBashCWrapped` reference;
+there is no behavior change beyond the identifier.
+
+**BREAKING (source-compatible): `BashParserOptions` reparented**
+
+`BashParserOptions` is now a sealed record deriving from the new abstract
+`ShellParserOptions` base; `HomeDirectory` / `WorkingDirectory` move to the
+base. The object-initializer shape is unchanged —
+`new BashParserOptions { HomeDirectory = ..., WorkingDirectory = ... }`
+still compiles. Only code that named `BashParserOptions` as a *base type*
+or reflected over its declared members is affected.
+
+**New public surface**
+
+- `PwshParser : IShellParser` — the PowerShell parser. `Parse` throws
+  `ArgumentNullException` on null and never throws on a well-formed string,
+  exactly like `BashParser`.
+- `PwshParserOptions` — configuration record for `PwshParser` (empty in
+  v0.2.0; resolver knobs live on `ShellParserOptions`).
+- `ShellParserOptions` — the shared, abstract resolver-configuration base.
+- `VerbChain.CanonicalVerb` (additive) — the alias-resolved canonical verb,
+  non-null only when an alias was rewritten (`ls` → `Get-ChildItem`). Null
+  for every bash clause. Consumers gate on `CanonicalVerb ?? Tokens[0]`.
+- `VerbChain.IsDynamic` (additive) — true when the command name is a
+  dynamic token the parser cannot statically identify (`& $exe`,
+  `& { ... }`). Always false for bash clauses; a consumer MUST route a
+  dynamic clause to safe-fail.
+
+**PowerShell parser capabilities (SPEC.POWERSHELL.md)**
+
+- Parses PowerShell command pipelines into the shared `ParsedCommand` AST —
+  per-clause verbs, args, parameters, redirects, and the `&&` / `||` / `;`
+  / `|` / newline compound operators.
+- Recognizes cmdlets (`Verb-Noun`), native commands, and the complete
+  built-in alias set; resolves aliases to their canonical cmdlet while
+  preserving the verbatim typed token.
+- The §6.5 parameter-binding model — switch vs. value-binding decisions
+  from static tables, colon-form `-Name:value`, prefix matching.
+- Per-cmdlet / per-parameter path-arg extraction (`-Path`, `-LiteralPath`,
+  `-Destination`, positional rules).
+- `Set-Location <dir>; cmd` cwd propagation, including through `( ... )`
+  grouping (PowerShell `( )` is not a subshell).
+- Recursion into `pwsh -Command "<inner>"`, `pwsh -c`, and
+  `pwsh -EncodedCommand <base64>` (base64 / UTF-16LE decode, BOM strip),
+  depth-5 capped; inner clauses surface with `IsCommandStringWrapped=true`.
+- Marks dynamic-content tokens (`$var`, subexpressions, script blocks,
+  splatting, comma-arrays) `DynamicSkip`; control flow, definitions, and
+  other script-level constructs safe-fail to `IsUnparseable=true`.
+- A 64 KiB input cap guards the per-shell-call hot path.
+
+**Corpus & validation**
+
+- 211 hand-authored PowerShell corpus entries under
+  `Corpus/powershell/`, exceeding every SPEC.POWERSHELL.md §13 category
+  minimum. The corpus runner and PII audit are directory-routed by shell.
+- A real-`pwsh` validation gate (`PwshOracleTests`) feeds every PowerShell
+  corpus input to `[Parser]::ParseInput` and enforces the §13 oracle
+  matrix; a `PwshAliases`-vs-live-`Get-Alias` completeness `[Fact]`
+  confirms the alias table has no gaps.
+- `tools/PwshCorpusTool` — the corpus authoring aid (see `TOOLING.md`).
+
+---
+
 #### 0.1.5 May 16th 2026 ####
 
 Stable promotion of 0.1.5-beta. No code changes from the beta; this release

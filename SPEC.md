@@ -1,9 +1,12 @@
-# ShellSyntaxTree — v0.1 Specification
+# ShellSyntaxTree — bash & shared-contract Specification
 
-**Status:** Draft for v0.1. Approved decisions; implementation pending.
-**Audience:** Whoever (human or agent) implements ShellSyntaxTree v0.1.
+**Status:** Shipped. The bash parser is implemented (v0.1.x); v0.2.0 adds the
+PowerShell parser and the shared multi-shell surface.
+**Audience:** Whoever (human or agent) works on ShellSyntaxTree.
 **Read this end-to-end before writing any code.**
-**PowerShell support is specified separately in `SPEC.POWERSHELL.md` (v0.2.0).**
+**PowerShell support is specified separately in `SPEC.POWERSHELL.md` (v0.2.0);
+this document is the canonical home of the public API, AST, sanitization
+workflow, and consumer contract that PowerShell reuses.**
 
 This document specifies the public API, AST, grammar, verb tables, resolver
 semantics, and corpus contract for ShellSyntaxTree v0.1. The library is a
@@ -90,8 +93,31 @@ public sealed class BashParser : IShellParser
     public ParsedCommand Parse(string command);
 }
 
-/// <summary>Configuration knobs for BashParser.</summary>
-public sealed record BashParserOptions
+/// <summary>PowerShell implementation of IShellParser (v0.2.0). The
+/// PowerShell grammar, tables, and resolver are specified in
+/// SPEC.POWERSHELL.md.</summary>
+public sealed class PwshParser : IShellParser
+{
+    public PwshParser();
+    public PwshParser(PwshParserOptions options);
+    public ParsedCommand Parse(string command);
+}
+
+/// <summary>Shell-neutral resolver configuration shared by every parser
+/// (added v0.2.0). HomeDirectory / WorkingDirectory live here.</summary>
+public abstract record ShellParserOptions { ... }
+
+/// <summary>Configuration knobs for BashParser. As of v0.2.0 a sealed
+/// record deriving from ShellParserOptions; the v0.1 object-initializer
+/// shape is unchanged.</summary>
+public sealed record BashParserOptions : ShellParserOptions;
+
+/// <summary>Configuration knobs for PwshParser (v0.2.0). Empty — the
+/// resolver knobs live on ShellParserOptions.</summary>
+public sealed record PwshParserOptions : ShellParserOptions;
+
+// The pre-v0.2.0 BashParserOptions body, now hoisted onto ShellParserOptions:
+public abstract record ShellParserOptions
 {
     /// <summary>
     /// User home directory used to expand `~` and `$HOME` tokens during
@@ -192,11 +218,15 @@ public sealed record Clause
     public bool IsSubshell { get; init; }
 
     /// <summary>
-    /// True when this clause is the result of recursing into a `bash -c`
-    /// or `sh -c` wrapper. Useful for consumers that want to surface
-    /// "this came from a wrapped invocation" in UI.
+    /// True when this clause is the result of recursing into a
+    /// command-string wrapper — `bash -c "..."` / `sh -c "..."`, or (v0.2.0)
+    /// PowerShell `pwsh -Command "..."` / `pwsh -EncodedCommand ...`. Useful
+    /// for consumers that want to surface "this came from a wrapped
+    /// invocation" in UI.
     /// </summary>
-    public bool IsBashCWrapped { get; init; }
+    /// <remarks>Renamed from `IsCommandStringWrapped` in v0.2.0 — see RELEASE_NOTES.md
+    /// and SPEC.POWERSHELL.md §3 for the old→new mapping.</remarks>
+    public bool IsCommandStringWrapped { get; init; }
 }
 ```
 
@@ -216,6 +246,20 @@ public sealed record VerbChain
     /// (e.g. clause is just a redirect or an empty fragment).
     /// </summary>
     public IReadOnlyList<string> Tokens { get; init; } = [];
+
+    /// <summary>
+    /// The canonical, alias-resolved verb identity (added v0.2.0). Non-null
+    /// only when the parser rewrote a built-in alias — `ls` → `Get-ChildItem`.
+    /// Null for every bash clause. See SPEC.POWERSHELL.md §3.
+    /// </summary>
+    public string? CanonicalVerb { get; init; }
+
+    /// <summary>
+    /// True when the clause's command name is a dynamic token the parser
+    /// cannot statically identify — `& $exe`, `& { ... }` (added v0.2.0).
+    /// Always false for bash clauses. See SPEC.POWERSHELL.md §3.
+    /// </summary>
+    public bool IsDynamic { get; init; }
 
     /// <summary>Convenience: tokens joined with spaces.</summary>
     public string Joined => string.Join(" ", Tokens);
@@ -659,20 +703,23 @@ internal static readonly HashSet<string> FileVerbs =
 };
 ```
 
-### 6.4 CMD_FILE verbs (Windows cmd; deferred for v0.1 implementation)
+### 6.4 CMD_FILE verbs (Windows cmd / PowerShell file utilities)
 
-Reserved for future PowerShell/cmd parser support. Document the table
-shape now so the seam is clear.
+The Windows native file utilities. As of v0.2.0 the PowerShell parser's
+`PwshVerbs.FileVerbs` table consumes this reserved set
+(`type`, `copy`, `move`, `del`, `xcopy`, `robocopy`, `findstr`) so a
+native Windows file tool in a PowerShell command still gets path
+classification. PowerShell *cmdlet* file verbs (`Get-Content`,
+`Remove-Item`, `Copy-Item`, ...) are owned by `SPEC.POWERSHELL.md` §6.4 —
+they are recognized by cmdlet shape and alias resolution, not by this
+table. A Windows `cmd` parser remains deferred (§18).
 
 ```csharp
 internal static readonly HashSet<string> CmdFileVerbs =
     new(StringComparer.OrdinalIgnoreCase)
 {
-    "type", "copy", "move", "del", "erase", "ren", "ren",
+    "type", "copy", "move", "del", "erase", "ren",
     "xcopy", "robocopy", "findstr",
-    // PowerShell cmdlets
-    "get-content", "set-content", "remove-item", "copy-item",
-    "move-item", "new-item",
 };
 ```
 
@@ -943,18 +990,18 @@ the agent emits. The parser:
 1. Recognizes the `bash -c` or `sh -c` prefix.
 2. Parses the quoted argument as a fresh `ParsedCommand`.
 3. Surfaces the inner command's clauses inline in the outer's `Clauses`
-   list, each with `IsBashCWrapped=true`.
+   list, each with `IsCommandStringWrapped=true`.
 
 Example: `bash -c "cd /a && cmd"` produces:
 
 ```
-Clause 0: Op=None, Verb=cd, Args=[/a], IsBashCWrapped=true
-Clause 1: Op=AndIf, Verb=cmd, Args=[/a attribution], IsBashCWrapped=true
+Clause 0: Op=None, Verb=cd, Args=[/a], IsCommandStringWrapped=true
+Clause 1: Op=AndIf, Verb=cmd, Args=[/a attribution], IsCommandStringWrapped=true
 ```
 
 The outer `bash -c` itself does not appear as a clause — it's "consumed"
 by the recursion. Consumers that care that this came from a wrapper can
-inspect `IsBashCWrapped` on the surfaced clauses.
+inspect `IsCommandStringWrapped` on the surfaced clauses.
 
 **Recursion limit:** parse `bash -c "bash -c ..."` chains up to depth 5.
 Deeper nesting → set the outer `ParsedCommand.IsUnparseable = true` with
@@ -1034,7 +1081,7 @@ ParsedCommand {
       ],
       Redirects = [],
       IsSubshell = false,
-      IsBashCWrapped = false
+      IsCommandStringWrapped = false
     }
   ]
 }
@@ -1347,7 +1394,12 @@ Adapt for ShellSyntaxTree:
   parsed-AST shape when the prior shape violated this SPEC — e.g. v0.1.5
   makes a bare newline a statement separator per §4. The §2 public API
   surface stays locked.
-- **v0.2.0** — first PowerShell parser implementation.
+- **v0.2.0** — first PowerShell parser implementation (`PwshParser`). Adds
+  the shared `ShellParserOptions` base, the additive `VerbChain.CanonicalVerb`
+  / `VerbChain.IsDynamic` fields, and the breaking `Clause.IsBashCWrapped` →
+  `IsCommandStringWrapped` rename. A breaking AST change on a `0.x` minor is
+  permitted by Appendix A when `RELEASE_NOTES.md` carries the old→new mapping
+  and Netclaw is updated in lockstep. See `SPEC.POWERSHELL.md`.
 - **v1.0.0** — ready when at least one external consumer beyond Netclaw
   ships against it without finding API gaps.
 
@@ -1472,7 +1524,7 @@ What Netclaw expects from this library:
 The contract is stable — additive changes to AST records (new fields with
 default values) are compatible; renaming or removing fields is breaking.
 Before v1.0.0, while the library is in its `0.x` line, a breaking AST change
-MAY ship in a minor bump (e.g. the `Clause.IsBashCWrapped` →
+MAY ship in a minor bump (e.g. the `Clause.IsCommandStringWrapped` →
 `IsCommandStringWrapped` rename in v0.2.0) provided `RELEASE_NOTES.md`
 documents the old→new mapping and the consumer (Netclaw) is updated in
 lockstep. From v1.0.0 onward, renaming or removing a field requires a major

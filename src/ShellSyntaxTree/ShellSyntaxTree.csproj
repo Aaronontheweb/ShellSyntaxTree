@@ -3,8 +3,8 @@
   <PropertyGroup>
     <TargetFrameworks>$(NetStandardLibVersion);$(NetLibVersion)</TargetFrameworks>
     <RootNamespace>ShellSyntaxTree</RootNamespace>
-    <Description>Bash command parser that emits a structured AST for security gate evaluators.</Description>
-    <PackageDescription>Bash command parser that emits a structured AST for security gate evaluators.</PackageDescription>
+    <Description>Bash and PowerShell command parser that emits a structured AST for security gate evaluators.</Description>
+    <PackageDescription>Bash and PowerShell command parser that emits a structured AST for security gate evaluators.</PackageDescription>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == '$(NetLibVersion)'">

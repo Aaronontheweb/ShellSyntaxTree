@@ -40,6 +40,15 @@ jobs:
         shell: pwsh
         run: ./scripts/Add-FileHeaders.ps1 -Verify
 
+      - name: "Verify pwsh is available (SPEC.POWERSHELL.md §13 oracle gate)"
+        shell: bash
+        run: |
+          if ! command -v pwsh >/dev/null 2>&1; then
+            echo "::error::pwsh is not on PATH — the PowerShell corpus oracle gate (PwshOracleTests) would silently skip."
+            exit 1
+          fi
+          pwsh --version
+
       - name: "dotnet restore"
         run: dotnet restore
 
