@@ -1470,8 +1470,13 @@ What Netclaw expects from this library:
    args + redirects)` if we don't).
 
 The contract is stable — additive changes to AST records (new fields with
-default values) are compatible; renaming or removing fields is breaking
-and requires a major version bump.
+default values) are compatible; renaming or removing fields is breaking.
+Before v1.0.0, while the library is in its `0.x` line, a breaking AST change
+MAY ship in a minor bump (e.g. the `Clause.IsBashCWrapped` →
+`IsCommandStringWrapped` rename in v0.2.0) provided `RELEASE_NOTES.md`
+documents the old→new mapping and the consumer (Netclaw) is updated in
+lockstep. From v1.0.0 onward, renaming or removing a field requires a major
+version bump.
 
 ---
 
