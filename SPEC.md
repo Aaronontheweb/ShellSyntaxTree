@@ -3,6 +3,7 @@
 **Status:** Draft for v0.1. Approved decisions; implementation pending.
 **Audience:** Whoever (human or agent) implements ShellSyntaxTree v0.1.
 **Read this end-to-end before writing any code.**
+**PowerShell support is specified separately in `SPEC.POWERSHELL.md` (v0.2.0).**
 
 This document specifies the public API, AST, grammar, verb tables, resolver
 semantics, and corpus contract for ShellSyntaxTree v0.1. The library is a
@@ -1469,8 +1470,13 @@ What Netclaw expects from this library:
    args + redirects)` if we don't).
 
 The contract is stable — additive changes to AST records (new fields with
-default values) are compatible; renaming or removing fields is breaking
-and requires a major version bump.
+default values) are compatible; renaming or removing fields is breaking.
+Before v1.0.0, while the library is in its `0.x` line, a breaking AST change
+MAY ship in a minor bump (e.g. the `Clause.IsBashCWrapped` →
+`IsCommandStringWrapped` rename in v0.2.0) provided `RELEASE_NOTES.md`
+documents the old→new mapping and the consumer (Netclaw) is updated in
+lockstep. From v1.0.0 onward, renaming or removing a field requires a major
+version bump.
 
 ---
 
