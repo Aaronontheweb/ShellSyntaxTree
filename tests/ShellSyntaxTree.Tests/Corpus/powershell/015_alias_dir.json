@@ -1,0 +1,26 @@
+{
+  "name": "Alias dir",
+  "input": "dir C:\\logs",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "dir"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "dir resolves to Get-ChildItem."
+}

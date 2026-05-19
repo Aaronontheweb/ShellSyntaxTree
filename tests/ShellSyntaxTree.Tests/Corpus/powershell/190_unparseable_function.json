@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable function",
+  "input": "function Show-Thing { Get-Date }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027function\u0027 is not supported in v0.2"
+  },
+  "notes": "A function definition.",
+  "oracleExpectation": "OutOfScope"
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Quote herestring literal",
+  "input": "Write-Output @\u0027\n$literal text\n\u0027@",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "@\u0027\n$literal text\n\u0027@",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A literal here-string preserves $literal."
+}

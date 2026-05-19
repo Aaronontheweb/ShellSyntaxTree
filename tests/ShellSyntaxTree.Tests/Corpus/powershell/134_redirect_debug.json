@@ -1,0 +1,23 @@
+{
+  "name": "Redirect debug",
+  "input": "Get-Date 5\u003E debug.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/work/debug.txt"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "5\u003E debug stream \u2014 maps lossily to Out."
+}

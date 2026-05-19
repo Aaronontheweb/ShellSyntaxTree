@@ -1,0 +1,24 @@
+{
+  "name": "Dynamic glob arg",
+  "input": "Get-ChildItem C:\\logs\\*.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "C:\\logs\\*.log",
+            "kind": "Glob",
+            "isPath": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A glob in a path slot \u2014 Kind=Glob, IsPath=true."
+}

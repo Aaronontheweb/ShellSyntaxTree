@@ -1,0 +1,26 @@
+{
+  "name": "Alias ni",
+  "input": "ni C:\\temp\\new.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "ni"
+        ],
+        "canonicalVerb": "New-Item",
+        "args": [
+          {
+            "raw": "C:\\temp\\new.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp/new.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "ni resolves to New-Item."
+}

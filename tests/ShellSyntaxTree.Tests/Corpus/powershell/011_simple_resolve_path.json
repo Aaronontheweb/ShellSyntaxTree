@@ -1,0 +1,25 @@
+{
+  "name": "Simple resolve path",
+  "input": "Resolve-Path .\\rel\\sub",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Resolve-Path"
+        ],
+        "args": [
+          {
+            "raw": ".\\rel\\sub",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/rel/sub"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Resolve-Path with a relative positional path."
+}

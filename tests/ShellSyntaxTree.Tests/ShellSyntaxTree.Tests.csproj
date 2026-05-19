@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ShellSyntaxTree\ShellSyntaxTree.csproj" />
+    <!-- PwshOracleTests reuse the tool's real-pwsh validation oracle. -->
+    <ProjectReference Include="..\..\tools\PwshCorpusTool\PwshCorpusTool.csproj" />
   </ItemGroup>
 
   <ItemGroup>

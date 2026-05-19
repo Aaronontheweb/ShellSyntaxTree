@@ -1,0 +1,30 @@
+{
+  "name": "Native git commit",
+  "input": "git commit -m \u0022initial\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git",
+          "commit"
+        ],
+        "args": [
+          {
+            "raw": "-m",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0022initial\u0022",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "git commit; -m is not a flag-with-value so the chain stops."
+}

@@ -1,0 +1,43 @@
+{
+  "name": "Setloc cd then git",
+  "input": "cd C:\\repo; git status",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "C:\\repo",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "git",
+          "status"
+        ],
+        "args": [
+          {
+            "raw": "C:/repo",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "cd attributes C:/repo to the subsequent clause."
+}

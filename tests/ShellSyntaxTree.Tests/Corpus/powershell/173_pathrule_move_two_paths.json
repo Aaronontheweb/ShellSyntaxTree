@@ -1,0 +1,31 @@
+{
+  "name": "Pathrule move two paths",
+  "input": "Move-Item old.txt archive\\old.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Move-Item"
+        ],
+        "args": [
+          {
+            "raw": "old.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/old.txt"
+          },
+          {
+            "raw": "archive\\old.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/archive/old.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Move-Item positionals are both paths."
+}

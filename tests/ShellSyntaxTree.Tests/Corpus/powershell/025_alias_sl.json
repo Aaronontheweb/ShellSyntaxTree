@@ -1,0 +1,26 @@
+{
+  "name": "Alias sl",
+  "input": "sl C:\\repo",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "sl"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "C:\\repo",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "sl resolves to Set-Location."
+}

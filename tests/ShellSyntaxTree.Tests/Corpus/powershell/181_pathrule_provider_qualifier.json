@@ -1,0 +1,25 @@
+{
+  "name": "Pathrule provider qualifier",
+  "input": "Get-Content FileSystem::C:\\logs\\app.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "FileSystem::C:\\logs\\app.log",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs/app.log"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A FileSystem:: provider qualifier is stripped before resolution."
+}

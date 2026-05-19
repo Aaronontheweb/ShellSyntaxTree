@@ -1,0 +1,25 @@
+{
+  "name": "Simple test path",
+  "input": "Test-Path C:\\temp",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Test-Path"
+        ],
+        "args": [
+          {
+            "raw": "C:\\temp",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Test-Path FileVerb with one positional path."
+}

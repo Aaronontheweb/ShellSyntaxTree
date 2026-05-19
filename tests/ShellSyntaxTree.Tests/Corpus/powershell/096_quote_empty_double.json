@@ -1,0 +1,24 @@
+{
+  "name": "Quote empty double",
+  "input": "Write-Output \u0022\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "\u0022\u0022",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "An empty double-quoted string."
+}

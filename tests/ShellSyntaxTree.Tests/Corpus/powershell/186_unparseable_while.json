@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable while",
+  "input": "while ($false) { Get-Date }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027while\u0027 is not supported in v0.2"
+  },
+  "notes": "A while loop.",
+  "oracleExpectation": "OutOfScope"
+}

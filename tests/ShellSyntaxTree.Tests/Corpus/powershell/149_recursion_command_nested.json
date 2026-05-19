@@ -1,0 +1,19 @@
+{
+  "name": "Recursion command nested",
+  "input": "pwsh -Command { pwsh -Command { Get-Date } }",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "Two-level -Command recursion."
+}

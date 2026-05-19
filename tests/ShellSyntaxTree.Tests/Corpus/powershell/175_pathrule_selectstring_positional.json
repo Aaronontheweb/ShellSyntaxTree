@@ -1,0 +1,30 @@
+{
+  "name": "Pathrule selectstring positional",
+  "input": "Select-String error app.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Select-String"
+        ],
+        "args": [
+          {
+            "raw": "error",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "app.log",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/app.log"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Select-String positional 0 = pattern, positional 1 = path."
+}

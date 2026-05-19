@@ -1,0 +1,24 @@
+{
+  "name": "Bind splat",
+  "input": "Copy-Item @itemArgs",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Copy-Item"
+        ],
+        "args": [
+          {
+            "raw": "@itemArgs",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A splat argument is opaque DynamicSkip."
+}

@@ -1,0 +1,64 @@
+{
+  "name": "Pipeline four stage",
+  "input": "gci -Recurse C:\\logs | ? Name | sort | rm",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "-Recurse",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "?"
+        ],
+        "canonicalVerb": "Where-Object",
+        "args": [
+          {
+            "raw": "Name",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "sort"
+        ],
+        "canonicalVerb": "Sort-Object",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Four-stage pipeline mixing flags, opaque, and aliases."
+}

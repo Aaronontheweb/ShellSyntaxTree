@@ -1,0 +1,19 @@
+{
+  "name": "Recursion command scriptblock",
+  "input": "pwsh -Command { Get-Date }",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "pwsh -Command with a script-block payload."
+}

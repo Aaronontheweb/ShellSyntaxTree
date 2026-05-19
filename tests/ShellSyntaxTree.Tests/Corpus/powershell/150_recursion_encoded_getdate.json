@@ -1,0 +1,19 @@
+{
+  "name": "Recursion encoded getdate",
+  "input": "pwsh -EncodedCommand RwBlAHQALQBEAGEAdABlAA==",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "-EncodedCommand decodes base64/UTF-16LE to Get-Date."
+}

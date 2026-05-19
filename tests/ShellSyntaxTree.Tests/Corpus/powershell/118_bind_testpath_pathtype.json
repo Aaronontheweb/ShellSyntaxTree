@@ -1,0 +1,41 @@
+{
+  "name": "Bind testpath pathtype",
+  "input": "Test-Path -Path C:\\x -PathType Leaf",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Test-Path"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          },
+          {
+            "raw": "-PathType",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "Leaf",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/Leaf"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-PathType value is a literal, not a path."
+}

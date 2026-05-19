@@ -1,0 +1,18 @@
+{
+  "name": "Simple get location",
+  "input": "Get-Location",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Location"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Bare cmdlet, no args."
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Dynamic call variable noargs",
+  "input": "\u0026 $tool",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "$tool"
+        ],
+        "isDynamic": true,
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A bare dynamic call with no args."
+}

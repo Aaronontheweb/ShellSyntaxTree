@@ -1,0 +1,34 @@
+{
+  "name": "Pipeline ps sort",
+  "input": "ps | sort CPU",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "ps"
+        ],
+        "canonicalVerb": "Get-Process",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "sort"
+        ],
+        "canonicalVerb": "Sort-Object",
+        "args": [
+          {
+            "raw": "CPU",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Two aliases piped."
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable throw",
+  "input": "throw \u0027boom\u0027",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027throw\u0027 is not supported in v0.2"
+  },
+  "notes": "A throw statement.",
+  "oracleExpectation": "OutOfScope"
+}

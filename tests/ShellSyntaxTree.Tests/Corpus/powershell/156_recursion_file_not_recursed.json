@@ -1,0 +1,30 @@
+{
+  "name": "Recursion file not recursed",
+  "input": "pwsh -File C:\\scripts\\deploy.ps1",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "pwsh"
+        ],
+        "args": [
+          {
+            "raw": "-File",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\scripts\\deploy.ps1",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/scripts/deploy.ps1"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "pwsh -File is not recursion; the script path is an ordinary path arg."
+}

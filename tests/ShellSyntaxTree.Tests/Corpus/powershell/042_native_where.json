@@ -1,0 +1,19 @@
+{
+  "name": "Native where",
+  "input": "where git",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "where",
+          "git"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "where is never aliased (\u00A76.3 rule 3); parses as a native command."
+}

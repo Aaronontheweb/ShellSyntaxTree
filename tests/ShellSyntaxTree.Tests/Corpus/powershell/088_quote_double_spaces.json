@@ -1,0 +1,31 @@
+{
+  "name": "Quote double spaces",
+  "input": "Copy-Item \u0022C:\\my files\\doc.txt\u0022 \u0022C:\\backup\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Copy-Item"
+        ],
+        "args": [
+          {
+            "raw": "\u0022C:\\my files\\doc.txt\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/my files/doc.txt"
+          },
+          {
+            "raw": "\u0022C:\\backup\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/backup"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Double-quoted paths with embedded spaces."
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Compound continuation",
+  "input": "Get-ChildItem \u0060\n  C:\\logs",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A backtick line continuation joins two physical lines."
+}

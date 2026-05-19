@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable if",
+  "input": "if ($true) { Get-Date }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027if\u0027 is not supported in v0.2"
+  },
+  "notes": "An if statement \u2014 valid PowerShell the parser declines to model.",
+  "oracleExpectation": "OutOfScope"
+}

@@ -1,0 +1,26 @@
+{
+  "name": "Recursion command quoted",
+  "input": "pwsh -Command \u0022Remove-Item C:\\tmp\\x\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "C:\\tmp\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/tmp/x"
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "pwsh -Command with a quoted-string payload; inner clause surfaces wrapped."
+}

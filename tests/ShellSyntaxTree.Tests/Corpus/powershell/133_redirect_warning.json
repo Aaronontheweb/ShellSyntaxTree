@@ -1,0 +1,23 @@
+{
+  "name": "Redirect warning",
+  "input": "Get-Date 4\u003E warn.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/work/warn.txt"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "4\u003E warning stream \u2014 maps lossily to Out."
+}

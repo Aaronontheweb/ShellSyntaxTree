@@ -1,0 +1,26 @@
+{
+  "name": "Alias gci",
+  "input": "gci C:\\logs",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "gci resolves to Get-ChildItem."
+}

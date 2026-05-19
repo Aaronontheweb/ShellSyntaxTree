@@ -1,0 +1,18 @@
+{
+  "name": "Simple get command",
+  "input": "Get-Command",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Command"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Bare cmdlet, no args."
+}

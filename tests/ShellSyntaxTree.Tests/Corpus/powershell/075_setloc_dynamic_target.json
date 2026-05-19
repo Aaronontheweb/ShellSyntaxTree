@@ -1,0 +1,41 @@
+{
+  "name": "Setloc dynamic target",
+  "input": "cd $repo; gci",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "$repo",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A dynamic cd target yields dynamic attribution."
+}

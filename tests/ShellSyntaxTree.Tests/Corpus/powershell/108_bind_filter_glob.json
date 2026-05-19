@@ -1,0 +1,35 @@
+{
+  "name": "Bind filter glob",
+  "input": "Get-ChildItem -Filter *.log C:\\logs",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "-Filter",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "*.log",
+            "kind": "Glob",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Filter value is a glob slot; C:\\logs is the positional path."
+}

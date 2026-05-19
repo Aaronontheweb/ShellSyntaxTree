@@ -1,0 +1,40 @@
+{
+  "name": "Bind setcontent value",
+  "input": "Set-Content -Path out.txt -Value hello",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Content"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "out.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/out.txt"
+          },
+          {
+            "raw": "-Value",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "hello",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Path value is a path; -Value content is not."
+}

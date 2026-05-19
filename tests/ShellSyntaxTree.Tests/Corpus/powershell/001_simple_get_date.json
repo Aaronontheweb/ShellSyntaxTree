@@ -1,0 +1,18 @@
+{
+  "name": "Simple get date",
+  "input": "Get-Date",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Bare cmdlet, no args."
+}

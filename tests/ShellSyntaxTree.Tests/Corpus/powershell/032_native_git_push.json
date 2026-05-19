@@ -1,0 +1,21 @@
+{
+  "name": "Native git push",
+  "input": "git push origin main",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git",
+          "push",
+          "origin",
+          "main"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Greedy verb-chain walk absorbs origin and main."
+}

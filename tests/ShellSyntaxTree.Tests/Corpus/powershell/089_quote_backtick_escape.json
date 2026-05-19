@@ -1,0 +1,24 @@
+{
+  "name": "Quote backtick escape",
+  "input": "Write-Output \u0022a\u0060tb\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "\u0022a\u0060tb\u0022",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Backtick escape inside a double-quoted string."
+}

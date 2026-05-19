@@ -1,0 +1,30 @@
+{
+  "name": "Bind prefix literalpath",
+  "input": "Get-ChildItem -lp C:\\logs",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "-lp",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-lp prefix-matches -LiteralPath (\u00A76.5.2)."
+}

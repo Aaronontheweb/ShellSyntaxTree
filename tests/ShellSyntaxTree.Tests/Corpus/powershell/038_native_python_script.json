@@ -1,0 +1,19 @@
+{
+  "name": "Native python script",
+  "input": "python script.py",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "python",
+          "script.py"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Native python with a script-file positional."
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Redirect null",
+  "input": "Get-Date \u003E $null",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "$null",
+            "isDynamicSkip": true
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "$null redirect target is the discard sink."
+}

@@ -1,0 +1,43 @@
+{
+  "name": "Setloc tilde",
+  "input": "cd ~; gci",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "~",
+            "kind": "Tilde",
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:/Users/user",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/Users/user",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "cd ~ attributes the home directory."
+}

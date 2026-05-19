@@ -1,0 +1,31 @@
+{
+  "name": "Pathrule copy two paths",
+  "input": "Copy-Item src.txt dst.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Copy-Item"
+        ],
+        "args": [
+          {
+            "raw": "src.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/src.txt"
+          },
+          {
+            "raw": "dst.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/dst.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Copy-Item positional 0 = source path, positional 1 = destination path."
+}

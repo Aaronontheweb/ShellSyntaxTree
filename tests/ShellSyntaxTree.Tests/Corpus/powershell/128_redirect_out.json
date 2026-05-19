@@ -1,0 +1,23 @@
+{
+  "name": "Redirect out",
+  "input": "Get-Date \u003E out.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/work/out.txt"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "\u003E stdout redirect (truncate)."
+}

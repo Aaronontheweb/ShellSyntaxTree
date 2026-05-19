@@ -1,0 +1,53 @@
+{
+  "name": "Setloc path param",
+  "input": "Set-Location -Path C:\\proj; rm temp.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\proj",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/proj"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [
+          {
+            "raw": "temp.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/proj/temp.txt"
+          },
+          {
+            "raw": "C:/proj",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/proj",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Set-Location target taken from -Path."
+}

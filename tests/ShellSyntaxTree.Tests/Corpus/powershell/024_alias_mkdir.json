@@ -1,0 +1,26 @@
+{
+  "name": "Alias mkdir",
+  "input": "mkdir C:\\temp\\newdir",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "mkdir"
+        ],
+        "canonicalVerb": "New-Item",
+        "args": [
+          {
+            "raw": "C:\\temp\\newdir",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp/newdir"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "mkdir resolves to New-Item."
+}

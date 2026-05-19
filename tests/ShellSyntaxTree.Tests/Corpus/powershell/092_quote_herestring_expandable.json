@@ -1,0 +1,25 @@
+{
+  "name": "Quote herestring expandable",
+  "input": "Get-Content @\u0022\nC:\\logs\\app.log\n\u0022@",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "@\u0022\nC:\\logs\\app.log\n\u0022@",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs/app.log"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "An expandable here-string argument."
+}

@@ -1,0 +1,40 @@
+{
+  "name": "Bind remove recurse force",
+  "input": "Remove-Item -Path C:\\temp -Recurse -Force",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\temp",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp"
+          },
+          {
+            "raw": "-Recurse",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-Force",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Named path plus two trailing switches."
+}

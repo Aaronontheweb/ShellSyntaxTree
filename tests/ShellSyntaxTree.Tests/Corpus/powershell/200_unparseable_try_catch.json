@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable try catch",
+  "input": "try { Get-Date } catch { }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027try\u0027 is not supported in v0.2"
+  },
+  "notes": "A try/catch block.",
+  "oracleExpectation": "OutOfScope"
+}

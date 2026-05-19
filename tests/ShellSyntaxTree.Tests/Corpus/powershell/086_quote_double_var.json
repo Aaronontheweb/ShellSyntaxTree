@@ -1,0 +1,25 @@
+{
+  "name": "Quote double var",
+  "input": "echo \u0022value is $env:TEMP\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "echo"
+        ],
+        "canonicalVerb": "Write-Output",
+        "args": [
+          {
+            "raw": "\u0022value is $env:TEMP\u0022",
+            "kind": "EnvVar",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Double quotes keep $env:TEMP literal in the token value."
+}

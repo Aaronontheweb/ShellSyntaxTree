@@ -1,0 +1,25 @@
+{
+  "name": "Pathrule unc path",
+  "input": "Get-ChildItem \\\\internal-host.example\\share\\data",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "\\\\internal-host.example\\share\\data",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "//internal-host.example/share/data"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A UNC path is rooted and normalized."
+}

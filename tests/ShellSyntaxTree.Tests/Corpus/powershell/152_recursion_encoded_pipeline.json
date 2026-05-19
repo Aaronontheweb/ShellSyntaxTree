@@ -1,0 +1,28 @@
+{
+  "name": "Recursion encoded pipeline",
+  "input": "pwsh -EncodedCommand RwBlAHQALQBQAHIAbwBjAGUAcwBzACAAfAAgAFMAdABvAHAALQBQAHIAbwBjAGUAcwBzAA==",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Process"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Stop-Process"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "-EncodedCommand decoding to a pipeline."
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable for",
+  "input": "for ($i = 0; $i -lt 3; $i\u002B\u002B) { Get-Date }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027for\u0027 is not supported in v0.2"
+  },
+  "notes": "A for loop.",
+  "oracleExpectation": "OutOfScope"
+}

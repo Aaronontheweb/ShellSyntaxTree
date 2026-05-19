@@ -1,0 +1,41 @@
+{
+  "name": "Bind source destination",
+  "input": "Copy-Item -Path src.txt -Destination dst.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Copy-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "src.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/src.txt"
+          },
+          {
+            "raw": "-Destination",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "dst.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/dst.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Two path-typed parameters."
+}

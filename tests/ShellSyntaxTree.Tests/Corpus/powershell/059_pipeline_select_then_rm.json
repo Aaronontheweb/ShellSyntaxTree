@@ -1,0 +1,54 @@
+{
+  "name": "Pipeline select then rm",
+  "input": "gci C:\\tmp | Select-Object -First 5 | rm",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:\\tmp",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/tmp"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Select-Object"
+        ],
+        "args": [
+          {
+            "raw": "-First",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "5",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Pipeline with a value-binding parameter mid-chain."
+}

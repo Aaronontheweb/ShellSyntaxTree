@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable unterminated block comment",
+  "input": "Get-Date \u003C# never closed",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unterminated block comment \u0027\u003C# \u2026 #\u003E\u0027"
+  },
+  "notes": "An unterminated block comment."
+}

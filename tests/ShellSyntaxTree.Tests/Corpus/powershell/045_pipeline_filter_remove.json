@@ -1,0 +1,43 @@
+{
+  "name": "Pipeline filter remove",
+  "input": "gci | ? { $_.Length -gt 1mb } | rm",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "?"
+        ],
+        "canonicalVerb": "Where-Object",
+        "args": [
+          {
+            "raw": "{ $_.Length -gt 1mb }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Three-clause pipeline with an opaque script-block filter."
+}

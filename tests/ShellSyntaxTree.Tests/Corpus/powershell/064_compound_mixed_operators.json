@@ -1,0 +1,34 @@
+{
+  "name": "Compound mixed operators",
+  "input": "Get-Date \u0026\u0026 Get-Location || Get-Process",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": [
+          "Get-Location"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "OrIf",
+        "verb": [
+          "Get-Process"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Mixed \u0026\u0026 / || chain."
+}

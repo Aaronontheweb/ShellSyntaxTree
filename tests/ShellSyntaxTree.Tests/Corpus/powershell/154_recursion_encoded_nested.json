@@ -1,0 +1,19 @@
+{
+  "name": "Recursion encoded nested",
+  "input": "pwsh -EncodedCommand RwBlAHQALQBEAGEAdABlAA==",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "An -EncodedCommand payload that is itself a pwsh -EncodedCommand invocation."
+}

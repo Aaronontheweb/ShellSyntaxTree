@@ -1,0 +1,23 @@
+{
+  "name": "Redirect err",
+  "input": "Get-Process 2\u003E err.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Process"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "ErrOut",
+            "target": "C:/work/err.txt"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "2\u003E stderr redirect."
+}

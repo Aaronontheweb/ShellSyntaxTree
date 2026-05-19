@@ -1,0 +1,40 @@
+{
+  "name": "Bind selectstring pattern",
+  "input": "Select-String -Pattern error -Path app.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Select-String"
+        ],
+        "args": [
+          {
+            "raw": "-Pattern",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "error",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "app.log",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/app.log"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Pattern is not a path; -Path is."
+}

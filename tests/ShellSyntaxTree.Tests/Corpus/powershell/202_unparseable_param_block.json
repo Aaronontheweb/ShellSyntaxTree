@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable param block",
+  "input": "param($Name)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027param\u0027 is not supported in v0.2"
+  },
+  "notes": "A param() block.",
+  "oracleExpectation": "OutOfScope"
+}

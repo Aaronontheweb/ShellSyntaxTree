@@ -1,0 +1,41 @@
+{
+  "name": "Bind destination first",
+  "input": "Copy-Item -Destination C:\\dst -Path C:\\src",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Copy-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Destination",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\dst",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/dst"
+          },
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\src",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/src"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Named parameters in either order."
+}

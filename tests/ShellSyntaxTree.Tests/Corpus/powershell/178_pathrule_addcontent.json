@@ -1,0 +1,30 @@
+{
+  "name": "Pathrule addcontent",
+  "input": "Add-Content log.txt entry",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Add-Content"
+        ],
+        "args": [
+          {
+            "raw": "log.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/log.txt"
+          },
+          {
+            "raw": "entry",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Add-Content positional 0 = path; the rest is content."
+}

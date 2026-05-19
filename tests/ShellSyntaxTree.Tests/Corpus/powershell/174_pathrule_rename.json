@@ -1,0 +1,31 @@
+{
+  "name": "Pathrule rename",
+  "input": "Rename-Item report.txt report-final.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Rename-Item"
+        ],
+        "args": [
+          {
+            "raw": "report.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/report.txt"
+          },
+          {
+            "raw": "report-final.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/report-final.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Rename-Item positional 0 = path, positional 1 = new name."
+}

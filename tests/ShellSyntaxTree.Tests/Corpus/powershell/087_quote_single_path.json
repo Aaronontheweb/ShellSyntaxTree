@@ -1,0 +1,25 @@
+{
+  "name": "Quote single path",
+  "input": "Get-Content \u0027C:\\logs\\app.log\u0027",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "\u0027C:\\logs\\app.log\u0027",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs/app.log"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A single-quoted path still resolves."
+}

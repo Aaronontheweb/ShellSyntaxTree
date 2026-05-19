@@ -1,0 +1,25 @@
+{
+  "name": "Pathrule newitem positional",
+  "input": "New-Item C:\\temp\\created",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "New-Item"
+        ],
+        "args": [
+          {
+            "raw": "C:\\temp\\created",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp/created"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "New-Item positional 0 = path."
+}

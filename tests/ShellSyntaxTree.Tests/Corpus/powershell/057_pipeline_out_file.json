@@ -1,0 +1,33 @@
+{
+  "name": "Pipeline out file",
+  "input": "Get-Process | Out-File C:\\out\\procs.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Process"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Out-File"
+        ],
+        "args": [
+          {
+            "raw": "C:\\out\\procs.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/out/procs.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Pipeline terminating in Out-File with a path."
+}

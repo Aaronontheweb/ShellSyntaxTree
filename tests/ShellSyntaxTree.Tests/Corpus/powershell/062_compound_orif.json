@@ -1,0 +1,40 @@
+{
+  "name": "Compound orif",
+  "input": "Test-Path C:\\x || New-Item C:\\x",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Test-Path"
+        ],
+        "args": [
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "OrIf",
+        "verb": [
+          "New-Item"
+        ],
+        "args": [
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "|| pipeline-chain operator (PowerShell 7)."
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Dynamic scriptblock arg",
+  "input": "ForEach-Object { $_.Name }",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "ForEach-Object"
+        ],
+        "args": [
+          {
+            "raw": "{ $_.Name }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A script-block argument to ForEach-Object."
+}

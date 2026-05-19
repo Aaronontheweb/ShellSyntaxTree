@@ -1,0 +1,31 @@
+{
+  "name": "Alias sls",
+  "input": "sls error C:\\logs\\app.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "sls"
+        ],
+        "canonicalVerb": "Select-String",
+        "args": [
+          {
+            "raw": "error",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\logs\\app.log",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs/app.log"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "sls resolves to Select-String."
+}

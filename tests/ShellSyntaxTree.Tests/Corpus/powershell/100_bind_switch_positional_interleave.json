@@ -1,0 +1,41 @@
+{
+  "name": "Bind switch positional interleave",
+  "input": "Copy-Item -Force a.txt -Verbose b.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Copy-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Force",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "a.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/a.txt"
+          },
+          {
+            "raw": "-Verbose",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "b.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/b.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Switches do not advance the positional index (\u00A76.5.1)."
+}

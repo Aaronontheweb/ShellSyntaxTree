@@ -1,0 +1,45 @@
+{
+  "name": "Bind include exclude",
+  "input": "Get-ChildItem -Include *.txt -Exclude *.tmp C:\\x",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "-Include",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "*.txt",
+            "kind": "Glob",
+            "isPath": false
+          },
+          {
+            "raw": "-Exclude",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "*.tmp",
+            "kind": "Glob",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Include / -Exclude are glob slots."
+}

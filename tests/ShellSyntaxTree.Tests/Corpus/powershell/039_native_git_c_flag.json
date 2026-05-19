@@ -1,0 +1,31 @@
+{
+  "name": "Native git c flag",
+  "input": "git -C C:\\repo status",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git",
+          "status"
+        ],
+        "args": [
+          {
+            "raw": "-C",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\repo",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "git -C consumes a directory path (shared bash flag table)."
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Dynamic variable path arg",
+  "input": "Remove-Item $targetPath",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "$targetPath",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A $var in a path slot is DynamicSkip."
+}

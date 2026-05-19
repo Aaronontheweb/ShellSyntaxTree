@@ -1,0 +1,35 @@
+{
+  "name": "Bind encoding",
+  "input": "Get-Content -Encoding UTF8 C:\\x.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "-Encoding",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "UTF8",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\x.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Encoding is value-binding but its value is not a path."
+}

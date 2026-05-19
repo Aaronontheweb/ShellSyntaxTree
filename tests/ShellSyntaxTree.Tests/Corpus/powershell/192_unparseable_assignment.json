@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable assignment",
+  "input": "$result = Get-Date",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "an assignment statement is not supported in v0.2"
+  },
+  "notes": "An assignment statement.",
+  "oracleExpectation": "OutOfScope"
+}

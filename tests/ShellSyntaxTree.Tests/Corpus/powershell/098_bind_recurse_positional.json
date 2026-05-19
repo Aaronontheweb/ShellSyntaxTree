@@ -1,0 +1,30 @@
+{
+  "name": "Bind recurse positional",
+  "input": "Get-ChildItem -Recurse C:\\logs",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "-Recurse",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Recurse is a switch; C:\\logs stays a positional path."
+}

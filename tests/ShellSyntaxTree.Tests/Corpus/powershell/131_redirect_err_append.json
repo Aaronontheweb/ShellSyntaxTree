@@ -1,0 +1,23 @@
+{
+  "name": "Redirect err append",
+  "input": "Get-Process 2\u003E\u003E err.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Process"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "ErrAppend",
+            "target": "C:/work/err.txt"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "2\u003E\u003E stderr append."
+}

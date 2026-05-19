@@ -1,0 +1,40 @@
+{
+  "name": "Bind newitem directory",
+  "input": "New-Item -ItemType Directory -Path C:\\newdir",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "New-Item"
+        ],
+        "args": [
+          {
+            "raw": "-ItemType",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "Directory",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\newdir",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/newdir"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Path positional path; -ItemType literal."
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Quote doubled double",
+  "input": "echo \u0022say \u0022\u0022hello\u0022\u0022\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "echo"
+        ],
+        "canonicalVerb": "Write-Output",
+        "args": [
+          {
+            "raw": "\u0022say \u0022\u0022hello\u0022\u0022\u0022",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A doubled \u0022\u0022 is an escaped double quote."
+}

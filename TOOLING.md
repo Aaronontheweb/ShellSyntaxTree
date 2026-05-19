@@ -23,8 +23,26 @@ removed — this repo does not need them.
 | `coverlet.collector` | NuGet | code coverage |
 
 The corpus runner (SPEC §13) is a single `[Theory] [MemberData]` test that
-enumerates `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` and asserts each
-parses to its declared `expected` AST.
+enumerates every `tests/ShellSyntaxTree.Tests/Corpus/<shell>/*.json`
+directory, routes each entry to the matching parser (`bash/` → `BashParser`,
+`powershell/` → `PwshParser`), and asserts it parses to its declared
+`expected` AST. `PwshOracleTests` is the SPEC.POWERSHELL.md §13 validation
+gate — it feeds every PowerShell corpus input to real `pwsh` and enforces
+the oracle matrix.
+
+### PwshCorpusTool
+
+`tools/PwshCorpusTool` is the PowerShell corpus authoring aid
+(SPEC.POWERSHELL.md §13). It is a dev-only console app (not packed).
+
+| Command | Purpose |
+|---|---|
+| `dotnet run --project tools/PwshCorpusTool -- generate` | Regenerate every `Corpus/powershell/NNN_slug.json` from the curated `CorpusManifest`. Run after any parser change that shifts PowerShell AST output. |
+| `dotnet run --project tools/PwshCorpusTool -- check "<command>"` | Print the parser's expected-AST JSON block for a command beside the real-`pwsh` oracle verdict — the fastest way to author or debug a binding-category entry. |
+
+The curated inputs live in `tools/PwshCorpusTool/CorpusManifest.cs`; the
+`expected` AST is generated from `PwshParser`, and `PwshOracleTests`
+independently validates every input against real `pwsh`.
 
 ## Source Control and CI
 
