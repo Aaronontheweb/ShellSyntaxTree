@@ -14,72 +14,87 @@ using Xunit;
 namespace ShellSyntaxTree.Tests.Corpus;
 
 /// <summary>
-/// Drives the JSON corpus under <c>tests/ShellSyntaxTree.Tests/Corpus/bash/</c>.
-/// Each entry pairs an <c>input</c> string with an <c>expected</c>
-/// <see cref="ParsedCommand"/> shape; <see cref="AstAssert.Equal"/> drives
-/// the field-by-field comparison and emits diff-friendly failure messages
-/// pointing at the first differing path.
+/// Drives the JSON corpus under <c>tests/ShellSyntaxTree.Tests/Corpus/</c>.
+/// The corpus is <em>directory-routed by shell</em> (SPEC.POWERSHELL.md
+/// §13): an entry under <c>Corpus/bash/</c> is parsed with
+/// <see cref="BashParser"/>, an entry under <c>Corpus/powershell/</c> with
+/// <see cref="PwshParser"/>. Each entry pairs an <c>input</c> string with an
+/// <c>expected</c> <see cref="ParsedCommand"/> shape; <see cref="AstAssert.Equal"/>
+/// drives the field-by-field comparison.
 /// </summary>
 public class CorpusRunnerTests
 {
     [Theory]
     [MemberData(nameof(CorpusEntries))]
-    public void Corpus_entry_parses_to_expected_ast(string fileName, CorpusEntry entry)
+    public void Corpus_entry_parses_to_expected_ast(string shell, string fileName, CorpusEntry entry)
     {
         Assert.NotNull(entry);
         Assert.False(string.IsNullOrEmpty(entry.Name), $"Corpus entry {fileName} has no name.");
         Assert.NotNull(entry.Expected);
 
-        // Pin HomeDirectory and WorkingDirectory so corpus entries with
-        // relative-path resolution have stable expected values across
-        // hosts (Linux CI, Windows CI, dev machines). The values mirror
-        // the BashCommandParserTests harness.
-        var parser = new BashParser(new BashParserOptions
+        var actual = CreateParser(shell).Parse(entry.Input);
+        AstAssert.Equal(entry.Expected!, actual, $"{shell}/{fileName}");
+    }
+
+    /// <summary>
+    /// The parser for a corpus shell directory. HomeDirectory and
+    /// WorkingDirectory are pinned so entries with relative-path resolution
+    /// have stable expected values across hosts (Linux CI, Windows CI, dev
+    /// machines).
+    /// </summary>
+    internal static IShellParser CreateParser(string shell) => shell switch
+    {
+        "bash" => new BashParser(new BashParserOptions
         {
             HomeDirectory = "/home/test",
             WorkingDirectory = "/work",
-        });
-        var actual = parser.Parse(entry.Input);
-
-        AstAssert.Equal(entry.Expected!, actual, fileName);
-    }
+        }),
+        "powershell" => new PwshParser(new PwshParserOptions
+        {
+            HomeDirectory = "C:/Users/user",
+            WorkingDirectory = "C:/work",
+        }),
+        _ => throw new InvalidOperationException(
+            $"No parser is registered for corpus shell directory '{shell}'."),
+    };
 
     public static IEnumerable<object[]> CorpusEntries()
     {
-        var dir = Path.Combine(AppContext.BaseDirectory, "Corpus", "bash");
-        if (!Directory.Exists(dir))
+        var root = Path.Combine(AppContext.BaseDirectory, "Corpus");
+        if (!Directory.Exists(root))
         {
-            // Empty corpus is a valid state until entries arrive.
             yield break;
         }
 
-        var files = Directory.GetFiles(dir, "*.json").OrderBy(f => f).ToArray();
-        foreach (var file in files)
+        foreach (var shellDir in Directory.GetDirectories(root).OrderBy(d => d))
         {
-            CorpusEntry? entry;
-            try
+            var shell = Path.GetFileName(shellDir);
+            foreach (var file in Directory.GetFiles(shellDir, "*.json").OrderBy(f => f))
             {
-                entry = JsonSerializer.Deserialize<CorpusEntry>(
-                    File.ReadAllText(file),
-                    JsonOptions);
-            }
-            catch (JsonException ex)
-            {
-                throw new InvalidOperationException(
-                    $"Failed to deserialize corpus entry {Path.GetFileName(file)}: {ex.Message}", ex);
-            }
+                CorpusEntry? entry;
+                try
+                {
+                    entry = JsonSerializer.Deserialize<CorpusEntry>(
+                        File.ReadAllText(file), JsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to deserialize corpus entry {shell}/{Path.GetFileName(file)}: {ex.Message}", ex);
+                }
 
-            if (entry is null)
-            {
-                throw new InvalidOperationException(
-                    $"Corpus entry {Path.GetFileName(file)} deserialized to null.");
-            }
+                if (entry is null)
+                {
+                    throw new InvalidOperationException(
+                        $"Corpus entry {shell}/{Path.GetFileName(file)} deserialized to null.");
+                }
 
-            yield return new object[] { Path.GetFileName(file), entry };
+                yield return new object[] { shell, Path.GetFileName(file), entry };
+            }
         }
     }
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    internal static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,

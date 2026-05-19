@@ -15,12 +15,12 @@ using Xunit.Sdk;
 namespace ShellSyntaxTree.Tests.Corpus;
 
 /// <summary>
-/// PII audit gate per SPEC §14. Scans every JSON corpus entry under
-/// <c>tests/ShellSyntaxTree.Tests/Corpus/bash/</c> for the forbidden
-/// patterns listed in the sanitization table. The audit reads from the
-/// build-output copy of the corpus (the same location the runner pulls
-/// from) so CI runs against the same bytes a developer's local
-/// <c>dotnet test</c> would.
+/// PII audit gate per SPEC §14 / SPEC.POWERSHELL.md §14. Scans every JSON
+/// corpus entry under every <c>tests/ShellSyntaxTree.Tests/Corpus/&lt;shell&gt;/</c>
+/// directory for the forbidden patterns listed in the sanitization table.
+/// The audit reads from the build-output copy of the corpus (the same
+/// location the runner pulls from) so CI runs against the same bytes a
+/// developer's local <c>dotnet test</c> would.
 /// </summary>
 /// <remarks>
 /// Scanning policy:
@@ -85,11 +85,24 @@ public class PiiAuditTests
     private static readonly Regex RepoPathPattern =
         new(@"/home/[^/]+/repositories/[^/]+/([a-zA-Z0-9_.-]+)/", RegexOptions.Compiled);
 
+    // SPEC.POWERSHELL.md §14: a concrete C:\Users\<username>\ path (mixed
+    // slashes allowed). A literal $env:USERNAME / $env:USERPROFILE reference
+    // is not PII and is not matched here.
+    private static readonly Regex WindowsUserPattern =
+        new(@"[A-Za-z]:[\\/]Users[\\/]([A-Za-z0-9_.-]+)[\\/]", RegexOptions.Compiled);
+
+    // SPEC.POWERSHELL.md §14: a UNC \\<hostname>\share path.
+    private static readonly Regex UncHostPattern =
+        new(@"\\\\([A-Za-z0-9_.-]+)\\", RegexOptions.Compiled);
+
+    private static readonly HashSet<string> AllowedUncHosts =
+        new(StringComparer.Ordinal) { "internal-host.example" };
+
     [Fact]
     public void Corpus_contains_no_pii_per_spec_section_14()
     {
-        var dir = Path.Combine(AppContext.BaseDirectory, "Corpus", "bash");
-        if (!Directory.Exists(dir))
+        var root = Path.Combine(AppContext.BaseDirectory, "Corpus");
+        if (!Directory.Exists(root))
         {
             // The audit is vacuous when there's no corpus to audit; the
             // separate CorpusRunnerTests asserts the corpus is present.
@@ -97,24 +110,27 @@ public class PiiAuditTests
         }
 
         var hits = new List<string>();
-        var files = Directory.GetFiles(dir, "*.json").OrderBy(f => f).ToArray();
-        foreach (var file in files)
+        foreach (var shellDir in Directory.GetDirectories(root).OrderBy(d => d))
         {
-            var name = Path.GetFileName(file);
-            JsonDocument doc;
-            try
+            var shell = Path.GetFileName(shellDir);
+            foreach (var file in Directory.GetFiles(shellDir, "*.json").OrderBy(f => f))
             {
-                doc = JsonDocument.Parse(File.ReadAllText(file));
-            }
-            catch (JsonException ex)
-            {
-                hits.Add($"{name}: failed to parse JSON for PII audit: {ex.Message}");
-                continue;
-            }
+                var name = $"{shell}/{Path.GetFileName(file)}";
+                JsonDocument doc;
+                try
+                {
+                    doc = JsonDocument.Parse(File.ReadAllText(file));
+                }
+                catch (JsonException ex)
+                {
+                    hits.Add($"{name}: failed to parse JSON for PII audit: {ex.Message}");
+                    continue;
+                }
 
-            using (doc)
-            {
-                Walk(doc.RootElement, name, fieldPath: string.Empty, hits);
+                using (doc)
+                {
+                    Walk(doc.RootElement, name, fieldPath: string.Empty, hits);
+                }
             }
         }
 
@@ -232,6 +248,26 @@ public class PiiAuditTests
             if (!AllowedRepoNames.Contains(repo))
             {
                 hits.Add($"{fileName} ({fieldPath}): repository path '/repositories/.../{repo}/' — not in allowed-placeholder list (SPEC §14)");
+            }
+        }
+
+        // C:\Users\<username>\ (SPEC.POWERSHELL.md §14).
+        foreach (Match m in WindowsUserPattern.Matches(value))
+        {
+            var user = m.Groups[1].Value;
+            if (!AllowedUsersUsernames.Contains(user))
+            {
+                hits.Add($"{fileName} ({fieldPath}): Windows user path 'Users\\{user}\\' — not in allowed-placeholder list (SPEC.POWERSHELL.md §14)");
+            }
+        }
+
+        // UNC \\<hostname>\share (SPEC.POWERSHELL.md §14).
+        foreach (Match m in UncHostPattern.Matches(value))
+        {
+            var host = m.Groups[1].Value;
+            if (!AllowedUncHosts.Contains(host))
+            {
+                hits.Add($"{fileName} ({fieldPath}): UNC host '\\\\{host}\\' — not in allowed-placeholder list (SPEC.POWERSHELL.md §14)");
             }
         }
     }
