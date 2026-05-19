@@ -77,12 +77,12 @@ public static class MermaidRenderer
                     sb.Append("    end\n");
                     c = groupEnd;
                 }
-                else if (clause.IsBashCWrapped)
+                else if (clause.IsCommandStringWrapped)
                 {
                     bashCSerial++;
                     sb.Append("    subgraph BC").Append(bashCSerial).Append(" [\"bash -c\"]\n");
                     var groupEnd = c;
-                    while (groupEnd < parse.Clauses.Count && parse.Clauses[groupEnd].IsBashCWrapped)
+                    while (groupEnd < parse.Clauses.Count && parse.Clauses[groupEnd].IsCommandStringWrapped)
                     {
                         EmitClauseNode(sb, parse, lineIdx, groupEnd);
                         groupEnd++;

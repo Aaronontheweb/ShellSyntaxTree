@@ -47,8 +47,11 @@ public sealed record Clause
 
     /// <summary>
     /// True when this clause is the result of recursing into a
-    /// <c>bash -c</c> or <c>sh -c</c> wrapper. Useful for consumers that
-    /// want to surface "this came from a wrapped invocation" in UI.
+    /// command-string wrapper — bash <c>bash -c "..."</c> / <c>sh -c "..."</c>,
+    /// or PowerShell <c>pwsh -Command "..."</c> / <c>pwsh -c "..."</c> /
+    /// <c>pwsh -EncodedCommand ...</c>. Useful for consumers that want to
+    /// surface "this came from a wrapped invocation" in UI. See
+    /// SPEC.POWERSHELL.md §3 / §10.
     /// </summary>
-    public bool IsBashCWrapped { get; init; }
+    public bool IsCommandStringWrapped { get; init; }
 }

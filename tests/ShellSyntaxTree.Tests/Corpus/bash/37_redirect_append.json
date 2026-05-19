@@ -12,7 +12,7 @@
           { "direction": "Append", "target": "/tmp/log" }
         ],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   }

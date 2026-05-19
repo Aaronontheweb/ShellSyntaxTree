@@ -12,7 +12,7 @@
           { "direction": "ErrOut", "target": "&1", "isDynamicSkip": true }
         ],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   },

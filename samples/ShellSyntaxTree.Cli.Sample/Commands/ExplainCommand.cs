@@ -33,10 +33,10 @@ internal static class ExplainCommand
             sb.Append("Clause ").Append(i)
               .Append("  (Operator: ").Append(clause.Operator).Append(')');
 
-            if (clause.IsSubshell || clause.IsBashCWrapped)
+            if (clause.IsSubshell || clause.IsCommandStringWrapped)
             {
                 sb.Append("  IsSubshell=").Append(clause.IsSubshell)
-                  .Append("  IsBashCWrapped=").Append(clause.IsBashCWrapped);
+                  .Append("  IsCommandStringWrapped=").Append(clause.IsCommandStringWrapped);
             }
 
             sb.AppendLine();

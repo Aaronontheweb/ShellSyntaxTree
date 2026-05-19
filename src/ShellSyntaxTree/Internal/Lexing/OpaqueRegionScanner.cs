@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="OpaqueRegionScanner.cs" company="Aaron Stannard">
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
@@ -10,20 +10,24 @@ namespace ShellSyntaxTree.Internal.Lexing;
 /// <summary>
 /// Grammar-agnostic boundary scanner for "opaque regions" — input slices
 /// that the lexer must skip over verbatim because their interior follows
-/// rules the outer lexer does not model. In v0.1 this is bash's
-/// <c>$(…)</c> command substitution and backtick <c>`…`</c>; in v0.2 it
-/// will additionally serve PowerShell's <c>$( … )</c> and <c>@( … )</c>.
+/// rules the outer lexer does not model. Bash uses it for <c>$(…)</c>
+/// command substitution and backtick <c>`…`</c>; PowerShell uses it for
+/// <c>$( … )</c> / <c>@( … )</c> / <c>@{ … }</c> subexpressions and
+/// <c>{ … }</c> script blocks.
 ///
-/// The scanner is intentionally permissive about interior content — it
-/// does not parse the inside, it only finds the matching close. The
-/// outer parser treats the whole region as a single
-/// <c>Arg{ Kind = DynamicSkip, IsPath = false }</c> per the locked
-/// interpretation in the v0.1 OpenSpec change
-/// (proposal §"2. Command substitution + arithmetic + complex param
-/// expansion").
+/// The scanner is intentionally permissive about interior content — it does
+/// not parse the inside, it only finds the matching close. The escape
+/// character is a parameter (SPEC.POWERSHELL.md §16): bash escapes with
+/// backslash, PowerShell with backtick.
 /// </summary>
 internal static class OpaqueRegionScanner
 {
+    /// <summary>The bash escape character — backslash.</summary>
+    internal const char BashEscape = '\\';
+
+    /// <summary>The PowerShell escape character — backtick.</summary>
+    internal const char PwshEscape = '`';
+
     /// <summary>
     /// Result of a scan. <see cref="EndIndex"/> is the index of the
     /// closing delimiter character (inclusive) when <see cref="Closed"/>
@@ -35,22 +39,30 @@ internal static class OpaqueRegionScanner
 
     /// <summary>
     /// Find the matching close delimiter for an asymmetric opaque region
-    /// (e.g. <c>(</c>/<c>)</c>) starting at <paramref name="startIndex"/>
-    /// — which must point at the opening delimiter character. Handles:
-    ///
-    /// <list type="bullet">
-    ///   <item>nested same-kind regions (depth tracking),</item>
-    ///   <item>single- and double-quoted nested strings (delimiters
-    ///         inside quotes don't count),</item>
-    ///   <item><c>\X</c> escapes outside of single quotes (the next char
-    ///         is consumed verbatim).</item>
-    /// </list>
+    /// (e.g. <c>(</c>/<c>)</c>) starting at <paramref name="startIndex"/> —
+    /// which must point at the opening delimiter character. Uses the bash
+    /// escape character (backslash).
     /// </summary>
     internal static ScanResult Scan(
         ReadOnlySpan<char> input,
         int startIndex,
         char openChar,
         char closeChar)
+        => Scan(input, startIndex, openChar, closeChar, BashEscape);
+
+    /// <summary>
+    /// Find the matching close delimiter for an asymmetric opaque region,
+    /// honoring <paramref name="escapeChar"/> as the escape character.
+    /// Handles nested same-kind regions (depth tracking), single- and
+    /// double-quoted nested strings, and <c>escape</c>+char escapes outside
+    /// single quotes.
+    /// </summary>
+    internal static ScanResult Scan(
+        ReadOnlySpan<char> input,
+        int startIndex,
+        char openChar,
+        char closeChar,
+        char escapeChar)
     {
         // Caller contract: startIndex points at the opening delimiter.
         // We start scanning at startIndex+1 with depth=1 already counted.
@@ -65,10 +77,10 @@ internal static class OpaqueRegionScanner
         {
             var c = input[i];
 
-            // Backslash escapes the next character (outside single quotes).
+            // Escape: consume the escape char and the next char verbatim.
             // The single-quote branch below short-circuits before this code
             // ever runs while inside '...'.
-            if (c == '\\' && i + 1 < input.Length)
+            if (c == escapeChar && i + 1 < input.Length)
             {
                 i += 2;
                 continue;
@@ -83,7 +95,7 @@ internal static class OpaqueRegionScanner
 
             if (c == '"')
             {
-                i = SkipDoubleQuoted(input, i + 1);
+                i = SkipDoubleQuoted(input, i + 1, escapeChar);
                 continue;
             }
 
@@ -107,12 +119,9 @@ internal static class OpaqueRegionScanner
     }
 
     /// <summary>
-    /// Variant for symmetric opaque regions (e.g. backtick-quoted command
-    /// substitution) where the open and close delimiters are the same
-    /// character. <paramref name="startIndex"/> points at the opening
-    /// delimiter; the scan returns at the next unescaped occurrence of
-    /// <paramref name="delimiter"/>. There is no nesting — the next
-    /// unescaped match wins.
+    /// Variant for symmetric opaque regions (e.g. backtick-quoted bash
+    /// command substitution) where the open and close delimiters are the
+    /// same character. Uses the bash escape character.
     /// </summary>
     internal static ScanResult ScanSymmetric(
         ReadOnlySpan<char> input,
@@ -129,11 +138,9 @@ internal static class OpaqueRegionScanner
         {
             var c = input[i];
 
-            if (c == '\\' && i + 1 < input.Length)
+            if (c == BashEscape && i + 1 < input.Length)
             {
-                // Escape: skip backslash + next char verbatim. Bash treats
-                // \` inside a backtick context as a literal backtick — the
-                // skip is the right behavior either way.
+                // Escape: skip backslash + next char verbatim.
                 i += 2;
                 continue;
             }
@@ -150,11 +157,11 @@ internal static class OpaqueRegionScanner
     }
 
     /// <summary>
-    /// Skip past a single-quoted string. <paramref name="i"/> points at
-    /// the first char after the opening quote. Returns the index of the
-    /// char after the closing quote, or <c>input.Length</c> if no close
-    /// was found. Single-quoted strings preserve bytes literally — no
-    /// escape processing per SPEC §5.
+    /// Skip past a single-quoted string. <paramref name="i"/> points at the
+    /// first char after the opening quote. Returns the index of the char
+    /// after the closing quote, or <c>input.Length</c> if no close was
+    /// found. Single-quoted strings preserve bytes literally — no escape
+    /// processing (bash SPEC §5, PowerShell SPEC.POWERSHELL.md §5).
     /// </summary>
     private static int SkipSingleQuoted(ReadOnlySpan<char> input, int i)
     {
@@ -172,18 +179,18 @@ internal static class OpaqueRegionScanner
     }
 
     /// <summary>
-    /// Skip past a double-quoted string. <paramref name="i"/> points at
-    /// the first char after the opening quote. Backslash escapes the
-    /// next character (covers <c>\"</c> in particular). Returns the
-    /// index of the char after the closing quote, or <c>input.Length</c>
-    /// if no close was found.
+    /// Skip past a double-quoted string. <paramref name="i"/> points at the
+    /// first char after the opening quote. <paramref name="escapeChar"/>
+    /// escapes the next character (covers <c>\"</c> in bash and <c>`"</c>
+    /// in PowerShell). Returns the index of the char after the closing
+    /// quote, or <c>input.Length</c> if no close was found.
     /// </summary>
-    private static int SkipDoubleQuoted(ReadOnlySpan<char> input, int i)
+    private static int SkipDoubleQuoted(ReadOnlySpan<char> input, int i, char escapeChar)
     {
         while (i < input.Length)
         {
             var c = input[i];
-            if (c == '\\' && i + 1 < input.Length)
+            if (c == escapeChar && i + 1 < input.Length)
             {
                 i += 2;
                 continue;

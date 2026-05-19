@@ -44,7 +44,7 @@ namespace ShellSyntaxTree.Tests.Corpus;
 ///   <item>
 ///     Per clause: <c>Operator</c>, <c>Verb.Tokens</c> (sequence equality),
 ///     <c>Args.Count</c>, per-arg fields, <c>Redirects.Count</c>, per-
-///     redirect fields, <c>IsSubshell</c>, <c>IsBashCWrapped</c>.
+///     redirect fields, <c>IsSubshell</c>, <c>IsCommandStringWrapped</c>.
 ///   </item>
 ///   <item>
 ///     Per arg: <c>Raw</c>, <c>Kind</c>, <c>IsPath</c>, <c>IsCwdAttribution</c>
@@ -126,6 +126,18 @@ internal static class AstAssert
                 $"{path}.verb: expected=[{string.Join(",", expectedVerb)}], actual=[{string.Join(",", actual.Verb.Tokens)}]");
         }
 
+        if (expected.CanonicalVerb != actual.Verb.CanonicalVerb)
+        {
+            throw new XunitException(
+                $"{path}.canonicalVerb: expected={Quote(expected.CanonicalVerb)}, actual={Quote(actual.Verb.CanonicalVerb)}");
+        }
+
+        if (expected.IsDynamic != actual.Verb.IsDynamic)
+        {
+            throw new XunitException(
+                $"{path}.isDynamic: expected={expected.IsDynamic}, actual={actual.Verb.IsDynamic}");
+        }
+
         var expectedArgs = expected.Args ?? new List<ExpectedArg>();
         if (expectedArgs.Count != actual.Args.Count)
         {
@@ -158,12 +170,14 @@ internal static class AstAssert
                 $"{path}.isSubshell: expected={expected.IsSubshell}, actual={actual.IsSubshell}");
         }
 
-        if (expected.IsBashCWrapped != actual.IsBashCWrapped)
+        if (expected.IsCommandStringWrapped != actual.IsCommandStringWrapped)
         {
             throw new XunitException(
-                $"{path}.isBashCWrapped: expected={expected.IsBashCWrapped}, actual={actual.IsBashCWrapped}");
+                $"{path}.isCommandStringWrapped: expected={expected.IsCommandStringWrapped}, actual={actual.IsCommandStringWrapped}");
         }
     }
+
+    private static string Quote(string? value) => value is null ? "null" : $"'{value}'";
 
     private static void AssertArgEqual(ExpectedArg expected, Arg actual, string path)
     {
@@ -291,6 +305,8 @@ internal static class AstAssert
             {
                 Operator = c.Operator.ToString(),
                 Verb = c.Verb.Tokens,
+                c.Verb.CanonicalVerb,
+                c.Verb.IsDynamic,
                 Args = c.Args.Select(a => new
                 {
                     a.Raw,
@@ -307,7 +323,7 @@ internal static class AstAssert
                     r.IsDynamicSkip,
                 }),
                 c.IsSubshell,
-                c.IsBashCWrapped,
+                c.IsCommandStringWrapped,
             }),
         }, new JsonSerializerOptions { WriteIndented = true });
 }

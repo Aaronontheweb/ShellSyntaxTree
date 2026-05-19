@@ -99,6 +99,14 @@ public sealed record CorpusEntry
     public ExpectedParsedCommand? Expected { get; init; }
 
     public string? Notes { get; init; }
+
+    /// <summary>
+    /// Ground-truth expectation for the real-<c>pwsh</c> validation gate
+    /// (SPEC.POWERSHELL.md §13). Meaningful only when
+    /// <c>expected.isUnparseable</c> is true; defaults to
+    /// <see cref="OracleExpectation.SyntaxError"/>.
+    /// </summary>
+    public OracleExpectation OracleExpectation { get; init; } = OracleExpectation.SyntaxError;
 }
 
 public sealed record ExpectedParsedCommand
@@ -116,13 +124,45 @@ public sealed record ExpectedClause
 
     public List<string>? Verb { get; init; }
 
+    /// <summary>
+    /// Expected <see cref="VerbChain.CanonicalVerb"/>. Omit (leave null) to
+    /// assert the parser produced <c>null</c> — every bash clause and every
+    /// PowerShell clause whose verb is a canonical cmdlet or unknown command.
+    /// Provide the canonical cmdlet to assert an alias was resolved. See
+    /// SPEC.POWERSHELL.md §13.
+    /// </summary>
+    public string? CanonicalVerb { get; init; }
+
+    /// <summary>
+    /// Expected <see cref="VerbChain.IsDynamic"/>. Omit to assert
+    /// <c>false</c>; set true for a dynamic command name (<c>&amp; $exe</c>).
+    /// </summary>
+    public bool IsDynamic { get; init; }
+
     public List<ExpectedArg>? Args { get; init; }
 
     public List<ExpectedRedirect>? Redirects { get; init; }
 
     public bool IsSubshell { get; init; }
 
-    public bool IsBashCWrapped { get; init; }
+    public bool IsCommandStringWrapped { get; init; }
+}
+
+/// <summary>
+/// Ground-truth expectation for the real-<c>pwsh</c> validation gate
+/// (SPEC.POWERSHELL.md §13). Meaningful only when <c>isUnparseable</c> is
+/// true.
+/// </summary>
+public enum OracleExpectation
+{
+    /// <summary>Genuinely malformed PowerShell — real <c>pwsh</c> must also
+    /// reject it.</summary>
+    SyntaxError,
+
+    /// <summary>Valid PowerShell the parser deliberately does not model —
+    /// real <c>pwsh</c> must accept it. Also covers an over-cap input, an
+    /// <c>-EncodedCommand</c> decode failure, or a recursion overflow.</summary>
+    OutOfScope,
 }
 
 public sealed record ExpectedArg

@@ -12,7 +12,7 @@
           { "direction": "In", "target": "/tmp/input" }
         ],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   }

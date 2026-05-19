@@ -54,7 +54,7 @@ internal static class BashCommandParser
     /// Recursion entry point. <paramref name="bashCDepth"/> counts how many
     /// <c>bash -c</c> wrappers we've unwrapped to reach this call; the
     /// outer caller passes 0. <paramref name="markBashCWrapped"/> sets
-    /// <see cref="Clause.IsBashCWrapped"/> on every emitted clause and
+    /// <see cref="Clause.IsCommandStringWrapped"/> on every emitted clause and
     /// fires only on recursive calls (the outer top-level command doesn't
     /// pretend to be wrapped).
     /// </summary>
@@ -221,7 +221,7 @@ internal static class BashCommandParser
                     {
                         Operator = op,
                         IsSubshell = isSubshell,
-                        IsBashCWrapped = true,
+                        IsCommandStringWrapped = true,
                     });
                 }
 
@@ -270,12 +270,12 @@ internal static class BashCommandParser
 
             foreach (var clause in clauseOrError.Clauses)
             {
-                // Apply the IsSubshell / IsBashCWrapped flags first; both
+                // Apply the IsSubshell / IsCommandStringWrapped flags first; both
                 // are properties of the *segment*, not the clause body.
                 var withFlags = clause with
                 {
                     IsSubshell = segment.SubshellDepth > 0,
-                    IsBashCWrapped = markBashCWrapped,
+                    IsCommandStringWrapped = markBashCWrapped,
                 };
 
                 // Inspect the verb to decide whether this clause updates
@@ -901,7 +901,7 @@ internal static class BashCommandParser
                 Args = emptyArgs,
                 Redirects = emptyRedirects,
                 IsSubshell = false,
-                IsBashCWrapped = false,
+                IsCommandStringWrapped = false,
             });
         }
 
@@ -938,7 +938,7 @@ internal static class BashCommandParser
             Args = args,
             Redirects = redirects,
             IsSubshell = false,
-            IsBashCWrapped = false,
+            IsCommandStringWrapped = false,
         };
 
         return ClauseResult.Ok(clause);

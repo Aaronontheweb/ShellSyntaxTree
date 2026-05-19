@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="PublicApiSnapshotTests.cs" company="Aaron Stannard">
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
@@ -12,9 +12,9 @@ using Xunit;
 namespace ShellSyntaxTree.Tests;
 
 /// <summary>
-/// Locks the public API surface for v0.1.0-alpha. Any drift here means
-/// either SPEC.md §2/§3 was bumped (deliberate version change) or a
-/// regression — both are blockers until reconciled.
+/// Locks the public API surface for v0.2.0. Any drift here means either
+/// SPEC.md §2/§3 / SPEC.POWERSHELL.md §2/§3 was bumped (deliberate version
+/// change) or a regression — both are blockers until reconciled.
 /// </summary>
 public class PublicApiSnapshotTests
 {
@@ -100,14 +100,68 @@ public class PublicApiSnapshotTests
         Assert.NotNull(parser);
     }
 
-    // -------- BashParserOptions --------
+    // -------- PwshParser --------
 
     [Fact]
-    public void BashParserOptions_has_expected_shape()
+    public void PwshParser_has_expected_shape()
     {
-        var t = typeof(BashParserOptions);
+        var t = typeof(PwshParser);
         Assert.True(t.IsPublic);
         Assert.True(t.IsSealed);
+        Assert.True(t.IsClass);
+        Assert.Contains(typeof(IShellParser), t.GetInterfaces());
+
+        var ctors = t.GetConstructors().OrderBy(c => c.GetParameters().Length).ToArray();
+        Assert.Equal(2, ctors.Length);
+
+        Assert.Empty(ctors[0].GetParameters());
+
+        var withOptions = ctors[1].GetParameters();
+        Assert.Single(withOptions);
+        Assert.Equal(typeof(PwshParserOptions), withOptions[0].ParameterType);
+
+        var parse = t.GetMethod(nameof(PwshParser.Parse), new[] { typeof(string) });
+        Assert.NotNull(parse);
+        Assert.Equal(typeof(ParsedCommand), parse!.ReturnType);
+    }
+
+    [Fact]
+    public void PwshParser_Parse_throws_ArgumentNullException_on_null()
+    {
+        var parser = new PwshParser();
+        Assert.Throws<ArgumentNullException>(() => parser.Parse(null!));
+    }
+
+    [Fact]
+    public void PwshParser_Parse_returns_ParsedCommand_for_simple_input()
+    {
+        var parser = new PwshParser();
+        var result = parser.Parse("Get-Date");
+        Assert.NotNull(result);
+        Assert.Equal("Get-Date", result.Source);
+        Assert.False(result.IsUnparseable);
+        Assert.Single(result.Clauses);
+    }
+
+    [Fact]
+    public void PwshParser_options_ctor_constructs_with_supplied_options()
+    {
+        var parser = new PwshParser(new PwshParserOptions
+        {
+            HomeDirectory = "C:/Users/user",
+            WorkingDirectory = "C:/work",
+        });
+        Assert.NotNull(parser);
+    }
+
+    // -------- ShellParserOptions --------
+
+    [Fact]
+    public void ShellParserOptions_has_expected_shape()
+    {
+        var t = typeof(ShellParserOptions);
+        Assert.True(t.IsPublic);
+        Assert.True(t.IsAbstract);
         AssertIsRecord(t);
 
         AssertInitProperty(t, "HomeDirectory", typeof(string), nullable: true);
@@ -119,6 +173,50 @@ public class PublicApiSnapshotTests
             .OrderBy(n => n)
             .ToArray();
         Assert.Equal(new[] { "HomeDirectory", "WorkingDirectory" }, declaredProps);
+    }
+
+    // -------- BashParserOptions --------
+
+    [Fact]
+    public void BashParserOptions_has_expected_shape()
+    {
+        var t = typeof(BashParserOptions);
+        Assert.True(t.IsPublic);
+        Assert.True(t.IsSealed);
+        AssertIsRecord(t);
+        Assert.Equal(typeof(ShellParserOptions), t.BaseType);
+
+        // The resolver knobs are inherited from ShellParserOptions; the
+        // object-initializer shape stays source-compatible with v0.1.
+        AssertInitProperty(t, "HomeDirectory", typeof(string), nullable: true);
+        AssertInitProperty(t, "WorkingDirectory", typeof(string), nullable: true);
+
+        var declaredProps = DeclaredInstanceProps(t)
+            .Where(p => p.Name != "EqualityContract")
+            .Select(p => p.Name)
+            .ToArray();
+        Assert.Empty(declaredProps);
+    }
+
+    // -------- PwshParserOptions --------
+
+    [Fact]
+    public void PwshParserOptions_has_expected_shape()
+    {
+        var t = typeof(PwshParserOptions);
+        Assert.True(t.IsPublic);
+        Assert.True(t.IsSealed);
+        AssertIsRecord(t);
+        Assert.Equal(typeof(ShellParserOptions), t.BaseType);
+
+        AssertInitProperty(t, "HomeDirectory", typeof(string), nullable: true);
+        AssertInitProperty(t, "WorkingDirectory", typeof(string), nullable: true);
+
+        var declaredProps = DeclaredInstanceProps(t)
+            .Where(p => p.Name != "EqualityContract")
+            .Select(p => p.Name)
+            .ToArray();
+        Assert.Empty(declaredProps);
     }
 
     // -------- ParsedCommand --------
@@ -158,7 +256,7 @@ public class PublicApiSnapshotTests
         AssertInitProperty(t, "Args", typeof(IReadOnlyList<Arg>));
         AssertInitProperty(t, "Redirects", typeof(IReadOnlyList<Redirect>));
         AssertInitProperty(t, "IsSubshell", typeof(bool));
-        AssertInitProperty(t, "IsBashCWrapped", typeof(bool));
+        AssertInitProperty(t, "IsCommandStringWrapped", typeof(bool));
 
         var instance = new Clause();
         Assert.Equal(CompoundOperator.None, instance.Operator);
@@ -167,7 +265,7 @@ public class PublicApiSnapshotTests
         Assert.Empty(instance.Args);
         Assert.Empty(instance.Redirects);
         Assert.False(instance.IsSubshell);
-        Assert.False(instance.IsBashCWrapped);
+        Assert.False(instance.IsCommandStringWrapped);
     }
 
     // -------- VerbChain --------
@@ -181,6 +279,8 @@ public class PublicApiSnapshotTests
         AssertIsRecord(t);
 
         AssertInitProperty(t, "Tokens", typeof(IReadOnlyList<string>));
+        AssertInitProperty(t, "CanonicalVerb", typeof(string), nullable: true);
+        AssertInitProperty(t, "IsDynamic", typeof(bool));
 
         // Joined is a computed (get-only) property, no setter.
         var joined = t.GetProperty("Joined");
@@ -195,6 +295,8 @@ public class PublicApiSnapshotTests
         var empty = new VerbChain();
         Assert.Empty(empty.Tokens);
         Assert.Equal("", empty.Joined);
+        Assert.Null(empty.CanonicalVerb);
+        Assert.False(empty.IsDynamic);
     }
 
     // -------- Arg --------
@@ -324,10 +426,13 @@ public class PublicApiSnapshotTests
             nameof(CompoundOperator),
             nameof(IShellParser),
             nameof(ParsedCommand),
+            nameof(PwshParser),
+            nameof(PwshParserOptions),
             nameof(Redirect),
             nameof(RedirectDirection),
+            nameof(ShellParserOptions),
             nameof(VerbChain),
-        };
+        }.OrderBy(n => n).ToArray();
 
         Assert.Equal(expected, actual);
     }
@@ -352,13 +457,18 @@ public class PublicApiSnapshotTests
 
     private static void AssertIsRecord(Type t)
     {
-        // Records emit a compiler-generated <Clone>$ method and an EqualityContract property.
-        var clone = t.GetMethod("<Clone>$", BindingFlags.Public | BindingFlags.Instance);
+        // Records emit a compiler-generated <Clone>$ method and an
+        // EqualityContract property. DeclaredOnly avoids the
+        // AmbiguousMatchException a record hierarchy would otherwise raise —
+        // a derived record re-emits both members with a covariant return.
+        var clone = t.GetMethod(
+            "<Clone>$",
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
         Assert.NotNull(clone);
 
         var equalityContract = t.GetProperty(
             "EqualityContract",
-            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public | BindingFlags.DeclaredOnly);
         Assert.NotNull(equalityContract);
     }
 

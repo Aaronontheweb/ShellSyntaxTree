@@ -472,7 +472,7 @@ public class BashCommandParserTests
     {
         // PR 5: bash -c recursion. The outer bash -c clause is consumed and
         // the inner command's clauses surface inline, each with
-        // IsBashCWrapped=true. The inner cd attributes only within the
+        // IsCommandStringWrapped=true. The inner cd attributes only within the
         // inner shell — outer attribution does not propagate in or out
         // (v0.1 decision; bash -c spawns a fresh shell).
         var result = Parse("bash -c \"cd /a && cmd\"");
@@ -481,11 +481,11 @@ public class BashCommandParserTests
 
         Assert.Equal(new[] { "cd" }, result.Clauses[0].Verb.Tokens);
         Assert.Equal("/a", result.Clauses[0].Args[0].Resolved);
-        Assert.True(result.Clauses[0].IsBashCWrapped);
+        Assert.True(result.Clauses[0].IsCommandStringWrapped);
 
         Assert.Equal(new[] { "cmd" }, result.Clauses[1].Verb.Tokens);
         Assert.Equal(CompoundOperator.AndIf, result.Clauses[1].Operator);
-        Assert.True(result.Clauses[1].IsBashCWrapped);
+        Assert.True(result.Clauses[1].IsCommandStringWrapped);
 
         // The inner cmd inherits /a from the inner cd via attribution.
         Assert.Single(result.Clauses[1].Args);
@@ -502,7 +502,7 @@ public class BashCommandParserTests
         // Issue #27: `hi` is verb-like and absorbed into the inner clause's
         // verb chain (echo is not a FILE verb).
         Assert.Equal(new[] { "echo", "hi" }, clause.Verb.Tokens);
-        Assert.True(clause.IsBashCWrapped);
+        Assert.True(clause.IsCommandStringWrapped);
     }
 
     [Fact]
@@ -513,7 +513,7 @@ public class BashCommandParserTests
         var result = Parse("bash script.sh");
         var clause = Assert.Single(result.Clauses);
         Assert.Equal(new[] { "bash" }, clause.Verb.Tokens);
-        Assert.False(clause.IsBashCWrapped);
+        Assert.False(clause.IsCommandStringWrapped);
     }
 
     [Fact]
@@ -548,7 +548,7 @@ public class BashCommandParserTests
         var clause = Assert.Single(result.Clauses);
         // Issue #27: `hi` absorbed into the verb chain.
         Assert.Equal(new[] { "echo", "hi" }, clause.Verb.Tokens);
-        Assert.True(clause.IsBashCWrapped);
+        Assert.True(clause.IsCommandStringWrapped);
     }
 
     [Fact]
@@ -566,7 +566,7 @@ public class BashCommandParserTests
 
         // Inner ls (surfaced from bash -c). No attribution arg.
         Assert.Equal(new[] { "ls" }, result.Clauses[1].Verb.Tokens);
-        Assert.True(result.Clauses[1].IsBashCWrapped);
+        Assert.True(result.Clauses[1].IsCommandStringWrapped);
         Assert.Equal(CompoundOperator.AndIf, result.Clauses[1].Operator);
         Assert.Empty(result.Clauses[1].Args);
     }

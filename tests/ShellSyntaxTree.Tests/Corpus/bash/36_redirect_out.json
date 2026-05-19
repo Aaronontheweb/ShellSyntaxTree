@@ -12,7 +12,7 @@
           { "direction": "Out", "target": "/tmp/out" }
         ],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   }

@@ -10,7 +10,7 @@
         "args": [],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       },
       {
         "operator": "Pipe",
@@ -20,7 +20,7 @@
           { "direction": "Out", "target": "/tmp/out" }
         ],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   }

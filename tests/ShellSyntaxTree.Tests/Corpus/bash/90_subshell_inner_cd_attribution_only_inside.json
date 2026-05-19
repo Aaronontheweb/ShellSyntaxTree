@@ -12,7 +12,7 @@
         ],
         "redirects": [],
         "isSubshell": true,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       },
       {
         "operator": "AndIf",
@@ -22,7 +22,7 @@
         ],
         "redirects": [],
         "isSubshell": true,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       },
       {
         "operator": "AndIf",
@@ -30,7 +30,7 @@
         "args": [],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   },

@@ -13,7 +13,7 @@
           { "direction": "ErrOut", "target": "/work/err" }
         ],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   },

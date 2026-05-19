@@ -21,6 +21,38 @@ public sealed record VerbChain
     /// </summary>
     public IReadOnlyList<string> Tokens { get; init; } = Array.Empty<string>();
 
+    /// <summary>
+    /// The canonical, alias-resolved verb identity, set when the parser
+    /// resolved the first token of <see cref="Tokens"/> from a shell
+    /// built-in alias — e.g. <c>ls</c> / <c>gci</c> / <c>dir</c> resolve to
+    /// <c>Get-ChildItem</c>; <c>rm</c> / <c>del</c> resolve to
+    /// <c>Remove-Item</c>. <see cref="Tokens"/> always keeps the verbatim
+    /// token the user typed; this field carries the resolved name so a
+    /// consumer can gate on canonical identity without re-implementing the
+    /// alias table.
+    ///
+    /// Null when no alias resolution applied: every bash clause, and every
+    /// PowerShell clause whose verb is already a canonical cmdlet or an
+    /// unknown command. Consumers SHOULD use
+    /// <c>CanonicalVerb ?? Tokens[0]</c> as the gate key. See
+    /// SPEC.POWERSHELL.md §3.
+    /// </summary>
+    public string? CanonicalVerb { get; init; }
+
+    /// <summary>
+    /// True when the clause's command name is a dynamic token the parser
+    /// cannot statically identify — a variable (<c>&amp; $exe</c>), a
+    /// subexpression (<c>&amp; (Get-Thing)</c>), or a script block
+    /// (<c>&amp; { ... }</c>) at verb position. <see cref="Tokens"/> still
+    /// carries the verbatim token; <see cref="CanonicalVerb"/> is null.
+    ///
+    /// A consumer MUST treat a clause with <c>IsDynamic=true</c> as "the
+    /// command being run is unknown" and route to safe-fail. Always false
+    /// for bash clauses and for PowerShell clauses with a literal command
+    /// name. See SPEC.POWERSHELL.md §3.
+    /// </summary>
+    public bool IsDynamic { get; init; }
+
     /// <summary>Convenience: tokens joined with spaces.</summary>
     public string Joined => string.Join(" ", Tokens);
 }

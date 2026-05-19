@@ -180,7 +180,7 @@
               .Append(" op=").Append(clause.Operator)
               .Append(" verb=\"").Append(clause.Verb.Joined).Append('"');
             if (clause.IsSubshell) sb.Append(" subshell");
-            if (clause.IsBashCWrapped) sb.Append(" bash-c");
+            if (clause.IsCommandStringWrapped) sb.Append(" cmd-wrapped");
             sb.AppendLine();
 
             foreach (var arg in clause.Args)

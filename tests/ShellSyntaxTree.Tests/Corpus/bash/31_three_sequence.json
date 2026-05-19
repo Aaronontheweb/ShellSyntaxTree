@@ -4,9 +4,9 @@
   "expected": {
     "isUnparseable": false,
     "clauses": [
-      { "operator": "None", "verb": ["cmd1"], "args": [], "redirects": [], "isSubshell": false, "isBashCWrapped": false },
-      { "operator": "Sequence", "verb": ["cmd2"], "args": [], "redirects": [], "isSubshell": false, "isBashCWrapped": false },
-      { "operator": "Sequence", "verb": ["cmd3"], "args": [], "redirects": [], "isSubshell": false, "isBashCWrapped": false }
+      { "operator": "None", "verb": ["cmd1"], "args": [], "redirects": [], "isSubshell": false, "isCommandStringWrapped": false },
+      { "operator": "Sequence", "verb": ["cmd2"], "args": [], "redirects": [], "isSubshell": false, "isCommandStringWrapped": false },
+      { "operator": "Sequence", "verb": ["cmd3"], "args": [], "redirects": [], "isSubshell": false, "isCommandStringWrapped": false }
     ]
   }
 }
