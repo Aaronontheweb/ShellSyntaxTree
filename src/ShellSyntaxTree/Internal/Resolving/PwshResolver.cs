@@ -89,11 +89,10 @@ internal static class PwshResolver
             hadHomeish = true;
         }
 
-        if (ContainsDynamicReference(working, out var isPsScriptRoot))
+        if (ContainsDynamicReference(working))
         {
             // $PSScriptRoot, $var, $env:NAME, ${name} — not statically
             // knowable. Path slot → DynamicSkip; non-path slot → EnvVar.
-            _ = isPsScriptRoot;
             return treatAsPath
                 ? (ArgKind.DynamicSkip, null, false)
                 : (ArgKind.EnvVar, null, false);
@@ -208,11 +207,16 @@ internal static class PwshResolver
         return sb.ToString();
     }
 
+    // Recognized home-variable forms: $HOME / ${HOME} / $env:USERPROFILE /
+    // ${env:USERPROFILE}. The braced forms are self-delimiting; the bare
+    // forms must not run into an adjacent identifier char.
+    private static readonly string[] BracedHomeForms = { "${HOME}", "${env:USERPROFILE}" };
+
+    private static readonly string[] BareHomeForms = { "$env:USERPROFILE", "$HOME" };
+
     private static bool TryMatchHomeVariable(string input, int i, out int consumed)
     {
-        // Recognized: $HOME  ${HOME}  $env:USERPROFILE  ${env:USERPROFILE}
-        ReadOnlySpan<string> braced = new[] { "${HOME}", "${env:USERPROFILE}" };
-        foreach (var form in braced)
+        foreach (var form in BracedHomeForms)
         {
             if (Matches(input, i, form))
             {
@@ -221,8 +225,7 @@ internal static class PwshResolver
             }
         }
 
-        ReadOnlySpan<string> bare = new[] { "$env:USERPROFILE", "$HOME" };
-        foreach (var form in bare)
+        foreach (var form in BareHomeForms)
         {
             if (Matches(input, i, form)
                 && !IsIdentifierContinuation(CharAt(input, i + form.Length)))
@@ -244,11 +247,11 @@ internal static class PwshResolver
 
     /// <summary>
     /// Detect any <c>$var</c> / <c>$env:NAME</c> / <c>${name}</c> /
-    /// <c>$PSScriptRoot</c> reference left after home substitution.
+    /// <c>$PSScriptRoot</c> reference left after home substitution. Every
+    /// such reference resolves the same way — not statically knowable.
     /// </summary>
-    private static bool ContainsDynamicReference(string input, out bool isPsScriptRoot)
+    private static bool ContainsDynamicReference(string input)
     {
-        isPsScriptRoot = false;
         for (var i = 0; i < input.Length; i++)
         {
             if (input[i] != '$' || i + 1 >= input.Length)
@@ -266,11 +269,6 @@ internal static class PwshResolver
             }
             else if (IsIdentifierStart(next))
             {
-                if (Matches(input, i, "$PSScriptRoot"))
-                {
-                    isPsScriptRoot = true;
-                }
-
                 return true;
             }
         }

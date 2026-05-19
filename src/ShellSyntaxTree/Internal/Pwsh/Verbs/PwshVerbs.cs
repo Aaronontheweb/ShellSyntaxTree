@@ -17,17 +17,6 @@ namespace ShellSyntaxTree.Internal.Pwsh.Verbs;
 internal static class PwshVerbs
 {
     /// <summary>
-    /// Verbs whose target attributes the cwd for subsequent clauses
-    /// (SPEC.POWERSHELL.md §9). Canonical cmdlets plus raw aliases.
-    /// </summary>
-    internal static readonly HashSet<string> CwdVerbs =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            "Set-Location", "Push-Location", "Pop-Location",
-            "cd", "chdir", "sl", "pushd", "popd",
-        };
-
-    /// <summary>
     /// File cmdlets whose positional args classify as paths
     /// (SPEC.POWERSHELL.md §6.4). Canonical cmdlets plus the Windows native
     /// file utilities reserved in SPEC.md §6.4.
@@ -52,17 +41,6 @@ internal static class PwshVerbs
         };
 
     /// <summary>
-    /// Cmdlets whose first non-flag positional is a script block / dynamic
-    /// content rather than a path — they have no path positionals
-    /// (SPEC.POWERSHELL.md §7.2).
-    /// </summary>
-    internal static readonly HashSet<string> ScriptBlockVerbs =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
-            "ForEach-Object", "Where-Object",
-        };
-
-    /// <summary>
     /// Control-flow, definition, block, and statement keywords v0.2.0 does
     /// not parse. SPEC.POWERSHELL.md §6.4 / §11: one at statement/verb
     /// position sets <c>ParsedCommand.IsUnparseable = true</c>.
@@ -74,17 +52,6 @@ internal static class PwshVerbs
             "do", "until", "function", "filter", "workflow", "configuration",
             "class", "enum", "param", "begin", "process", "end",
             "dynamicparam", "trap", "data", "try", "catch", "finally",
-            "return", "throw", "break", "continue", "exit", "using", "hidden",
-        };
-
-    /// <summary>
-    /// Statement keywords that lead a statement and mark it unparseable
-    /// (SPEC.POWERSHELL.md §11 item 5). A subset of
-    /// <see cref="ControlFlowKeywords"/> kept separate for diagnostic text.
-    /// </summary>
-    internal static readonly HashSet<string> StatementKeywords =
-        new(StringComparer.OrdinalIgnoreCase)
-        {
             "return", "throw", "break", "continue", "exit", "using", "hidden",
         };
 

@@ -524,10 +524,8 @@ internal static class PwshCommandParser
             });
         }
 
-        var head = body[start];
-
         // Classify the command.
-        var classified = ClassifyVerb(body, start, source);
+        var classified = ClassifyVerb(body, start);
         if (classified.Kind == PwshCommandKind.PwshInvocation)
         {
             var recursion = TryRecurseIntoPwsh(
@@ -555,7 +553,6 @@ internal static class PwshCommandParser
             IsDynamic = classified.IsDynamic,
         };
 
-        _ = head;
         return BuildResult.Ok(new Clause
         {
             Operator = segment.PrecedingOperator,
@@ -590,58 +587,42 @@ internal static class PwshCommandParser
 
         public bool IsDynamic { get; init; }
 
-        /// <summary>Index in <c>body</c> where args begin.</summary>
-        public int ArgStart { get; init; }
-
         /// <summary>Body indices that are verb-chain tokens (skipped as args).</summary>
         public HashSet<int> VerbPositions { get; init; }
-
-        /// <summary>The effective verb for per-verb rules (canonical ?? raw).</summary>
-        public string EffectiveVerb { get; init; }
     }
 
-    private static ClassifiedVerb ClassifyVerb(List<PwshToken> body, int start, string source)
+    private static ClassifiedVerb ClassifyVerb(List<PwshToken> body, int start)
     {
         var head = body[start];
         var verbPositions = new HashSet<int> { start };
 
-        if (head.Kind == PwshTokenKind.Operator)
+        // A clause that starts with a redirect operator, a flag, or a
+        // stop-parsing token has no verb.
+        if (head.Kind is PwshTokenKind.Operator or PwshTokenKind.Parameter
+            or PwshTokenKind.StopParsing)
         {
-            // Redirect-only clause — no verb.
             return new ClassifiedVerb
             {
                 Kind = PwshCommandKind.NoVerb,
                 VerbTokens = new List<string>(),
-                ArgStart = start,
                 VerbPositions = new HashSet<int>(),
-                EffectiveVerb = string.Empty,
             };
         }
 
-        if (head.Kind is PwshTokenKind.ScriptBlock or PwshTokenKind.Subexpression
-            or PwshTokenKind.Splat)
+        // A script block, subexpression, splat, or $-variable at command
+        // position is a dynamic command name (§3).
+        var isVariableWord = head.Kind == PwshTokenKind.Word
+            && head.Value.Length > 0 && head.Value[0] == '$';
+        if (isVariableWord
+            || head.Kind is PwshTokenKind.ScriptBlock or PwshTokenKind.Subexpression
+                or PwshTokenKind.Splat)
         {
             return new ClassifiedVerb
             {
                 Kind = PwshCommandKind.DynamicCommand,
                 VerbTokens = new List<string> { head.Value },
                 IsDynamic = true,
-                ArgStart = start + 1,
                 VerbPositions = verbPositions,
-                EffectiveVerb = head.Value,
-            };
-        }
-
-        if (head.Kind == PwshTokenKind.Parameter || head.Kind == PwshTokenKind.StopParsing)
-        {
-            // A clause starting with a flag or stop-parsing token has no verb.
-            return new ClassifiedVerb
-            {
-                Kind = PwshCommandKind.NoVerb,
-                VerbTokens = new List<string>(),
-                ArgStart = start,
-                VerbPositions = new HashSet<int>(),
-                EffectiveVerb = string.Empty,
             };
         }
 
@@ -651,28 +632,12 @@ internal static class PwshCommandParser
             {
                 Kind = PwshCommandKind.QuotedCommand,
                 VerbTokens = new List<string> { head.Value },
-                ArgStart = start + 1,
                 VerbPositions = verbPositions,
-                EffectiveVerb = head.Value,
             };
         }
 
         // head.Kind == Word.
         var word = head.Value;
-
-        // A $-variable command name is dynamic (§3).
-        if (word.Length > 0 && word[0] == '$')
-        {
-            return new ClassifiedVerb
-            {
-                Kind = PwshCommandKind.DynamicCommand,
-                VerbTokens = new List<string> { word },
-                IsDynamic = true,
-                ArgStart = start + 1,
-                VerbPositions = verbPositions,
-                EffectiveVerb = word,
-            };
-        }
 
         if (PwshApprovedVerbs.IsCmdletShaped(word))
         {
@@ -680,10 +645,7 @@ internal static class PwshCommandParser
             {
                 Kind = PwshCommandKind.Cmdlet,
                 VerbTokens = new List<string> { word },
-                CanonicalVerb = null,
-                ArgStart = start + 1,
                 VerbPositions = verbPositions,
-                EffectiveVerb = word,
             };
         }
 
@@ -695,9 +657,7 @@ internal static class PwshCommandParser
                 Kind = PwshCommandKind.Alias,
                 VerbTokens = new List<string> { word },
                 CanonicalVerb = alias,
-                ArgStart = start + 1,
                 VerbPositions = verbPositions,
-                EffectiveVerb = alias,
             };
         }
 
@@ -707,9 +667,7 @@ internal static class PwshCommandParser
             {
                 Kind = PwshCommandKind.PwshInvocation,
                 VerbTokens = new List<string> { word },
-                ArgStart = start + 1,
                 VerbPositions = verbPositions,
-                EffectiveVerb = word,
             };
         }
 
@@ -717,7 +675,6 @@ internal static class PwshCommandParser
         // file utility (xcopy, robocopy, ...) gets a 1-token chain so its
         // arguments classify as paths.
         var verbTokens = new List<string> { word };
-        var argStart = start + 1;
         if (!PwshVerbs.FileVerbs.Contains(word))
         {
             BashVerbs.FlagsWithValue.TryGetValue(word, out var flagsForVerb);
@@ -753,19 +710,14 @@ internal static class PwshCommandParser
                 verbTokens.Add(t.Value);
                 verbPositions.Add(i);
                 i++;
-                argStart = i;
             }
-
-            argStart = start + 1; // args iterate the whole body minus verb positions
         }
 
         return new ClassifiedVerb
         {
             Kind = PwshCommandKind.NativeCommand,
             VerbTokens = verbTokens,
-            ArgStart = argStart,
             VerbPositions = verbPositions,
-            EffectiveVerb = word,
         };
     }
 
@@ -1337,7 +1289,8 @@ internal static class PwshCommandParser
 
             if (a.IsFlag)
             {
-                sawPathFlag = a.Raw.ToLowerInvariant() is "-path" or "-literalpath" or "-lp";
+                sawPathFlag = a.Raw.ToLowerInvariant() is "-path" or "-literalpath"
+                    or "-pspath" or "-lp";
                 continue;
             }
 
