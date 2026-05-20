@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable class",
+  "input": "class Widget { }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027class\u0027 is not supported in v0.2"
+  },
+  "notes": "A class definition.",
+  "oracleExpectation": "OutOfScope"
+}

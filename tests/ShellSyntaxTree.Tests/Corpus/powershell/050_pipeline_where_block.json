@@ -1,0 +1,32 @@
+{
+  "name": "Pipeline where block",
+  "input": "Get-Process | Where-Object { $_.CPU -gt 10 }",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Process"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Where-Object"
+        ],
+        "args": [
+          {
+            "raw": "{ $_.CPU -gt 10 }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Where-Object with an opaque script block."
+}

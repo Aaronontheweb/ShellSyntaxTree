@@ -1,0 +1,19 @@
+{
+  "name": "Compound group",
+  "input": "(Get-ChildItem)",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [],
+        "redirects": [],
+        "isSubshell": true
+      }
+    ]
+  },
+  "notes": "A parenthesized pipeline marks IsSubshell."
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Dynamic call scriptblock",
+  "input": "\u0026 { Get-Date }",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "{ Get-Date }"
+        ],
+        "isDynamic": true,
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "The call operator on a script block \u2014 dynamic command."
+}

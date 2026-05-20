@@ -1,0 +1,19 @@
+{
+  "name": "Dynamic variable command",
+  "input": "$cmd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "$cmd"
+        ],
+        "isDynamic": true,
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A bare variable at statement position is a dynamic command name."
+}

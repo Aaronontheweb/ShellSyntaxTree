@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable unclosed subexpression",
+  "input": "Get-Content $(Get-Location",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unbalanced \u0027$(\u0027 subexpression"
+  },
+  "notes": "An unterminated $( ) subexpression."
+}

@@ -10,19 +10,32 @@ var commandArg = new Argument<string>("command")
     Description = "The shell command (or single line) to analyze.",
 };
 
+var shellOption = new Option<string>("--shell")
+{
+    Description = "Which parser to use: 'bash' (default) or 'pwsh'.",
+    DefaultValueFactory = _ => "bash",
+};
+shellOption.AcceptOnlyFromAmong("bash", "pwsh");
+
 var explainCmd = new Command("explain", "Pretty-print the parsed AST.")
 {
     commandArg,
+    shellOption,
 };
-explainCmd.SetAction(parseResult => ExplainCommand.Run(parseResult.GetValue(commandArg) ?? string.Empty));
+explainCmd.SetAction(parseResult => ExplainCommand.Run(
+    parseResult.GetValue(commandArg) ?? string.Empty,
+    parseResult.GetValue(shellOption) ?? "bash"));
 
 var auditCmd = new Command("audit", "Run the built-in policy against the command.")
 {
     commandArg,
+    shellOption,
 };
-auditCmd.SetAction(parseResult => AuditCommand.Run(parseResult.GetValue(commandArg) ?? string.Empty));
+auditCmd.SetAction(parseResult => AuditCommand.Run(
+    parseResult.GetValue(commandArg) ?? string.Empty,
+    parseResult.GetValue(shellOption) ?? "bash"));
 
-var root = new RootCommand("ShellSyntaxTree sample CLI")
+var root = new RootCommand("ShellSyntaxTree sample CLI — bash & PowerShell")
 {
     explainCmd,
     auditCmd,

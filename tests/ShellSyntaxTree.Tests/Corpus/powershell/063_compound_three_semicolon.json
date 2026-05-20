@@ -1,0 +1,51 @@
+{
+  "name": "Compound three semicolon",
+  "input": "gci; rm a.txt; rm b.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [
+          {
+            "raw": "a.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/a.txt"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [
+          {
+            "raw": "b.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/b.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Three ;-joined statements."
+}

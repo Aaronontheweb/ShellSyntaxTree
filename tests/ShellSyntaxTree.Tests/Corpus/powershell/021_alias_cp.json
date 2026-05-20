@@ -1,0 +1,32 @@
+{
+  "name": "Alias cp",
+  "input": "cp src.txt dst.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cp"
+        ],
+        "canonicalVerb": "Copy-Item",
+        "args": [
+          {
+            "raw": "src.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/src.txt"
+          },
+          {
+            "raw": "dst.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/dst.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "cp resolves to Copy-Item."
+}

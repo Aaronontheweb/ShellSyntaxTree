@@ -14,6 +14,7 @@
     <File Path="TOOLING.md" />
     <File Path="IMPLEMENTATION_PLAN.md" />
     <File Path="SPEC.md" />
+    <File Path="SPEC.POWERSHELL.md" />
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/ShellSyntaxTree/ShellSyntaxTree.csproj" />
@@ -24,5 +25,8 @@
   <Folder Name="/samples/">
     <Project Path="samples/ShellSyntaxTree.Cli.Sample/ShellSyntaxTree.Cli.Sample.csproj" />
     <Project Path="samples/ShellSyntaxTree.Web.Sample/ShellSyntaxTree.Web.Sample.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/PwshCorpusTool/PwshCorpusTool.csproj" />
   </Folder>
 </Solution>

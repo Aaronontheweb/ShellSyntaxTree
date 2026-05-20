@@ -1,0 +1,28 @@
+{
+  "name": "Compound group then clause",
+  "input": "(gci) ; Get-Date",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": [],
+        "isSubshell": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A group followed by a ;-joined clause."
+}

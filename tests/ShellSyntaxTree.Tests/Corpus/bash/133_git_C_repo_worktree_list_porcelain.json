@@ -14,7 +14,7 @@
         ],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   },

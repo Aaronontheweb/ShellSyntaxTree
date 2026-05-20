@@ -1,0 +1,43 @@
+{
+  "name": "Setloc andif",
+  "input": "cd C:\\repo \u0026\u0026 git status",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "C:\\repo",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": [
+          "git",
+          "status"
+        ],
+        "args": [
+          {
+            "raw": "C:/repo",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Attribution propagates across the \u0026\u0026 operator."
+}

@@ -1,0 +1,27 @@
+{
+  "name": "Pipeline format table",
+  "input": "Get-Service | ft",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Service"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "ft"
+        ],
+        "canonicalVerb": "Format-Table",
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Pipeline into the ft alias."
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable unterminated herestring",
+  "input": "Write-Output @\u0022\nnever closed",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unterminated here-string"
+  },
+  "notes": "An unterminated here-string."
+}

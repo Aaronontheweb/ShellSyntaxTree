@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable unclosed scriptblock",
+  "input": "gci | ? { $_.Name",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unbalanced \u0027{\u0027 script block"
+  },
+  "notes": "An unterminated script block."
+}

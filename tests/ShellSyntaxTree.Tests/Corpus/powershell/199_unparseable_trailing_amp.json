@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable trailing amp",
+  "input": "git status \u0026",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "trailing \u0027\u0026\u0027 background-job operator is not supported in v0.2"
+  },
+  "notes": "A trailing \u0026 background-job operator.",
+  "oracleExpectation": "OutOfScope"
+}

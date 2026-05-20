@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable trap",
+  "input": "trap { \u0027caught\u0027 }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027trap\u0027 is not supported in v0.2"
+  },
+  "notes": "A trap statement.",
+  "oracleExpectation": "OutOfScope"
+}

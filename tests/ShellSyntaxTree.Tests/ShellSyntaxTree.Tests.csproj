@@ -9,6 +9,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ShellSyntaxTree\ShellSyntaxTree.csproj" />
+    <!-- PwshOracleTests reuse the tool's real-pwsh validation oracle. -->
+    <ProjectReference Include="..\..\tools\PwshCorpusTool\PwshCorpusTool.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -24,9 +26,9 @@
   </ItemGroup>
 
   <!-- Copy the JSON corpus alongside the test binary so the corpus runner
-       can enumerate AppContext.BaseDirectory/Corpus/bash/*.json at runtime. -->
+       can enumerate AppContext.BaseDirectory/Corpus/<shell>/*.json at runtime. -->
   <ItemGroup>
-    <None Update="Corpus\bash\*.json">
+    <None Update="Corpus\**\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

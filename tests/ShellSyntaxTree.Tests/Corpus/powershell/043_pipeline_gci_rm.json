@@ -1,0 +1,28 @@
+{
+  "name": "Pipeline gci rm",
+  "input": "gci | rm",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Two-clause alias pipeline."
+}

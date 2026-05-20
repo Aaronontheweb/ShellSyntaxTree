@@ -1,0 +1,31 @@
+{
+  "name": "Bind two positionals",
+  "input": "Get-ChildItem C:\\a C:\\b",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "C:\\a",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/a"
+          },
+          {
+            "raw": "C:\\b",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/b"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Two positional paths."
+}

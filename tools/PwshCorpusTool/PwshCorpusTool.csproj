@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(NetLibVersion)</TargetFramework>
+    <RootNamespace>ShellSyntaxTree.Tools.PwshCorpus</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <!-- A dev-only authoring aid; SourceLink/pack metadata do not apply. -->
+    <PublishRepositoryUrl>false</PublishRepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\ShellSyntaxTree\ShellSyntaxTree.csproj" />
+  </ItemGroup>
+
+</Project>

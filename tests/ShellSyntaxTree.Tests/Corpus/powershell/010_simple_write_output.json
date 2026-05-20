@@ -1,0 +1,24 @@
+{
+  "name": "Simple write output",
+  "input": "Write-Output hello",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "hello",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Write-Output with a non-path literal arg."
+}

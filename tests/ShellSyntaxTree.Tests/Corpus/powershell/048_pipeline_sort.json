@@ -1,0 +1,33 @@
+{
+  "name": "Pipeline sort",
+  "input": "gci | Sort-Object Length",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Sort-Object"
+        ],
+        "args": [
+          {
+            "raw": "Length",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Pipeline into Sort-Object."
+}

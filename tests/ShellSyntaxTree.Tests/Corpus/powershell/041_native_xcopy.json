@@ -1,0 +1,31 @@
+{
+  "name": "Native xcopy",
+  "input": "xcopy C:\\src C:\\dst",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "xcopy"
+        ],
+        "args": [
+          {
+            "raw": "C:\\src",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/src"
+          },
+          {
+            "raw": "C:\\dst",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/dst"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "xcopy native file utility \u2014 one-token chain, positionals are paths."
+}

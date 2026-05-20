@@ -12,7 +12,7 @@
           { "direction": "ErrOut", "target": "/tmp/err" }
         ],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   }

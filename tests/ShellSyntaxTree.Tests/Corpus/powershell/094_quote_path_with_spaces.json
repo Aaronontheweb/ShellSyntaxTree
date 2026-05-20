@@ -1,0 +1,25 @@
+{
+  "name": "Quote path with spaces",
+  "input": "Get-Item \u0022C:\\path with spaces\\file.txt\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Item"
+        ],
+        "args": [
+          {
+            "raw": "\u0022C:\\path with spaces\\file.txt\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/path with spaces/file.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A double-quoted drive path with spaces."
+}

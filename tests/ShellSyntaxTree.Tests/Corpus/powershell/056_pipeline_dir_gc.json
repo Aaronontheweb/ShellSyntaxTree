@@ -1,0 +1,28 @@
+{
+  "name": "Pipeline dir gc",
+  "input": "dir | gc",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "dir"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "gc"
+        ],
+        "canonicalVerb": "Get-Content",
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "dir piped into gc \u2014 both aliases."
+}

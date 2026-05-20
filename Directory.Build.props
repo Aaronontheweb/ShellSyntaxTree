@@ -7,8 +7,8 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <VersionPrefix>0.1.5</VersionPrefix>
-    <VersionSuffix></VersionSuffix>
+    <VersionPrefix>0.2.0</VersionPrefix>
+    <VersionSuffix>alpha</VersionSuffix>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Target framework matrix -->
@@ -29,7 +29,7 @@
   </ItemGroup>
   <!-- NuGet package metadata -->
   <PropertyGroup>
-    <PackageTags>bash;shell;parser;ast;security;agent;syntax-tree</PackageTags>
+    <PackageTags>bash;powershell;pwsh;shell;parser;ast;security;agent;syntax-tree</PackageTags>
     <PackageProjectUrl>https://github.com/Aaronontheweb/ShellSyntaxTree</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Aaronontheweb/ShellSyntaxTree</RepositoryUrl>
     <RepositoryType>git</RepositoryType>

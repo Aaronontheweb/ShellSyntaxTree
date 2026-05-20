@@ -1,0 +1,20 @@
+{
+  "name": "Native kubectl get",
+  "input": "kubectl get pods",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "kubectl",
+          "get",
+          "pods"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Native kubectl, three-token chain."
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Dynamic env path arg",
+  "input": "Get-Content $env:TEMP\\session.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "$env:TEMP\\session.log",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "An $env: reference in a path slot resolves to DynamicSkip."
+}

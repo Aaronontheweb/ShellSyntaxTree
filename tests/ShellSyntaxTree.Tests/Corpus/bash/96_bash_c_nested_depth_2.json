@@ -10,7 +10,7 @@
         "args": [],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": true
+        "isCommandStringWrapped": true
       }
     ]
   },

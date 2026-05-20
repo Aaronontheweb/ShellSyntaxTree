@@ -1,0 +1,33 @@
+{
+  "name": "Pipeline foreach alias",
+  "input": "Get-ChildItem | foreach { $_ }",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "foreach"
+        ],
+        "canonicalVerb": "ForEach-Object",
+        "args": [
+          {
+            "raw": "{ $_ }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "foreach after a pipe is the ForEach-Object alias, not the loop keyword."
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable env assignment",
+  "input": "$env:EDITOR = \u0027code\u0027",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "an assignment statement is not supported in v0.2"
+  },
+  "notes": "An $env: assignment statement.",
+  "oracleExpectation": "OutOfScope"
+}

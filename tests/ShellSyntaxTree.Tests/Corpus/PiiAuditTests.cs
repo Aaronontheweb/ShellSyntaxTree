@@ -15,12 +15,12 @@ using Xunit.Sdk;
 namespace ShellSyntaxTree.Tests.Corpus;
 
 /// <summary>
-/// PII audit gate per SPEC §14. Scans every JSON corpus entry under
-/// <c>tests/ShellSyntaxTree.Tests/Corpus/bash/</c> for the forbidden
-/// patterns listed in the sanitization table. The audit reads from the
-/// build-output copy of the corpus (the same location the runner pulls
-/// from) so CI runs against the same bytes a developer's local
-/// <c>dotnet test</c> would.
+/// PII audit gate per SPEC §14 / SPEC.POWERSHELL.md §14. Scans every JSON
+/// corpus entry under every <c>tests/ShellSyntaxTree.Tests/Corpus/&lt;shell&gt;/</c>
+/// directory for the forbidden patterns listed in the sanitization table.
+/// The audit reads from the build-output copy of the corpus (the same
+/// location the runner pulls from) so CI runs against the same bytes a
+/// developer's local <c>dotnet test</c> would.
 /// </summary>
 /// <remarks>
 /// Scanning policy:
@@ -85,11 +85,24 @@ public class PiiAuditTests
     private static readonly Regex RepoPathPattern =
         new(@"/home/[^/]+/repositories/[^/]+/([a-zA-Z0-9_.-]+)/", RegexOptions.Compiled);
 
+    // SPEC.POWERSHELL.md §14: a concrete C:\Users\<username>\ path (mixed
+    // slashes allowed). A literal $env:USERNAME / $env:USERPROFILE reference
+    // is not PII and is not matched here.
+    private static readonly Regex WindowsUserPattern =
+        new(@"[A-Za-z]:[\\/]Users[\\/]([A-Za-z0-9_.-]+)[\\/]", RegexOptions.Compiled);
+
+    // SPEC.POWERSHELL.md §14: a UNC \\<hostname>\share path.
+    private static readonly Regex UncHostPattern =
+        new(@"\\\\([A-Za-z0-9_.-]+)\\", RegexOptions.Compiled);
+
+    private static readonly HashSet<string> AllowedUncHosts =
+        new(StringComparer.Ordinal) { "internal-host.example" };
+
     [Fact]
     public void Corpus_contains_no_pii_per_spec_section_14()
     {
-        var dir = Path.Combine(AppContext.BaseDirectory, "Corpus", "bash");
-        if (!Directory.Exists(dir))
+        var root = Path.Combine(AppContext.BaseDirectory, "Corpus");
+        if (!Directory.Exists(root))
         {
             // The audit is vacuous when there's no corpus to audit; the
             // separate CorpusRunnerTests asserts the corpus is present.
@@ -97,24 +110,27 @@ public class PiiAuditTests
         }
 
         var hits = new List<string>();
-        var files = Directory.GetFiles(dir, "*.json").OrderBy(f => f).ToArray();
-        foreach (var file in files)
+        foreach (var shellDir in Directory.GetDirectories(root).OrderBy(d => d))
         {
-            var name = Path.GetFileName(file);
-            JsonDocument doc;
-            try
+            var shell = Path.GetFileName(shellDir);
+            foreach (var file in Directory.GetFiles(shellDir, "*.json").OrderBy(f => f))
             {
-                doc = JsonDocument.Parse(File.ReadAllText(file));
-            }
-            catch (JsonException ex)
-            {
-                hits.Add($"{name}: failed to parse JSON for PII audit: {ex.Message}");
-                continue;
-            }
+                var name = $"{shell}/{Path.GetFileName(file)}";
+                JsonDocument doc;
+                try
+                {
+                    doc = JsonDocument.Parse(File.ReadAllText(file));
+                }
+                catch (JsonException ex)
+                {
+                    hits.Add($"{name}: failed to parse JSON for PII audit: {ex.Message}");
+                    continue;
+                }
 
-            using (doc)
-            {
-                Walk(doc.RootElement, name, fieldPath: string.Empty, hits);
+                using (doc)
+                {
+                    Walk(doc.RootElement, name, fieldPath: string.Empty, hits);
+                }
             }
         }
 
@@ -160,6 +176,26 @@ public class PiiAuditTests
     }
 
     /// <summary>
+    /// True when a long alphanumeric run has too few distinct characters to
+    /// be a credential — e.g. the repeated-character filler of the
+    /// over-cap corpus entry. A real API key has high character diversity.
+    /// </summary>
+    private static bool IsLowEntropyRun(string token)
+    {
+        var distinct = new HashSet<char>();
+        foreach (var c in token)
+        {
+            distinct.Add(c);
+            if (distinct.Count > 4)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Decide whether a JSON string at <paramref name="fieldPath"/> is in
     /// scope for the audit. SPEC §14: scan <c>input</c>, <c>notes</c>,
     /// and any <c>raw</c> nested under args. Skip synthetic fields like
@@ -199,10 +235,23 @@ public class PiiAuditTests
             hits.Add($"{fileName} ({fieldPath}): email '{m.Value}' (SPEC §14)");
         }
 
-        // Long alphanumeric tokens (potential API keys).
-        foreach (Match m in LongKeyPattern.Matches(value))
+        // Long alphanumeric tokens (potential API keys). A base64
+        // -EncodedCommand payload and a repeated-character filler are
+        // intentional corpus content, not leaked secrets — exempt them.
+        var isEncodedCommand =
+            value.IndexOf("-EncodedCommand", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("-e ", StringComparison.OrdinalIgnoreCase) >= 0;
+        if (!isEncodedCommand)
         {
-            hits.Add($"{fileName} ({fieldPath}): long token '{m.Value.Substring(0, Math.Min(8, m.Value.Length))}…' ({m.Value.Length} chars; SPEC §14 key pattern)");
+            foreach (Match m in LongKeyPattern.Matches(value))
+            {
+                if (IsLowEntropyRun(m.Value))
+                {
+                    continue;
+                }
+
+                hits.Add($"{fileName} ({fieldPath}): long token '{m.Value.Substring(0, Math.Min(8, m.Value.Length))}…' ({m.Value.Length} chars; SPEC §14 key pattern)");
+            }
         }
 
         // /home/<user>/ — allowlist generic placeholders.
@@ -232,6 +281,26 @@ public class PiiAuditTests
             if (!AllowedRepoNames.Contains(repo))
             {
                 hits.Add($"{fileName} ({fieldPath}): repository path '/repositories/.../{repo}/' — not in allowed-placeholder list (SPEC §14)");
+            }
+        }
+
+        // C:\Users\<username>\ (SPEC.POWERSHELL.md §14).
+        foreach (Match m in WindowsUserPattern.Matches(value))
+        {
+            var user = m.Groups[1].Value;
+            if (!AllowedUsersUsernames.Contains(user))
+            {
+                hits.Add($"{fileName} ({fieldPath}): Windows user path 'Users\\{user}\\' — not in allowed-placeholder list (SPEC.POWERSHELL.md §14)");
+            }
+        }
+
+        // UNC \\<hostname>\share (SPEC.POWERSHELL.md §14).
+        foreach (Match m in UncHostPattern.Matches(value))
+        {
+            var host = m.Groups[1].Value;
+            if (!AllowedUncHosts.Contains(host))
+            {
+                hits.Add($"{fileName} ({fieldPath}): UNC host '\\\\{host}\\' — not in allowed-placeholder list (SPEC.POWERSHELL.md §14)");
             }
         }
     }

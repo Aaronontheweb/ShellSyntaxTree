@@ -1,0 +1,24 @@
+{
+  "name": "Dynamic subexpression arg",
+  "input": "Get-Content $(Get-Location)",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "$(Get-Location)",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A $( ) subexpression argument is opaque DynamicSkip."
+}

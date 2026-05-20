@@ -1,0 +1,41 @@
+{
+  "name": "Bind name newitem",
+  "input": "New-Item -Name report.txt -Path C:\\out",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "New-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Name",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "report.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/report.txt"
+          },
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\out",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/out"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Name is a path leaf for New-Item (\u00A77.1)."
+}

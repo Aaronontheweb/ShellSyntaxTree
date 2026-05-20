@@ -1,0 +1,34 @@
+{
+  "name": "Pipeline gci path remove",
+  "input": "gci C:\\logs | Remove-Item",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "First clause carries a path; piped to Remove-Item."
+}

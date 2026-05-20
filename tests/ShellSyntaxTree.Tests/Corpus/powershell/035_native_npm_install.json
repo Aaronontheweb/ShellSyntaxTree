@@ -1,0 +1,19 @@
+{
+  "name": "Native npm install",
+  "input": "npm install",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "npm",
+          "install"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Native npm, two-token chain."
+}

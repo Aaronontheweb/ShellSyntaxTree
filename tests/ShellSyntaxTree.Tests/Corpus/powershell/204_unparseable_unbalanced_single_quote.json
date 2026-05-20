@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable unbalanced single quote",
+  "input": "Get-Content \u0027unbalanced",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unbalanced single quote"
+  },
+  "notes": "An unbalanced single quote \u2014 a genuine syntax error."
+}

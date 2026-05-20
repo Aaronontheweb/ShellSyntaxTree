@@ -1,0 +1,30 @@
+{
+  "name": "Bind whatif switch",
+  "input": "Remove-Item -WhatIf C:\\temp\\x.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "-WhatIf",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\temp\\x.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp/x.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-WhatIf common switch."
+}

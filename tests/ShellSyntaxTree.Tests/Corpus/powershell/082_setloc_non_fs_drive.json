@@ -1,0 +1,41 @@
+{
+  "name": "Setloc non fs drive",
+  "input": "cd HKLM:; gci",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "HKLM:",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "cd to a non-FileSystem PSDrive yields dynamic attribution."
+}

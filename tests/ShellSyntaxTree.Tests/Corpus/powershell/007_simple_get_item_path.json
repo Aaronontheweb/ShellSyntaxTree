@@ -1,0 +1,25 @@
+{
+  "name": "Simple get item path",
+  "input": "Get-Item C:\\Users\\user\\file.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Item"
+        ],
+        "args": [
+          {
+            "raw": "C:\\Users\\user\\file.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/Users/user/file.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Cmdlet with a drive-qualified positional path."
+}

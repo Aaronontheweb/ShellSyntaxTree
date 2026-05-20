@@ -1,0 +1,26 @@
+{
+  "name": "Recursion command bare",
+  "input": "pwsh -Command Remove-Item C:\\tmp\\x",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "C:\\tmp\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/tmp/x"
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "The bare/multi-token -Command form."
+}

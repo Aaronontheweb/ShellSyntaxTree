@@ -1,0 +1,10 @@
+{
+  "name": "Recursion encoded controlflow",
+  "input": "pwsh -EncodedCommand aQBmACAAKAAkAHQAcgB1AGUAKQAgAHsAIABHAGUAdAAtAEQAYQB0AGUAIAB9AA==",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027if\u0027 is not supported in v0.2"
+  },
+  "notes": "An -EncodedCommand payload that decodes to control flow \u2014 inner unparseable propagates.",
+  "oracleExpectation": "OutOfScope"
+}

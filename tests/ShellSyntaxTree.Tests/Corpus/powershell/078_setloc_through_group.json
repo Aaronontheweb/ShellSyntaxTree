@@ -1,0 +1,48 @@
+{
+  "name": "Setloc through group",
+  "input": "(cd C:\\sensitive); Remove-Item *",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "C:\\sensitive",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/sensitive"
+          }
+        ],
+        "redirects": [],
+        "isSubshell": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "*",
+            "kind": "Glob",
+            "isPath": true
+          },
+          {
+            "raw": "C:/sensitive",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/sensitive",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Attribution propagates through a group \u2014 ( ) is not a subshell."
+}

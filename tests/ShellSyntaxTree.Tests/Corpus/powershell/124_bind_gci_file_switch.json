@@ -1,0 +1,30 @@
+{
+  "name": "Bind gci file switch",
+  "input": "Get-ChildItem -File C:\\logs",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "-File",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-File is a switch on Get-ChildItem (\u00A76.5.4 collision)."
+}

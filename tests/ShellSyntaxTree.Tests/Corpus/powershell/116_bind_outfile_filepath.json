@@ -1,0 +1,30 @@
+{
+  "name": "Bind outfile filepath",
+  "input": "Out-File -FilePath C:\\out.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Out-File"
+        ],
+        "args": [
+          {
+            "raw": "-FilePath",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\out.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/out.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-FilePath value is a path."
+}

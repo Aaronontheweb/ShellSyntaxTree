@@ -1,0 +1,26 @@
+{
+  "name": "Recursion iex not recursed",
+  "input": "iex \u0022Remove-Item C:\\x\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "iex"
+        ],
+        "canonicalVerb": "Invoke-Expression",
+        "args": [
+          {
+            "raw": "\u0022Remove-Item C:\\x\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/Remove-Item C:/x"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Invoke-Expression / iex is never recursed into (\u00A710)."
+}

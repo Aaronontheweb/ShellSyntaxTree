@@ -1,0 +1,24 @@
+{
+  "name": "Dynamic array subexpression",
+  "input": "Write-Output @(1, 2, 3)",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "@(1, 2, 3)",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "An @( ) array subexpression argument is opaque DynamicSkip."
+}

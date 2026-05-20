@@ -1,0 +1,24 @@
+{
+  "name": "Dynamic stop parsing",
+  "input": "git --% log --oneline | findstr x",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git"
+        ],
+        "args": [
+          {
+            "raw": "--% log --oneline | findstr x",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "The --% stop-parsing token swallows the line remainder."
+}

@@ -1,0 +1,28 @@
+{
+  "name": "Compound pipe newline",
+  "input": "gci |\nrm",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A newline right after | collapses; the pipeline continues."
+}

@@ -1,0 +1,66 @@
+{
+  "name": "Setloc relative after literal",
+  "input": "cd C:\\repo; cd sub; gci",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "C:\\repo",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "sub",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo/sub"
+          },
+          {
+            "raw": "C:/repo",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:/repo/sub",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/repo/sub",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A relative cd resolves under the prior attributed cwd."
+}

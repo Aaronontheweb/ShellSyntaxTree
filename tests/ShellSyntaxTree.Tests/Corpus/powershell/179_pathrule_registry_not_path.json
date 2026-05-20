@@ -1,0 +1,24 @@
+{
+  "name": "Pathrule registry not path",
+  "input": "Remove-Item HKLM:\\Software\\Vendor",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "HKLM:\\Software\\Vendor",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A registry-provider path is not a filesystem path (\u00A78 step 4)."
+}

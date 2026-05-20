@@ -1,0 +1,35 @@
+{
+  "name": "Dynamic hash literal",
+  "input": "New-Item -Path C:\\x @{ Force = $true }",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "New-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          },
+          {
+            "raw": "@{ Force = $true }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A hash literal argument is opaque DynamicSkip."
+}

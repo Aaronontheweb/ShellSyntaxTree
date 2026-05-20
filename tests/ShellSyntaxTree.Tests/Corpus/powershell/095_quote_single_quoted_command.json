@@ -1,0 +1,24 @@
+{
+  "name": "Quote single quoted command",
+  "input": "\u0026 \u0027C:\\Program Files\\app\\tool.exe\u0027 run",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "C:\\Program Files\\app\\tool.exe"
+        ],
+        "args": [
+          {
+            "raw": "run",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A single-quoted command name invoked with the call operator."
+}

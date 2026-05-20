@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable unbalanced double quote",
+  "input": "Write-Output \u0022unclosed",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unbalanced double quote"
+  },
+  "notes": "An unbalanced double quote."
+}

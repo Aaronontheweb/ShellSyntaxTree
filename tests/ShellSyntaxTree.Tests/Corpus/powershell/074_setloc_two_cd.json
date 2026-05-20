@@ -1,0 +1,66 @@
+{
+  "name": "Setloc two cd",
+  "input": "cd C:\\a; cd C:\\b; gci",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "C:\\a",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/a"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "C:\\b",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/b"
+          },
+          {
+            "raw": "C:/a",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/a",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:/b",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/b",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A later Set-Location replaces the attributed cwd."
+}

@@ -1,0 +1,40 @@
+{
+  "name": "Bind importcsv delimiter",
+  "input": "Import-Csv -Path data.csv -Delimiter \u0022;\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Import-Csv"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "data.csv",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/data.csv"
+          },
+          {
+            "raw": "-Delimiter",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0022;\u0022",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Delimiter is value-binding but not a path."
+}

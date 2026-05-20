@@ -1,0 +1,35 @@
+{
+  "name": "Bind depth value",
+  "input": "Get-ChildItem -Depth 3 C:\\logs",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "-Depth",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "3",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\logs",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-Depth is value-binding; 3 is its value, C:\\logs the positional."
+}

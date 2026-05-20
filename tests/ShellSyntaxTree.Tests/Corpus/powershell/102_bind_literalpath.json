@@ -1,0 +1,30 @@
+{
+  "name": "Bind literalpath",
+  "input": "Get-Content -LiteralPath C:\\logs\\app.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "-LiteralPath",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\logs\\app.log",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs/app.log"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-LiteralPath value is a path."
+}

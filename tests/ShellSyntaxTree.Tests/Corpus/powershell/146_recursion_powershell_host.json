@@ -1,0 +1,19 @@
+{
+  "name": "Recursion powershell host",
+  "input": "powershell -Command \u0022Get-Process\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Process"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "The powershell host name is also recognized."
+}

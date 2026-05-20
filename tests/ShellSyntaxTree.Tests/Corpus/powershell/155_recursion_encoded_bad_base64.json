@@ -1,0 +1,10 @@
+{
+  "name": "Recursion encoded bad base64",
+  "input": "pwsh -EncodedCommand ###not-base64###",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "-EncodedCommand is missing its base64 payload"
+  },
+  "notes": "A malformed base64 -EncodedCommand payload \u2014 the outer pwsh invocation still parses.",
+  "oracleExpectation": "OutOfScope"
+}

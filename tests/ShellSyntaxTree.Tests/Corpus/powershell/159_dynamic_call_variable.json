@@ -1,0 +1,25 @@
+{
+  "name": "Dynamic call variable",
+  "input": "\u0026 $exe arg1",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "$exe"
+        ],
+        "isDynamic": true,
+        "args": [
+          {
+            "raw": "arg1",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "The call operator on a variable \u2014 VerbChain.IsDynamic is set."
+}

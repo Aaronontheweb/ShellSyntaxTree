@@ -1,0 +1,45 @@
+{
+  "name": "Recursion command setlocation",
+  "input": "pwsh -Command \u0022cd C:\\x; gci\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "canonicalVerb": "Set-Location",
+        "args": [
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:/x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "Set-Location attribution works inside a recursed command."
+}

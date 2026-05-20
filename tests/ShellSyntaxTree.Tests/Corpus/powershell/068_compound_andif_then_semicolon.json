@@ -1,0 +1,43 @@
+{
+  "name": "Compound andif then semicolon",
+  "input": "gci \u0026\u0026 rm a.txt; Get-Date",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [
+          {
+            "raw": "a.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/a.txt"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "\u0026\u0026 then ; in one compound."
+}

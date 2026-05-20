@@ -1,0 +1,30 @@
+{
+  "name": "Recursion command pipeline",
+  "input": "pwsh -Command \u0022gci | rm\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "A pipeline inside -Command surfaces as two wrapped clauses."
+}

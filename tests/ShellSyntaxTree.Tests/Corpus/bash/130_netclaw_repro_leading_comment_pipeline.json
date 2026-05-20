@@ -13,7 +13,7 @@
         ],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       },
       {
         "operator": "Pipe",
@@ -23,7 +23,7 @@
         ],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       },
       {
         "operator": "Pipe",
@@ -34,7 +34,7 @@
         ],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       },
       {
         "operator": "Pipe",
@@ -44,7 +44,7 @@
         ],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   },

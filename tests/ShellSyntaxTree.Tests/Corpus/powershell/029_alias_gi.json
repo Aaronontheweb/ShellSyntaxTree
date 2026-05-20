@@ -1,0 +1,26 @@
+{
+  "name": "Alias gi",
+  "input": "gi C:\\temp\\f.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gi"
+        ],
+        "canonicalVerb": "Get-Item",
+        "args": [
+          {
+            "raw": "C:\\temp\\f.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp/f.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "gi resolves to Get-Item."
+}

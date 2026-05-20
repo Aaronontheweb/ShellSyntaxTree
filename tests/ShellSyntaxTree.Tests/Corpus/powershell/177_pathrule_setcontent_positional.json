@@ -1,0 +1,25 @@
+{
+  "name": "Pathrule setcontent positional",
+  "input": "Set-Content notes.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Content"
+        ],
+        "args": [
+          {
+            "raw": "notes.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/notes.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Set-Content positional 0 = path."
+}

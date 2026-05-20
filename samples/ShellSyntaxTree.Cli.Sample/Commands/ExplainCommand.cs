@@ -4,16 +4,16 @@ using ShellSyntaxTree;
 namespace ShellSyntaxTree.Cli.Sample.Commands;
 
 /// <summary>
-/// Pretty-prints the AST returned by <see cref="BashParser"/>.
+/// Pretty-prints the AST returned by an <see cref="IShellParser"/>.
 /// Marker tokens (<c>[flag]</c>, <c>[path]</c>, <c>[cwd-attr]</c>,
 /// <c>[dyn-skip]</c>, <c>[glob]</c>, <c>[literal]</c>) are stable so that
 /// downstream tooling can grep the output without re-parsing the AST.
 /// </summary>
 internal static class ExplainCommand
 {
-    public static int Run(string command)
+    public static int Run(string command, string shell)
     {
-        var parser = new BashParser();
+        var parser = ShellParserFactory.Create(shell);
         var parsed = parser.Parse(command);
 
         var sb = new StringBuilder();
@@ -33,16 +33,27 @@ internal static class ExplainCommand
             sb.Append("Clause ").Append(i)
               .Append("  (Operator: ").Append(clause.Operator).Append(')');
 
-            if (clause.IsSubshell || clause.IsBashCWrapped)
+            if (clause.IsSubshell || clause.IsCommandStringWrapped)
             {
                 sb.Append("  IsSubshell=").Append(clause.IsSubshell)
-                  .Append("  IsBashCWrapped=").Append(clause.IsBashCWrapped);
+                  .Append("  IsCommandStringWrapped=").Append(clause.IsCommandStringWrapped);
             }
 
             sb.AppendLine();
 
             var verbLabel = clause.Verb.Tokens.Count == 0 ? "(none)" : clause.Verb.Joined;
-            sb.Append("  Verb: ").AppendLine(verbLabel);
+            sb.Append("  Verb: ").Append(verbLabel);
+            if (clause.Verb.CanonicalVerb is not null)
+            {
+                sb.Append("  [canonical: ").Append(clause.Verb.CanonicalVerb).Append(']');
+            }
+
+            if (clause.Verb.IsDynamic)
+            {
+                sb.Append("  [dynamic]");
+            }
+
+            sb.AppendLine();
 
             if (clause.Args.Count > 0)
             {

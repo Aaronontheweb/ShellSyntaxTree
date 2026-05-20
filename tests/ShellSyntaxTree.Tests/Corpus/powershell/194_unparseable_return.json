@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable return",
+  "input": "return 0",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027return\u0027 is not supported in v0.2"
+  },
+  "notes": "A return statement.",
+  "oracleExpectation": "OutOfScope"
+}

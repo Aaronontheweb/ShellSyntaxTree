@@ -1,0 +1,10 @@
+{
+  "name": "Recursion depth overflow",
+  "input": "pwsh -Command { pwsh -Command { pwsh -Command { pwsh -Command { pwsh -Command { pwsh -Command { Get-Date } } } } } }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "pwsh -Command / -EncodedCommand recursion depth exceeded"
+  },
+  "notes": "Six nested -Command levels exceed the depth-5 cap.",
+  "oracleExpectation": "OutOfScope"
+}

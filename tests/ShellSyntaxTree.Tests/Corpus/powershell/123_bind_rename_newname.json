@@ -1,0 +1,41 @@
+{
+  "name": "Bind rename newname",
+  "input": "Rename-Item -Path old.txt -NewName new.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Rename-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "old.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/old.txt"
+          },
+          {
+            "raw": "-NewName",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "new.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/new.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Rename-Item named parameters."
+}

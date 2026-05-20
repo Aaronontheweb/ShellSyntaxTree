@@ -1,0 +1,25 @@
+{
+  "name": "Quote doubled single",
+  "input": "echo \u0027it\u0027\u0027s here\u0027",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "echo"
+        ],
+        "canonicalVerb": "Write-Output",
+        "args": [
+          {
+            "raw": "\u0027it\u0027\u0027s here\u0027",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A doubled \u0027\u0027 is an escaped single quote."
+}

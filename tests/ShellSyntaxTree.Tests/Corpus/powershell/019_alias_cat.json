@@ -1,0 +1,26 @@
+{
+  "name": "Alias cat",
+  "input": "cat C:\\logs\\app.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cat"
+        ],
+        "canonicalVerb": "Get-Content",
+        "args": [
+          {
+            "raw": "C:\\logs\\app.log",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs/app.log"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "cat resolves to Get-Content."
+}

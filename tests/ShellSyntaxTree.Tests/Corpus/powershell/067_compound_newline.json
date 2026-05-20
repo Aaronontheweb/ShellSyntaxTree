@@ -1,0 +1,26 @@
+{
+  "name": "Compound newline",
+  "input": "Get-Date\nGet-Location",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Location"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A bare newline is a statement separator."
+}

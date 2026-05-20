@@ -1,0 +1,19 @@
+{
+  "name": "Native dotnet build",
+  "input": "dotnet build",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "dotnet",
+          "build"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Native dotnet, two-token chain."
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Recursion short c",
+  "input": "pwsh -c \u0022Get-Date\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "The short -c flag is recognized as -Command."
+}

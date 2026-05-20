@@ -1,0 +1,9 @@
+{
+  "name": "Unparseable unbalanced paren",
+  "input": "Get-ChildItem )",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unbalanced \u0027)\u0027"
+  },
+  "notes": "A stray closing parenthesis."
+}

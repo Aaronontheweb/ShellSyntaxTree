@@ -1,0 +1,27 @@
+{
+  "name": "Native dotnet ef",
+  "input": "dotnet ef migrations add InitialCreate",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "dotnet",
+          "ef",
+          "migrations",
+          "add"
+        ],
+        "args": [
+          {
+            "raw": "InitialCreate",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Chain stops at the capitalized InitialCreate token."
+}

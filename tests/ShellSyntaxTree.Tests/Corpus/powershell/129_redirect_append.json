@@ -1,0 +1,23 @@
+{
+  "name": "Redirect append",
+  "input": "Get-Date \u003E\u003E log.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Append",
+            "target": "C:/work/log.txt"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "\u003E\u003E stdout append."
+}

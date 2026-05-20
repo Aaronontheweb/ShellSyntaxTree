@@ -1,0 +1,32 @@
+{
+  "name": "Pipeline select",
+  "input": "Get-ChildItem | Select-Object Name",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Select-Object"
+        ],
+        "args": [
+          {
+            "raw": "Name",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Pipeline into Select-Object."
+}

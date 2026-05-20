@@ -1,0 +1,26 @@
+{
+  "name": "Alias del",
+  "input": "del C:\\temp\\old.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "del"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [
+          {
+            "raw": "C:\\temp\\old.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp/old.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "del resolves to Remove-Item."
+}

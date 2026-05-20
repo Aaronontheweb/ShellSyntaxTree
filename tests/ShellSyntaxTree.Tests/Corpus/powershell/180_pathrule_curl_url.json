@@ -1,0 +1,35 @@
+{
+  "name": "Pathrule curl url",
+  "input": "curl -o C:\\out.txt https://example.com/file",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "curl"
+        ],
+        "args": [
+          {
+            "raw": "-o",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\out.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/out.txt"
+          },
+          {
+            "raw": "https://example.com/file",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Native curl: -o value is a path; the positional URL is not."
+}

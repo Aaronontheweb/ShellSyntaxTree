@@ -1,0 +1,40 @@
+{
+  "name": "Compound andif",
+  "input": "Test-Path C:\\x \u0026\u0026 Get-ChildItem C:\\x",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Test-Path"
+        ],
+        "args": [
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "\u0026\u0026 pipeline-chain operator (PowerShell 7)."
+}

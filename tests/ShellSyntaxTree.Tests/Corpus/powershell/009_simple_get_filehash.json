@@ -1,0 +1,25 @@
+{
+  "name": "Simple get filehash",
+  "input": "Get-FileHash C:\\downloads\\setup.exe",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-FileHash"
+        ],
+        "args": [
+          {
+            "raw": "C:\\downloads\\setup.exe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/downloads/setup.exe"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Get-FileHash FileVerb with one positional path."
+}

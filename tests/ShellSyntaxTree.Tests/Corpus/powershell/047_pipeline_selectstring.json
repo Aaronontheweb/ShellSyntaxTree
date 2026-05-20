@@ -1,0 +1,39 @@
+{
+  "name": "Pipeline selectstring",
+  "input": "Get-Content app.log | Select-String error",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "app.log",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/app.log"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Select-String"
+        ],
+        "args": [
+          {
+            "raw": "error",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Pipeline into Select-String."
+}

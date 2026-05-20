@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable break",
+  "input": "break",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027break\u0027 is not supported in v0.2"
+  },
+  "notes": "A bare break statement.",
+  "oracleExpectation": "OutOfScope"
+}

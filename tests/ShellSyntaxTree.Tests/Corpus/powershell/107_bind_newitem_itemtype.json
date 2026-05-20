@@ -1,0 +1,40 @@
+{
+  "name": "Bind newitem itemtype",
+  "input": "New-Item -Path C:\\temp\\f.txt -ItemType File",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "New-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\temp\\f.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp/f.txt"
+          },
+          {
+            "raw": "-ItemType",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "File",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "-ItemType value is a literal, not a path."
+}

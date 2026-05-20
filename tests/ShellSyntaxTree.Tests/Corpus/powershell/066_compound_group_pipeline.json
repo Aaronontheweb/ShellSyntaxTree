@@ -1,0 +1,36 @@
+{
+  "name": "Compound group pipeline",
+  "input": "(gci C:\\tmp | Remove-Item)",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:\\tmp",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/tmp"
+          }
+        ],
+        "redirects": [],
+        "isSubshell": true
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [],
+        "redirects": [],
+        "isSubshell": true
+      }
+    ]
+  },
+  "notes": "A group wrapping a pipeline; both clauses marked IsSubshell."
+}

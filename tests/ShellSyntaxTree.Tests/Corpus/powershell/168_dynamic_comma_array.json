@@ -1,0 +1,24 @@
+{
+  "name": "Dynamic comma array",
+  "input": "Remove-Item a.txt,b.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "a.txt,b.txt",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A comma-array path token is marked DynamicSkip (\u00A78)."
+}

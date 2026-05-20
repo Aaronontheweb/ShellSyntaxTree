@@ -12,7 +12,7 @@
           { "direction": "Append", "target": "/work/log.txt" }
         ],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   },

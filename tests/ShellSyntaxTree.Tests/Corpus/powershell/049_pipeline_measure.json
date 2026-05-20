@@ -1,0 +1,28 @@
+{
+  "name": "Pipeline measure",
+  "input": "gci | measure",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "measure"
+        ],
+        "canonicalVerb": "Measure-Object",
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Pipeline into the measure alias."
+}

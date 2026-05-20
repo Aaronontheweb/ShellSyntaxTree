@@ -1,0 +1,25 @@
+{
+  "name": "Alias select",
+  "input": "select Name",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "select"
+        ],
+        "canonicalVerb": "Select-Object",
+        "args": [
+          {
+            "raw": "Name",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "select resolves to Select-Object."
+}

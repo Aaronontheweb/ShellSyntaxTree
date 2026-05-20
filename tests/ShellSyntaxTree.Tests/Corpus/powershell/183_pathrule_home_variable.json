@@ -1,0 +1,25 @@
+{
+  "name": "Pathrule home variable",
+  "input": "Get-Content $HOME\\notes.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "$HOME\\notes.txt",
+            "kind": "Tilde",
+            "isPath": true,
+            "resolved": "C:/Users/user/notes.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "$HOME expands to the configured home directory."
+}

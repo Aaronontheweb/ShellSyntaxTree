@@ -1,0 +1,10 @@
+{
+  "name": "Unparseable type literal",
+  "input": "[System.Math]::Sqrt(2)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "a bare type-literal / .NET method-call statement is not supported in v0.2"
+  },
+  "notes": "A bare type-literal / .NET method-call statement.",
+  "oracleExpectation": "OutOfScope"
+}

@@ -1,0 +1,35 @@
+{
+  "name": "Setloc pushd no attribution",
+  "input": "pushd C:\\stack; gci",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "pushd"
+        ],
+        "canonicalVerb": "Push-Location",
+        "args": [
+          {
+            "raw": "C:\\stack",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/stack"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Push-Location is a CwdVerb but adds no attribution arg (\u00A79)."
+}

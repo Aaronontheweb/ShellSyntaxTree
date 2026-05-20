@@ -1,0 +1,35 @@
+{
+  "name": "Setloc no arg",
+  "input": "Set-Location; gci",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [
+          {
+            "raw": "C:/Users/user",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/Users/user",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Set-Location with no target attributes the home directory."
+}

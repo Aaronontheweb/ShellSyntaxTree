@@ -1,0 +1,26 @@
+{
+  "name": "Pipeline process stop",
+  "input": "Get-Process | Stop-Process",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Process"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Stop-Process"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Cmdlet pipeline."
+}

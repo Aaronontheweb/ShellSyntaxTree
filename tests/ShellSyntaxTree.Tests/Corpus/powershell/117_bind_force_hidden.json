@@ -1,0 +1,35 @@
+{
+  "name": "Bind force hidden",
+  "input": "Get-ChildItem -Force -Hidden C:\\x",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "-Force",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-Hidden",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Two switches then a positional path."
+}

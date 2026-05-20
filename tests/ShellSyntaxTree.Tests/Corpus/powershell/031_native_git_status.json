@@ -1,0 +1,19 @@
+{
+  "name": "Native git status",
+  "input": "git status",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git",
+          "status"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Native git, two-token chain."
+}

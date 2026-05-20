@@ -1,0 +1,26 @@
+{
+  "name": "Alias ri",
+  "input": "ri C:\\temp\\old.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "ri"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [
+          {
+            "raw": "C:\\temp\\old.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/temp/old.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "ri resolves to Remove-Item."
+}

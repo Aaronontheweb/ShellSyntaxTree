@@ -1,0 +1,23 @@
+{
+  "name": "Redirect information",
+  "input": "Get-Date 6\u003E info.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/work/info.txt"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "6\u003E information stream \u2014 maps lossily to Out."
+}
