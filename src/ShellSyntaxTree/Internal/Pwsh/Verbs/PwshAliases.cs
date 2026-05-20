@@ -204,6 +204,9 @@ internal static class PwshAliases
             ["dbp"] = "Disable-PSBreakpoint",
             ["ebp"] = "Enable-PSBreakpoint",
             ["gcs"] = "Get-PSCallStack",
+
+            // ---- Windows-only host integrations ----
+            ["shcm"] = "Show-Command",
         };
 
     /// <summary>
