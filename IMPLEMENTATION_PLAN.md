@@ -50,8 +50,9 @@ priorities.
 
 ### 15. Release 0.2.0 (alpha → beta → stable) — SPEC.PWSH §15 / §17
 
-- [ ] Tag `0.2.0-alpha`; confirm `publish_nuget.yml` produces the `.nupkg`
-      on nuget.org *(needs a tag push — maintainer action)*
+- [x] Tag `0.2.0-alpha`; `publish_nuget.yml` produced
+      `ShellSyntaxTree.0.2.0-alpha.nupkg` and it is live on nuget.org
+      (released 2026-05-20).
 - [ ] `0.2.0-beta` so Netclaw validates the parser + the breaking rename
 - [ ] Promote to stable `0.2.0` after Netclaw validation
 
