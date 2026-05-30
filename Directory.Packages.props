@@ -2,7 +2,7 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <!-- Test stack -->
-    <XunitVersion>2.9.2</XunitVersion>
+    <XunitVersion>2.9.3</XunitVersion>
     <XunitRunnerVersion>3.1.5</XunitRunnerVersion>
     <!-- Sample stack -->
     <AspNetCoreVersion>8.0.27</AspNetCoreVersion>
