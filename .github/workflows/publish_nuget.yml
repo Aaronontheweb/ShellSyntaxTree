@@ -37,7 +37,7 @@ jobs:
           echo "Tag '$TAG' is a valid bare version. Publishing package version: ${TAG}"
 
       - name: "Checkout"
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v7.0.0
         with:
           lfs: true
           fetch-depth: 0
