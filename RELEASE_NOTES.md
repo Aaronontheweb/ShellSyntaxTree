@@ -1,3 +1,17 @@
+#### 0.2.0-beta.1 2026-07-22 ####
+
+## Fixed
+
+- **Preserved hyphenated PowerShell native options for safer parsing (#60)**
+  PowerShell native options now keep their full hyphenated form when present in
+  command text. Parameter forms like `-Native-Flag` and `-Native-Flag=value` now
+  stay correctly grouped instead of being split in ways that could confuse
+  downstream approvals. The parser also avoids over-reading ambiguous colon-value
+  combinations by marking those cases as `DynamicSkip` when the shape is unclear.
+  See [#60](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/60) for
+  details.
+
+
 #### 0.2.0-alpha May 19th 2026 ####
 
 First **PowerShell** parser. ShellSyntaxTree now ships two `IShellParser`
@@ -393,4 +407,3 @@ SourceLink metadata.
 - `openspec/changes/` — change-proposal history with rationale for the
   eight v0.1 SPEC interpretations resolved during planning
 - `README.md` — quick-start usage
-
