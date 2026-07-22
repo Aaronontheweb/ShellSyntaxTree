@@ -97,6 +97,20 @@ public class PwshLexerTests
         Assert.Equal("-Path:C:\\logs", tokens[1].Value);
     }
 
+    [Theory]
+    [InlineData("git --work-tree repo", "--work-tree")]
+    [InlineData("Get-Thing -Name-Part:value", "-Name-Part:value")]
+    [InlineData("git --work-tree=../test", "--work-tree=../test")]
+    [InlineData("Get-Help -?", "-?")]
+    [InlineData("Get-Foo -Ba?r x", "-Ba?r")]
+    public void Hyphenated_parameter_or_native_option_stays_one_token(
+        string input, string expected)
+    {
+        var tokens = Significant(input);
+        Assert.Equal(PwshTokenKind.Parameter, tokens[1].Kind);
+        Assert.Equal(expected, tokens[1].Value);
+    }
+
     [Fact]
     public void Negative_number_is_a_word_not_a_parameter()
     {

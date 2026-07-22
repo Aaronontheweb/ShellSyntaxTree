@@ -1,0 +1,29 @@
+{
+  "name": "Bind equals colon value is dynamic",
+  "input": "Remove-Item -Path=C:\\Windows",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Path=C",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\\Windows",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "PowerShell reads this as parameter \u0027-Path=C:\u0027 plus argument \u0027\\Windows\u0027 \u2014 a name that can never bind, so the value safe-fails to DynamicSkip."
+}

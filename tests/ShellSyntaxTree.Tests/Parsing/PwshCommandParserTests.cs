@@ -102,6 +102,66 @@ public class PwshCommandParserTests
         Assert.Equal("InitialCreate", clause.Args[0].Raw);
     }
 
+    [Fact]
+    public void Native_hyphenated_flag_consumes_spaced_path_value()
+    {
+        var clause = Assert.Single(Parse("git --work-tree repo status").Clauses);
+
+        Assert.Equal(new[] { "git", "status" }, clause.Verb.Tokens);
+        Assert.Equal("--work-tree", clause.Args[0].Raw);
+        Assert.Equal("repo", clause.Args[1].Raw);
+        Assert.True(clause.Args[1].IsPath);
+        Assert.Equal("C:/work/repo", clause.Args[1].Resolved);
+    }
+
+    [Theory]
+    [InlineData("--work-tree=../test", "--work-tree", "../test", "C:/test")]
+    [InlineData("--git-dir=repo", "--git-dir", "repo", "C:/work/repo")]
+    public void Native_equals_flag_splits_and_classifies_its_path_value(
+        string option, string expectedFlag, string expectedValue, string expectedResolved)
+    {
+        var clause = Assert.Single(Parse($"git {option} add somefile").Clauses);
+
+        Assert.Equal(new[] { "git" }, clause.Verb.Tokens);
+        Assert.Equal(4, clause.Args.Count);
+        Assert.Equal(expectedFlag, clause.Args[0].Raw);
+        Assert.Equal(expectedValue, clause.Args[1].Raw);
+        Assert.True(clause.Args[1].IsPath);
+        Assert.Equal(expectedResolved, clause.Args[1].Resolved);
+        Assert.Equal("add", clause.Args[2].Raw);
+        Assert.Equal("somefile", clause.Args[3].Raw);
+    }
+
+    [Fact]
+    public void Native_colon_option_is_preserved_verbatim()
+    {
+        var clause = Assert.Single(Parse("git --option:value status").Clauses);
+
+        Assert.Equal("--option:value", clause.Args[0].Raw);
+        Assert.True(clause.Args[0].IsFlag);
+    }
+
+    [Fact]
+    public void Unknown_native_equals_flag_does_not_gain_path_semantics()
+    {
+        var clause = Assert.Single(Parse("git --destination=repo status").Clauses);
+
+        Assert.Equal("--destination", clause.Args[0].Raw);
+        Assert.Equal("repo", clause.Args[1].Raw);
+        Assert.False(clause.Args[1].IsPath);
+    }
+
+    [Fact]
+    public void Dynamic_native_equals_path_value_safe_fails()
+    {
+        var clause = Assert.Single(Parse("git --work-tree=$repo status").Clauses);
+
+        Assert.Equal("--work-tree", clause.Args[0].Raw);
+        Assert.Equal("$repo", clause.Args[1].Raw);
+        Assert.Equal(ArgKind.DynamicSkip, clause.Args[1].Kind);
+        Assert.False(clause.Args[1].IsPath);
+    }
+
     // ---------------------------------------------------------------- pipelines
 
     [Fact]
@@ -177,6 +237,53 @@ public class PwshCommandParserTests
         Assert.True(clause.Args[0].IsFlag);
         Assert.Equal("C:\\logs", clause.Args[1].Raw);
         Assert.True(clause.Args[1].IsPath);
+    }
+
+    [Fact]
+    public void Hyphenated_cmdlet_parameter_colon_form_stays_one_parameter()
+    {
+        var clause = Assert.Single(Parse("Get-Thing -Name-Part:value").Clauses);
+
+        Assert.Equal(2, clause.Args.Count);
+        Assert.Equal("-Name-Part", clause.Args[0].Raw);
+        Assert.Equal("value", clause.Args[1].Raw);
+    }
+
+    [Fact]
+    public void Equals_does_not_bind_a_cmdlet_parameter_value()
+    {
+        var clause = Assert.Single(Parse("Get-Item -Path=foo bar").Clauses);
+
+        Assert.Equal(2, clause.Args.Count);
+        Assert.Equal("-Path=foo", clause.Args[0].Raw);
+        Assert.True(clause.Args[0].IsFlag);
+        Assert.Equal("bar", clause.Args[1].Raw);
+        Assert.True(clause.Args[1].IsPath);
+    }
+
+    [Fact]
+    public void Equals_in_a_parameter_name_makes_its_colon_value_dynamic()
+    {
+        // PowerShell tokenizes this as parameter `-Path=C:` plus argument
+        // `\Windows` — a name that can never bind, so the value's role is
+        // unknowable and must not surface as a confident literal.
+        var clause = Assert.Single(Parse("Remove-Item -Path=C:\\Windows").Clauses);
+
+        Assert.Equal(2, clause.Args.Count);
+        Assert.Equal("-Path=C", clause.Args[0].Raw);
+        Assert.Equal("\\Windows", clause.Args[1].Raw);
+        Assert.Equal(ArgKind.DynamicSkip, clause.Args[1].Kind);
+        Assert.False(clause.Args[1].IsPath);
+    }
+
+    [Fact]
+    public void Question_mark_help_parameter_is_one_flag()
+    {
+        var clause = Assert.Single(Parse("Get-Help -?").Clauses);
+
+        var arg = Assert.Single(clause.Args);
+        Assert.Equal("-?", arg.Raw);
+        Assert.True(arg.IsFlag);
     }
 
     [Fact]

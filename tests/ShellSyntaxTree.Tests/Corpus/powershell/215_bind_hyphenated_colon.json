@@ -1,0 +1,29 @@
+{
+  "name": "Bind hyphenated colon",
+  "input": "Get-Thing -Name-Part:value",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Thing"
+        ],
+        "args": [
+          {
+            "raw": "-Name-Part",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "value",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A hyphenated cmdlet parameter remains one token and retains colon binding."
+}

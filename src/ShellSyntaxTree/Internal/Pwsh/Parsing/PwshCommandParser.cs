@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using ShellSyntaxTree.Internal.Bash.Verbs;
+using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
 using ShellSyntaxTree.Internal.Pwsh.Verbs;
 using ShellSyntaxTree.Internal.Resolving;
@@ -684,7 +685,14 @@ internal static class PwshCommandParser
                 var t = body[i];
                 if (t.Kind == PwshTokenKind.Parameter)
                 {
-                    if (flagsForVerb is null || !flagsForVerb.Contains(StripColon(t.Value)))
+                    if (NativeFlagSyntax.TrySplitEqualsFlag(t.Value, out _, out _))
+                    {
+                        // Match Bash: an inline --flag=value is surfaced by
+                        // arg extraction, and terminates the greedy walk.
+                        break;
+                    }
+
+                    if (flagsForVerb is null || !flagsForVerb.Contains(t.Value))
                     {
                         break;
                     }
@@ -719,12 +727,6 @@ internal static class PwshCommandParser
             VerbTokens = verbTokens,
             VerbPositions = verbPositions,
         };
-    }
-
-    private static string StripColon(string paramToken)
-    {
-        var colon = paramToken.IndexOf(':');
-        return colon > 0 ? paramToken.Substring(0, colon) : paramToken;
     }
 
     // ---------------------------------------------------------------- args
@@ -800,15 +802,30 @@ internal static class PwshCommandParser
                 pendingNativeFlag = null;
 
                 var raw = t.Value;
-                var colon = raw.IndexOf(':');
-                var paramName = colon > 0 ? raw.Substring(0, colon) : raw;
-                var colonValue = colon > 0 ? raw.Substring(colon + 1) : null;
-
-                args.Add(new Arg { Raw = paramName, Kind = ArgKind.Literal, IsPath = false });
 
                 if (cmdletStyle)
                 {
-                    if (colonValue is not null)
+                    var colon = raw.IndexOf(':');
+                    var paramName = colon > 0 ? raw.Substring(0, colon) : raw;
+                    var colonValue = colon > 0 ? raw.Substring(colon + 1) : null;
+
+                    args.Add(new Arg { Raw = paramName, Kind = ArgKind.Literal, IsPath = false });
+
+                    if (colonValue is not null && paramName.IndexOf('=') >= 0)
+                    {
+                        // `-Path=C:\Windows` splits here into name `-Path=C`
+                        // and value `\Windows` — exactly how PowerShell
+                        // tokenizes it, and a name that can never bind. The
+                        // value's role is unknowable, so don't hand the gate
+                        // a confident literal (§6.5.3 / SPEC.md §1).
+                        args.Add(new Arg
+                        {
+                            Raw = colonValue,
+                            Kind = ArgKind.DynamicSkip,
+                            IsPath = false,
+                        });
+                    }
+                    else if (colonValue is not null)
                     {
                         // Colon form always binds (§6.5.3 rule 1).
                         var valueIsPath = PwshPerVerbRules.ParameterValueIsPath(canonical, paramName);
@@ -821,13 +838,31 @@ internal static class PwshCommandParser
                 }
                 else
                 {
-                    // Native flag-with-value via the shared bash table (§7.3).
                     var verbKey = verb.VerbTokens.Count > 0 ? verb.VerbTokens[0] : string.Empty;
-                    if (colonValue is null
-                        && BashVerbs.FlagsWithValue.TryGetValue(verbKey, out var flags)
-                        && flags.Contains(paramName))
+
+                    // Native --flag=value follows Bash exactly: surface the
+                    // flag and value separately, and classify a curated
+                    // flag's value through the shared per-verb table.
+                    if (NativeFlagSyntax.TrySplitEqualsFlag(raw, out var flagPart, out var valuePart))
                     {
-                        pendingNativeFlag = paramName;
+                        args.Add(new Arg { Raw = flagPart, Kind = ArgKind.Literal, IsPath = false });
+                        var valueIsPath = BashPerVerbRules.ValueOfFlagIsPath(verbKey, flagPart);
+                        args.Add(ResolveValue(
+                            valuePart, valueIsPath, options, workingDirectoryUnknown, false));
+                    }
+                    else
+                    {
+                        // Every other option shape stays one arg. A colon in
+                        // particular has no native binding meaning, so the
+                        // tail is preserved rather than dropped.
+                        args.Add(new Arg { Raw = raw, Kind = ArgKind.Literal, IsPath = false });
+                    }
+
+                    if (raw.IndexOf('=') < 0
+                        && BashVerbs.FlagsWithValue.TryGetValue(verbKey, out var flags)
+                        && flags.Contains(raw))
+                    {
+                        pendingNativeFlag = raw;
                     }
                 }
 

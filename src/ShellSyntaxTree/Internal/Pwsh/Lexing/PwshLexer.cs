@@ -669,15 +669,20 @@ internal static class PwshLexer
             i++;
         }
 
-        // Parameter name: letters, digits, underscores.
-        while (i < src.Length && IsIdentifierContinuation(src[i]))
+        // Parameter / native-option name. Hyphens after the first name
+        // character are significant (`-Name-Part`, `--work-tree`) and `?` is
+        // a name character in its own right (`-?`, `-Ba?r`) — both must stay
+        // in the same token; the identifier predicate is deliberately not
+        // widened because it also governs splat names.
+        while (i < src.Length && IsParameterNameContinuation(src[i]))
         {
             i++;
         }
 
-        // Colon form -Name:value — consume the value word-style. The parser
-        // splits the token on the first ':'.
-        if (i < src.Length && src[i] == ':')
+        // Keep an unquoted inline value attached to its source token. The
+        // parser interprets ':' only for cmdlet-style parameters and '='
+        // only for native options.
+        if (i < src.Length && (src[i] == ':' || src[i] == '='))
         {
             i++;
             i = ScanWordRun(src, i);
@@ -860,4 +865,9 @@ internal static class PwshLexer
 
     private static bool IsIdentifierContinuation(char c) =>
         IsAsciiLetter(c) || (c >= '0' && c <= '9') || c == '_';
+
+    // Mirrors IsParameterStart, which already admits '?' — without it
+    // `Get-Help -?` lexed as a bare `-` flag plus a `?` glob arg.
+    private static bool IsParameterNameContinuation(char c) =>
+        IsIdentifierContinuation(c) || c == '-' || c == '?';
 }
