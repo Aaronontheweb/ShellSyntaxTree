@@ -670,9 +670,10 @@ internal static class PwshLexer
         }
 
         // Parameter / native-option name. Hyphens after the first name
-        // character are significant (`-Name-Part`, `--work-tree`) and must
-        // stay in the same token; the identifier predicate is deliberately
-        // not widened because it also governs splat names.
+        // character are significant (`-Name-Part`, `--work-tree`) and `?` is
+        // a name character in its own right (`-?`, `-Ba?r`) — both must stay
+        // in the same token; the identifier predicate is deliberately not
+        // widened because it also governs splat names.
         while (i < src.Length && IsParameterNameContinuation(src[i]))
         {
             i++;
@@ -865,6 +866,8 @@ internal static class PwshLexer
     private static bool IsIdentifierContinuation(char c) =>
         IsAsciiLetter(c) || (c >= '0' && c <= '9') || c == '_';
 
+    // Mirrors IsParameterStart, which already admits '?' — without it
+    // `Get-Help -?` lexed as a bare `-` flag plus a `?` glob arg.
     private static bool IsParameterNameContinuation(char c) =>
-        IsIdentifierContinuation(c) || c == '-';
+        IsIdentifierContinuation(c) || c == '-' || c == '?';
 }

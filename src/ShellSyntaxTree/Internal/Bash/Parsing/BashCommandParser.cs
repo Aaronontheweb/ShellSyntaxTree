@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using ShellSyntaxTree.Internal.Bash.Lexing;
 using ShellSyntaxTree.Internal.Bash.Verbs;
+using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
@@ -1099,7 +1100,8 @@ internal static class BashCommandParser
                     // flag half is a Literal arg with IsFlag=true (Raw
                     // starts with '-'); the value half is classified per
                     // the flag-value path rule.
-                    if (TrySplitEqualsFlag(t.Value, out var flagPart, out var valuePart))
+                    if (NativeFlagSyntax.TrySplitEqualsFlag(
+                            t.Value, out var flagPart, out var valuePart))
                     {
                         // Flag arg.
                         argList.Add(new Arg
@@ -1391,28 +1393,6 @@ internal static class BashCommandParser
                 direction = default;
                 return false;
         }
-    }
-
-    private static bool TrySplitEqualsFlag(string raw, out string flagPart, out string valuePart)
-    {
-        if (raw.Length < 2 || raw[0] != '-')
-        {
-            flagPart = "";
-            valuePart = "";
-            return false;
-        }
-
-        var eq = raw.IndexOf('=');
-        if (eq <= 0 || eq == raw.Length - 1)
-        {
-            flagPart = "";
-            valuePart = "";
-            return false;
-        }
-
-        flagPart = raw.Substring(0, eq);
-        valuePart = raw.Substring(eq + 1);
-        return true;
     }
 
     private static string SourceSlice(string source, BashToken token)

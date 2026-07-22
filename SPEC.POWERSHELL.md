@@ -281,8 +281,9 @@ The `PwshLexer` produces tokens consumed by `PwshCommandParser`. Token kinds
   processed; simple `$x` / `${x}` is absorbed into the Word.
 - **Parameter** — a `-Name` parameter token. A `-Name:value` colon form
   keeps the value; the parser splits on the first `:` for cmdlet-style
-  commands. Parameter names may contain internal hyphens, so `-Name-Part`
-  and native `--work-tree` each remain one token. An unquoted native
+  commands. Parameter names may contain internal hyphens and `?`, so
+  `-Name-Part`, `-?`, and native `--work-tree` each remain one token. An
+  unquoted native
   `--flag=value` likewise remains one source token; the native-command
   parser splits it into flag and value args using the bash rules. `=` is
   not cmdlet parameter binding — `-Name=value` stays one parameter token
@@ -561,7 +562,11 @@ and treated as unknown.
 
 For each `-Name` token, in order:
 
-1. Colon form `-Name:value` → value-binding; value is the colon tail.
+1. Colon form `-Name:value` → value-binding; value is the colon tail. When
+   the name half carries an `=` the colon tail is **`DynamicSkip`** instead:
+   PowerShell reads `-Path=C:\Windows` as parameter `-Path=C:` plus argument
+   `\Windows`, a name no cmdlet can bind, so the value's role is unknowable
+   and the parser must not classify it.
 2. `-Name` (prefix-)matches `PwshValueParameters` → value-binding; consume
    the next significant token as its value. If there is no next token, or
    the next token is itself a parameter or an operator, `-Name` bound

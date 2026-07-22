@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using ShellSyntaxTree.Internal.Bash.Verbs;
+using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
 using ShellSyntaxTree.Internal.Pwsh.Verbs;
 using ShellSyntaxTree.Internal.Resolving;
@@ -684,7 +685,7 @@ internal static class PwshCommandParser
                 var t = body[i];
                 if (t.Kind == PwshTokenKind.Parameter)
                 {
-                    if (TrySplitNativeEqualsFlag(t.Value, out _, out _))
+                    if (NativeFlagSyntax.TrySplitEqualsFlag(t.Value, out _, out _))
                     {
                         // Match Bash: an inline --flag=value is surfaced by
                         // arg extraction, and terminates the greedy walk.
@@ -810,7 +811,21 @@ internal static class PwshCommandParser
 
                     args.Add(new Arg { Raw = paramName, Kind = ArgKind.Literal, IsPath = false });
 
-                    if (colonValue is not null)
+                    if (colonValue is not null && paramName.IndexOf('=') >= 0)
+                    {
+                        // `-Path=C:\Windows` splits here into name `-Path=C`
+                        // and value `\Windows` — exactly how PowerShell
+                        // tokenizes it, and a name that can never bind. The
+                        // value's role is unknowable, so don't hand the gate
+                        // a confident literal (§6.5.3 / SPEC.md §1).
+                        args.Add(new Arg
+                        {
+                            Raw = colonValue,
+                            Kind = ArgKind.DynamicSkip,
+                            IsPath = false,
+                        });
+                    }
+                    else if (colonValue is not null)
                     {
                         // Colon form always binds (§6.5.3 rule 1).
                         var valueIsPath = PwshPerVerbRules.ParameterValueIsPath(canonical, paramName);
@@ -828,7 +843,7 @@ internal static class PwshCommandParser
                     // Native --flag=value follows Bash exactly: surface the
                     // flag and value separately, and classify a curated
                     // flag's value through the shared per-verb table.
-                    if (TrySplitNativeEqualsFlag(raw, out var flagPart, out var valuePart))
+                    if (NativeFlagSyntax.TrySplitEqualsFlag(raw, out var flagPart, out var valuePart))
                     {
                         args.Add(new Arg { Raw = flagPart, Kind = ArgKind.Literal, IsPath = false });
                         var valueIsPath = BashPerVerbRules.ValueOfFlagIsPath(verbKey, flagPart);
@@ -837,8 +852,9 @@ internal static class PwshCommandParser
                     }
                     else
                     {
-                        // A colon has no native binding meaning. Preserve the
-                        // complete option rather than dropping its tail.
+                        // Every other option shape stays one arg. A colon in
+                        // particular has no native binding meaning, so the
+                        // tail is preserved rather than dropped.
                         args.Add(new Arg { Raw = raw, Kind = ArgKind.Literal, IsPath = false });
                     }
 
@@ -906,29 +922,6 @@ internal static class PwshCommandParser
         }
 
         return new ArgResult(args, redirects, null);
-    }
-
-    private static bool TrySplitNativeEqualsFlag(
-        string raw, out string flagPart, out string valuePart)
-    {
-        if (raw.Length < 2 || raw[0] != '-')
-        {
-            flagPart = "";
-            valuePart = "";
-            return false;
-        }
-
-        var equals = raw.IndexOf('=');
-        if (equals <= 0 || equals == raw.Length - 1)
-        {
-            flagPart = "";
-            valuePart = "";
-            return false;
-        }
-
-        flagPart = raw.Substring(0, equals);
-        valuePart = raw.Substring(equals + 1);
-        return true;
     }
 
     private static Arg ResolveValueToken(

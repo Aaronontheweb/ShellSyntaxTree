@@ -262,6 +262,31 @@ public class PwshCommandParserTests
     }
 
     [Fact]
+    public void Equals_in_a_parameter_name_makes_its_colon_value_dynamic()
+    {
+        // PowerShell tokenizes this as parameter `-Path=C:` plus argument
+        // `\Windows` — a name that can never bind, so the value's role is
+        // unknowable and must not surface as a confident literal.
+        var clause = Assert.Single(Parse("Remove-Item -Path=C:\\Windows").Clauses);
+
+        Assert.Equal(2, clause.Args.Count);
+        Assert.Equal("-Path=C", clause.Args[0].Raw);
+        Assert.Equal("\\Windows", clause.Args[1].Raw);
+        Assert.Equal(ArgKind.DynamicSkip, clause.Args[1].Kind);
+        Assert.False(clause.Args[1].IsPath);
+    }
+
+    [Fact]
+    public void Question_mark_help_parameter_is_one_flag()
+    {
+        var clause = Assert.Single(Parse("Get-Help -?").Clauses);
+
+        var arg = Assert.Single(clause.Args);
+        Assert.Equal("-?", arg.Raw);
+        Assert.True(arg.IsFlag);
+    }
+
+    [Fact]
     public void Unknown_parameter_defaults_to_switch()
     {
         // -Whatever is unknown → switch; C:\logs stays a positional path.

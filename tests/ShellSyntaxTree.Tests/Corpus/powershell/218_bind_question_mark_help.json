@@ -1,0 +1,24 @@
+{
+  "name": "Bind question mark help",
+  "input": "Get-Help -?",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Help"
+        ],
+        "args": [
+          {
+            "raw": "-?",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "\u0027-?\u0027 is a single parameter token, not a bare dash plus a \u0027?\u0027 glob."
+}

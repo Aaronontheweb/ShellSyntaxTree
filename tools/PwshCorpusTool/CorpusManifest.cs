@@ -473,5 +473,10 @@ internal static class CorpusManifest
             "A hyphenated cmdlet parameter remains one token and retains colon binding."),
         E("bind_equals_not_cmdlet_binding", "Get-Item -Path=foo bar",
             "Equals does not bind a cmdlet parameter value; the following positional remains a path."),
+        E("bind_equals_colon_value_is_dynamic", "Remove-Item -Path=C:\\Windows",
+            "PowerShell reads this as parameter '-Path=C:' plus argument '\\Windows' — a name that "
+            + "can never bind, so the value safe-fails to DynamicSkip."),
+        E("bind_question_mark_help", "Get-Help -?",
+            "'-?' is a single parameter token, not a bare dash plus a '?' glob."),
     };
 }

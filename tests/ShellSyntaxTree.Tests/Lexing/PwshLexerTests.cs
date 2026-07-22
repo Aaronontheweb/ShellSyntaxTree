@@ -101,6 +101,8 @@ public class PwshLexerTests
     [InlineData("git --work-tree repo", "--work-tree")]
     [InlineData("Get-Thing -Name-Part:value", "-Name-Part:value")]
     [InlineData("git --work-tree=../test", "--work-tree=../test")]
+    [InlineData("Get-Help -?", "-?")]
+    [InlineData("Get-Foo -Ba?r x", "-Ba?r")]
     public void Hyphenated_parameter_or_native_option_stays_one_token(
         string input, string expected)
     {

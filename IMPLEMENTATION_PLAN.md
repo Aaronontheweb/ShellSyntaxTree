@@ -54,7 +54,10 @@ priorities.
       Preserve internal hyphens, apply bash-compatible native
       `--flag=value` splitting and path classification, keep colon binding
       cmdlet-only, and pin the behavior in unit tests plus the PowerShell
-      corpus.
+      corpus. Review follow-ups shipped with it: the equals-form split moved
+      to a shared `NativeFlagSyntax` so the two parsers can't drift, a colon
+      value under an `=`-bearing parameter name safe-fails to `DynamicSkip`,
+      and `-?` lexes as one parameter token.
 
 ### 15. Release 0.2.0 (alpha → beta → stable) — SPEC.PWSH §15 / §17
 
