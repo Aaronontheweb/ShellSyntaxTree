@@ -17,9 +17,10 @@ internal enum PwshTokenKind
     /// <c>${x}</c> absorbed.</summary>
     Word,
 
-    /// <summary>A <c>-Name</c> parameter token. A <c>-Name:value</c> colon
-    /// form keeps the value in <see cref="PwshToken.Value"/>; the parser
-    /// splits on the first <c>:</c>.</summary>
+    /// <summary>A parameter-shaped token, including hyphenated cmdlet
+    /// parameters and native options. Inline <c>:</c> or <c>=</c> text stays
+    /// in <see cref="PwshToken.Value"/>; the parser interprets it according
+    /// to command kind.</summary>
     Parameter,
 
     /// <summary>Single-quoted, double-quoted, or here-string. Delimiters

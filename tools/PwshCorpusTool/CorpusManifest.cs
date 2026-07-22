@@ -461,5 +461,17 @@ internal static class CorpusManifest
             "An unterminated $( ) subexpression."),
         E("unparseable_unterminated_herestring", "Write-Output @\"\nnever closed",
             "An unterminated here-string."),
+
+        // ---- Issue #52: hyphenated parameters and native inline values ----
+        E("native_git_worktree_equals", "git --work-tree=../test add somefile",
+            "Issue #52: native --flag=value stays atomic, then splits into flag and path value."),
+        E("native_git_worktree_spaced", "git --work-tree repo status",
+            "Issue #52: a hyphenated curated flag consumes and path-classifies its spaced value."),
+        E("native_colon_option", "git --option:value status",
+            "Native colon options are preserved verbatim; colon binding is cmdlet-only."),
+        E("bind_hyphenated_colon", "Get-Thing -Name-Part:value",
+            "A hyphenated cmdlet parameter remains one token and retains colon binding."),
+        E("bind_equals_not_cmdlet_binding", "Get-Item -Path=foo bar",
+            "Equals does not bind a cmdlet parameter value; the following positional remains a path."),
     };
 }

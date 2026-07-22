@@ -48,6 +48,14 @@ priorities.
       `RELEASE_NOTES.md` v0.2.0 section; CLI + Web samples gain a shell
       selector; `README.md` updated.
 
+### Completed maintenance
+
+- [x] **Issue #52 — hyphenated PowerShell parameters/native options.**
+      Preserve internal hyphens, apply bash-compatible native
+      `--flag=value` splitting and path classification, keep colon binding
+      cmdlet-only, and pin the behavior in unit tests plus the PowerShell
+      corpus.
+
 ### 15. Release 0.2.0 (alpha → beta → stable) — SPEC.PWSH §15 / §17
 
 - [x] Tag `0.2.0-alpha`; `publish_nuget.yml` produced

@@ -14,7 +14,8 @@ namespace ShellSyntaxTree.Internal.Pwsh.Lexing;
 /// <see cref="PwshTokenKind.QuotedString"/>. For <see cref="PwshTokenKind.Word"/>
 /// this is the text after backtick-escape processing. For
 /// <see cref="PwshTokenKind.Parameter"/> this is the verbatim <c>-Name</c>
-/// or <c>-Name:value</c> text. For <see cref="PwshTokenKind.ScriptBlock"/>,
+/// or <c>-Name:value</c> text, or a native option such as
+/// <c>--work-tree=value</c>. For <see cref="PwshTokenKind.ScriptBlock"/>,
 /// <see cref="PwshTokenKind.Subexpression"/>, <see cref="PwshTokenKind.Splat"/>,
 /// and <see cref="PwshTokenKind.StopParsing"/> this is the full verbatim
 /// source slice. Empty for kinds that carry no content.

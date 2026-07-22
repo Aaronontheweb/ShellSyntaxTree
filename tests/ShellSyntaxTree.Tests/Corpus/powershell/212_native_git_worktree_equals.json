@@ -1,0 +1,40 @@
+{
+  "name": "Native git worktree equals",
+  "input": "git --work-tree=../test add somefile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git"
+        ],
+        "args": [
+          {
+            "raw": "--work-tree",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "../test",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/test"
+          },
+          {
+            "raw": "add",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "somefile",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Issue #52: native --flag=value stays atomic, then splits into flag and path value."
+}

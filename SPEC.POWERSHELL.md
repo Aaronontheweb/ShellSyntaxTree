@@ -280,7 +280,13 @@ The `PwshLexer` produces tokens consumed by `PwshCommandParser`. Token kinds
   `${name}`, `$env:PATH`, drive-qualified `C:\x`. Backtick escapes are
   processed; simple `$x` / `${x}` is absorbed into the Word.
 - **Parameter** — a `-Name` parameter token. A `-Name:value` colon form
-  keeps the value; the parser splits on the first `:`.
+  keeps the value; the parser splits on the first `:` for cmdlet-style
+  commands. Parameter names may contain internal hyphens, so `-Name-Part`
+  and native `--work-tree` each remain one token. An unquoted native
+  `--flag=value` likewise remains one source token; the native-command
+  parser splits it into flag and value args using the bash rules. `=` is
+  not cmdlet parameter binding — `-Name=value` stays one parameter token
+  for a cmdlet.
 - **QuotedString** — single-quoted, double-quoted, or here-string.
   Delimiters stripped from the value. Carries `IsSingleQuoted` and
   `IsHereString` flags.
@@ -638,7 +644,11 @@ positionals are paths," exactly as `SPEC.md` §7.
 
 Native commands reuse the bash per-verb rules table verbatim — `git`,
 `curl`, `tar`, etc. behave identically to `SPEC.md` §7 (`curl` / `wget`:
-the first positional is a URL; the `-o` / `-O` value is a path).
+the first positional is a URL; the `-o` / `-O` value is a path). This
+includes hyphenated option names and the bash `--flag=value` split: the
+flag and value surface as separate args, and a curated flag's value receives
+the same path classification in both parsers. Native `--flag:value` has no
+cmdlet-binding semantics and remains verbatim.
 
 ---
 

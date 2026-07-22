@@ -684,7 +684,14 @@ internal static class PwshCommandParser
                 var t = body[i];
                 if (t.Kind == PwshTokenKind.Parameter)
                 {
-                    if (flagsForVerb is null || !flagsForVerb.Contains(StripColon(t.Value)))
+                    if (TrySplitNativeEqualsFlag(t.Value, out _, out _))
+                    {
+                        // Match Bash: an inline --flag=value is surfaced by
+                        // arg extraction, and terminates the greedy walk.
+                        break;
+                    }
+
+                    if (flagsForVerb is null || !flagsForVerb.Contains(t.Value))
                     {
                         break;
                     }
@@ -719,12 +726,6 @@ internal static class PwshCommandParser
             VerbTokens = verbTokens,
             VerbPositions = verbPositions,
         };
-    }
-
-    private static string StripColon(string paramToken)
-    {
-        var colon = paramToken.IndexOf(':');
-        return colon > 0 ? paramToken.Substring(0, colon) : paramToken;
     }
 
     // ---------------------------------------------------------------- args
@@ -800,14 +801,15 @@ internal static class PwshCommandParser
                 pendingNativeFlag = null;
 
                 var raw = t.Value;
-                var colon = raw.IndexOf(':');
-                var paramName = colon > 0 ? raw.Substring(0, colon) : raw;
-                var colonValue = colon > 0 ? raw.Substring(colon + 1) : null;
-
-                args.Add(new Arg { Raw = paramName, Kind = ArgKind.Literal, IsPath = false });
 
                 if (cmdletStyle)
                 {
+                    var colon = raw.IndexOf(':');
+                    var paramName = colon > 0 ? raw.Substring(0, colon) : raw;
+                    var colonValue = colon > 0 ? raw.Substring(colon + 1) : null;
+
+                    args.Add(new Arg { Raw = paramName, Kind = ArgKind.Literal, IsPath = false });
+
                     if (colonValue is not null)
                     {
                         // Colon form always binds (§6.5.3 rule 1).
@@ -821,13 +823,30 @@ internal static class PwshCommandParser
                 }
                 else
                 {
-                    // Native flag-with-value via the shared bash table (§7.3).
                     var verbKey = verb.VerbTokens.Count > 0 ? verb.VerbTokens[0] : string.Empty;
-                    if (colonValue is null
-                        && BashVerbs.FlagsWithValue.TryGetValue(verbKey, out var flags)
-                        && flags.Contains(paramName))
+
+                    // Native --flag=value follows Bash exactly: surface the
+                    // flag and value separately, and classify a curated
+                    // flag's value through the shared per-verb table.
+                    if (TrySplitNativeEqualsFlag(raw, out var flagPart, out var valuePart))
                     {
-                        pendingNativeFlag = paramName;
+                        args.Add(new Arg { Raw = flagPart, Kind = ArgKind.Literal, IsPath = false });
+                        var valueIsPath = BashPerVerbRules.ValueOfFlagIsPath(verbKey, flagPart);
+                        args.Add(ResolveValue(
+                            valuePart, valueIsPath, options, workingDirectoryUnknown, false));
+                    }
+                    else
+                    {
+                        // A colon has no native binding meaning. Preserve the
+                        // complete option rather than dropping its tail.
+                        args.Add(new Arg { Raw = raw, Kind = ArgKind.Literal, IsPath = false });
+                    }
+
+                    if (raw.IndexOf('=') < 0
+                        && BashVerbs.FlagsWithValue.TryGetValue(verbKey, out var flags)
+                        && flags.Contains(raw))
+                    {
+                        pendingNativeFlag = raw;
                     }
                 }
 
@@ -887,6 +906,29 @@ internal static class PwshCommandParser
         }
 
         return new ArgResult(args, redirects, null);
+    }
+
+    private static bool TrySplitNativeEqualsFlag(
+        string raw, out string flagPart, out string valuePart)
+    {
+        if (raw.Length < 2 || raw[0] != '-')
+        {
+            flagPart = "";
+            valuePart = "";
+            return false;
+        }
+
+        var equals = raw.IndexOf('=');
+        if (equals <= 0 || equals == raw.Length - 1)
+        {
+            flagPart = "";
+            valuePart = "";
+            return false;
+        }
+
+        flagPart = raw.Substring(0, equals);
+        valuePart = raw.Substring(equals + 1);
+        return true;
     }
 
     private static Arg ResolveValueToken(

@@ -1,0 +1,29 @@
+{
+  "name": "Native colon option",
+  "input": "git --option:value status",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git"
+        ],
+        "args": [
+          {
+            "raw": "--option:value",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "status",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Native colon options are preserved verbatim; colon binding is cmdlet-only."
+}

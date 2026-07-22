@@ -1,0 +1,30 @@
+{
+  "name": "Bind equals not cmdlet binding",
+  "input": "Get-Item -Path=foo bar",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Path=foo",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "bar",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/bar"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Equals does not bind a cmdlet parameter value; the following positional remains a path."
+}
