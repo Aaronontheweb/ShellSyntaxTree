@@ -8,7 +8,8 @@
   existing command-string size and depth limits. Variables, interpolation,
   concatenation, subexpressions, and pipeline input now route through
   `DynamicSkip` or `IsUnparseable` instead of producing a clean persistent
-  approval shape.
+  approval shape. PowerShell backtick and Unicode escapes are decoded before
+  recursion, and exact colon-form `-Command:` binding is supported.
 
 #### 0.2.0-beta.1 2026-07-22 ####
 

@@ -1137,6 +1137,7 @@ internal static class PwshCommandParser
         }
 
         var payloadStart = start + 1;
+        string? inlinePayload = null;
         if (payloadStart >= body.Count)
         {
             result = BuildResult.Fail("Invoke-Expression is missing its payload");
@@ -1145,23 +1146,40 @@ internal static class PwshCommandParser
 
         if (body[payloadStart].Kind == PwshTokenKind.Parameter)
         {
+            var parameter = body[payloadStart].Value;
+            var colon = parameter.IndexOf(':');
+            var parameterName = colon >= 0
+                ? parameter.Substring(0, colon)
+                : parameter;
             if (!string.Equals(
-                body[payloadStart].Value, "-Command", StringComparison.OrdinalIgnoreCase))
+                parameterName, "-Command", StringComparison.OrdinalIgnoreCase))
             {
                 result = BuildResult.Fail(
                     "Invoke-Expression payload binding is ambiguous");
                 return true;
             }
 
+            if (colon >= 0 && colon + 1 < parameter.Length)
+            {
+                if (payloadStart + 1 != body.Count)
+                {
+                    result = BuildResult.Fail(
+                        "Invoke-Expression payload binding is ambiguous");
+                    return true;
+                }
+
+                inlinePayload = parameter.Substring(colon + 1);
+            }
+
             payloadStart++;
-            if (payloadStart >= body.Count)
+            if (inlinePayload is null && payloadStart >= body.Count)
             {
                 result = BuildResult.Fail("Invoke-Expression is missing its payload");
                 return true;
             }
         }
 
-        for (var i = payloadStart; i < body.Count; i++)
+        for (var i = payloadStart; inlinePayload is null && i < body.Count; i++)
         {
             if (body[i].Kind == PwshTokenKind.Operator
                 && body[i].OperatorText is not "(" and not ")")
@@ -1173,17 +1191,32 @@ internal static class PwshCommandParser
         }
 
         var payloadEnd = body.Count - 1;
-        var singlePayload = payloadStart == payloadEnd;
-        var payload = body[payloadStart];
-        var isStatic = singlePayload
-            && payload.Kind is PwshTokenKind.Word or PwshTokenKind.QuotedString
-            && !payload.HasInterpolation
-            && (payload.Kind != PwshTokenKind.Word
-                || !PwshResolver.LooksLikeCommaArray(payload.Value));
+        var payloadValue = inlinePayload;
+        var rawPayload = inlinePayload;
+        var isStatic = false;
+        if (inlinePayload is not null)
+        {
+            payloadValue = PwshLexer.DecodeExpandableValue(
+                inlinePayload!, out var hasInterpolation);
+            isStatic = !hasInterpolation
+                && !PwshResolver.LooksLikeCommaArray(payloadValue);
+        }
+
+        if (inlinePayload is null)
+        {
+            var singlePayload = payloadStart == payloadEnd;
+            var payload = body[payloadStart];
+            payloadValue = payload.Value;
+            rawPayload = SourceSlice(source, body[payloadStart], body[payloadEnd]);
+            isStatic = singlePayload
+                && payload.Kind is PwshTokenKind.Word or PwshTokenKind.QuotedString
+                && !payload.HasInterpolation
+                && (payload.Kind != PwshTokenKind.Word
+                    || !PwshResolver.LooksLikeCommaArray(payload.Value));
+        }
 
         if (!isStatic)
         {
-            var rawPayload = SourceSlice(source, body[payloadStart], body[payloadEnd]);
             var canonicalVerb = verb.CanonicalVerb;
             if (canonicalVerb is null && verb.VerbTokens.Count > 0
                 && string.Equals(
@@ -1205,7 +1238,7 @@ internal static class PwshCommandParser
                 {
                     new Arg
                     {
-                        Raw = rawPayload,
+                        Raw = rawPayload!,
                         Kind = ArgKind.DynamicSkip,
                         IsPath = false,
                     },
@@ -1231,7 +1264,7 @@ internal static class PwshCommandParser
         }
 
         var innerParsed = ParseInternal(
-            payload.Value, options, recursionDepth + 1, markWrapped: true,
+            payloadValue!, options, recursionDepth + 1, markWrapped: true,
             sharedLocation: attribution);
         if (innerParsed.IsUnparseable)
         {

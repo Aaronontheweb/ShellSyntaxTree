@@ -1,0 +1,70 @@
+{
+  "name": "Iex vertical tab location",
+  "input": "Set-Location C:\\safe; iex \u0022Set-Location\u0060vC:\\evil\u0022; Remove-Item child.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "C:\\safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "C:\\evil",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/evil"
+          },
+          {
+            "raw": "C:/safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "child.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/evil/child.txt"
+          },
+          {
+            "raw": "C:/evil",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/evil",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Decoded vertical-tab whitespace preserves an inner location change."
+}

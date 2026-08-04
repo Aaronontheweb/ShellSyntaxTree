@@ -1,0 +1,9 @@
+{
+  "name": "Iex command colon comment",
+  "input": "iex -Command:#comment",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "Invoke-Expression is missing its payload"
+  },
+  "notes": "A comment after an empty colon value leaves -Command without a payload."
+}

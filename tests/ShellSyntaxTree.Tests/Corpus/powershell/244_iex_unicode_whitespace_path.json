@@ -1,0 +1,26 @@
+{
+  "name": "Iex unicode whitespace path",
+  "input": "iex \u0022Remove-Item\u0060u{2003}C:\\x\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "Decoded Unicode whitespace separates the inner path argument."
+}

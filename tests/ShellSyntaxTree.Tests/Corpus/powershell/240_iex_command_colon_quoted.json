@@ -1,0 +1,19 @@
+{
+  "name": "Iex command colon quoted",
+  "input": "iex -Command:\u0027Get-Date\u0027",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "An empty colon-form parameter tail binds the following quoted payload."
+}

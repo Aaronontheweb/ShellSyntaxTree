@@ -51,11 +51,20 @@ internal static class PwshLexer
         {
             var c = src[i];
 
+            if (c == '\0')
+            {
+                tokens.Add(new PwshToken(
+                    PwshTokenKind.UnparseableSentinel,
+                    "", null, i, 1,
+                    $"NUL character is not supported at position {i}"));
+                return tokens;
+            }
+
             // ---- whitespace ----
-            if (c == ' ' || c == '\t')
+            if (IsInlineWhitespace(c))
             {
                 var start = i;
-                while (i < src.Length && (src[i] == ' ' || src[i] == '\t'))
+                while (i < src.Length && IsInlineWhitespace(src[i]))
                 {
                     i++;
                 }
@@ -373,20 +382,7 @@ internal static class PwshLexer
 
             if (c == '`' && i + 1 < src.Length)
             {
-                var n = src[i + 1];
-                sb.Append(n switch
-                {
-                    'n' => '\n',
-                    't' => '\t',
-                    'r' => '\r',
-                    '0' => '\0',
-                    'a' => '\a',
-                    'b' => '\b',
-                    'f' => '\f',
-                    'v' => '\v',
-                    _ => n,
-                });
-                i += 2;
+                i = AppendBacktickEscape(src, i, sb);
                 continue;
             }
 
@@ -512,11 +508,13 @@ internal static class PwshLexer
                     bodyEnd--;
                 }
 
-                var body = bodyEnd >= bodyStart
-                    ? src.Slice(bodyStart, bodyEnd - bodyStart).ToString()
-                    : string.Empty;
-                var hasInterpolation = quote == '"'
-                    && ContainsInterpolation(src.Slice(bodyStart, bodyEnd - bodyStart));
+                var bodySpan = bodyEnd >= bodyStart
+                    ? src.Slice(bodyStart, bodyEnd - bodyStart)
+                    : ReadOnlySpan<char>.Empty;
+                var hasInterpolation = false;
+                var body = quote == '"'
+                    ? DecodeExpandableString(bodySpan, out hasInterpolation)
+                    : bodySpan.ToString();
                 var end = k + 2; // past quote + '@'
                 tokens.Add(new PwshToken(
                     PwshTokenKind.QuotedString, body, null,
@@ -539,24 +537,33 @@ internal static class PwshLexer
         return src.Length;
     }
 
-    private static bool ContainsInterpolation(ReadOnlySpan<char> value)
+    private static string DecodeExpandableString(
+        ReadOnlySpan<char> value, out bool hasInterpolation)
     {
+        var decoded = new StringBuilder(value.Length);
+        hasInterpolation = false;
         for (var i = 0; i < value.Length; i++)
         {
             if (value[i] == '`' && i + 1 < value.Length)
             {
-                i++;
+                i = AppendBacktickEscape(value, i, decoded) - 1;
                 continue;
             }
 
             if (value[i] == '$' && StartsInterpolation(value, i))
             {
-                return true;
+                hasInterpolation = true;
             }
+
+            decoded.Append(value[i]);
         }
 
-        return false;
+        return decoded.ToString();
     }
+
+    internal static string DecodeExpandableValue(
+        string value, out bool hasInterpolation) =>
+        DecodeExpandableString(value.AsSpan(), out hasInterpolation);
 
     private static bool StartsInterpolation(ReadOnlySpan<char> value, int dollarIndex)
     {
@@ -568,6 +575,87 @@ internal static class PwshLexer
         var next = value[dollarIndex + 1];
         return next is '(' or '{' or '?' or '^' or '$' or '_'
             || char.IsLetterOrDigit(next);
+    }
+
+    private static int AppendBacktickEscape(
+        ReadOnlySpan<char> value, int backtickIndex, StringBuilder target)
+    {
+        var escaped = value[backtickIndex + 1];
+        if (escaped == 'u' && TryReadUnicodeEscape(
+            value, backtickIndex, out var scalar, out var endIndex))
+        {
+            target.Append(char.ConvertFromUtf32(scalar));
+            return endIndex;
+        }
+
+        target.Append(escaped switch
+        {
+            'n' => '\n',
+            't' => '\t',
+            'r' => '\r',
+            '0' => '\0',
+            'a' => '\a',
+            'b' => '\b',
+            'f' => '\f',
+            'v' => '\v',
+            _ => escaped,
+        });
+        return backtickIndex + 2;
+    }
+
+    private static bool TryReadUnicodeEscape(
+        ReadOnlySpan<char> value, int backtickIndex, out int scalar, out int endIndex)
+    {
+        scalar = 0;
+        endIndex = backtickIndex + 2;
+        var openBrace = backtickIndex + 2;
+        if (openBrace >= value.Length || value[openBrace] != '{')
+        {
+            return false;
+        }
+
+        var i = openBrace + 1;
+        var digits = 0;
+        while (i < value.Length && digits < 6 && TryHexValue(value[i], out var hex))
+        {
+            scalar = (scalar * 16) + hex;
+            digits++;
+            i++;
+        }
+
+        if (digits == 0 || i >= value.Length || value[i] != '}'
+            || scalar > 0x10FFFF || (scalar >= 0xD800 && scalar <= 0xDFFF))
+        {
+            scalar = 0;
+            return false;
+        }
+
+        endIndex = i + 1;
+        return true;
+    }
+
+    private static bool TryHexValue(char value, out int hex)
+    {
+        if (value >= '0' && value <= '9')
+        {
+            hex = value - '0';
+            return true;
+        }
+
+        if (value >= 'a' && value <= 'f')
+        {
+            hex = value - 'a' + 10;
+            return true;
+        }
+
+        if (value >= 'A' && value <= 'F')
+        {
+            hex = value - 'A' + 10;
+            return true;
+        }
+
+        hex = 0;
+        return false;
     }
 
     // ---------------------------------------------------------------- regions
@@ -765,14 +853,13 @@ internal static class PwshLexer
                     break;
                 }
 
-                var n = src[i + 1];
-                if (n == '\n' || n == '\r')
+                var next = src[i + 1];
+                if (next == '\n' || next == '\r')
                 {
                     break; // line continuation — handled by the outer loop
                 }
 
-                sb.Append(n);
-                i += 2;
+                i = AppendBacktickEscape(src, i, sb);
                 continue;
             }
 
@@ -835,10 +922,11 @@ internal static class PwshLexer
     /// </summary>
     private static int ScanWordRun(ReadOnlySpan<char> src, int i)
     {
+        var start = i;
         while (i < src.Length)
         {
             var c = src[i];
-            if (IsWordBoundary(c))
+            if (IsWordBoundary(c) || (i == start && c == '#'))
             {
                 break;
             }
@@ -854,6 +942,13 @@ internal static class PwshLexer
                 if (src[i + 1] == '\n' || src[i + 1] == '\r')
                 {
                     break;
+                }
+
+                if (src[i + 1] == 'u' && TryReadUnicodeEscape(
+                    src, i, out _, out var unicodeEnd))
+                {
+                    i = unicodeEnd;
+                    continue;
                 }
 
                 i += 2;
@@ -903,7 +998,7 @@ internal static class PwshLexer
             case '>':
                 return true;
             default:
-                return false;
+                return c == '\0' || IsInlineWhitespace(c);
         }
     }
 
@@ -911,6 +1006,9 @@ internal static class PwshLexer
 
     private static bool IsAsciiLetter(char c) =>
         (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
+
+    private static bool IsInlineWhitespace(char c) =>
+        c != '\r' && c != '\n' && char.IsWhiteSpace(c);
 
     private static bool IsIdentifierStart(char c) =>
         IsAsciiLetter(c) || c == '_';

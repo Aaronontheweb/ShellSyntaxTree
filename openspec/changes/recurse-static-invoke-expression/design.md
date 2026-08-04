@@ -63,6 +63,11 @@ Searching the processed token value for `$` was rejected because it would
 misclassify escaped literal dollar signs and lose the proof the lexer already
 has while scanning source text.
 
+Backtick character escapes are decoded before a static payload is parsed,
+including Unicode scalar and newline escapes. This matches the logical string
+PowerShell passes to `Invoke-Expression`; preserving the source escape text
+could otherwise hide an inner verb or location change.
+
 ### Use DynamicSkip when the dynamic source is observable
 
 For a direct computed payload, the parser will preserve the outer

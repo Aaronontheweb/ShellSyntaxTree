@@ -25,6 +25,10 @@
 - [x] 4.3 Add parser unit tests for inherited location, exported location changes, child-process isolation, depth limits, mixed wrappers, and input limits.
 - [x] 4.4 Replace PowerShell corpus case 157 and add the required static, dynamic, pipeline, location, and recursion cases to `CorpusManifest`.
 - [x] 4.5 Regenerate the PowerShell corpus and confirm the real-`pwsh` oracle matrix remains valid.
+- [x] 4.6 Cover Unicode and backtick-newline escape decoding found during security review.
+- [x] 4.7 Cover exact colon-form `Invoke-Expression -Command:` binding.
+- [x] 4.8 Cover decoded whitespace, colon comments, and escaped inline colon payloads found during follow-up review.
+- [x] 4.9 Cover decoded NUL safe-fail and inline colon Unicode escapes.
 
 ## 5. Completion
 

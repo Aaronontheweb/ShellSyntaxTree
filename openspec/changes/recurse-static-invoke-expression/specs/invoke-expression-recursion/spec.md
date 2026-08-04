@@ -30,6 +30,10 @@ the outer clause's preceding operator on the first surfaced clause.
 - **WHEN** PowerShell parses `Invoke-Expression -Command 'Get-Date'`
 - **THEN** the result contains one wrapped `Get-Date` clause
 
+#### Scenario: Colon command parameter binds a static payload
+- **WHEN** PowerShell parses `Invoke-Expression -Command:Get-Date`
+- **THEN** the result contains one wrapped `Get-Date` clause
+
 #### Scenario: Inner compound clauses are surfaced
 - **WHEN** PowerShell parses `iex 'Get-Date; Get-Process'`
 - **THEN** the result contains wrapped `Get-Date` and `Get-Process` clauses
@@ -100,6 +104,28 @@ The parser SHALL use that lexical evidence when proving an
 - **WHEN** PowerShell parses ``iex "Write-Host `$name"``
 - **THEN** the quoted payload is treated as static
 - **THEN** the inner `Write-Host` clause is surfaced
+
+#### Scenario: Unicode escape in an invoked alias is decoded
+- **WHEN** PowerShell parses ``& "i`u{65}x" $code``
+- **THEN** the command is recognized as `iex`
+- **THEN** `$code` is surfaced as `DynamicSkip`
+
+#### Scenario: Escaped newline in a static payload is decoded
+- **WHEN** a static expression payload contains `` `n`` between two commands
+- **THEN** both inner command clauses are surfaced
+
+#### Scenario: Decoded PowerShell whitespace separates inner tokens
+- **WHEN** a static expression payload separates a verb and path with
+  vertical tab, form feed, or Unicode whitespace
+- **THEN** the path is surfaced as a separate inner argument
+
+#### Scenario: Colon payload comment leaves the argument missing
+- **WHEN** PowerShell parses `Invoke-Expression -Command:#comment`
+- **THEN** `ParsedCommand.IsUnparseable` is `true`
+
+#### Scenario: Decoded NUL safe-fails
+- **WHEN** a static expression payload contains a decoded NUL
+- **THEN** `ParsedCommand.IsUnparseable` is `true`
 
 ### Requirement: Static expression recursion shares the caller's location context
 

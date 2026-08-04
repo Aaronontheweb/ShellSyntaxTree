@@ -1,0 +1,92 @@
+{
+  "name": "Iex backtick location",
+  "input": "Set-Location C:\\safe; iex Write-Output\u0060 ok\u0060nSet-Location\u0060 C:\\evil; Remove-Item child.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "C:\\safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "ok",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:/safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "C:\\evil",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/evil"
+          },
+          {
+            "raw": "C:/safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "child.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/evil/child.txt"
+          },
+          {
+            "raw": "C:/evil",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/evil",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A hidden escaped-newline location change is surfaced and propagated."
+}

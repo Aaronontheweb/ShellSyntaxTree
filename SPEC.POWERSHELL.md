@@ -320,19 +320,29 @@ The `PwshLexer` produces tokens consumed by `PwshCommandParser`. Token kinds
   `$var` / `${name}` / `$env:X` / `$( ... )` interpolation — but the parser
   **does not expand**; `$var` stays literal in the token value and the
   resolver (§8) classifies it. A `$( ... )` inside a double-quoted string
-  does not split the token.
+  does not split the token. Backtick character escapes are decoded into the
+  same logical value PowerShell passes to a command, including
+  `` `u{hex}`` Unicode scalar escapes.
 - **Here-strings** — `@"` + newline ... newline + `"@` (expandable) and
   `@'` + newline ... newline + `'@` (literal). The closing delimiter must
   start a line. Lexes to one `QuotedString` token with `IsHereString=true`.
+  Expandable here-strings decode backtick character escapes; literal
+  here-strings preserve their body bytes.
 - Unbalanced quotes or here-strings → `IsUnparseable` with a reason.
 
 ### Escape handling
 
 - The backtick `` ` `` is PowerShell's escape character — **not** a
   command-substitution delimiter. There is no backtick command substitution
-  in PowerShell. Outside quotes, `` `X `` takes `X` literally into the
-  current Word. Inside double quotes, `` `n ``, `` `t ``, `` `" ``, `` `$ ``,
-  and an escaped backtick are recognized.
+  in PowerShell. Outside quotes, a backtick escape contributes its decoded
+  character to the current Word. Inside expandable strings, `` `n ``,
+  `` `t ``, `` `" ``, `` `$ ``, an escaped backtick, and `` `u{hex}`` are
+  recognized. Decoding occurs before static command-string recursion so an
+  escaped newline cannot hide an additional command. Decoded PowerShell
+  whitespace, including vertical tab, form feed, and Unicode separator
+  characters, becomes a token boundary; only CR/LF separate statements. A
+  decoded NUL marks the command unparseable rather than being merged into a
+  verb or argument.
 - Backtick + newline is a line continuation.
 
 ### Operator boundaries
@@ -887,7 +897,12 @@ Static call-operator spellings such as `& 'iex' ...` and module-qualified
 Accepted payloads are a single-quoted string, a literal here-string, a bare
 non-dynamic word, or a double-quoted string / expandable here-string whose
 lexer token records no unescaped variable or subexpression interpolation.
-An optional exact `-Command` parameter may bind that one token.
+An optional exact `-Command` parameter may bind that one token. The normal
+colon forms are accepted: `-Command:Get-Date` carries an inline bare value,
+while `-Command:'Get-Date'` and `-Command:"Get-Date"` bind the following
+quoted token. Inline values receive the same backtick decoding as ordinary
+words. A `#` immediately after an empty colon starts a comment and therefore
+leaves the required payload missing. Dynamic inline values remain opaque.
 
 For a static payload, the parser consumes the outer expression clause and
 surfaces the inner clauses inline with `IsCommandStringWrapped = true`. The

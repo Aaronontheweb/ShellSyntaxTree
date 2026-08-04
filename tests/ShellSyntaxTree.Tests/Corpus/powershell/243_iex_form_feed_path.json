@@ -1,0 +1,26 @@
+{
+  "name": "Iex form feed path",
+  "input": "iex \u0022Remove-Item\u0060fC:\\x\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "C:\\x",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/x"
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "Decoded form-feed whitespace separates the inner path argument."
+}
