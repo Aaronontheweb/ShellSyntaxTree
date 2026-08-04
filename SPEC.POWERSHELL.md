@@ -393,13 +393,20 @@ cmdlets, so the bash greedy walk does not apply to them.
 
 When the first token is neither cmdlet-shaped nor a known alias (`git`,
 `dotnet`, `npm`, `kubectl`, `python`, ...) it is a **native command**.
-Native commands reuse the bash greedy verb-chain walk (`SPEC.md` §6.1):
-append the first token, then walk consecutive verb-like Word tokens,
-transparently consuming flag-with-value pairs, stopping at the first
-non-verb-like token, flag, operator, quoted string, or opaque token. The
-verb-like predicate is the bash predicate **unchanged** (`SPEC.md` §6.1:
+Native commands reuse the bash greedy verb-chain walk (`SPEC.md` §6.1).
+The parser appends the first token and then walks consecutive verb-like Word
+tokens. The walk transparently consumes flag-with-value pairs. It stops at a
+path-shaped token, non-verb-like token, flag, operator, quoted string, or
+opaque token.
+
+The path-shape test uses `BashResolver.LooksLikePath`. Both native parsers
+therefore share one boundary. The verb-like predicate is the bash predicate
+**unchanged** (`SPEC.md` §6.1:
 `Kind == Word`, length `[1, 64]`, first char ASCII lowercase `[a-z]`,
 remaining chars `[a-z0-9._-]`).
+
+The path-shape boundary does not apply to the first native command token.
+For example, `deploy.sh status` has verb tokens `deploy.sh` and `status`.
 
 Keeping the predicate **case-sensitive** — not relaxing it to accept an
 uppercase first char — is deliberate. The leading-lowercase rule is the only

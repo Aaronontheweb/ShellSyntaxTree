@@ -118,6 +118,74 @@ public class BashCommandParserTests
     }
 
     [Fact]
+    public void Path_shaped_operand_terminates_greedy_verb_chain()
+    {
+        var clause = Assert.Single(Parse("git diff install-skills.sh").Clauses);
+
+        Assert.Equal(new[] { "git", "diff" }, clause.Verb.Tokens);
+        var operand = Assert.Single(clause.Args);
+        Assert.Equal("install-skills.sh", operand.Raw);
+        Assert.True(operand.IsPath);
+        Assert.Equal("/work/install-skills.sh", operand.Resolved);
+    }
+
+    [Fact]
+    public void Unknown_command_uses_path_shape_without_a_command_rule()
+    {
+        var clause = Assert.Single(Parse("acme inspect report.json").Clauses);
+
+        Assert.Equal(new[] { "acme", "inspect" }, clause.Verb.Tokens);
+        var operand = Assert.Single(clause.Args);
+        Assert.True(operand.IsPath);
+        Assert.Equal("/work/report.json", operand.Resolved);
+    }
+
+    [Fact]
+    public void Path_shaped_operand_after_transparent_flag_pair_is_an_arg()
+    {
+        var clause = Assert.Single(Parse("git -C /repo diff install-skills.sh").Clauses);
+
+        Assert.Equal(new[] { "git", "diff" }, clause.Verb.Tokens);
+        Assert.Equal(new[] { "-C", "/repo", "install-skills.sh" },
+            clause.Args.Select(arg => arg.Raw).ToArray());
+        Assert.True(clause.Args[2].IsPath);
+    }
+
+    [Fact]
+    public void Explicit_separator_produces_the_same_file_metadata()
+    {
+        var implicitClause = Assert.Single(Parse("git diff install-skills.sh").Clauses);
+        var explicitClause = Assert.Single(Parse("git diff -- install-skills.sh").Clauses);
+
+        var implicitOperand = Assert.Single(implicitClause.Args);
+        var explicitOperand = Assert.Single(explicitClause.Args, arg => !arg.IsFlag);
+        Assert.Equal(implicitOperand.Raw, explicitOperand.Raw);
+        Assert.Equal(implicitOperand.IsPath, explicitOperand.IsPath);
+        Assert.Equal(implicitOperand.Resolved, explicitOperand.Resolved);
+    }
+
+    [Fact]
+    public void Path_shaped_first_token_remains_the_command()
+    {
+        var clause = Assert.Single(Parse("deploy.sh status").Clauses);
+
+        Assert.Equal(new[] { "deploy.sh", "status" }, clause.Verb.Tokens);
+        Assert.Empty(clause.Args);
+    }
+
+    [Fact]
+    public void Known_file_suffix_wins_over_an_extension_shaped_subcommand()
+    {
+        var clause = Assert.Single(Parse("tool plugin.sh list").Clauses);
+
+        Assert.Equal(new[] { "tool" }, clause.Verb.Tokens);
+        Assert.Equal(new[] { "plugin.sh", "list" },
+            clause.Args.Select(arg => arg.Raw).ToArray());
+        Assert.True(clause.Args[0].IsPath);
+        Assert.False(clause.Args[1].IsPath);
+    }
+
+    [Fact]
     public void Greedy_verb_chain_walks_through_docker_compose_up_nginx()
     {
         // Issue #27: `docker compose up nginx` over-extracts because `nginx`

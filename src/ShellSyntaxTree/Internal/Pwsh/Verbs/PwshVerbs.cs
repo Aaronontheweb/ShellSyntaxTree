@@ -78,7 +78,8 @@ internal static class PwshVerbs
     /// <em>case-sensitive</em>: the leading-lowercase rule is the only
     /// signal that stops the greedy walk at a capitalized identifier
     /// (<c>dotnet ef migrations add InitialCreate</c> stops at
-    /// <c>InitialCreate</c>).
+    /// <c>InitialCreate</c>). The caller first rejects tokens that match the
+    /// shared Bash path-shape rules.
     /// </summary>
     internal static bool IsNativeVerbLikeToken(string value)
     {

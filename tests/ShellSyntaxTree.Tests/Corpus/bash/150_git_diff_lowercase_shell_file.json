@@ -1,0 +1,26 @@
+{
+  "name": "Path-shaped operand: git diff lowercase shell file",
+  "input": "git diff install-skills.sh",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "diff"],
+        "args": [
+          {
+            "raw": "install-skills.sh",
+            "kind": "Literal",
+            "isPath": true,
+            "isFlag": false,
+            "resolved": "/work/install-skills.sh"
+          }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #64: the path-shape rule stops the greedy verb pass before a lowercase file operand."
+}

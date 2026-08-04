@@ -128,14 +128,11 @@ internal static class BashVerbs
     /// </summary>
     /// <remarks>
     /// Strict allow-list (leading <c>[a-z]</c>, body <c>[a-z0-9._-]</c>)
-    /// over the more obvious negation-of-LooksLikePath because it stays
-    /// conservative for unknown shapes: a token like <c>readme.md</c>
-    /// satisfies the allow-list and would extend an unknown CLI's verb
-    /// chain, but the FileVerb carveout in <c>BashCommandParser</c>
-    /// short-circuits the common case (<c>cat readme.md</c>) before the
-    /// allow-list ever runs. Quoted strings are excluded so the user's
-    /// intent to treat bytes literally is preserved. The 64-char bound
-    /// is a defensive cap against pathological inputs.
+    /// remains independent from path classification. The caller applies
+    /// <c>BashResolver.LooksLikePath</c> first so a token such as
+    /// <c>readme.md</c> remains an argument. Quoted strings are excluded so
+    /// the user's intent to treat bytes literally is preserved. The
+    /// 64-char bound is a defensive cap against pathological inputs.
     /// </remarks>
     internal static bool IsVerbLikeToken(in BashToken token)
     {

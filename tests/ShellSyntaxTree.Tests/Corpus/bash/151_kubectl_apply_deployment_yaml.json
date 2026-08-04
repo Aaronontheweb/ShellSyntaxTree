@@ -1,0 +1,26 @@
+{
+  "name": "Path-shaped operand: kubectl apply YAML file",
+  "input": "kubectl apply deployment.yaml",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["kubectl", "apply"],
+        "args": [
+          {
+            "raw": "deployment.yaml",
+            "kind": "Literal",
+            "isPath": true,
+            "isFlag": false,
+            "resolved": "/work/deployment.yaml"
+          }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #64: a real non-Git CLI exposes a lowercase YAML file without a command-specific rule."
+}

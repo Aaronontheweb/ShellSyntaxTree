@@ -50,6 +50,10 @@ priorities.
 
 ### Completed maintenance
 
+- [x] **Issue #64 — path-shaped operands after native verb chains.**
+      Stop the Bash and PowerShell native greedy passes before a token that
+      matches the shared path-shape rules. Preserve that token as a resolved
+      argument without a command dictionary or a public API change.
 - [x] **Issue #52 — hyphenated PowerShell parameters/native options.**
       Preserve internal hyphens, apply bash-compatible native
       `--flag=value` splitting and path classification, keep colon binding
