@@ -34,6 +34,36 @@ This separation is important. ShellSyntaxTree cannot safely embed the grammar
 of every executable. It should preserve the source facts a command-aware
 consumer needs, while remaining conservative when those facts are incomplete.
 
+```mermaid
+flowchart TD
+    A["Command text + selected shell + working directory"] --> B
+    B{"Caller selects the matching parser"}
+
+    subgraph SST["ShellSyntaxTree"]
+        C["BashParser"]
+        D["PwshParser"]
+        C --> E["Parse syntax, classify tokens, and resolve static context"]
+        D --> E
+        E --> F["ParsedCommand: ordered clauses, verbs, args, redirects, cwd, and uncertainty"]
+    end
+
+    subgraph APP["Consumer-owned policy"]
+        G{"IsUnparseable or policy-relevant input dynamic?"}
+        G -->|Yes| H["Safe-fail: prompt or deny"]
+        G -->|No| I["Walk every clause in source order"]
+        I --> J["Choose command identity and evaluate paths, cwd, and redirects"]
+        J --> K{"ALLOW / PROMPT / DENY"}
+    end
+
+    B -->|Bash| C
+    B -->|PowerShell| D
+    F --> G
+```
+
+The diagram is a responsibility flow, not an execution flow: parsing never
+runs the command, and every decision after `ParsedCommand` belongs to the
+consumer.
+
 ## A production-shaped consumer loop
 
 The caller should know which shell will execute the command and select that
