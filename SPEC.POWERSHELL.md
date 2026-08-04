@@ -1,8 +1,9 @@
 # ShellSyntaxTree — PowerShell Specification (v0.2.0)
 
-**Status:** Draft for v0.2.0. Approved decisions; implementation pending.
-**Audience:** Whoever (human or agent) implements the ShellSyntaxTree
-PowerShell parser.
+**Status:** Shipped in the v0.2.0 prerelease line; stable promotion pending
+downstream Netclaw validation.
+**Audience:** Whoever (human or agent) implements, consumes, or maintains the
+ShellSyntaxTree PowerShell parser.
 **Read `SPEC.md` (the bash and shared-contract specification) end-to-end
 first — this document specifies only what differs for PowerShell.**
 

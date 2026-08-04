@@ -19,24 +19,29 @@ The output is a `ParsedCommand` containing:
   when known, and explicit `DynamicSkip` marking for unresolved env vars
   / unexpanded globs
 - redirect operators (`>`, `>>`, `<`, `2>`, `2>>`)
-- `cd <dir> && cmd` propagation — the cd target is attributed to subsequent
-  clauses in the same compound
-- recursion into `bash -c "<inner>"` so wrapped commands surface as clauses
-- subshell `( ... )` isolation for `cd` attribution
+- Bash `cd <dir> && cmd` and PowerShell `Set-Location <dir>; cmd`
+  propagation — the target is attributed to subsequent clauses
+- recursion into `bash -c`, `pwsh -Command`, and `pwsh -EncodedCommand` so
+  wrapped commands surface as clauses
+- PowerShell alias canonicalization and explicit dynamic-command identity
+- Bash subshell isolation and PowerShell grouping semantics for cwd attribution
 - safe-fail flag `IsUnparseable` for unsupported constructs (control flow,
-  function definitions, process substitution, deep `bash -c` nesting,
-  unbalanced quotes/parens)
+  function definitions, process substitution, deep command-string nesting,
+  unbalanced quotes/parens/opaque regions)
 
-The complete contract lives in [`SPEC.md`](./SPEC.md).
+The complete contract lives in [`SPEC.md`](./SPEC.md) and
+[`SPEC.POWERSHELL.md`](./SPEC.POWERSHELL.md).
 
 ## Who It's For
 
 **Primary consumer: [Netclaw](https://github.com/netclaw-dev/netclaw)** — an
-open-source autonomous operations agent. Netclaw's approval gate currently
-hand-rolls equivalent functionality in
-`src/Netclaw.Security/ShellApprovalSemantics.cs` and `ShellTokenizer.cs`.
-ShellSyntaxTree v0.1 is intended to **replace that hand-rolled approximation**
-with a richer, structured AST that Netclaw's gate can walk directly.
+open-source autonomous operations agent. Netclaw's POSIX approval gate consumes
+ShellSyntaxTree's Bash parser to decompose approval units, identify candidate
+verbs and directories, propagate cwd context, inspect redirects, and fail
+closed when parsing is uncertain. Its PowerShell integration is the remaining
+v0.2.0 downstream acceptance item. See
+[`docs/CONSUMER_GUIDE.md`](./docs/CONSUMER_GUIDE.md) for the public consumer
+algorithm and immutable Netclaw examples.
 
 **Acceptance is tied to Netclaw integration** (see SPEC §17 #7-#8): the
 package must be consumable via `<PackageReference>` and exercise at least
@@ -56,15 +61,16 @@ zero-native-deps .NET parser sized to what security gates actually need.
 
 ## Scope Discipline
 
-### v0.1 (current)
+### v0.2 (current prerelease line)
 
-- Bash only. PowerShell and Windows `cmd` are deferred — but the
-  `IShellParser` seam is in place so consumers don't have to refactor.
+- Bash and PowerShell 7 pipeline parsing ship behind the shared
+  `IShellParser` seam. Windows `cmd` remains deferred.
 - Public API surface in SPEC §2 is **locked**. Internal changes are free.
-- Acceptance is the corpus contract (SPEC §13): every JSON entry parses to
-  its expected AST.
+- Acceptance is the multi-shell corpus contract: every Bash and PowerShell
+  JSON entry parses to its expected AST, and the PowerShell corpus also passes
+  the live `pwsh` oracle matrix.
 
-### Explicit non-goals (v0.1)
+### Explicit non-goals
 
 - Command execution.
 - Variable expansion of any kind (we **mark** dynamic tokens, never resolve
@@ -73,25 +79,30 @@ zero-native-deps .NET parser sized to what security gates actually need.
 - Process substitution `<(cmd)`, `>(cmd)`.
 - Function definitions, `for`/`while`/`case` control flow, arithmetic
   expansion `$((...))`.
+- PowerShell script-level control flow, definitions, expression evaluation,
+  and `.ps1` file-content parsing.
 - Performance optimization beyond "fast enough to invoke per shell call
   without noticeable latency" (~1 ms typical).
-- Source-mapping (line/column for AST nodes — useful for IDEs, irrelevant
-  for security gates).
+- Full IDE-style source mapping. Security-motivated token provenance is under
+  active design in issue #62.
 
 ### Versioning
 
-- `v0.1.0-alpha` — first publishable cut, bash-only.
-- `v0.1.x` — additive (more verb table entries, more corpus, bug fixes).
-- `v0.2.0` — first PowerShell parser implementation.
-- `v1.0.0` — at least one external consumer beyond Netclaw ships against it
+- `0.1.0-alpha` — first publishable cut, Bash-only.
+- `0.1.x` — additive (more verb table entries, more corpus, bug fixes).
+- `0.2.0` — first PowerShell parser implementation; alpha and beta.1 shipped,
+  stable promotion pending downstream validation.
+- `1.0.0` — at least one external consumer beyond Netclaw ships against it
   without finding API gaps.
 
 ## Architectural Constraints
 
 - **Public API in `SPEC.md` §2 is the contract.** Everything else is
-  `internal`. Renaming/removing public fields requires a major version bump.
-- **`IShellParser` is the multi-shell seam.** PowerShell and `cmd` parsers
-  must be addable without touching consumer code.
+  `internal`. During `0.x`, renaming or removing public fields requires a
+  deliberate minor version bump and migration notes; after `1.0`, it requires
+  a major version bump.
+- **`IShellParser` is the multi-shell seam.** Additional parsers such as
+  Windows `cmd` must be addable without reshaping consumer code.
 - **No native dependencies.** AOT-trim friendly; ship a single managed
   package.
 - **Multi-targeting**: `netstandard2.0` for broad consumer reach, `net8.0`
@@ -100,18 +111,20 @@ zero-native-deps .NET parser sized to what security gates actually need.
   `IsUnparseable`. Consumers can always relax — they cannot retroactively
   un-execute a command we falsely classified as safe.
 
-## Acceptance for v0.1.0-alpha
+## Shipped acceptance for 0.1.0-alpha
 
 Per SPEC §17, all of the following must be true:
 
 1. Public API matches SPEC §2 exactly. `dotnet pack` produces a
    `ShellSyntaxTree.0.1.0-alpha.nupkg`.
-2. Every corpus entry in `tests/Corpus/bash/*.json` parses to its expected
+2. Every corpus entry in
+   `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` parses to its expected
    AST. `dotnet test` runs them all and passes.
 3. Corpus has ≥ 105 entries spanning the SPEC §13 categories.
-4. PII audit scan over `tests/Corpus/bash/*.json` finds zero hits.
+4. PII audit scan over `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` finds
+   zero hits.
 5. PR validation runs on GitHub Actions and passes.
-6. Tagging `v0.1.0-alpha` triggers `publish_nuget.yml` and the package
+6. Tagging `0.1.0-alpha` triggers `publish_nuget.yml` and the package
    appears on nuget.org.
 7. Netclaw consumes the package via `<PackageReference>` and `IShellParser`
    resolves at runtime in Netclaw's DI container.
@@ -124,27 +137,28 @@ Per SPEC §17, all of the following must be true:
   logs (`~/.netclaw/logs/daemon-*.log`) that contain usernames, repo paths,
   channel/thread IDs. Sanitization is mandatory and gated by a CI scan
   (SPEC §14). Shipping unsanitized PII is a release-blocker.
-- **Verb table drift**. `BashArity`, `FileVerbs`, `CwdVerbs`, and
-  `FlagsWithValue` are static data. Adding entries is cheap; *missing*
-  entries means the parser silently mis-classifies. The corpus is the
+- **Verb/binding table drift**. Bash verb tables and PowerShell alias,
+  binding, and per-verb tables are static data. Adding entries is cheap;
+  missing entries can misclassify. The corpora and `pwsh` oracle are the
   early-warning system.
-- **`bash -c` recursion depth**. Capped at 5 (SPEC §10). Going deeper
-  marks the deepest clause `IsUnparseable` so we don't blow the stack on
-  hostile inputs.
+- **Command-string recursion depth**. `bash -c`, `pwsh -Command`, and
+  `pwsh -EncodedCommand` recursion is capped at 5. Going deeper marks the
+  result `IsUnparseable` rather than risking hostile recursion.
 - **Resolver assumptions**. `WorkingDirectory` defaults to the daemon's
   cwd. If consumers pass the wrong cwd, relative-path attribution will
-  silently disagree with what bash would do at runtime. Document loudly.
-- **API surface lock**. v0.1 commits to the AST shape. Mistakes here cost
-  a major-version bump to fix.
+  silently disagree with what the selected shell would do at runtime.
+- **API surface lock**. The `0.x` line commits to the documented AST shape;
+  breaking changes require a deliberate minor bump and migration notes.
 
 ## Where Things Live
 
 | Concern | Location |
 |---|---|
-| Library source | `src/ShellSyntaxTree/` *(to be created)* |
-| Tests + corpus | `tests/ShellSyntaxTree.Tests/` *(to be created)* |
-| Corpus entries | `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` |
-| The contract | `SPEC.md` |
+| Library source | `src/ShellSyntaxTree/` |
+| Tests + corpus | `tests/ShellSyntaxTree.Tests/` |
+| Corpus entries | `tests/ShellSyntaxTree.Tests/Corpus/{bash,powershell}/*.json` |
+| The contracts | `SPEC.md`, `SPEC.POWERSHELL.md` |
+| Consumer guide | `docs/CONSUMER_GUIDE.md` |
 | Active work plan | `IMPLEMENTATION_PLAN.md` |
 | Tooling inventory | `TOOLING.md` |
 | Agent constitution | `AGENTS.md` (and `CLAUDE.md`) |

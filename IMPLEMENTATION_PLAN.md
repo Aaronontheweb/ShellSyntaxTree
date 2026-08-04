@@ -58,6 +58,11 @@ priorities.
       Stop the Bash and PowerShell native greedy passes before a token that
       matches the shared path-shape rules. Preserve that token as a resolved
       argument without a command dictionary or a public API change.
+- [x] **Consumer guide.** Added `docs/CONSUMER_GUIDE.md` with the
+      shell-neutral security-consumer algorithm, Bash and PowerShell guidance,
+      worked public use cases, and immutable permalinks to Netclaw's production
+      integration. Linked it from the README and aligned stale PowerShell
+      prerelease/status wording in the public project docs.
 - [x] **Issue #52 — hyphenated PowerShell parameters/native options.**
       Preserve internal hyphens, apply bash-compatible native
       `--flag=value` splitting and path classification, keep colon binding
@@ -89,8 +94,6 @@ priorities.
 - Seed corpus entries from sanitized real-world dogfood logs (SPEC §14
   workflow) — both shells.
 - Expand verb / cmdlet / alias tables as the corpus surfaces real commands.
-- Document the "consumer's algorithm" — given a `ParsedCommand`, how a
-  security gate walks it (a `docs/CONSUMER_GUIDE.md` or `SPEC.md` appendix).
 - Performance sanity check (~1 ms typical) with a tiny BenchmarkDotNet
   harness — only if anything in the daemon hot path complains.
 
