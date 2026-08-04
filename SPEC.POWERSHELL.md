@@ -707,11 +707,17 @@ positionals are paths," exactly as `SPEC.md` §7.
 Native commands reuse the bash per-verb rules table verbatim — `git`,
 `curl`, `tar`, etc. behave identically to `SPEC.md` §7 (`curl` / `wget`:
 the first positional is a URL; curl `-o` / `-D` values and Wget `-o` / `-O`
-values are paths, while curl `-d` data is not). This
+values are paths, while curl `-d` data is non-path unless `@file` requests a
+file read; `@-` denotes stdin). Tar `-F` / `--info-script` helper values are
+paths. This
 includes hyphenated option names and the bash `--flag=value` split: the
 flag and value surface as separate args, and a curated flag's value receives
 the same path classification in both parsers. Native `--flag:value` has no
-cmdlet-binding semantics and remains verbatim.
+cmdlet-binding semantics and remains verbatim. PowerShell still owns outer
+tokenization: spaced curl operands beginning with `@` should be quoted because
+`@name` is splatting and bare `@-` is a parse error. Use forms such as
+`-d "@request.json"` / `-d "@-"`, or bind a file inline as
+`--data=@request.json`, so the native command receives one value.
 
 ---
 

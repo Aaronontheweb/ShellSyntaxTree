@@ -19,8 +19,8 @@ before a subcommand and similarly spelled options after it.
 - Apply the same contract to Bash and PowerShell.
 - Match native option spelling case-sensitively in both shells so distinct
   options such as Git `-c` and `-C` do not share path metadata; explicitly
-  model case-colliding curl and Wget bindings rather than relying on comparer
-  collisions.
+  model case-colliding curl, Wget, and tar bindings rather than relying on
+  comparer collisions.
 
 ## Capabilities
 

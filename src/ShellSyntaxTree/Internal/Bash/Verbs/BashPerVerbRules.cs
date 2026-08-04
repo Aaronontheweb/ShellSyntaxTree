@@ -59,9 +59,9 @@ internal static class BashPerVerbRules
             ["sed"] = i => i >= 1,
             ["awk"] = i => i >= 1,
 
-            // curl / wget: first positional is a URL (not a path). The
-            // file-path comes from a flag-with-value (-o / -O), handled
-            // separately by ValueOfFlagIsPath.
+            // curl / wget: first positional is a URL (not a path). File
+            // operands come from curated flag values, including curl's
+            // operand-sensitive @file data form.
             ["curl"] = _ => false,
             ["wget"] = _ => false,
 
@@ -153,17 +153,21 @@ internal static class BashPerVerbRules
             [("docker", "-v")] = false,
             [("docker", "--volume")] = false,
 
-            // tar: -f / --file is the archive path; -C / --directory is a
-            // directory path.
+            // tar: archive, directory, and multi-volume helper values are paths.
             [("tar", "-f")] = true,
             [("tar", "--file")] = true,
             [("tar", "-C")] = true,
             [("tar", "--directory")] = true,
+            [("tar", "-F")] = true,
+            [("tar", "--info-script")] = true,
+            [("tar", "--new-volume-script")] = true,
         };
 
     /// <summary>
-    /// Whether the value following <paramref name="flag"/> for
-    /// <paramref name="verb"/> should be classified as a path.
+    /// Whether every value following <paramref name="flag"/> for
+    /// <paramref name="verb"/> should be classified as a path. Concrete
+    /// operand-sensitive classification goes through
+    /// <see cref="TryGetFlagValuePath"/>.
     /// </summary>
     internal static bool ValueOfFlagIsPath(string verb, string flag)
     {
@@ -173,6 +177,39 @@ internal static class BashPerVerbRules
         }
 
         return FlagValueIsPath.TryGetValue((verb, flag), out var isPath) && isPath;
+    }
+
+    /// <summary>
+    /// Classifies a concrete native flag value and returns the logical value
+    /// the resolver should treat as the path. Most flags use the fixed table;
+    /// curl data flags additionally interpret a leading <c>@</c> as a file
+    /// read, except <c>@-</c> which denotes stdin.
+    /// </summary>
+    internal static bool TryGetFlagValuePath(
+        string verb,
+        string flag,
+        string value,
+        out string pathValue)
+    {
+        pathValue = value;
+
+        if (ValueOfFlagIsPath(verb, flag))
+        {
+            return true;
+        }
+
+        if (string.Equals(verb, "curl", StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(flag, "-d", StringComparison.Ordinal)
+                || string.Equals(flag, "--data", StringComparison.Ordinal))
+            && value.Length > 1
+            && value[0] == '@'
+            && !string.Equals(value, "@-", StringComparison.Ordinal))
+        {
+            pathValue = value.Substring(1);
+            return true;
+        }
+
+        return false;
     }
 
     // ---------------------------------------------------------------- key comparer

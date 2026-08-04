@@ -1017,9 +1017,15 @@ internal static class PwshCommandParser
                     if (NativeFlagSyntax.TrySplitEqualsFlag(raw, out var flagPart, out var valuePart))
                     {
                         args.Add(new Arg { Raw = flagPart, Kind = ArgKind.Literal, IsPath = false });
-                        var valueIsPath = BashPerVerbRules.ValueOfFlagIsPath(verbKey, flagPart);
-                        args.Add(ResolveValue(
-                            valuePart, valueIsPath, options, workingDirectoryUnknown, false));
+                        var valueIsPath = BashPerVerbRules.TryGetFlagValuePath(
+                            verbKey, flagPart, valuePart, out var inlineValueForResolution);
+                        args.Add(ResolveValueToken(
+                            valuePart,
+                            inlineValueForResolution,
+                            valueIsPath,
+                            options,
+                            workingDirectoryUnknown,
+                            false));
                     }
                     else
                     {
@@ -1088,6 +1094,7 @@ internal static class PwshCommandParser
             var isLiteralBytes = t.Kind == PwshTokenKind.QuotedString && t.IsSingleQuoted;
             var rawValue = SourceSlice(source, t);
 
+            var valueForResolution = t.Value;
             bool treatAsPath;
             if (pendingValueParam is not null)
             {
@@ -1097,7 +1104,11 @@ internal static class PwshCommandParser
             else if (pendingNativeFlag is not null)
             {
                 var verbKey = verb.VerbTokens.Count > 0 ? verb.VerbTokens[0] : string.Empty;
-                treatAsPath = BashPerVerbRules.ValueOfFlagIsPath(verbKey, pendingNativeFlag);
+                treatAsPath = BashPerVerbRules.TryGetFlagValuePath(
+                    verbKey,
+                    pendingNativeFlag,
+                    t.Value,
+                    out valueForResolution);
                 pendingNativeFlag = null;
             }
             else
@@ -1109,7 +1120,12 @@ internal static class PwshCommandParser
             }
 
             var resolvedArg = ResolveValueToken(
-                rawValue, t.Value, treatAsPath, options, workingDirectoryUnknown, isLiteralBytes);
+                rawValue,
+                valueForResolution,
+                treatAsPath,
+                options,
+                workingDirectoryUnknown,
+                isLiteralBytes);
             args.Add(resolvedArg);
             elements.Add(CreateElement(
                 source,

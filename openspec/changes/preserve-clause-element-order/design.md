@@ -69,9 +69,17 @@ the generic global-option table).
 Ordinal matching requires every supported spelling to be explicit. The shared
 native table therefore distinguishes curl `-d` request data from `-D` header
 output, and lists both Wget `-o` log output and `-O` document output as
-path-valued bindings. An option-binding matrix pins consuming and path
-semantics independently so a comparer change cannot silently alter either;
-the long aliases are pinned alongside the case-colliding short forms.
+path-valued bindings. It also lists tar `-F` independently from `-f`. An
+option-binding matrix pins consuming and path semantics independently so a
+comparer change cannot silently alter either; the long aliases are pinned
+alongside the case-colliding short forms.
+
+Some native meaning is operand- or command-context-sensitive rather than
+spelling-sensitive. Curl `-d` / `--data` uses a leading `@` to read a file, so
+the parser preserves the authored value while stripping `@` only for path
+resolution; `@-` remains stdin. Docker's global `-v` and `docker run -v` have
+different meanings, so the collision matrix does not claim a universal Docker
+binding. Executable-aware consumers interpret that placement from `Elements`.
 
 This corrects pre-existing metadata drift. It does not make the shared parser
 Git-semantic: a Git-aware consumer must still reinterpret `git commit -c/-C`

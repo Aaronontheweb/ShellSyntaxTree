@@ -1,0 +1,105 @@
+{
+  "name": "Curl data file references",
+  "input": "curl -d \u0022@request.json\u0022 --data=@payload.bin https://example.invalid/api",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "curl"
+        ],
+        "args": [
+          {
+            "raw": "-d",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0022@request.json\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/request.json"
+          },
+          {
+            "raw": "--data",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "@payload.bin",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/payload.bin"
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "curl",
+            "value": "curl",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-d",
+            "value": "-d",
+            "role": "Argument",
+            "sourceStart": 5,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "\u0022@request.json\u0022",
+            "value": "@request.json",
+            "role": "Argument",
+            "sourceStart": 8,
+            "sourceLength": 15,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/request.json"
+          },
+          {
+            "raw": "--data=@payload.bin",
+            "value": "--data=@payload.bin",
+            "role": "Argument",
+            "sourceStart": 24,
+            "sourceLength": 19,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": true,
+            "resolved": "C:/work/payload.bin"
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "value": "https://example.invalid/api",
+            "role": "Argument",
+            "sourceStart": 44,
+            "sourceLength": 27,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Curl data operands prefixed with @ read files; authored values retain the @ marker."
+}

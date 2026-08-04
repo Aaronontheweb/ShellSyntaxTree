@@ -1163,9 +1163,15 @@ internal static class BashCommandParser
                         // verb owns the flag, otherwise fall back to plain
                         // literal (the equals-form is its own visible split,
                         // so we don't apply LooksLikePath here).
+                        var inlineValueForResolution = valuePart;
                         var valueIsPath = verbKeyForFlagValuePaths is not null
-                            && BashPerVerbRules.ValueOfFlagIsPath(verbKeyForFlagValuePaths, flagPart);
-                        var (vKind, vResolved, vIsPath) = BashResolver.Resolve(valuePart, valueIsPath, options, workingDirectoryUnknown);
+                            && BashPerVerbRules.TryGetFlagValuePath(
+                                verbKeyForFlagValuePaths,
+                                flagPart,
+                                valuePart,
+                                out inlineValueForResolution);
+                        var (vKind, vResolved, vIsPath) = BashResolver.Resolve(
+                            inlineValueForResolution, valueIsPath, options, workingDirectoryUnknown);
                         argList.Add(new Arg
                         {
                             Raw = valuePart,
@@ -1230,13 +1236,17 @@ internal static class BashCommandParser
                     }
 
                     // Non-flag positional. Classify path / resolve.
+                    var valueForResolution = t.Value;
                     bool treatAsPath;
                     if (pendingFlagForValue is not null && verbKeyForFlagValuePaths is not null)
                     {
                         // This is the value of a preceding flag — use the
                         // flag-value rule, NOT the positional-index rule.
-                        treatAsPath = BashPerVerbRules.ValueOfFlagIsPath(
-                            verbKeyForFlagValuePaths, pendingFlagForValue);
+                        treatAsPath = BashPerVerbRules.TryGetFlagValuePath(
+                            verbKeyForFlagValuePaths,
+                            pendingFlagForValue,
+                            t.Value,
+                            out valueForResolution);
                         pendingFlagForValue = null;
                     }
                     else
@@ -1245,7 +1255,8 @@ internal static class BashCommandParser
                         positionalIndex++;
                     }
 
-                    var (kind, resolved, isPath) = BashResolver.Resolve(t.Value, treatAsPath, options, workingDirectoryUnknown);
+                    var (kind, resolved, isPath) = BashResolver.Resolve(
+                        valueForResolution, treatAsPath, options, workingDirectoryUnknown);
                     argList.Add(new Arg
                     {
                         Raw = sourceRaw,
@@ -1274,11 +1285,15 @@ internal static class BashCommandParser
                     // a quoted string is the user's signal "literal"). They
                     // still classify as positional path / non-path through
                     // the per-verb rule + resolver.
+                    var valueForResolution = t.Value;
                     bool treatAsPath;
                     if (pendingFlagForValue is not null && verbKeyForFlagValuePaths is not null)
                     {
-                        treatAsPath = BashPerVerbRules.ValueOfFlagIsPath(
-                            verbKeyForFlagValuePaths, pendingFlagForValue);
+                        treatAsPath = BashPerVerbRules.TryGetFlagValuePath(
+                            verbKeyForFlagValuePaths,
+                            pendingFlagForValue,
+                            t.Value,
+                            out valueForResolution);
                         pendingFlagForValue = null;
                     }
                     else
@@ -1291,7 +1306,11 @@ internal static class BashCommandParser
                     // — bypass tilde / $HOME / $VAR / glob handling so
                     // `'$HOME'` doesn't expand.
                     var (kind, resolved, isPath) = BashResolver.Resolve(
-                        t.Value, treatAsPath, options, workingDirectoryUnknown, t.IsSingleQuoted);
+                        valueForResolution,
+                        treatAsPath,
+                        options,
+                        workingDirectoryUnknown,
+                        t.IsSingleQuoted);
                     argList.Add(new Arg
                     {
                         Raw = sourceRaw,

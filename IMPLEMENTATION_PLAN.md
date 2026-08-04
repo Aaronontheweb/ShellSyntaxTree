@@ -37,7 +37,7 @@ priorities.
       the 64 KiB cap (§11).
 - [x] **11. Multi-shell corpus runner + PII audit** — directory-routed by
       `Corpus/<shell>/`.
-- [x] **12. PowerShell corpus** — 227 entries under `Corpus/powershell/`,
+- [x] **12. PowerShell corpus** — 230 entries under `Corpus/powershell/`,
       every §13 category minimum exceeded.
 - [x] **13. `pwsh` validation gate + `tools/PwshCorpusTool`** —
       `PwshOracleTests` enforces the §13 oracle matrix + the `PwshAliases`
@@ -66,9 +66,12 @@ priorities.
       synthetic cwd attribution remain compatible; native options that differ
       only by case receive corrected metadata. The post-implementation option
       audit explicitly covers Wget `-o` / `-O`, curl `-d` / `-D` / `-o` /
-      `-O`, Git `-c` / `-C`, Docker `-v` / `-V`, and tar `-c` / `-C` /
-      `-f` / `-F`; paired corpus cases pin Wget log/document output and curl
-      data/header-output semantics in both shells.
+      `-O`, Git `-c` / `-C`, and tar `-c` / `-C` / `-f` / `-F`; paired corpus
+      cases pin Wget log/document output, curl data/header-output and `@file`
+      semantics, and tar helper-script paths in both shells. Docker `-v`
+      remains explicitly context-sensitive: the generic table supports
+      `docker run`, while consumers use authored elements for global-option
+      interpretation.
 - [x] **Issue #64 — path-shaped operands after native verb chains.**
       Stop the Bash and PowerShell native greedy passes before a token that
       matches the shared path-shape rules. Preserve that token as a resolved

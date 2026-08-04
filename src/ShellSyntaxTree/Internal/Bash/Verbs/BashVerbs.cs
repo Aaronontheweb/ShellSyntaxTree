@@ -117,7 +117,8 @@ internal static class BashVerbs
             },
             ["tar"] = new HashSet<string>(StringComparer.Ordinal)
             {
-                "-f", "--file", "-C", "--directory",
+                "-f", "--file", "-C", "--directory", "-F",
+                "--info-script", "--new-volume-script",
             },
         };
 

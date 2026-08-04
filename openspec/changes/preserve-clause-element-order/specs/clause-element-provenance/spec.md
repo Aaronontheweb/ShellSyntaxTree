@@ -76,6 +76,18 @@ Argument elements SHALL carry the parser's `Kind`, `IsFlag`, `IsPath`, and
 - **THEN** `payload` is not classified as a path
 - **THEN** `headers.txt` is classified as a path
 
+#### Scenario: Native values may carry path syntax
+- **WHEN** either parser parses `curl -d "@request.json" --data=@payload.bin URL`
+- **THEN** the spaced element value is `@request.json`
+- **THEN** the inline element value remains `--data=@payload.bin`
+- **THEN** both value args retain their authored `@` and resolve as paths without it
+- **WHEN** either parser parses `curl -d "@-" URL`
+- **THEN** `@-` is not classified as a path
+
+#### Scenario: Tar helper-script bindings are explicit
+- **WHEN** either parser parses `tar -F=./helper.sh --info-script=./info.sh --new-volume-script ./next.sh archive.tar`
+- **THEN** all three helper-script values are classified as paths
+
 ### Requirement: Redirects occupy their authored position
 Each redirect SHALL appear as one redirect element at the source position of
 its operator and target. Its ordinal among redirect elements SHALL match its

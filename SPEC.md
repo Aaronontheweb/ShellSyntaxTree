@@ -851,8 +851,8 @@ verb chain is a path. Per-verb overrides:
 | `rg` | First positional is **pattern**; rest are paths. |
 | `sed` | First positional is **script**; rest are paths. |
 | `awk` | First positional is **program**; rest are paths. |
-| `tar` | Action flag determines path roles; default to extracting all non-flag positionals as paths. |
-| `curl` | First positional is **URL**, not a path. `-o` / `--output` and `-D` / `--dump-header` values are paths; `-d` / `--data` values are request data, not paths. |
+| `tar` | Action flag determines path roles; default to extracting all non-flag positionals as paths. `-F` / `--info-script` / `--new-volume-script` values are helper-script paths. |
+| `curl` | First positional is **URL**, not a path. `-o` / `--output` and `-D` / `--dump-header` values are paths. `-d` / `--data` values are request data unless prefixed with `@`, which reads a file; `@-` reads stdin and is not a path. |
 | `wget` | First positional is **URL**, not a path. `-o` / `--output-file` writes a log path; `-O` / `--output-document` writes the downloaded document path. |
 | `scp`, `rsync`, `sftp` | All positionals are paths (some remote). |
 | `cd`, `chdir`, `pushd`, `popd` | First non-flag positional is the cwd target (a path). |
@@ -872,7 +872,7 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
     ["curl"]  = new HashSet<string>(StringComparer.Ordinal) { "-o", "--output", "-d", "--data", "-D", "--dump-header" },
     ["wget"]  = new HashSet<string>(StringComparer.Ordinal) { "-o", "--output-file", "-O", "--output-document" },
     ["docker"]= new HashSet<string>(StringComparer.Ordinal) { "-v", "--volume", "-f", "--file" },
-    ["tar"]   = new HashSet<string>(StringComparer.Ordinal) { "-f", "--file", "-C", "--directory" },
+    ["tar"]   = new HashSet<string>(StringComparer.Ordinal) { "-f", "--file", "-C", "--directory", "-F", "--info-script", "--new-volume-script" },
     // Add as corpus surfaces real cases.
 };
 ```
@@ -890,8 +890,23 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
 > reinterpret command-scoped forms such as `git commit -c/-C`, where Git uses
 > the operand as a revision rather than the generic table's global meaning.
 > Every supported case-distinct spelling is listed explicitly: curl `-d`
-> consumes non-path request data while `-D` consumes a header-output path;
+> consumes request data while `-D` consumes a header-output path;
 > Wget `-o` and `-O` both consume paths but write different files.
+
+> **Operand-sensitive values.** A fixed `(verb, flag)` boolean is insufficient
+> for curl `-d` / `--data`: a value beginning with `@` names a file curl reads.
+> The parser preserves the authored marker in the value `Arg.Raw` and in the
+> complete `ClauseElement.Value`, strips the leading `@` only for path
+> resolution, and leaves `@-` non-path because it denotes stdin. Dynamic and
+> glob filenames continue through the normal §8 safe-fail rules after the
+> prefix is removed.
+
+> **Executable context.** `FlagsWithValue` is a curated parser heuristic, not
+> a complete executable grammar. In particular, Docker's global `-v` means
+> `--version`, while `docker run -v` consumes a volume specification. The
+> generic table preserves the established `docker run` projection; a
+> Docker-aware consumer uses `Clause.Elements` to interpret placement and MUST
+> NOT treat the table as universal Docker semantics.
 
 > **Note:** the verb-chain walk consumes flag-with-value pairs
 > transparently. For `git -C /repo log`, the walk consumes `-C /repo`

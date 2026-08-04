@@ -606,5 +606,17 @@ internal static class CorpusManifest
         P("curl_case_distinct_data_and_header_options",
             "curl -d payload -D headers.txt https://example.invalid/api",
             "Curl -d consumes non-path request data while -D consumes a header-output path."),
+
+        // ---- Native option hardening: value- and context-sensitive cases ----
+        P("tar_info_script_paths",
+            "tar -F=./volume-helper.sh --info-script=./info-helper.sh "
+            + "--new-volume-script ./next-volume.sh archive.tar",
+            "Tar -F and both long aliases consume helper-script paths in equals and spaced forms."),
+        P("curl_data_file_references",
+            "curl -d \"@request.json\" --data=@payload.bin https://example.invalid/api",
+            "Curl data operands prefixed with @ read files; authored values retain the @ marker."),
+        P("curl_data_stdin_reference",
+            "curl -d \"@-\" https://example.invalid/api",
+            "Curl @- reads stdin and is not a filesystem path."),
     };
 }

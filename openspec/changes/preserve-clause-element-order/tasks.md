@@ -27,6 +27,8 @@
 - [x] 3.6 Pin native-option case sensitivity and the heuristic-role boundary.
 - [x] 3.7 Audit case-colliding native short options; explicitly model Wget
       log output and curl header output, with paired cross-shell corpus cases.
+- [x] 3.8 Harden the audit with tar helper-script bindings, curl `@file` /
+      `@-` operand semantics, and scoped Docker context claims.
 
 ## 4. Consumer documentation
 

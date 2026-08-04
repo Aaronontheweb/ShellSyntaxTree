@@ -309,12 +309,12 @@ public class BashPerVerbRulesTests
     [InlineData("wget", "-O", true, true)]
     [InlineData("wget", "--output-file", true, true)]
     [InlineData("wget", "--output-document", true, true)]
-    [InlineData("docker", "-v", true, false)]
-    [InlineData("docker", "-V", false, false)]
     [InlineData("tar", "-c", false, false)]
     [InlineData("tar", "-C", true, true)]
     [InlineData("tar", "-f", true, true)]
-    [InlineData("tar", "-F", false, false)]
+    [InlineData("tar", "-F", true, true)]
+    [InlineData("tar", "--info-script", true, true)]
+    [InlineData("tar", "--new-volume-script", true, true)]
     public void Native_option_binding_matrix(
         string verb,
         string flag,
@@ -324,6 +324,26 @@ public class BashPerVerbRulesTests
         Assert.True(BashVerbs.FlagsWithValue.TryGetValue(verb, out var flags));
         Assert.Equal(consumesValue, flags.Contains(flag));
         Assert.Equal(valueIsPath, BashPerVerbRules.ValueOfFlagIsPath(verb, flag));
+    }
+
+    [Theory]
+    [InlineData("-d", "payload", false, "payload")]
+    [InlineData("--data", "name=Jane", false, "name=Jane")]
+    [InlineData("-d", "@request.json", true, "request.json")]
+    [InlineData("--data", "@/etc/passwd", true, "/etc/passwd")]
+    [InlineData("-d", "@-", false, "@-")]
+    [InlineData("--data-raw", "@request.json", false, "@request.json")]
+    public void Curl_data_file_reference_is_operand_sensitive(
+        string flag,
+        string value,
+        bool isPath,
+        string expectedPathValue)
+    {
+        var actual = BashPerVerbRules.TryGetFlagValuePath(
+            "curl", flag, value, out var pathValue);
+
+        Assert.Equal(isPath, actual);
+        Assert.Equal(expectedPathValue, pathValue);
     }
 
     // ---------------------------------------------------------------- empty verb chain
