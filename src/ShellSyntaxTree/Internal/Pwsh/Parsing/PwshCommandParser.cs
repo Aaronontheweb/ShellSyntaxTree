@@ -42,11 +42,14 @@ internal static class PwshCommandParser
             throw new ArgumentNullException(nameof(options));
         }
 
-        return ParseInternal(source, options, recursionDepth: 0, markWrapped: false);
+        return ParseInternal(
+            source, options, recursionDepth: 0, markWrapped: false,
+            sharedLocation: null);
     }
 
     private static ParsedCommand ParseInternal(
-        string source, PwshParserOptions options, int recursionDepth, bool markWrapped)
+        string source, PwshParserOptions options, int recursionDepth, bool markWrapped,
+        PwshSetLocationContext? sharedLocation)
     {
         // §11 item 10: the size cap is checked before lexing, on the
         // top-level input and on every decoded payload.
@@ -90,7 +93,7 @@ internal static class PwshCommandParser
         }
 
         var clauses = new List<Clause>(segments.Count);
-        var attribution = new PwshSetLocationContext();
+        var attribution = sharedLocation ?? new PwshSetLocationContext();
 
         foreach (var segment in segments)
         {
@@ -117,7 +120,7 @@ internal static class PwshCommandParser
 
             var built = BuildSegment(
                 segment, source, options, effectiveOptions, workingDirectoryUnknown,
-                recursionDepth, markWrapped);
+                recursionDepth, markWrapped, attribution);
             if (built.Error is not null)
             {
                 return Unparseable(source, built.Error);
@@ -127,9 +130,9 @@ internal static class PwshCommandParser
             {
                 var clause = built.Clauses[k];
 
-                // pwsh-recursion clauses already carry IsCommandStringWrapped;
-                // they do not receive the outer attribution arg (a recursed
-                // command runs in a fresh runspace).
+                // Expanded command-string clauses already carry wrapper and
+                // attribution state. Child pwsh uses an isolated context;
+                // Invoke-Expression shares and updates this one.
                 if (!built.IsRecursion)
                 {
                     clause = AttachAttributionArg(clause, attribution);
@@ -138,9 +141,9 @@ internal static class PwshCommandParser
                 clauses.Add(clause);
             }
 
-            // A Set-Location clause updates the attributed cwd for the
-            // clauses that follow it (§9). Recursion expansion never carries
-            // a Set-Location at the compound level.
+            // A directly built Set-Location clause updates the attributed cwd
+            // for clauses that follow it (§9). Expanded command strings have
+            // already updated the appropriate isolated or shared context.
             if (!built.IsRecursion && built.Clauses.Count == 1)
             {
                 UpdateAttribution(built.Clauses[0], options, attribution);
@@ -188,6 +191,11 @@ internal static class PwshCommandParser
             return true;
         }
 
+        if (TryDetectUnsupportedInvocationShape(tokens, out reason))
+        {
+            return true;
+        }
+
         // Item 4: a trailing '&' background-job operator.
         if (TryDetectTrailingAmp(tokens, out reason))
         {
@@ -202,6 +210,68 @@ internal static class PwshCommandParser
 
         reason = null;
         return false;
+    }
+
+    private static bool TryDetectUnsupportedInvocationShape(
+        IReadOnlyList<PwshToken> tokens, out string? reason)
+    {
+        var verbSlot = true;
+        foreach (var token in tokens)
+        {
+            if (token.Kind == PwshTokenKind.Whitespace)
+            {
+                verbSlot = true;
+                continue;
+            }
+
+            if (token.Kind == PwshTokenKind.Operator)
+            {
+                verbSlot = token.OperatorText is "&&" or "||" or ";" or "|" or "(" or "&";
+                continue;
+            }
+
+            if (verbSlot && token.Kind == PwshTokenKind.Word)
+            {
+                if (token.Value == ".")
+                {
+                    reason = "the dot-source invocation operator is not supported in v0.2";
+                    return true;
+                }
+
+                if (IsUnsupportedModuleQualifiedCmdlet(token.Value))
+                {
+                    reason = $"module-qualified cmdlet '{token.Value}' is not supported in v0.2";
+                    return true;
+                }
+            }
+
+            if (verbSlot && token.Kind == PwshTokenKind.QuotedString
+                && IsUnsupportedModuleQualifiedCmdlet(token.Value))
+            {
+                reason = $"module-qualified cmdlet '{token.Value}' is not supported in v0.2";
+                return true;
+            }
+
+            verbSlot = false;
+        }
+
+        reason = null;
+        return false;
+    }
+
+    private static bool IsUnsupportedModuleQualifiedCmdlet(string command)
+    {
+        if (string.Equals(
+            command,
+            "Microsoft.PowerShell.Utility\\Invoke-Expression",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var separator = command.LastIndexOf('\\');
+        return separator > 0 && separator + 1 < command.Length
+            && PwshApprovedVerbs.IsCmdletShaped(command.Substring(separator + 1));
     }
 
     private static bool TryDetectKeywordAnomaly(IReadOnlyList<PwshToken> tokens, out string? reason)
@@ -376,6 +446,7 @@ internal static class PwshCommandParser
     {
         var segments = new List<Segment>();
         var depth = 0;
+        var expressionArgumentDepth = 0;
 
         Segment current = new() { PrecedingOperator = CompoundOperator.None, Depth = 0 };
 
@@ -390,6 +461,24 @@ internal static class PwshCommandParser
         for (var i = 0; i < tokens.Count; i++)
         {
             var t = tokens[i];
+
+            if (expressionArgumentDepth > 0)
+            {
+                current.Tokens.Add(t);
+                if (t.Kind == PwshTokenKind.Operator)
+                {
+                    if (t.OperatorText == "(")
+                    {
+                        expressionArgumentDepth++;
+                    }
+                    else if (t.OperatorText == ")")
+                    {
+                        expressionArgumentDepth--;
+                    }
+                }
+
+                continue;
+            }
 
             if (t.Kind == PwshTokenKind.Whitespace)
             {
@@ -411,6 +500,13 @@ internal static class PwshCommandParser
                 var op = t.OperatorText;
                 if (op == "(")
                 {
+                    if (StartsWithInvokeExpression(current.Tokens))
+                    {
+                        current.Tokens.Add(t);
+                        expressionArgumentDepth = 1;
+                        continue;
+                    }
+
                     Flush();
                     depth++;
                     current = new Segment { PrecedingOperator = CompoundOperator.None, Depth = depth };
@@ -452,7 +548,7 @@ internal static class PwshCommandParser
             current.Tokens.Add(t);
         }
 
-        if (depth != 0)
+        if (depth != 0 || expressionArgumentDepth != 0)
         {
             error = $"unbalanced '(' grouping at position {source.Length}";
             return segments;
@@ -471,6 +567,23 @@ internal static class PwshCommandParser
         "|" => CompoundOperator.Pipe,
         _ => CompoundOperator.None,
     };
+
+    private static bool StartsWithInvokeExpression(List<PwshToken> tokens)
+    {
+        var verbIndex = tokens.Count > 0
+            && tokens[0].Kind == PwshTokenKind.Operator
+            && tokens[0].OperatorText == "&"
+                ? 1
+                : 0;
+        if (verbIndex >= tokens.Count
+            || tokens[verbIndex].Kind is not PwshTokenKind.Word
+                and not PwshTokenKind.QuotedString)
+        {
+            return false;
+        }
+
+        return IsInvokeExpressionName(tokens[verbIndex].Value);
+    }
 
     // ---------------------------------------------------------------- segment build
 
@@ -501,7 +614,7 @@ internal static class PwshCommandParser
     private static BuildResult BuildSegment(
         Segment segment, string source, PwshParserOptions baseOptions,
         PwshParserOptions effectiveOptions, bool workingDirectoryUnknown,
-        int recursionDepth, bool markWrapped)
+        int recursionDepth, bool markWrapped, PwshSetLocationContext attribution)
     {
         var body = segment.Tokens;
         var start = 0;
@@ -516,17 +629,32 @@ internal static class PwshCommandParser
         {
             // A lone call operator (`& ( ... )` — the group followed in a
             // separate segment). Emit a dynamic, verb-less clause.
-            return BuildResult.Ok(new Clause
+            var dynamicClause = AttachAttributionArg(new Clause
             {
                 Operator = segment.PrecedingOperator,
                 Verb = new VerbChain { IsDynamic = true },
                 IsSubshell = segment.Depth > 0,
                 IsCommandStringWrapped = markWrapped,
-            });
+            }, attribution);
+            attribution.SetDynamic();
+            return BuildResult.Recursion(new[] { dynamicClause });
+        }
+
+        if (start == 0 && body[start].Kind == PwshTokenKind.QuotedString)
+        {
+            return BuildResult.Fail(
+                "a quoted expression at command position is not supported in v0.2");
         }
 
         // Classify the command.
         var classified = ClassifyVerb(body, start);
+        if (TryHandleInvokeExpression(
+            body, start, classified, source, baseOptions, recursionDepth,
+            segment, markWrapped, attribution, out var expressionResult))
+        {
+            return expressionResult;
+        }
+
         if (classified.Kind == PwshCommandKind.PwshInvocation)
         {
             var recursion = TryRecurseIntoPwsh(
@@ -554,7 +682,7 @@ internal static class PwshCommandParser
             IsDynamic = classified.IsDynamic,
         };
 
-        return BuildResult.Ok(new Clause
+        var clause = new Clause
         {
             Operator = segment.PrecedingOperator,
             Verb = verb,
@@ -562,7 +690,16 @@ internal static class PwshCommandParser
             Redirects = argResult.Redirects,
             IsSubshell = segment.Depth > 0,
             IsCommandStringWrapped = markWrapped,
-        });
+        };
+
+        if (classified.IsDynamic)
+        {
+            clause = AttachAttributionArg(clause, attribution);
+            attribution.SetDynamic();
+            return BuildResult.Recursion(new[] { clause });
+        }
+
+        return BuildResult.Ok(clause);
     }
 
     // ---------------------------------------------------------------- verb chain
@@ -614,7 +751,7 @@ internal static class PwshCommandParser
         // position is a dynamic command name (§3).
         var isVariableWord = head.Kind == PwshTokenKind.Word
             && head.Value.Length > 0 && head.Value[0] == '$';
-        if (isVariableWord
+        if (isVariableWord || head.HasInterpolation
             || head.Kind is PwshTokenKind.ScriptBlock or PwshTokenKind.Subexpression
                 or PwshTokenKind.Splat)
         {
@@ -1065,6 +1202,199 @@ internal static class PwshCommandParser
 
     // ---------------------------------------------------------------- recursion
 
+    private static bool TryHandleInvokeExpression(
+        List<PwshToken> body, int start, ClassifiedVerb verb, string source,
+        PwshParserOptions options, int recursionDepth, Segment segment, bool markWrapped,
+        PwshSetLocationContext attribution, out BuildResult result)
+    {
+        result = default;
+        if (!IsInvokeExpression(verb))
+        {
+            return false;
+        }
+
+        if (segment.PrecedingOperator == CompoundOperator.Pipe)
+        {
+            result = BuildResult.Fail(
+                "Invoke-Expression pipeline input is dynamic and cannot be parsed safely");
+            return true;
+        }
+
+        var payloadStart = start + 1;
+        string? inlinePayload = null;
+        if (payloadStart >= body.Count)
+        {
+            result = BuildResult.Fail("Invoke-Expression is missing its payload");
+            return true;
+        }
+
+        if (body[payloadStart].Kind == PwshTokenKind.Parameter)
+        {
+            var parameter = body[payloadStart].Value;
+            var colon = parameter.IndexOf(':');
+            var parameterName = colon >= 0
+                ? parameter.Substring(0, colon)
+                : parameter;
+            if (!string.Equals(
+                parameterName, "-Command", StringComparison.OrdinalIgnoreCase))
+            {
+                result = BuildResult.Fail(
+                    "Invoke-Expression payload binding is ambiguous");
+                return true;
+            }
+
+            if (colon >= 0 && colon + 1 < parameter.Length)
+            {
+                if (payloadStart + 1 != body.Count)
+                {
+                    result = BuildResult.Fail(
+                        "Invoke-Expression payload binding is ambiguous");
+                    return true;
+                }
+
+                inlinePayload = parameter.Substring(colon + 1);
+            }
+
+            payloadStart++;
+            if (inlinePayload is null && payloadStart >= body.Count)
+            {
+                result = BuildResult.Fail("Invoke-Expression is missing its payload");
+                return true;
+            }
+        }
+
+        for (var i = payloadStart; inlinePayload is null && i < body.Count; i++)
+        {
+            if (body[i].Kind == PwshTokenKind.Operator
+                && body[i].OperatorText is not "(" and not ")")
+            {
+                result = BuildResult.Fail(
+                    "Invoke-Expression payload binding is ambiguous");
+                return true;
+            }
+        }
+
+        var payloadEnd = body.Count - 1;
+        var payloadValue = inlinePayload;
+        var rawPayload = inlinePayload;
+        var isStatic = false;
+        if (inlinePayload is not null)
+        {
+            if (!PwshLexer.TryDecodeExpandableValue(
+                inlinePayload!, out var decodedPayload, out var hasInterpolation))
+            {
+                result = BuildResult.Fail("invalid PowerShell Unicode escape in Invoke-Expression payload");
+                return true;
+            }
+
+            payloadValue = decodedPayload;
+            isStatic = !hasInterpolation
+                && !PwshResolver.LooksLikeCommaArray(payloadValue);
+        }
+
+        if (inlinePayload is null)
+        {
+            var singlePayload = payloadStart == payloadEnd;
+            var payload = body[payloadStart];
+            payloadValue = payload.Value;
+            rawPayload = SourceSlice(source, body[payloadStart], body[payloadEnd]);
+            isStatic = singlePayload
+                && payload.Kind is PwshTokenKind.Word or PwshTokenKind.QuotedString
+                && !payload.HasInterpolation
+                && (payload.Kind != PwshTokenKind.Word
+                    || !PwshResolver.LooksLikeCommaArray(payload.Value));
+        }
+
+        if (!isStatic)
+        {
+            var canonicalVerb = verb.CanonicalVerb;
+            if (canonicalVerb is null && verb.VerbTokens.Count > 0
+                && string.Equals(
+                    verb.VerbTokens[0], "iex", StringComparison.OrdinalIgnoreCase))
+            {
+                canonicalVerb = "Invoke-Expression";
+            }
+
+            var dynamicClause = new Clause
+            {
+                Operator = segment.PrecedingOperator,
+                Verb = new VerbChain
+                {
+                    Tokens = verb.VerbTokens,
+                    CanonicalVerb = canonicalVerb,
+                    IsDynamic = verb.IsDynamic,
+                },
+                Args = new[]
+                {
+                    new Arg
+                    {
+                        Raw = rawPayload!,
+                        Kind = ArgKind.DynamicSkip,
+                        IsPath = false,
+                    },
+                },
+                IsSubshell = segment.Depth > 0,
+                IsCommandStringWrapped = markWrapped,
+            };
+
+            // Runtime code can call Set-Location in the current scope. Once
+            // the payload is dynamic, every following relative path must
+            // safe-fail rather than retain the previously known location.
+            dynamicClause = AttachAttributionArg(dynamicClause, attribution);
+            attribution.SetDynamic();
+            result = BuildResult.Recursion(new[] { dynamicClause });
+            return true;
+        }
+
+        if (recursionDepth + 1 > MaxRecursionDepth)
+        {
+            result = BuildResult.Fail(
+                "PowerShell command-string recursion depth exceeded (>5)");
+            return true;
+        }
+
+        var innerParsed = ParseInternal(
+            payloadValue!, options, recursionDepth + 1, markWrapped: true,
+            sharedLocation: attribution);
+        if (innerParsed.IsUnparseable)
+        {
+            result = BuildResult.Fail(innerParsed.UnparseableReason);
+            return true;
+        }
+
+        var expanded = new List<Clause>(innerParsed.Clauses.Count);
+        for (var i = 0; i < innerParsed.Clauses.Count; i++)
+        {
+            var innerClause = innerParsed.Clauses[i];
+            expanded.Add(innerClause with
+            {
+                Operator = i == 0 ? segment.PrecedingOperator : innerClause.Operator,
+                IsSubshell = segment.Depth > 0 || innerClause.IsSubshell,
+                IsCommandStringWrapped = true,
+            });
+        }
+
+        result = BuildResult.Recursion(expanded);
+        return true;
+    }
+
+    private static bool IsInvokeExpression(ClassifiedVerb verb)
+    {
+        var identity = verb.CanonicalVerb
+            ?? (verb.VerbTokens.Count > 0 ? verb.VerbTokens[0] : null);
+        return identity is not null && IsInvokeExpressionName(identity);
+    }
+
+    private static bool IsInvokeExpressionName(string identity)
+    {
+        return string.Equals(identity, "Invoke-Expression", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(identity, "iex", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                identity,
+                "Microsoft.PowerShell.Utility\\Invoke-Expression",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
     private static bool TryRecurseIntoPwsh(
         List<PwshToken> body, int start, ClassifiedVerb verb, string source,
         PwshParserOptions options, int recursionDepth, Segment segment, bool markWrapped,
@@ -1134,7 +1464,8 @@ internal static class PwshCommandParser
             }
 
             var innerParsed = ParseInternal(
-                inner, options, recursionDepth + 1, markWrapped: true);
+                inner, options, recursionDepth + 1, markWrapped: true,
+                sharedLocation: null);
             if (innerParsed.IsUnparseable)
             {
                 result = BuildResult.Fail(innerParsed.UnparseableReason);
@@ -1381,5 +1712,22 @@ internal static class PwshCommandParser
         }
 
         return source.Substring(token.SourceStart, len);
+    }
+
+    private static string SourceSlice(string source, PwshToken first, PwshToken last)
+    {
+        var start = first.SourceStart;
+        var end = last.SourceStart + last.SourceLength;
+        if (start < 0 || start >= source.Length || end <= start)
+        {
+            return first.Value;
+        }
+
+        if (end > source.Length)
+        {
+            end = source.Length;
+        }
+
+        return source.Substring(start, end - start);
     }
 }

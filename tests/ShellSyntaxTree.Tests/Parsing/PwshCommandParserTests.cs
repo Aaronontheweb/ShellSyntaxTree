@@ -3,7 +3,9 @@
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
+using System;
 using System.Linq;
+using System.Text;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests.Parsing;
@@ -560,6 +562,428 @@ public class PwshCommandParserTests
     {
         var result = Parse("pwsh -Command \"foreach ($x in $y) { $x }\"");
         Assert.True(result.IsUnparseable);
+    }
+
+    [Theory]
+    [InlineData("Invoke-Expression 'Get-Date'")]
+    [InlineData("iex 'Get-Date'")]
+    [InlineData("iex \"Get-Date\"")]
+    [InlineData("Invoke-Expression Get-Date")]
+    [InlineData("Invoke-Expression -Command 'Get-Date'")]
+    public void Invoke_expression_static_payload_surfaces_inner_clause(string input)
+    {
+        var result = Parse(input);
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "Get-Date" }, clause.Verb.Tokens);
+        Assert.True(clause.IsCommandStringWrapped);
+    }
+
+    [Fact]
+    public void Invoke_expression_static_compound_surfaces_all_inner_clauses()
+    {
+        var result = Parse("Get-Service; iex 'Get-Date; Get-Process'");
+
+        Assert.Equal(3, result.Clauses.Count);
+        Assert.Equal(CompoundOperator.Sequence, result.Clauses[1].Operator);
+        Assert.Equal(new[] { "Get-Date" }, result.Clauses[1].Verb.Tokens);
+        Assert.Equal(CompoundOperator.Sequence, result.Clauses[2].Operator);
+        Assert.All(result.Clauses.Skip(1), c => Assert.True(c.IsCommandStringWrapped));
+    }
+
+    [Fact]
+    public void Invoke_expression_static_expandable_here_string_is_recursed()
+    {
+        var clause = Assert.Single(Parse("iex @\"\nGet-Date\n\"@").Clauses);
+
+        Assert.Equal(new[] { "Get-Date" }, clause.Verb.Tokens);
+        Assert.True(clause.IsCommandStringWrapped);
+    }
+
+    [Theory]
+    [InlineData("& 'iex' 'Get-Date'")]
+    [InlineData("Microsoft.PowerShell.Utility\\Invoke-Expression 'Get-Date'")]
+    public void Alternate_invoke_expression_names_recurse_static_payloads(string input)
+    {
+        var clause = Assert.Single(Parse(input).Clauses);
+        Assert.Equal(new[] { "Get-Date" }, clause.Verb.Tokens);
+        Assert.True(clause.IsCommandStringWrapped);
+    }
+
+    [Fact]
+    public void Invoke_expression_escaped_dollar_is_a_static_outer_string()
+    {
+        var result = Parse("iex \"Write-Host `$name\"");
+        var clause = Assert.Single(result.Clauses);
+
+        Assert.Equal(new[] { "Write-Host" }, clause.Verb.Tokens);
+        Assert.True(clause.IsCommandStringWrapped);
+        Assert.Equal(ArgKind.EnvVar, Assert.Single(clause.Args).Kind);
+    }
+
+    [Theory]
+    [InlineData("Invoke-Expression $code", "$code")]
+    [InlineData("iex \"Remove-$noun C:\\x\"", "\"Remove-$noun C:\\x\"")]
+    [InlineData("iex \"Remove-$é C:\\x\"", "\"Remove-$é C:\\x\"")]
+    [InlineData("iex $(Get-Content script.ps1)", "$(Get-Content script.ps1)")]
+    [InlineData("iex ('Get-' + 'Date')", "('Get-' + 'Date')")]
+    [InlineData("Invoke-Expression Write-Output,OTHER", "Write-Output,OTHER")]
+    public void Invoke_expression_computed_payload_is_one_dynamic_arg(
+        string input, string expectedRaw)
+    {
+        var result = Parse(input);
+        var clause = Assert.Single(result.Clauses);
+        var arg = Assert.Single(clause.Args);
+
+        Assert.Equal("Invoke-Expression", clause.Verb.CanonicalVerb ?? clause.Verb.Tokens[0]);
+        Assert.Equal(expectedRaw, arg.Raw);
+        Assert.Equal(ArgKind.DynamicSkip, arg.Kind);
+        Assert.False(arg.IsPath);
+        Assert.Null(arg.Resolved);
+    }
+
+    [Theory]
+    [InlineData("Invoke-Expression")]
+    [InlineData("Get-Content script.ps1 | Invoke-Expression")]
+    [InlineData("'Get-Date' | Invoke-Expression 'Get-Process'")]
+    [InlineData("Invoke-Expression -Verbose 'Get-Date'")]
+    public void Invoke_expression_unbound_payload_is_unparseable(string input)
+    {
+        Assert.True(Parse(input).IsUnparseable);
+    }
+
+    [Theory]
+    [InlineData("& 'iex' $code")]
+    [InlineData("Microsoft.PowerShell.Utility\\Invoke-Expression $code")]
+    public void Alternate_invoke_expression_names_still_safe_fail_dynamic_payloads(
+        string input)
+    {
+        var clause = Assert.Single(Parse(input).Clauses);
+        Assert.Equal(ArgKind.DynamicSkip, Assert.Single(clause.Args).Kind);
+        if (input.StartsWith("&"))
+        {
+            Assert.Equal("Invoke-Expression", clause.Verb.CanonicalVerb);
+        }
+    }
+
+    [Fact]
+    public void Unicode_escaped_iex_name_still_safe_fails_dynamic_payload()
+    {
+        var clause = Assert.Single(Parse("& \"i`u{65}x\" $code").Clauses);
+
+        Assert.Equal("Invoke-Expression", clause.Verb.CanonicalVerb);
+        Assert.Equal(ArgKind.DynamicSkip, Assert.Single(clause.Args).Kind);
+    }
+
+    [Fact]
+    public void Bare_backtick_newline_payload_surfaces_every_command()
+    {
+        var result = Parse("iex Write-Output` harmless`nGet-Date");
+
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(new[] { "Write-Output" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal(new[] { "Get-Date" }, result.Clauses[1].Verb.Tokens);
+        Assert.All(result.Clauses, c => Assert.True(c.IsCommandStringWrapped));
+    }
+
+    [Fact]
+    public void Expandable_here_string_backtick_newline_surfaces_every_command()
+    {
+        var result = Parse("iex @\"\nWrite-Output ok`nGet-Date\n\"@");
+
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(new[] { "Write-Output" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal(new[] { "Get-Date" }, result.Clauses[1].Verb.Tokens);
+    }
+
+    [Fact]
+    public void Backtick_newline_payload_updates_outer_location()
+    {
+        var result = Parse(
+            "Set-Location C:\\safe; iex Write-Output` ok`nSet-Location` C:\\evil; Remove-Item child.txt");
+        var remove = result.Clauses.Last();
+
+        Assert.Contains(remove.Args,
+            a => a.Raw == "child.txt" && a.Resolved == "C:/evil/child.txt");
+    }
+
+    [Theory]
+    [InlineData("iex \"Remove-Item`vC:\\x\"")]
+    [InlineData("iex \"Remove-Item`fC:\\x\"")]
+    [InlineData("iex \"Remove-Item`u{2003}C:\\x\"")]
+    public void Decoded_inline_whitespace_separates_inner_path(string input)
+    {
+        var clause = Assert.Single(Parse(input).Clauses);
+        Assert.Equal(new[] { "Remove-Item" }, clause.Verb.Tokens);
+        Assert.Contains(clause.Args, a => a.Raw == "C:\\x" && a.Resolved == "C:/x");
+    }
+
+    [Fact]
+    public void Decoded_vertical_tab_location_change_updates_outer_location()
+    {
+        var result = Parse(
+            "Set-Location C:\\safe; iex \"Set-Location`vC:\\evil\"; Remove-Item child.txt");
+        var remove = result.Clauses.Last();
+
+        Assert.Contains(remove.Args,
+            a => a.Raw == "child.txt" && a.Resolved == "C:/evil/child.txt");
+    }
+
+    [Fact]
+    public void Decoded_nul_payload_is_unparseable()
+    {
+        Assert.True(Parse("iex \"Remove-Item`0C:\\x\"").IsUnparseable);
+    }
+
+    [Theory]
+    [InlineData("iex -Command:Get-Date")]
+    [InlineData("iex -Command:'Get-Date'")]
+    [InlineData("iex -Command:\"Get-Date\"")]
+    public void Invoke_expression_colon_command_parameter_binds_static_payload(
+        string input)
+    {
+        var clause = Assert.Single(Parse(input).Clauses);
+        Assert.Equal(new[] { "Get-Date" }, clause.Verb.Tokens);
+        Assert.True(clause.IsCommandStringWrapped);
+    }
+
+    [Fact]
+    public void Invoke_expression_colon_command_parameter_keeps_dynamic_payload_opaque()
+    {
+        var clause = Assert.Single(Parse("iex -Command:$code").Clauses);
+        Assert.Equal(ArgKind.DynamicSkip, Assert.Single(clause.Args).Kind);
+    }
+
+    [Fact]
+    public void Invoke_expression_colon_comment_is_a_missing_payload()
+    {
+        Assert.True(Parse("iex -Command:#comment").IsUnparseable);
+    }
+
+    [Fact]
+    public void Invoke_expression_colon_backtick_newline_surfaces_every_command()
+    {
+        var result = Parse("iex -Command:Write-Output`nGet-Date");
+
+        Assert.Equal(2, result.Clauses.Count);
+        Assert.Equal(new[] { "Write-Output" }, result.Clauses[0].Verb.Tokens);
+        Assert.Equal(new[] { "Get-Date" }, result.Clauses[1].Verb.Tokens);
+    }
+
+    [Fact]
+    public void Invoke_expression_colon_unicode_escape_is_decoded()
+    {
+        var clause = Assert.Single(Parse("iex -Command:Get-`u{44}ate").Clauses);
+        Assert.Equal(new[] { "Get-Date" }, clause.Verb.Tokens);
+        Assert.True(clause.IsCommandStringWrapped);
+    }
+
+    [Fact]
+    public void Custom_module_alias_is_not_treated_as_invoke_expression()
+    {
+        const string input = "OtherModule\\iex $code";
+        var clause = Assert.Single(Parse(input).Clauses);
+        Assert.StartsWith("OtherModule\\", clause.Verb.Tokens[0]);
+        Assert.Null(clause.Verb.CanonicalVerb);
+        Assert.DoesNotContain(clause.Args, a => a.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Fact]
+    public void Custom_module_qualified_cmdlet_is_unparseable()
+    {
+        Assert.True(Parse("OtherModule\\Invoke-Expression $code").IsUnparseable);
+    }
+
+    [Theory]
+    [InlineData("& \"i$part\" $code")]
+    [InlineData("& i$part $code")]
+    public void Interpolated_call_operator_command_name_is_dynamic(string input)
+    {
+        var clause = Assert.Single(Parse(input).Clauses);
+        Assert.True(clause.Verb.IsDynamic);
+    }
+
+    [Fact]
+    public void Scoped_interpolation_in_invoke_expression_payload_is_dynamic()
+    {
+        var clause = Assert.Single(Parse("iex \"Remove-$:noun C:\\x\"").Clauses);
+        Assert.Equal(ArgKind.DynamicSkip, Assert.Single(clause.Args).Kind);
+    }
+
+    [Fact]
+    public void Dot_invoked_iex_is_unparseable()
+    {
+        Assert.True(Parse(". iex 'Remove-Item C:\\x'").IsUnparseable);
+    }
+
+    [Theory]
+    [InlineData("iex 'Microsoft.PowerShell.Management\\Remove-Item C:\\x'")]
+    [InlineData("Set-Location C:\\safe; iex 'Microsoft.PowerShell.Management\\Set-Location C:\\evil'; Remove-Item child.txt")]
+    public void Module_qualified_inner_cmdlet_is_unparseable(string input)
+    {
+        Assert.True(Parse(input).IsUnparseable);
+    }
+
+    [Theory]
+    [InlineData("iex \"& 'Microsoft.PowerShell.Management\\Remove-Item' C:\\x\"")]
+    [InlineData("Set-Location C:\\safe; iex \"& 'Microsoft.PowerShell.Management\\Set-Location' C:\\evil\"; Remove-Item child.txt")]
+    [InlineData("& \"Microsoft.PowerShell.Management\\Remove-Item\" C:\\x")]
+    public void Quoted_module_qualified_cmdlet_is_unparseable(string input)
+    {
+        Assert.True(Parse(input).IsUnparseable);
+    }
+
+    [Fact]
+    public void Dynamic_command_invalidates_following_location()
+    {
+        var result = Parse(
+            "Set-Location C:\\safe; & \"i$part\" $code; Get-Item child.txt");
+        var item = result.Clauses.Last();
+        var child = Assert.Single(item.Args, a => a.Raw == "child.txt");
+
+        Assert.Equal(ArgKind.DynamicSkip, child.Kind);
+        Assert.Contains(item.Args,
+            a => a.IsCwdAttribution && a.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Theory]
+    [InlineData("\"iex\" 'Get-Date'")]
+    [InlineData("Set-Location C:\\safe; iex '\"Set-Location\" C:\\evil'; Get-Item child.txt")]
+    public void Quoted_expression_without_call_operator_is_unparseable(string input)
+    {
+        Assert.True(Parse(input).IsUnparseable);
+    }
+
+    [Fact]
+    public void Escape_character_does_not_create_set_location_identity()
+    {
+        var result = Parse(
+            "Set-Location C:\\safe; iex \"S`et-Location C:\\evil\"; Get-Item child.txt");
+        var item = result.Clauses.Last();
+
+        Assert.Contains(item.Args,
+            a => a.Raw == "child.txt" && a.Resolved == "C:/safe/child.txt");
+    }
+
+    [Theory]
+    [InlineData("iex \"Get-`u{}Date\"")]
+    [InlineData("iex \"Get-`u{110000}Date\"")]
+    [InlineData("iex -Command:Get-`u{}Date")]
+    public void Malformed_unicode_escape_is_unparseable(string input)
+    {
+        Assert.True(Parse(input).IsUnparseable);
+    }
+
+    [Fact]
+    public void Invoke_expression_inherits_the_current_location()
+    {
+        var result = Parse("Set-Location C:\\a; iex 'Remove-Item child.txt'");
+        var remove = result.Clauses.Last();
+
+        Assert.Equal("Remove-Item", remove.Verb.Tokens[0]);
+        Assert.Contains(remove.Args, a => a.Raw == "child.txt" && a.Resolved == "C:/a/child.txt");
+    }
+
+    [Fact]
+    public void Invoke_expression_exports_location_changes_to_outer_clauses()
+    {
+        var result = Parse(
+            "Set-Location C:\\a; iex 'Set-Location C:\\b; Remove-Item child.txt'; Get-ChildItem child.txt");
+
+        Assert.Contains(result.Clauses[2].Args,
+            a => a.Raw == "child.txt" && a.Resolved == "C:/b/child.txt");
+        Assert.Contains(result.Clauses[3].Args,
+            a => a.Raw == "child.txt" && a.Resolved == "C:/b/child.txt");
+    }
+
+    [Fact]
+    public void Dynamic_invoke_expression_invalidates_following_location()
+    {
+        var result = Parse(
+            "Set-Location C:\\safe; Invoke-Expression $code; Remove-Item child.txt");
+        var remove = result.Clauses.Last();
+        var child = Assert.Single(remove.Args, a => a.Raw == "child.txt");
+
+        Assert.Equal(ArgKind.DynamicSkip, child.Kind);
+        Assert.False(child.IsPath);
+        Assert.Null(child.Resolved);
+        Assert.Contains(remove.Args,
+            a => a.IsCwdAttribution && a.Kind == ArgKind.DynamicSkip);
+        var expression = result.Clauses[1];
+        Assert.Contains(expression.Args,
+            a => a.IsCwdAttribution && a.Resolved == "C:/safe");
+    }
+
+    [Fact]
+    public void Child_pwsh_location_change_remains_isolated()
+    {
+        var result = Parse(
+            "pwsh -Command 'Set-Location C:\\b'; Remove-Item child.txt");
+        var remove = result.Clauses.Last();
+
+        Assert.Contains(remove.Args,
+            a => a.Raw == "child.txt" && a.Resolved == "C:/work/child.txt");
+    }
+
+    [Fact]
+    public void Invoke_expression_depth_five_parses()
+    {
+        var result = Parse(NestInvokeExpression("Get-Date", 5));
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "Get-Date" }, Assert.Single(result.Clauses).Verb.Tokens);
+    }
+
+    [Fact]
+    public void Invoke_expression_depth_six_is_unparseable()
+    {
+        var result = Parse(NestInvokeExpression("Get-Date", 6));
+
+        Assert.True(result.IsUnparseable);
+        Assert.Contains("recursion depth", result.UnparseableReason!);
+    }
+
+    [Fact]
+    public void Mixed_command_string_wrappers_share_the_depth_limit()
+    {
+        var inner = "Get-Date";
+        for (var i = 0; i < 6; i++)
+        {
+            var escaped = inner.Replace("'", "''");
+            inner = (i % 3) switch
+            {
+                0 => "iex '" + escaped + "'",
+                1 => "pwsh -Command '" + escaped + "'",
+                _ => "pwsh -EncodedCommand "
+                    + Convert.ToBase64String(Encoding.Unicode.GetBytes(inner)),
+            };
+        }
+
+        Assert.True(Parse(inner).IsUnparseable);
+    }
+
+    [Fact]
+    public void Oversized_invoke_expression_input_is_unparseable()
+    {
+        var result = Parse("iex '" + new string('x', (64 * 1024) + 1) + "'");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Contains("64 KiB", result.UnparseableReason!);
+    }
+
+    [Fact]
+    public void Invoke_expression_inner_anomaly_propagates()
+    {
+        Assert.True(Parse("iex 'if ($true) { Get-Date }'").IsUnparseable);
+    }
+
+    private static string NestInvokeExpression(string inner, int depth)
+    {
+        for (var i = 0; i < depth; i++)
+        {
+            inner = "iex '" + inner.Replace("'", "''") + "'";
+        }
+
+        return inner;
     }
 
     // ---------------------------------------------------------------- anomalies

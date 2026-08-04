@@ -1,0 +1,67 @@
+{
+  "name": "Iex dynamic location",
+  "input": "Set-Location C:\\safe; iex $code; Remove-Item child.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "C:\\safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "iex"
+        ],
+        "canonicalVerb": "Invoke-Expression",
+        "args": [
+          {
+            "raw": "$code",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "C:/safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "child.txt",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Dynamic current-scope code invalidates location attribution for following paths."
+}

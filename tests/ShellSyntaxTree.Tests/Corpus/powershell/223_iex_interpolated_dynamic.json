@@ -1,0 +1,25 @@
+{
+  "name": "Iex interpolated dynamic",
+  "input": "iex \u0022Remove-$noun C:\\x\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "iex"
+        ],
+        "canonicalVerb": "Invoke-Expression",
+        "args": [
+          {
+            "raw": "\u0022Remove-$noun C:\\x\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "An interpolated payload remains opaque and dynamic."
+}

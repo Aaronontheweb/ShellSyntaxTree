@@ -1,0 +1,10 @@
+{
+  "name": "Iex decoded nul",
+  "input": "iex \u0022Remove-Item\u00600C:\\x\u0022",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "NUL character is not supported"
+  },
+  "notes": "A decoded NUL safe-fails instead of merging a hidden path into the verb.",
+  "oracleExpectation": "OutOfScope"
+}

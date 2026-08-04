@@ -1,0 +1,19 @@
+{
+  "name": "Iex command colon unicode escape",
+  "input": "iex -Command:Get-\u0060u{44}ate",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "An inline colon payload consumes and decodes a complete Unicode escape."
+}

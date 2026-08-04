@@ -1,0 +1,10 @@
+{
+  "name": "Iex dot invocation",
+  "input": ". iex \u0027Remove-Item C:\\x\u0027",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "the dot-source invocation operator is not supported in v0.2"
+  },
+  "notes": "Dot invocation is valid PowerShell but outside the parser grammar and safe-fails.",
+  "oracleExpectation": "OutOfScope"
+}

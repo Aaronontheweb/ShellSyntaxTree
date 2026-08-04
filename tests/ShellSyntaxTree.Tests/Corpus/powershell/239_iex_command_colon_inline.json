@@ -1,0 +1,19 @@
+{
+  "name": "Iex command colon inline",
+  "input": "iex -Command:Get-Date",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "The exact colon-form -Command parameter binds an inline static payload."
+}

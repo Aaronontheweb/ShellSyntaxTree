@@ -166,6 +166,8 @@ Mermaid flowchart in your browser. Everything runs client-side — pasted
 scripts never leave your machine. Useful for "what does this script
 actually do?" moments and for understanding how the library models
 constructs like subshells and `bash -c` / `pwsh -Command` recursion.
+Static `Invoke-Expression` / `iex` payloads surface the same way, while
+computed payloads safe-fail.
 
 ```bash
 dotnet run --project samples/ShellSyntaxTree.Web.Sample

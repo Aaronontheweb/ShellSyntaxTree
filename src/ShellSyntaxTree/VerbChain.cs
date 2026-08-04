@@ -41,8 +41,9 @@ public sealed record VerbChain
 
     /// <summary>
     /// True when the clause's command name is a dynamic token the parser
-    /// cannot statically identify — a variable (<c>&amp; $exe</c>), a
-    /// subexpression (<c>&amp; (Get-Thing)</c>), or a script block
+    /// cannot statically identify — a variable (<c>&amp; $exe</c>), an
+    /// interpolated name (<c>&amp; "tool-$name"</c>), a subexpression
+    /// (<c>&amp; (Get-Thing)</c>), or a script block
     /// (<c>&amp; { ... }</c>) at verb position. <see cref="Tokens"/> still
     /// carries the verbatim token; <see cref="CanonicalVerb"/> is null.
     ///

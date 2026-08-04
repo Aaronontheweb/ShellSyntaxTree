@@ -1,0 +1,28 @@
+{
+  "name": "Iex command colon backtick newline",
+  "input": "iex -Command:Write-Output\u0060nGet-Date",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "An inline colon payload decodes backtick newline before recursion."
+}

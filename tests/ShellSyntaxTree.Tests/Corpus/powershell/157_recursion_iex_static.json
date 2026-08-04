@@ -1,5 +1,5 @@
 {
-  "name": "Recursion iex not recursed",
+  "name": "Recursion iex static",
   "input": "iex \u0022Remove-Item C:\\x\u0022",
   "expected": {
     "isUnparseable": false,
@@ -7,20 +7,20 @@
       {
         "operator": "None",
         "verb": [
-          "iex"
+          "Remove-Item"
         ],
-        "canonicalVerb": "Invoke-Expression",
         "args": [
           {
-            "raw": "\u0022Remove-Item C:\\x\u0022",
+            "raw": "C:\\x",
             "kind": "Literal",
             "isPath": true,
-            "resolved": "C:/work/Remove-Item C:/x"
+            "resolved": "C:/x"
           }
         ],
-        "redirects": []
+        "redirects": [],
+        "isCommandStringWrapped": true
       }
     ]
   },
-  "notes": "Invoke-Expression / iex is never recursed into (\u00A710)."
+  "notes": "A static iex payload surfaces its inner Remove-Item clause (\u00A710)."
 }

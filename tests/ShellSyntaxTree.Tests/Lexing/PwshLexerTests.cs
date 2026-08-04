@@ -63,6 +63,57 @@ public class PwshLexerTests
         Assert.Equal(PwshTokenKind.QuotedString, t.Kind);
         Assert.Equal("path $env:TEMP", t.Value);
         Assert.False(t.IsSingleQuoted);
+        Assert.True(t.HasInterpolation);
+    }
+
+    [Theory]
+    [InlineData("\"Get-$noun\"")]
+    [InlineData("\"Get-$(Get-Variable noun)\"")]
+    [InlineData("\"Get-$é\"")]
+    [InlineData("\"Get-$:noun\"")]
+    public void Expandable_string_records_interpolation(string input)
+    {
+        var t = Assert.Single(Significant(input));
+        Assert.True(t.HasInterpolation);
+    }
+
+    [Theory]
+    [InlineData("\"Get-Date\"")]
+    [InlineData("\"Write-Host `$name\"")]
+    [InlineData("\"Write-Output $.\"")]
+    public void Static_expandable_string_has_no_interpolation(string input)
+    {
+        var t = Assert.Single(Significant(input));
+        Assert.False(t.HasInterpolation);
+    }
+
+    [Fact]
+    public void Expandable_here_string_records_interpolation()
+    {
+        var t = Assert.Single(Significant("@\"\nGet-$noun\n\"@"));
+        Assert.True(t.IsHereString);
+        Assert.True(t.HasInterpolation);
+    }
+
+    [Fact]
+    public void Expandable_here_string_decodes_backtick_newline_escape()
+    {
+        var t = Assert.Single(Significant("@\"\nWrite-Output ok`nGet-Date\n\"@"));
+        Assert.Equal("Write-Output ok\nGet-Date", t.Value);
+    }
+
+    [Fact]
+    public void Expandable_here_string_records_unicode_interpolation()
+    {
+        var t = Assert.Single(Significant("@\"\nGet-$é\n\"@"));
+        Assert.True(t.HasInterpolation);
+    }
+
+    [Fact]
+    public void Expandable_here_string_ignores_literal_dollar_punctuation()
+    {
+        var t = Assert.Single(Significant("@\"\nWrite-Output $.\n\"@"));
+        Assert.False(t.HasInterpolation);
     }
 
     [Fact]
@@ -70,6 +121,70 @@ public class PwshLexerTests
     {
         var t = Assert.Single(Significant("\"a`tb\""));
         Assert.Equal("a\tb", t.Value);
+    }
+
+    [Fact]
+    public void Double_quote_decodes_unicode_escape()
+    {
+        var t = Assert.Single(Significant("\"i`u{65}x\""));
+        Assert.Equal("iex", t.Value);
+    }
+
+    [Fact]
+    public void Double_quote_decodes_escape_character()
+    {
+        var t = Assert.Single(Significant("\"S`et\""));
+        Assert.Equal(new[] { 83, 27, 116 }, t.Value.Select(c => (int)c));
+    }
+
+    [Theory]
+    [InlineData("\"Get-`u{}Date\"")]
+    [InlineData("\"Get-`u{110000}Date\"")]
+    public void Malformed_unicode_escape_emits_sentinel(string input)
+    {
+        var t = Assert.Single(Significant(input));
+        Assert.Equal(PwshTokenKind.UnparseableSentinel, t.Kind);
+    }
+
+    [Fact]
+    public void Unicode_escape_allows_utf16_surrogate_code_unit()
+    {
+        var t = Assert.Single(Significant("\"`u{D800}\""));
+        Assert.Equal(1, t.Value.Length);
+        Assert.Equal(0xD800, t.Value[0]);
+    }
+
+    [Fact]
+    public void Bare_word_decodes_backtick_whitespace_and_newline_escape()
+    {
+        var t = Assert.Single(Significant("Write-Output` harmless`nGet-Date"));
+        Assert.Equal("Write-Output harmless\nGet-Date", t.Value);
+    }
+
+    [Fact]
+    public void Bare_word_decodes_unicode_escape()
+    {
+        var t = Assert.Single(Significant("i`u{65}x"));
+        Assert.Equal("iex", t.Value);
+    }
+
+    [Theory]
+    [InlineData("Remove-Item\vC:\\x")]
+    [InlineData("Remove-Item\fC:\\x")]
+    [InlineData("Remove-Item\u2003C:\\x")]
+    public void PowerShell_inline_whitespace_separates_words(string input)
+    {
+        var tokens = Significant(input);
+        Assert.Equal(2, tokens.Length);
+        Assert.Equal("Remove-Item", tokens[0].Value);
+        Assert.Equal("C:\\x", tokens[1].Value);
+    }
+
+    [Fact]
+    public void Nul_character_emits_unparseable_sentinel()
+    {
+        var token = Assert.Single(Significant("\0"));
+        Assert.Equal(PwshTokenKind.UnparseableSentinel, token.Kind);
     }
 
     [Fact]
@@ -95,6 +210,29 @@ public class PwshLexerTests
         var tokens = Significant("Get-Item -Path:C:\\logs");
         Assert.Equal(PwshTokenKind.Parameter, tokens[1].Kind);
         Assert.Equal("-Path:C:\\logs", tokens[1].Value);
+    }
+
+    [Fact]
+    public void Comment_after_empty_colon_value_starts_a_comment()
+    {
+        var tokens = Significant("iex -Command:#comment");
+        Assert.Equal(2, tokens.Length);
+        Assert.Equal("-Command:", tokens[1].Value);
+    }
+
+    [Fact]
+    public void Colon_value_scanner_consumes_complete_unicode_escape()
+    {
+        var tokens = Significant("iex -Command:Get-`u{44}ate");
+        Assert.Equal(2, tokens.Length);
+        Assert.Equal("-Command:Get-`u{44}ate", tokens[1].Value);
+    }
+
+    [Fact]
+    public void Malformed_colon_value_unicode_escape_emits_sentinel()
+    {
+        var tokens = Significant("iex -Command:Get-`u{}Date");
+        Assert.Contains(tokens, t => t.Kind == PwshTokenKind.UnparseableSentinel);
     }
 
     [Theory]

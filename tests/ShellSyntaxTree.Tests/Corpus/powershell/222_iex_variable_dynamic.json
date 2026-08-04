@@ -1,0 +1,24 @@
+{
+  "name": "Iex variable dynamic",
+  "input": "Invoke-Expression $code",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Invoke-Expression"
+        ],
+        "args": [
+          {
+            "raw": "$code",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A variable payload remains an Invoke-Expression clause with one DynamicSkip arg."
+}

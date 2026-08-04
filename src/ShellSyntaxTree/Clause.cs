@@ -49,7 +49,8 @@ public sealed record Clause
     /// True when this clause is the result of recursing into a
     /// command-string wrapper — bash <c>bash -c "..."</c> / <c>sh -c "..."</c>,
     /// or PowerShell <c>pwsh -Command "..."</c> / <c>pwsh -c "..."</c> /
-    /// <c>pwsh -EncodedCommand ...</c>. Useful for consumers that want to
+    /// <c>pwsh -EncodedCommand ...</c> / static
+    /// <c>Invoke-Expression '...'</c>. Useful for consumers that want to
     /// surface "this came from a wrapped invocation" in UI. See
     /// SPEC.POWERSHELL.md §3 / §10.
     /// </summary>

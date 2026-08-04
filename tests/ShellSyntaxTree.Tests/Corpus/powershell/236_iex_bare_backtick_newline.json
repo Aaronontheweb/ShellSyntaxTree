@@ -1,0 +1,34 @@
+{
+  "name": "Iex bare backtick newline",
+  "input": "iex Write-Output\u0060 harmless\u0060nGet-Date",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "harmless",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "A backtick newline escape in a bare static payload surfaces both commands."
+}

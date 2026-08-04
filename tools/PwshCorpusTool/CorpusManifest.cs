@@ -65,6 +65,16 @@ internal static class CorpusManifest
     private static string B64(string s) =>
         Convert.ToBase64String(Encoding.Unicode.GetBytes(s));
 
+    private static string NestIex(string inner, int depth)
+    {
+        for (var i = 0; i < depth; i++)
+        {
+            inner = "iex '" + inner.Replace("'", "''") + "'";
+        }
+
+        return inner;
+    }
+
     internal static IReadOnlyList<ManifestEntry> All() => new List<ManifestEntry>
     {
         // ---- Simple cmdlet (§13: ≥10) ----
@@ -344,8 +354,8 @@ internal static class CorpusManifest
             "A malformed base64 -EncodedCommand payload — the outer pwsh invocation still parses."),
         E("recursion_file_not_recursed", "pwsh -File C:\\scripts\\deploy.ps1",
             "pwsh -File is not recursion; the script path is an ordinary path arg."),
-        E("recursion_iex_not_recursed", "iex \"Remove-Item C:\\x\"",
-            "Invoke-Expression / iex is never recursed into (§10)."),
+        E("recursion_iex_static", "iex \"Remove-Item C:\\x\"",
+            "A static iex payload surfaces its inner Remove-Item clause (§10)."),
         Oos("recursion_depth_overflow",
             "pwsh -Command { pwsh -Command { pwsh -Command { pwsh -Command { pwsh -Command { pwsh -Command { Get-Date } } } } } }",
             "Six nested -Command levels exceed the depth-5 cap."),
@@ -482,5 +492,93 @@ internal static class CorpusManifest
         // ---- Issue #64: path-shaped operands after native verb chains ----
         E("native_kubectl_apply_yaml", "kubectl apply deployment.yaml",
             "A real non-Git CLI exposes a lowercase YAML file without a command-specific rule."),
+
+        // ---- Issue #63: Invoke-Expression command-string recursion ----
+        E("iex_full_name_static", "Invoke-Expression 'Get-Date'",
+            "The full cmdlet name recurses into one static literal payload."),
+        E("iex_command_parameter_static", "Invoke-Expression -Command 'Get-Process'",
+            "The exact -Command parameter binds one static payload."),
+        E("iex_variable_dynamic", "Invoke-Expression $code",
+            "A variable payload remains an Invoke-Expression clause with one DynamicSkip arg."),
+        E("iex_interpolated_dynamic", "iex \"Remove-$noun C:\\x\"",
+            "An interpolated payload remains opaque and dynamic."),
+        E("iex_concatenated_dynamic", "iex ('Get-' + 'Date')",
+            "Literal concatenation is not evaluated and collapses to one DynamicSkip arg."),
+        Oos("iex_pipeline_dynamic", "Get-Content script.ps1 | Invoke-Expression",
+            "Pipeline-fed expression code is valid PowerShell but safe-fails as unparseable."),
+        E("iex_inherits_location", "Set-Location C:\\a; iex 'Remove-Item child.txt'",
+            "A static payload inherits the caller's effective location."),
+        E("iex_exports_location", "iex 'Set-Location C:\\b'; Remove-Item child.txt",
+            "A location change inside iex affects following outer clauses."),
+        Oos("iex_recursion_depth_overflow", NestIex("Get-Date", 6),
+            "Six nested static expression strings exceed the shared depth-five cap."),
+        E("iex_quoted_alias_dynamic", "& 'iex' $code",
+            "A quoted alias invoked through the call operator still safe-fails its payload."),
+        E("iex_module_qualified_dynamic", "Microsoft.PowerShell.Utility\\Invoke-Expression $code",
+            "A module-qualified cmdlet name still receives expression security handling."),
+        E("iex_unicode_interpolation_dynamic", "iex \"Remove-$é C:\\x\"",
+            "Unicode variable interpolation cannot hide a clean inner verb."),
+        E("iex_comma_array_dynamic", "Invoke-Expression Write-Output,OTHER",
+            "An unquoted comma array is computed rather than one static scalar string."),
+        E("iex_dynamic_location", "Set-Location C:\\safe; iex $code; Remove-Item child.txt",
+            "Dynamic current-scope code invalidates location attribution for following paths."),
+        E("dynamic_interpolated_iex_name", "& \"i$part\" $code",
+            "An interpolated call-operator command name is dynamic and cannot bypass iex handling."),
+        E("iex_unicode_escaped_alias", "& \"i`u{65}x\" $code",
+            "A Unicode-escaped iex name is decoded before command identity checks."),
+        E("iex_bare_backtick_newline", "iex Write-Output` harmless`nGet-Date",
+            "A backtick newline escape in a bare static payload surfaces both commands."),
+        E("iex_herestring_backtick_newline", "iex @\"\nWrite-Output ok`nGet-Date\n\"@",
+            "An expandable here-string decodes its backtick newline before recursion."),
+        E("iex_backtick_location", "Set-Location C:\\safe; iex Write-Output` ok`nSet-Location` C:\\evil; Remove-Item child.txt",
+            "A hidden escaped-newline location change is surfaced and propagated."),
+        E("iex_command_colon_inline", "iex -Command:Get-Date",
+            "The exact colon-form -Command parameter binds an inline static payload."),
+        E("iex_command_colon_quoted", "iex -Command:'Get-Date'",
+            "An empty colon-form parameter tail binds the following quoted payload."),
+        E("iex_command_colon_dynamic", "iex -Command:$code",
+            "A dynamic inline colon-form payload remains one DynamicSkip arg."),
+        E("iex_vertical_tab_path", "iex \"Remove-Item`vC:\\x\"",
+            "Decoded vertical-tab whitespace separates the inner path argument."),
+        E("iex_form_feed_path", "iex \"Remove-Item`fC:\\x\"",
+            "Decoded form-feed whitespace separates the inner path argument."),
+        E("iex_unicode_whitespace_path", "iex \"Remove-Item`u{2003}C:\\x\"",
+            "Decoded Unicode whitespace separates the inner path argument."),
+        E("iex_vertical_tab_location", "Set-Location C:\\safe; iex \"Set-Location`vC:\\evil\"; Remove-Item child.txt",
+            "Decoded vertical-tab whitespace preserves an inner location change."),
+        E("iex_command_colon_comment", "iex -Command:#comment",
+            "A comment after an empty colon value leaves -Command without a payload."),
+        E("iex_command_colon_backtick_newline", "iex -Command:Write-Output`nGet-Date",
+            "An inline colon payload decodes backtick newline before recursion."),
+        Oos("iex_decoded_nul", "iex \"Remove-Item`0C:\\x\"",
+            "A decoded NUL safe-fails instead of merging a hidden path into the verb."),
+        E("iex_command_colon_unicode_escape", "iex -Command:Get-`u{44}ate",
+            "An inline colon payload consumes and decodes a complete Unicode escape."),
+        Oos("iex_dot_invocation", ". iex 'Remove-Item C:\\x'",
+            "Dot invocation is valid PowerShell but outside the parser grammar and safe-fails."),
+        E("iex_scoped_interpolation_dynamic", "iex \"Remove-$:noun C:\\x\"",
+            "Scoped interpolation syntax keeps the expression payload dynamic."),
+        Oos("iex_module_qualified_remove", "iex 'Microsoft.PowerShell.Management\\Remove-Item C:\\x'",
+            "An unsupported module-qualified inner cmdlet safe-fails instead of hiding its identity."),
+        Oos("iex_module_qualified_location", "Set-Location C:\\safe; iex 'Microsoft.PowerShell.Management\\Set-Location C:\\evil'; Remove-Item child.txt",
+            "An unsupported module-qualified location mutation safe-fails instead of preserving stale cwd."),
+        E("dynamic_command_location", "Set-Location C:\\safe; & \"i$part\" $code; Get-Item child.txt",
+            "Any dynamic command invalidates following current-scope location attribution."),
+        E("quoted_expression_command", "\"iex\" 'Get-Date'",
+            "A quoted expression without the call operator is not a command invocation."),
+        Oos("iex_quoted_inner_expression", "Set-Location C:\\safe; iex '\"Set-Location\" C:\\evil'; Get-Item child.txt",
+            "A quoted inner expression is valid outer syntax but not a supported command invocation."),
+        E("iex_escape_character", "Set-Location C:\\safe; iex \"S`et-Location C:\\evil\"; Get-Item child.txt",
+            "The backtick e escape becomes ESC and cannot spoof Set-Location."),
+        E("iex_invalid_unicode_empty", "iex \"Get-`u{}Date\"",
+            "An empty Unicode escape is a PowerShell syntax error."),
+        E("iex_invalid_unicode_range", "iex \"Get-`u{110000}Date\"",
+            "An out-of-range Unicode escape is a PowerShell syntax error."),
+        E("iex_invalid_unicode_colon", "iex -Command:Get-`u{}Date",
+            "Malformed Unicode syntax in an inline colon payload safe-fails."),
+        Oos("iex_quoted_module_remove", "iex \"& 'Microsoft.PowerShell.Management\\Remove-Item' C:\\x\"",
+            "A quoted module-qualified inner cmdlet safe-fails under the call operator."),
+        Oos("iex_quoted_module_location", "Set-Location C:\\safe; iex \"& 'Microsoft.PowerShell.Management\\Set-Location' C:\\evil\"; Remove-Item child.txt",
+            "A quoted module-qualified location mutation cannot preserve stale cwd."),
     };
 }

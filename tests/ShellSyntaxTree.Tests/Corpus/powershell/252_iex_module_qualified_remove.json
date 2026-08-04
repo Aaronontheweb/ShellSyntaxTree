@@ -1,0 +1,10 @@
+{
+  "name": "Iex module qualified remove",
+  "input": "iex \u0027Microsoft.PowerShell.Management\\Remove-Item C:\\x\u0027",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "module-qualified cmdlet \u0027Microsoft.PowerShell.Management\\Remove-Item\u0027 is not supported in v0.2"
+  },
+  "notes": "An unsupported module-qualified inner cmdlet safe-fails instead of hiding its identity.",
+  "oracleExpectation": "OutOfScope"
+}

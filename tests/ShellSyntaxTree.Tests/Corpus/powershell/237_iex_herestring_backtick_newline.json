@@ -1,0 +1,34 @@
+{
+  "name": "Iex herestring backtick newline",
+  "input": "iex @\u0022\nWrite-Output ok\u0060nGet-Date\n\u0022@",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "ok",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "An expandable here-string decodes its backtick newline before recursion."
+}

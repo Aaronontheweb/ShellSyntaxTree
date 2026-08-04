@@ -1,0 +1,25 @@
+{
+  "name": "Iex unicode escaped alias",
+  "input": "\u0026 \u0022i\u0060u{65}x\u0022 $code",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "iex"
+        ],
+        "canonicalVerb": "Invoke-Expression",
+        "args": [
+          {
+            "raw": "$code",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A Unicode-escaped iex name is decoded before command identity checks."
+}

@@ -1,0 +1,70 @@
+{
+  "name": "Iex escape character",
+  "input": "Set-Location C:\\safe; iex \u0022S\u0060et-Location C:\\evil\u0022; Get-Item child.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "C:\\safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "S\u001Bt-Location"
+        ],
+        "args": [
+          {
+            "raw": "C:\\evil",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/evil"
+          },
+          {
+            "raw": "C:/safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Item"
+        ],
+        "args": [
+          {
+            "raw": "child.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe/child.txt"
+          },
+          {
+            "raw": "C:/safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "The backtick e escape becomes ESC and cannot spoof Set-Location."
+}

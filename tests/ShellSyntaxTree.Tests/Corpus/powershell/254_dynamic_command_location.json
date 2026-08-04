@@ -1,0 +1,67 @@
+{
+  "name": "Dynamic command location",
+  "input": "Set-Location C:\\safe; \u0026 \u0022i$part\u0022 $code; Get-Item child.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "C:\\safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe"
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "i$part"
+        ],
+        "isDynamic": true,
+        "args": [
+          {
+            "raw": "$code",
+            "kind": "EnvVar",
+            "isPath": false
+          },
+          {
+            "raw": "C:/safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe",
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Item"
+        ],
+        "args": [
+          {
+            "raw": "child.txt",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Any dynamic command invalidates following current-scope location attribution."
+}

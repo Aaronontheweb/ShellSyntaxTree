@@ -1,0 +1,25 @@
+{
+  "name": "Iex scoped interpolation dynamic",
+  "input": "iex \u0022Remove-$:noun C:\\x\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "iex"
+        ],
+        "canonicalVerb": "Invoke-Expression",
+        "args": [
+          {
+            "raw": "\u0022Remove-$:noun C:\\x\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Scoped interpolation syntax keeps the expression payload dynamic."
+}

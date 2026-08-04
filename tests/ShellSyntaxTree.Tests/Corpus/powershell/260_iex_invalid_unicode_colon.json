@@ -1,0 +1,9 @@
+{
+  "name": "Iex invalid unicode colon",
+  "input": "iex -Command:Get-\u0060u{}Date",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "invalid PowerShell Unicode escape"
+  },
+  "notes": "Malformed Unicode syntax in an inline colon payload safe-fails."
+}

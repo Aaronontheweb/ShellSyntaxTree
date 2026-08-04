@@ -50,6 +50,10 @@ priorities.
 
 ### Completed maintenance
 
+- [x] **Issue #63 — static Invoke-Expression command-string recursion.**
+      Recurse into provably static `Invoke-Expression` / `iex` payloads,
+      safe-fail computed and pipeline-fed code, share the existing recursion
+      limits, and preserve current-scope PowerShell location attribution.
 - [x] **Issue #64 — path-shaped operands after native verb chains.**
       Stop the Bash and PowerShell native greedy passes before a token that
       matches the shared path-shape rules. Preserve that token as a resolved

@@ -1,0 +1,25 @@
+{
+  "name": "Iex command colon dynamic",
+  "input": "iex -Command:$code",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "iex"
+        ],
+        "canonicalVerb": "Invoke-Expression",
+        "args": [
+          {
+            "raw": "$code",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A dynamic inline colon-form payload remains one DynamicSkip arg."
+}
