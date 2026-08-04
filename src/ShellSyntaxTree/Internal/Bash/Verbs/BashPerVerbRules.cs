@@ -131,13 +131,18 @@ internal static class BashPerVerbRules
             [("git", "--git-dir")] = true,
             [("git", "--work-tree")] = true,
 
-            // curl: -o / --output is a file path; -d / --data is body text.
+            // curl: output and header-dump values are file paths; data is body text.
             [("curl", "-o")] = true,
             [("curl", "--output")] = true,
             [("curl", "-d")] = false,
             [("curl", "--data")] = false,
+            [("curl", "-D")] = true,
+            [("curl", "--dump-header")] = true,
 
-            // wget: -O / --output-document is the saved file path.
+            // wget: -o writes logs and -O writes the downloaded document;
+            // both operands name files even though their meanings differ.
+            [("wget", "-o")] = true,
+            [("wget", "--output-file")] = true,
             [("wget", "-O")] = true,
             [("wget", "--output-document")] = true,
 

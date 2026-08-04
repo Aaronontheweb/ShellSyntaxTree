@@ -105,11 +105,11 @@ internal static class BashVerbs
             },
             ["curl"] = new HashSet<string>(StringComparer.Ordinal)
             {
-                "-o", "--output", "-d", "--data",
+                "-o", "--output", "-d", "--data", "-D", "--dump-header",
             },
             ["wget"] = new HashSet<string>(StringComparer.Ordinal)
             {
-                "-O", "--output-document",
+                "-o", "--output-file", "-O", "--output-document",
             },
             ["docker"] = new HashSet<string>(StringComparer.Ordinal)
             {

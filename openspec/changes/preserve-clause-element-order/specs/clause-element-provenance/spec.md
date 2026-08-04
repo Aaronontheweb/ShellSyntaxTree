@@ -69,6 +69,13 @@ Argument elements SHALL carry the parser's `Kind`, `IsFlag`, `IsPath`, and
 - **THEN** `/repo` is classified as a path
 - **THEN** PowerShell cmdlet parameter matching remains case-insensitive
 
+#### Scenario: Case-distinct native bindings are explicit
+- **WHEN** either parser parses `wget -o wget.log -O download.bin URL`
+- **THEN** both `wget.log` and `download.bin` are classified as paths
+- **WHEN** either parser parses `curl -d payload -D headers.txt URL`
+- **THEN** `payload` is not classified as a path
+- **THEN** `headers.txt` is classified as a path
+
 ### Requirement: Redirects occupy their authored position
 Each redirect SHALL appear as one redirect element at the source position of
 its operator and target. Its ordinal among redirect elements SHALL match its

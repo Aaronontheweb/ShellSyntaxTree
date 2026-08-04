@@ -25,6 +25,8 @@
 - [x] 3.5 Add paired Bash and PowerShell corpus entries for lowercase `-c`,
       uppercase `-C`, mixed occurrences, and an intervening valueless option.
 - [x] 3.6 Pin native-option case sensitivity and the heuristic-role boundary.
+- [x] 3.7 Audit case-colliding native short options; explicitly model Wget
+      log output and curl header output, with paired cross-shell corpus cases.
 
 ## 4. Consumer documentation
 

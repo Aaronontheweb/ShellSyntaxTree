@@ -1,0 +1,114 @@
+{
+  "name": "Curl case distinct data and header options",
+  "input": "curl -d payload -D headers.txt https://example.invalid/api",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "curl"
+        ],
+        "args": [
+          {
+            "raw": "-d",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "payload",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-D",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "headers.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/headers.txt"
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "curl",
+            "value": "curl",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-d",
+            "value": "-d",
+            "role": "Argument",
+            "sourceStart": 5,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "payload",
+            "value": "payload",
+            "role": "Argument",
+            "sourceStart": 8,
+            "sourceLength": 7,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-D",
+            "value": "-D",
+            "role": "Argument",
+            "sourceStart": 16,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "headers.txt",
+            "value": "headers.txt",
+            "role": "Argument",
+            "sourceStart": 19,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/headers.txt"
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "value": "https://example.invalid/api",
+            "role": "Argument",
+            "sourceStart": 31,
+            "sourceLength": 27,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Curl -d consumes non-path request data while -D consumes a header-output path."
+}

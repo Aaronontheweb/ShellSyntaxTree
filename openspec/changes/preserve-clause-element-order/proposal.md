@@ -18,7 +18,9 @@ before a subcommand and similarly spelled options after it.
   existing consumers.
 - Apply the same contract to Bash and PowerShell.
 - Match native option spelling case-sensitively in both shells so distinct
-  options such as Git `-c` and `-C` do not share path metadata.
+  options such as Git `-c` and `-C` do not share path metadata; explicitly
+  model case-colliding curl and Wget bindings rather than relying on comparer
+  collisions.
 
 ## Capabilities
 

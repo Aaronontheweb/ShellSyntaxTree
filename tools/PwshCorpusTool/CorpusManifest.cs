@@ -598,5 +598,13 @@ internal static class CorpusManifest
             "Issue #62: both global and command-scoped -C occurrences remain distinct."),
         P("git_heuristic_boundary_provenance", "git --no-pager commit -C HEAD~1",
             "Issue #62: authored order survives when a valueless option stops the greedy verb walk."),
+
+        // ---- Issue #62 adversarial follow-up: native option case collisions ----
+        P("wget_case_distinct_output_options",
+            "wget -o wget.log -O download.bin https://example.invalid/file",
+            "Wget -o writes a log file while -O writes the downloaded document; both operands are paths."),
+        P("curl_case_distinct_data_and_header_options",
+            "curl -d payload -D headers.txt https://example.invalid/api",
+            "Curl -d consumes non-path request data while -D consumes a header-output path."),
     };
 }

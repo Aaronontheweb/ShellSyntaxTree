@@ -706,7 +706,8 @@ positionals are paths," exactly as `SPEC.md` §7.
 
 Native commands reuse the bash per-verb rules table verbatim — `git`,
 `curl`, `tar`, etc. behave identically to `SPEC.md` §7 (`curl` / `wget`:
-the first positional is a URL; the `-o` / `-O` value is a path). This
+the first positional is a URL; curl `-o` / `-D` values and Wget `-o` / `-O`
+values are paths, while curl `-d` data is not). This
 includes hyphenated option names and the bash `--flag=value` split: the
 flag and value surface as separate args, and a curated flag's value receives
 the same path classification in both parsers. Native `--flag:value` has no

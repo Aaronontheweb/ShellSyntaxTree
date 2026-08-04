@@ -852,7 +852,8 @@ verb chain is a path. Per-verb overrides:
 | `sed` | First positional is **script**; rest are paths. |
 | `awk` | First positional is **program**; rest are paths. |
 | `tar` | Action flag determines path roles; default to extracting all non-flag positionals as paths. |
-| `curl`, `wget` | First positional is **URL**, not a path. `-o file` flag arg is a path. |
+| `curl` | First positional is **URL**, not a path. `-o` / `--output` and `-D` / `--dump-header` values are paths; `-d` / `--data` values are request data, not paths. |
+| `wget` | First positional is **URL**, not a path. `-o` / `--output-file` writes a log path; `-O` / `--output-document` writes the downloaded document path. |
 | `scp`, `rsync`, `sftp` | All positionals are paths (some remote). |
 | `cd`, `chdir`, `pushd`, `popd` | First non-flag positional is the cwd target (a path). |
 | Others (in FileVerbs, no override) | All non-flag positionals are paths. |
@@ -868,8 +869,8 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
         StringComparer.OrdinalIgnoreCase)
 {
     ["git"]   = new HashSet<string>(StringComparer.Ordinal) { "-c", "-C", "--git-dir", "--work-tree" },
-    ["curl"]  = new HashSet<string>(StringComparer.Ordinal) { "-o", "--output", "-d", "--data" },
-    ["wget"]  = new HashSet<string>(StringComparer.Ordinal) { "-O", "--output-document" },
+    ["curl"]  = new HashSet<string>(StringComparer.Ordinal) { "-o", "--output", "-d", "--data", "-D", "--dump-header" },
+    ["wget"]  = new HashSet<string>(StringComparer.Ordinal) { "-o", "--output-file", "-O", "--output-document" },
     ["docker"]= new HashSet<string>(StringComparer.Ordinal) { "-v", "--volume", "-f", "--file" },
     ["tar"]   = new HashSet<string>(StringComparer.Ordinal) { "-f", "--file", "-C", "--directory" },
     // Add as corpus surfaces real cases.
@@ -888,6 +889,9 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
 > lowercase `-c` values as non-paths. Executable-aware consumers still
 > reinterpret command-scoped forms such as `git commit -c/-C`, where Git uses
 > the operand as a revision rather than the generic table's global meaning.
+> Every supported case-distinct spelling is listed explicitly: curl `-d`
+> consumes non-path request data while `-D` consumes a header-output path;
+> Wget `-o` and `-O` both consume paths but write different files.
 
 > **Note:** the verb-chain walk consumes flag-with-value pairs
 > transparently. For `git -C /repo log`, the walk consumes `-C /repo`

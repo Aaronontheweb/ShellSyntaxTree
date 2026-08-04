@@ -66,6 +66,13 @@ PowerShell cmdlet parameter tables remain case-insensitive. Git explicitly
 lists both `-c` (configuration value, not a path) and `-C` (directory path in
 the generic global-option table).
 
+Ordinal matching requires every supported spelling to be explicit. The shared
+native table therefore distinguishes curl `-d` request data from `-D` header
+output, and lists both Wget `-o` log output and `-O` document output as
+path-valued bindings. An option-binding matrix pins consuming and path
+semantics independently so a comparer change cannot silently alter either;
+the long aliases are pinned alongside the case-colliding short forms.
+
 This corrects pre-existing metadata drift. It does not make the shared parser
 Git-semantic: a Git-aware consumer must still reinterpret `git commit -c/-C`
 operands as revisions using authored order.

@@ -242,17 +242,21 @@ public class BashPerVerbRulesTests
     }
 
     [Fact]
-    public void Curl_dash_o_value_is_a_path_dash_d_is_not()
+    public void Curl_output_and_dump_header_values_are_paths_data_is_not()
     {
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("curl", "-o"));
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("curl", "--output"));
         Assert.False(BashPerVerbRules.ValueOfFlagIsPath("curl", "-d"));
         Assert.False(BashPerVerbRules.ValueOfFlagIsPath("curl", "--data"));
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("curl", "-D"));
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("curl", "--dump-header"));
     }
 
     [Fact]
-    public void Wget_dash_O_value_is_a_path()
+    public void Wget_log_and_document_output_values_are_paths()
     {
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("wget", "-o"));
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("wget", "--output-file"));
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("wget", "-O"));
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("wget", "--output-document"));
     }
@@ -289,6 +293,37 @@ public class BashPerVerbRulesTests
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("GIT", "-C"));
         Assert.False(BashPerVerbRules.ValueOfFlagIsPath("GIT", "-c"));
         Assert.False(BashPerVerbRules.ValueOfFlagIsPath("Git", "--Git-Dir"));
+    }
+
+    [Theory]
+    [InlineData("git", "-c", true, false)]
+    [InlineData("git", "-C", true, true)]
+    [InlineData("curl", "-d", true, false)]
+    [InlineData("curl", "-D", true, true)]
+    [InlineData("curl", "-o", true, true)]
+    [InlineData("curl", "-O", false, false)]
+    [InlineData("curl", "--data", true, false)]
+    [InlineData("curl", "--dump-header", true, true)]
+    [InlineData("curl", "--output", true, true)]
+    [InlineData("wget", "-o", true, true)]
+    [InlineData("wget", "-O", true, true)]
+    [InlineData("wget", "--output-file", true, true)]
+    [InlineData("wget", "--output-document", true, true)]
+    [InlineData("docker", "-v", true, false)]
+    [InlineData("docker", "-V", false, false)]
+    [InlineData("tar", "-c", false, false)]
+    [InlineData("tar", "-C", true, true)]
+    [InlineData("tar", "-f", true, true)]
+    [InlineData("tar", "-F", false, false)]
+    public void Native_option_binding_matrix(
+        string verb,
+        string flag,
+        bool consumesValue,
+        bool valueIsPath)
+    {
+        Assert.True(BashVerbs.FlagsWithValue.TryGetValue(verb, out var flags));
+        Assert.Equal(consumesValue, flags.Contains(flag));
+        Assert.Equal(valueIsPath, BashPerVerbRules.ValueOfFlagIsPath(verb, flag));
     }
 
     // ---------------------------------------------------------------- empty verb chain
