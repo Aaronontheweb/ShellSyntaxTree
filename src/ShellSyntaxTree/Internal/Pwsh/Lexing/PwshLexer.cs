@@ -382,6 +382,12 @@ internal static class PwshLexer
 
             if (c == '`' && i + 1 < src.Length)
             {
+                if (IsMalformedUnicodeEscape(src, i))
+                {
+                    tokens.Add(InvalidUnicodeEscapeToken(src, i));
+                    return src.Length;
+                }
+
                 i = AppendBacktickEscape(src, i, sb);
                 continue;
             }
@@ -512,9 +518,18 @@ internal static class PwshLexer
                     ? src.Slice(bodyStart, bodyEnd - bodyStart)
                     : ReadOnlySpan<char>.Empty;
                 var hasInterpolation = false;
+                var invalidUnicodeAt = -1;
                 var body = quote == '"'
-                    ? DecodeExpandableString(bodySpan, out hasInterpolation)
+                    ? DecodeExpandableString(
+                        bodySpan, out hasInterpolation, out invalidUnicodeAt)
                     : bodySpan.ToString();
+                if (quote == '"' && invalidUnicodeAt >= 0)
+                {
+                    var sourcePosition = bodyStart + invalidUnicodeAt;
+                    tokens.Add(InvalidUnicodeEscapeToken(src, sourcePosition));
+                    return src.Length;
+                }
+
                 var end = k + 2; // past quote + '@'
                 tokens.Add(new PwshToken(
                     PwshTokenKind.QuotedString, body, null,
@@ -538,14 +553,21 @@ internal static class PwshLexer
     }
 
     private static string DecodeExpandableString(
-        ReadOnlySpan<char> value, out bool hasInterpolation)
+        ReadOnlySpan<char> value, out bool hasInterpolation, out int invalidUnicodeAt)
     {
         var decoded = new StringBuilder(value.Length);
         hasInterpolation = false;
+        invalidUnicodeAt = -1;
         for (var i = 0; i < value.Length; i++)
         {
             if (value[i] == '`' && i + 1 < value.Length)
             {
+                if (IsMalformedUnicodeEscape(value, i))
+                {
+                    invalidUnicodeAt = i;
+                    return decoded.ToString();
+                }
+
                 i = AppendBacktickEscape(value, i, decoded) - 1;
                 continue;
             }
@@ -561,9 +583,13 @@ internal static class PwshLexer
         return decoded.ToString();
     }
 
-    internal static string DecodeExpandableValue(
-        string value, out bool hasInterpolation) =>
-        DecodeExpandableString(value.AsSpan(), out hasInterpolation);
+    internal static bool TryDecodeExpandableValue(
+        string value, out string decoded, out bool hasInterpolation)
+    {
+        decoded = DecodeExpandableString(
+            value.AsSpan(), out hasInterpolation, out var invalidUnicodeAt);
+        return invalidUnicodeAt < 0;
+    }
 
     private static bool StartsInterpolation(ReadOnlySpan<char> value, int dollarIndex)
     {
@@ -573,7 +599,7 @@ internal static class PwshLexer
         }
 
         var next = value[dollarIndex + 1];
-        return next is '(' or '{' or '?' or '^' or '$' or '_'
+        return next is '(' or '{' or '?' or '^' or '$' or '_' or ':'
             || char.IsLetterOrDigit(next);
     }
 
@@ -584,7 +610,15 @@ internal static class PwshLexer
         if (escaped == 'u' && TryReadUnicodeEscape(
             value, backtickIndex, out var scalar, out var endIndex))
         {
-            target.Append(char.ConvertFromUtf32(scalar));
+            if (scalar <= char.MaxValue)
+            {
+                target.Append((char)scalar);
+            }
+            else
+            {
+                target.Append(char.ConvertFromUtf32(scalar));
+            }
+
             return endIndex;
         }
 
@@ -596,6 +630,7 @@ internal static class PwshLexer
             '0' => '\0',
             'a' => '\a',
             'b' => '\b',
+            'e' => '\u001b',
             'f' => '\f',
             'v' => '\v',
             _ => escaped,
@@ -624,7 +659,7 @@ internal static class PwshLexer
         }
 
         if (digits == 0 || i >= value.Length || value[i] != '}'
-            || scalar > 0x10FFFF || (scalar >= 0xD800 && scalar <= 0xDFFF))
+            || scalar > 0x10FFFF)
         {
             scalar = 0;
             return false;
@@ -633,6 +668,22 @@ internal static class PwshLexer
         endIndex = i + 1;
         return true;
     }
+
+    private static bool IsMalformedUnicodeEscape(
+        ReadOnlySpan<char> value, int backtickIndex)
+    {
+        return backtickIndex + 2 < value.Length
+            && value[backtickIndex + 1] == 'u'
+            && value[backtickIndex + 2] == '{'
+            && !TryReadUnicodeEscape(value, backtickIndex, out _, out _);
+    }
+
+    private static PwshToken InvalidUnicodeEscapeToken(
+        ReadOnlySpan<char> source, int position) => new(
+        PwshTokenKind.UnparseableSentinel,
+        source.Slice(position).ToString(), null,
+        position, source.Length - position,
+        $"invalid PowerShell Unicode escape at position {position}");
 
     private static bool TryHexValue(char value, out int hex)
     {
@@ -817,7 +868,12 @@ internal static class PwshLexer
         if (i < src.Length && (src[i] == ':' || src[i] == '='))
         {
             i++;
-            i = ScanWordRun(src, i);
+            i = ScanWordRun(src, i, out var invalidUnicodeAt);
+            if (invalidUnicodeAt >= 0)
+            {
+                tokens.Add(InvalidUnicodeEscapeToken(src, invalidUnicodeAt));
+                return src.Length;
+            }
         }
 
         tokens.Add(new PwshToken(
@@ -857,6 +913,12 @@ internal static class PwshLexer
                 if (next == '\n' || next == '\r')
                 {
                     break; // line continuation — handled by the outer loop
+                }
+
+                if (IsMalformedUnicodeEscape(src, i))
+                {
+                    tokens.Add(InvalidUnicodeEscapeToken(src, i));
+                    return src.Length;
                 }
 
                 i = AppendBacktickEscape(src, i, sb);
@@ -920,8 +982,10 @@ internal static class PwshLexer
     /// returning the index just past the run. Honors backtick escapes and
     /// <c>${name}</c> absorption; stops at a word boundary.
     /// </summary>
-    private static int ScanWordRun(ReadOnlySpan<char> src, int i)
+    private static int ScanWordRun(
+        ReadOnlySpan<char> src, int i, out int invalidUnicodeAt)
     {
+        invalidUnicodeAt = -1;
         var start = i;
         while (i < src.Length)
         {
@@ -949,6 +1013,12 @@ internal static class PwshLexer
                 {
                     i = unicodeEnd;
                     continue;
+                }
+
+                if (IsMalformedUnicodeEscape(src, i))
+                {
+                    invalidUnicodeAt = i;
+                    return src.Length;
                 }
 
                 i += 2;

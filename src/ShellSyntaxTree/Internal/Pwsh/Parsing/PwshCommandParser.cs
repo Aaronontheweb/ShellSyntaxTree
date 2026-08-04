@@ -191,6 +191,11 @@ internal static class PwshCommandParser
             return true;
         }
 
+        if (TryDetectUnsupportedInvocationShape(tokens, out reason))
+        {
+            return true;
+        }
+
         // Item 4: a trailing '&' background-job operator.
         if (TryDetectTrailingAmp(tokens, out reason))
         {
@@ -205,6 +210,68 @@ internal static class PwshCommandParser
 
         reason = null;
         return false;
+    }
+
+    private static bool TryDetectUnsupportedInvocationShape(
+        IReadOnlyList<PwshToken> tokens, out string? reason)
+    {
+        var verbSlot = true;
+        foreach (var token in tokens)
+        {
+            if (token.Kind == PwshTokenKind.Whitespace)
+            {
+                verbSlot = true;
+                continue;
+            }
+
+            if (token.Kind == PwshTokenKind.Operator)
+            {
+                verbSlot = token.OperatorText is "&&" or "||" or ";" or "|" or "(" or "&";
+                continue;
+            }
+
+            if (verbSlot && token.Kind == PwshTokenKind.Word)
+            {
+                if (token.Value == ".")
+                {
+                    reason = "the dot-source invocation operator is not supported in v0.2";
+                    return true;
+                }
+
+                if (IsUnsupportedModuleQualifiedCmdlet(token.Value))
+                {
+                    reason = $"module-qualified cmdlet '{token.Value}' is not supported in v0.2";
+                    return true;
+                }
+            }
+
+            if (verbSlot && token.Kind == PwshTokenKind.QuotedString
+                && IsUnsupportedModuleQualifiedCmdlet(token.Value))
+            {
+                reason = $"module-qualified cmdlet '{token.Value}' is not supported in v0.2";
+                return true;
+            }
+
+            verbSlot = false;
+        }
+
+        reason = null;
+        return false;
+    }
+
+    private static bool IsUnsupportedModuleQualifiedCmdlet(string command)
+    {
+        if (string.Equals(
+            command,
+            "Microsoft.PowerShell.Utility\\Invoke-Expression",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var separator = command.LastIndexOf('\\');
+        return separator > 0 && separator + 1 < command.Length
+            && PwshApprovedVerbs.IsCmdletShaped(command.Substring(separator + 1));
     }
 
     private static bool TryDetectKeywordAnomaly(IReadOnlyList<PwshToken> tokens, out string? reason)
@@ -562,13 +629,21 @@ internal static class PwshCommandParser
         {
             // A lone call operator (`& ( ... )` — the group followed in a
             // separate segment). Emit a dynamic, verb-less clause.
-            return BuildResult.Ok(new Clause
+            var dynamicClause = AttachAttributionArg(new Clause
             {
                 Operator = segment.PrecedingOperator,
                 Verb = new VerbChain { IsDynamic = true },
                 IsSubshell = segment.Depth > 0,
                 IsCommandStringWrapped = markWrapped,
-            });
+            }, attribution);
+            attribution.SetDynamic();
+            return BuildResult.Recursion(new[] { dynamicClause });
+        }
+
+        if (start == 0 && body[start].Kind == PwshTokenKind.QuotedString)
+        {
+            return BuildResult.Fail(
+                "a quoted expression at command position is not supported in v0.2");
         }
 
         // Classify the command.
@@ -607,7 +682,7 @@ internal static class PwshCommandParser
             IsDynamic = classified.IsDynamic,
         };
 
-        return BuildResult.Ok(new Clause
+        var clause = new Clause
         {
             Operator = segment.PrecedingOperator,
             Verb = verb,
@@ -615,7 +690,16 @@ internal static class PwshCommandParser
             Redirects = argResult.Redirects,
             IsSubshell = segment.Depth > 0,
             IsCommandStringWrapped = markWrapped,
-        });
+        };
+
+        if (classified.IsDynamic)
+        {
+            clause = AttachAttributionArg(clause, attribution);
+            attribution.SetDynamic();
+            return BuildResult.Recursion(new[] { clause });
+        }
+
+        return BuildResult.Ok(clause);
     }
 
     // ---------------------------------------------------------------- verb chain
@@ -1196,8 +1280,14 @@ internal static class PwshCommandParser
         var isStatic = false;
         if (inlinePayload is not null)
         {
-            payloadValue = PwshLexer.DecodeExpandableValue(
-                inlinePayload!, out var hasInterpolation);
+            if (!PwshLexer.TryDecodeExpandableValue(
+                inlinePayload!, out var decodedPayload, out var hasInterpolation))
+            {
+                result = BuildResult.Fail("invalid PowerShell Unicode escape in Invoke-Expression payload");
+                return true;
+            }
+
+            payloadValue = decodedPayload;
             isStatic = !hasInterpolation
                 && !PwshResolver.LooksLikeCommaArray(payloadValue);
         }

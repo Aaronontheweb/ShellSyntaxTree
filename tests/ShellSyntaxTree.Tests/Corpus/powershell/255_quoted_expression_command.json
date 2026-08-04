@@ -1,0 +1,9 @@
+{
+  "name": "Quoted expression command",
+  "input": "\u0022iex\u0022 \u0027Get-Date\u0027",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "a quoted expression at command position is not supported in v0.2"
+  },
+  "notes": "A quoted expression without the call operator is not a command invocation."
+}

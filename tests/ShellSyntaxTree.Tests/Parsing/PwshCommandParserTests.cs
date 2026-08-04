@@ -777,16 +777,20 @@ public class PwshCommandParserTests
         Assert.True(clause.IsCommandStringWrapped);
     }
 
-    [Theory]
-    [InlineData("OtherModule\\Invoke-Expression $code")]
-    [InlineData("OtherModule\\iex $code")]
-    public void Custom_module_commands_are_not_treated_as_invoke_expression(
-        string input)
+    [Fact]
+    public void Custom_module_alias_is_not_treated_as_invoke_expression()
     {
+        const string input = "OtherModule\\iex $code";
         var clause = Assert.Single(Parse(input).Clauses);
         Assert.StartsWith("OtherModule\\", clause.Verb.Tokens[0]);
         Assert.Null(clause.Verb.CanonicalVerb);
         Assert.DoesNotContain(clause.Args, a => a.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Fact]
+    public void Custom_module_qualified_cmdlet_is_unparseable()
+    {
+        Assert.True(Parse("OtherModule\\Invoke-Expression $code").IsUnparseable);
     }
 
     [Theory]
@@ -796,6 +800,77 @@ public class PwshCommandParserTests
     {
         var clause = Assert.Single(Parse(input).Clauses);
         Assert.True(clause.Verb.IsDynamic);
+    }
+
+    [Fact]
+    public void Scoped_interpolation_in_invoke_expression_payload_is_dynamic()
+    {
+        var clause = Assert.Single(Parse("iex \"Remove-$:noun C:\\x\"").Clauses);
+        Assert.Equal(ArgKind.DynamicSkip, Assert.Single(clause.Args).Kind);
+    }
+
+    [Fact]
+    public void Dot_invoked_iex_is_unparseable()
+    {
+        Assert.True(Parse(". iex 'Remove-Item C:\\x'").IsUnparseable);
+    }
+
+    [Theory]
+    [InlineData("iex 'Microsoft.PowerShell.Management\\Remove-Item C:\\x'")]
+    [InlineData("Set-Location C:\\safe; iex 'Microsoft.PowerShell.Management\\Set-Location C:\\evil'; Remove-Item child.txt")]
+    public void Module_qualified_inner_cmdlet_is_unparseable(string input)
+    {
+        Assert.True(Parse(input).IsUnparseable);
+    }
+
+    [Theory]
+    [InlineData("iex \"& 'Microsoft.PowerShell.Management\\Remove-Item' C:\\x\"")]
+    [InlineData("Set-Location C:\\safe; iex \"& 'Microsoft.PowerShell.Management\\Set-Location' C:\\evil\"; Remove-Item child.txt")]
+    [InlineData("& \"Microsoft.PowerShell.Management\\Remove-Item\" C:\\x")]
+    public void Quoted_module_qualified_cmdlet_is_unparseable(string input)
+    {
+        Assert.True(Parse(input).IsUnparseable);
+    }
+
+    [Fact]
+    public void Dynamic_command_invalidates_following_location()
+    {
+        var result = Parse(
+            "Set-Location C:\\safe; & \"i$part\" $code; Get-Item child.txt");
+        var item = result.Clauses.Last();
+        var child = Assert.Single(item.Args, a => a.Raw == "child.txt");
+
+        Assert.Equal(ArgKind.DynamicSkip, child.Kind);
+        Assert.Contains(item.Args,
+            a => a.IsCwdAttribution && a.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Theory]
+    [InlineData("\"iex\" 'Get-Date'")]
+    [InlineData("Set-Location C:\\safe; iex '\"Set-Location\" C:\\evil'; Get-Item child.txt")]
+    public void Quoted_expression_without_call_operator_is_unparseable(string input)
+    {
+        Assert.True(Parse(input).IsUnparseable);
+    }
+
+    [Fact]
+    public void Escape_character_does_not_create_set_location_identity()
+    {
+        var result = Parse(
+            "Set-Location C:\\safe; iex \"S`et-Location C:\\evil\"; Get-Item child.txt");
+        var item = result.Clauses.Last();
+
+        Assert.Contains(item.Args,
+            a => a.Raw == "child.txt" && a.Resolved == "C:/safe/child.txt");
+    }
+
+    [Theory]
+    [InlineData("iex \"Get-`u{}Date\"")]
+    [InlineData("iex \"Get-`u{110000}Date\"")]
+    [InlineData("iex -Command:Get-`u{}Date")]
+    public void Malformed_unicode_escape_is_unparseable(string input)
+    {
+        Assert.True(Parse(input).IsUnparseable);
     }
 
     [Fact]

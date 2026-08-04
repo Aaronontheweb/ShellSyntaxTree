@@ -1,0 +1,10 @@
+{
+  "name": "Iex quoted module location",
+  "input": "Set-Location C:\\safe; iex \u0022\u0026 \u0027Microsoft.PowerShell.Management\\Set-Location\u0027 C:\\evil\u0022; Remove-Item child.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "module-qualified cmdlet \u0027Microsoft.PowerShell.Management\\Set-Location\u0027 is not supported in v0.2"
+  },
+  "notes": "A quoted module-qualified location mutation cannot preserve stale cwd.",
+  "oracleExpectation": "OutOfScope"
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Iex invalid unicode range",
+  "input": "iex \u0022Get-\u0060u{110000}Date\u0022",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "invalid PowerShell Unicode escape"
+  },
+  "notes": "An out-of-range Unicode escape is a PowerShell syntax error."
+}

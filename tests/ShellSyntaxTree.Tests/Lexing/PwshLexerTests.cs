@@ -70,6 +70,7 @@ public class PwshLexerTests
     [InlineData("\"Get-$noun\"")]
     [InlineData("\"Get-$(Get-Variable noun)\"")]
     [InlineData("\"Get-$é\"")]
+    [InlineData("\"Get-$:noun\"")]
     public void Expandable_string_records_interpolation(string input)
     {
         var t = Assert.Single(Significant(input));
@@ -127,6 +128,30 @@ public class PwshLexerTests
     {
         var t = Assert.Single(Significant("\"i`u{65}x\""));
         Assert.Equal("iex", t.Value);
+    }
+
+    [Fact]
+    public void Double_quote_decodes_escape_character()
+    {
+        var t = Assert.Single(Significant("\"S`et\""));
+        Assert.Equal(new[] { 83, 27, 116 }, t.Value.Select(c => (int)c));
+    }
+
+    [Theory]
+    [InlineData("\"Get-`u{}Date\"")]
+    [InlineData("\"Get-`u{110000}Date\"")]
+    public void Malformed_unicode_escape_emits_sentinel(string input)
+    {
+        var t = Assert.Single(Significant(input));
+        Assert.Equal(PwshTokenKind.UnparseableSentinel, t.Kind);
+    }
+
+    [Fact]
+    public void Unicode_escape_allows_utf16_surrogate_code_unit()
+    {
+        var t = Assert.Single(Significant("\"`u{D800}\""));
+        Assert.Equal(1, t.Value.Length);
+        Assert.Equal(0xD800, t.Value[0]);
     }
 
     [Fact]
@@ -201,6 +226,13 @@ public class PwshLexerTests
         var tokens = Significant("iex -Command:Get-`u{44}ate");
         Assert.Equal(2, tokens.Length);
         Assert.Equal("-Command:Get-`u{44}ate", tokens[1].Value);
+    }
+
+    [Fact]
+    public void Malformed_colon_value_unicode_escape_emits_sentinel()
+    {
+        var tokens = Significant("iex -Command:Get-`u{}Date");
+        Assert.Contains(tokens, t => t.Kind == PwshTokenKind.UnparseableSentinel);
     }
 
     [Theory]

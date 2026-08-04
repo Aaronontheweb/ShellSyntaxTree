@@ -1,0 +1,10 @@
+{
+  "name": "Iex quoted inner expression",
+  "input": "Set-Location C:\\safe; iex \u0027\u0022Set-Location\u0022 C:\\evil\u0027; Get-Item child.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "a quoted expression at command position is not supported in v0.2"
+  },
+  "notes": "A quoted inner expression is valid outer syntax but not a supported command invocation.",
+  "oracleExpectation": "OutOfScope"
+}

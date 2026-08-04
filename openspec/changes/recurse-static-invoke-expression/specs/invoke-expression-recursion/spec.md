@@ -127,6 +127,22 @@ The parser SHALL use that lexical evidence when proving an
 - **WHEN** a static expression payload contains a decoded NUL
 - **THEN** `ParsedCommand.IsUnparseable` is `true`
 
+#### Scenario: Scoped interpolation is dynamic
+- **WHEN** a static-looking payload contains `$:name`
+- **THEN** the payload is surfaced as `DynamicSkip`
+
+#### Scenario: Unsupported invocation identity safe-fails
+- **WHEN** an expression payload invokes a quoted command without `&` or an unsupported module-qualified cmdlet
+- **THEN** `ParsedCommand.IsUnparseable` is `true`
+
+#### Scenario: Dynamic command invalidates location
+- **WHEN** a dynamic command identity executes before a relative path clause
+- **THEN** the following path and cwd attribution are dynamic
+
+#### Scenario: Malformed Unicode escape safe-fails
+- **WHEN** a command string contains an empty or out-of-range `` `u{...}`` escape
+- **THEN** `ParsedCommand.IsUnparseable` is `true`
+
 ### Requirement: Static expression recursion shares the caller's location context
 
 The parser SHALL parse a static `Invoke-Expression` payload using the caller's effective PowerShell location.

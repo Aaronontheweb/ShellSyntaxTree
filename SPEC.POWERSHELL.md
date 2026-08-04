@@ -337,7 +337,10 @@ The `PwshLexer` produces tokens consumed by `PwshCommandParser`. Token kinds
   in PowerShell. Outside quotes, a backtick escape contributes its decoded
   character to the current Word. Inside expandable strings, `` `n ``,
   `` `t ``, `` `" ``, `` `$ ``, an escaped backtick, and `` `u{hex}`` are
-  recognized. Decoding occurs before static command-string recursion so an
+  recognized; `` `e`` decodes to ESC. Unicode escapes accept one to six hex
+  digits up to `0x10FFFF`, including UTF-16 surrogate code units as
+  PowerShell does. A malformed Unicode escape emits an unparseable sentinel.
+  Decoding occurs before static command-string recursion so an
   escaped newline cannot hide an additional command. Decoded PowerShell
   whitespace, including vertical tab, form feed, and Unicode separator
   characters, becomes a token boundary; only CR/LF separate statements. A
@@ -928,6 +931,15 @@ persistently approvable `Invoke-Expression` clause from hiding runtime code.
 Because computed code can call `Set-Location` in the current scope, a direct
 dynamic payload also makes location attribution dynamic for every following
 relative path.
+
+The dot-source invocation operator and unsupported module-qualified cmdlets
+are unparseable rather than being exposed under a misleading raw verb. The
+one supported module-qualified wrapper remains
+`Microsoft.PowerShell.Utility\Invoke-Expression`. A quoted string is a command
+identity only when preceded by the call operator `&`; otherwise it is an
+unsupported expression. Any dynamic command identity invalidates following
+location attribution because it can resolve to current-scope code that calls
+`Set-Location`.
 
 ---
 

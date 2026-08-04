@@ -29,6 +29,8 @@
 - [x] 4.7 Cover exact colon-form `Invoke-Expression -Command:` binding.
 - [x] 4.8 Cover decoded whitespace, colon comments, and escaped inline colon payloads found during follow-up review.
 - [x] 4.9 Cover decoded NUL safe-fail and inline colon Unicode escapes.
+- [x] 4.10 Cover dot invocation, scoped interpolation, module qualification, dynamic cwd, quoted expressions, and malformed escapes from adversarial review.
+- [x] 4.11 Cover quoted call-operator module-qualified cmdlets from adversarial re-review.
 
 ## 5. Completion
 
