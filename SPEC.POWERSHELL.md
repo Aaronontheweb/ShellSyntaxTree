@@ -952,6 +952,9 @@ leaves the required payload missing. Dynamic inline values remain opaque.
 For a static payload, the parser consumes the outer expression clause and
 surfaces the inner clauses inline with `IsCommandStringWrapped = true`. The
 first inner clause takes the operator that preceded the outer expression.
+Surfaced `Clause.Elements` retain their inner raw and decoded values but have
+null source spans because their offsets cannot be mapped exactly into the
+outer `ParsedCommand.Source`.
 The parse increments the same depth counter used by `pwsh -Command` and
 `-EncodedCommand`, and the payload passes through the same 64 KiB input cap.
 
@@ -965,7 +968,10 @@ The parser never evaluates variables, interpolation, concatenation,
 subexpressions, script blocks, arrays, or other computed expressions. When a
 direct computed payload has a source expression, the outer expression clause
 remains and the entire payload source slice becomes one
-`Arg { Kind=DynamicSkip, IsPath=false, Resolved=null }`. Pipeline input,
+`Arg { Kind=DynamicSkip, IsPath=false, Resolved=null }`. Its authored
+`Clause.Elements` retain the expression verb, an optional separate `-Command`
+parameter, and one source-aligned `DynamicSkip` payload region. An inline form
+such as `-Command:$code` remains one authored parameter element. Pipeline input,
 missing payloads, and ambiguous parameter binding set
 `ParsedCommand.IsUnparseable = true`; an incoming pipeline is dynamic even
 when an explicit literal argument also appears. These rules prevent a clean,

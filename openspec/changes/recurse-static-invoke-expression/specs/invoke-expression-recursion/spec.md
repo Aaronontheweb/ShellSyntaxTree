@@ -57,6 +57,7 @@ unambiguously, the parser SHALL set `ParsedCommand.IsUnparseable = true`.
 - **WHEN** PowerShell parses `Invoke-Expression $code`
 - **THEN** the result retains an `Invoke-Expression` clause
 - **THEN** `$code` is one `DynamicSkip` argument
+- **THEN** the authored verb and payload remain source-aligned clause elements
 
 #### Scenario: Interpolated payload is dynamic
 - **WHEN** PowerShell parses `iex "Remove-$noun C:\x"`

@@ -94,12 +94,18 @@ Existing consumers continue to find it through `Arg.IsCwdAttribution`.
 ### Preserve source spans only when exact outer mapping exists
 
 For an ordinary clause, `SourceStart` and `SourceLength` index the returned
-`ParsedCommand.Source`. Clauses expanded from `bash -c`, `pwsh -Command`, or
-`pwsh -EncodedCommand` retain their inner `Raw` and `Value`, but their spans are
-null after expansion because escaping and decoding prevent a generally exact
-mapping into the outer source.
+`ParsedCommand.Source`. Clauses expanded from `bash -c`, `pwsh -Command`,
+`pwsh -EncodedCommand`, or static `Invoke-Expression` retain their inner `Raw`
+and `Value`, but their spans are null after expansion because escaping and
+decoding prevent a generally exact mapping into the outer source.
 
 Nullable spans are an uncertainty signal; the parser does not guess offsets.
+
+When another parser feature deliberately collapses a computed source
+expression into one `DynamicSkip` compatibility argument, the ordered view
+uses one source-aligned argument element for that same opaque region. It does
+not expose interior tokens in a way that could imply partial semantic
+understanding.
 
 ### Model a redirect as one ordered semantic element
 

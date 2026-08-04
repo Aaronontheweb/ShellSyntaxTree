@@ -115,7 +115,33 @@ null spans when they cannot be mapped exactly into the outer
 - **THEN** the surfaced clause elements retain their inner raw and decoded values
 - **THEN** every surfaced element has null `SourceStart` and `SourceLength`
 
+#### Scenario: Dynamic Bash command string remains an ordinary clause
+- **WHEN** Bash parses `bash -c $code`
+- **THEN** the outer `bash`, `-c`, and `$code` elements remain source-aligned
+- **THEN** the clause is not marked as command-string wrapped
+
 #### Scenario: PowerShell encoded-command expansion
 - **WHEN** PowerShell parses a valid encoded command payload
 - **THEN** the surfaced clause elements retain their decoded values
 - **THEN** every surfaced element has null `SourceStart` and `SourceLength`
+
+#### Scenario: PowerShell Invoke-Expression expansion
+- **WHEN** PowerShell parses `Invoke-Expression 'git -C C:\repo status'`
+- **THEN** the surfaced clause elements retain their inner raw and decoded values
+- **THEN** every surfaced element has null `SourceStart` and `SourceLength`
+
+### Requirement: Opaque computed regions remain conservative ordered elements
+When a parser feature collapses a complete computed source expression, `Clause.Elements` SHALL
+represent the complete payload as one source-aligned opaque argument element
+matching the one `DynamicSkip` compatibility argument, rather than exposing
+partially interpreted interior tokens.
+
+#### Scenario: Dynamic Invoke-Expression payload
+- **WHEN** PowerShell parses `Invoke-Expression $code`
+- **THEN** the clause elements are the `Invoke-Expression` verb followed by one source-aligned `$code` argument
+- **THEN** the payload element has `Kind=DynamicSkip`
+
+#### Scenario: Inline dynamic Invoke-Expression binding
+- **WHEN** PowerShell parses `iex -Command:$code`
+- **THEN** `-Command:$code` remains one source-aligned argument element
+- **THEN** the element is both option-shaped and `DynamicSkip`

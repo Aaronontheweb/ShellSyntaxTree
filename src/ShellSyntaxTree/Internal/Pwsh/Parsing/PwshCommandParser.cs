@@ -1388,6 +1388,7 @@ internal static class PwshCommandParser
         }
 
         var payloadStart = start + 1;
+        int? commandParameterIndex = null;
         string? inlinePayload = null;
         if (payloadStart >= body.Count)
         {
@@ -1397,6 +1398,7 @@ internal static class PwshCommandParser
 
         if (body[payloadStart].Kind == PwshTokenKind.Parameter)
         {
+            commandParameterIndex = payloadStart;
             var parameter = body[payloadStart].Value;
             var colon = parameter.IndexOf(':');
             var parameterName = colon >= 0
@@ -1500,6 +1502,16 @@ internal static class PwshCommandParser
                         IsPath = false,
                     },
                 },
+                Elements = BuildDynamicInvokeExpressionElements(
+                    body,
+                    start,
+                    verb,
+                    source,
+                    commandParameterIndex,
+                    payloadStart,
+                    payloadEnd,
+                    inlinePayload,
+                    rawPayload!),
                 IsSubshell = segment.Depth > 0,
                 IsCommandStringWrapped = markWrapped,
             };
@@ -1538,11 +1550,82 @@ internal static class PwshCommandParser
                 Operator = i == 0 ? segment.PrecedingOperator : innerClause.Operator,
                 IsSubshell = segment.Depth > 0 || innerClause.IsSubshell,
                 IsCommandStringWrapped = true,
+                Elements = ClauseElementProvenance.WithoutOuterSourceSpans(
+                    innerClause.Elements),
             });
         }
 
         result = BuildResult.Recursion(expanded);
         return true;
+    }
+
+    private static IReadOnlyList<ClauseElement> BuildDynamicInvokeExpressionElements(
+        List<PwshToken> body,
+        int start,
+        ClassifiedVerb verb,
+        string source,
+        int? commandParameterIndex,
+        int payloadStart,
+        int payloadEnd,
+        string? inlinePayload,
+        string rawPayload)
+    {
+        var elements = new List<ClauseElement>();
+        var precedingVerbTokenCount = 0;
+        for (var i = start; i < body.Count; i++)
+        {
+            if (!verb.VerbPositions.Contains(i))
+            {
+                continue;
+            }
+
+            elements.Add(CreateElement(
+                source,
+                body[i],
+                ClauseElementRole.Verb,
+                precedingVerbTokenCount,
+                verb.IsDynamic ? ArgKind.DynamicSkip : ArgKind.Literal,
+                isFlag: false,
+                isPath: false,
+                resolved: null));
+            precedingVerbTokenCount++;
+        }
+
+        if (commandParameterIndex.HasValue)
+        {
+            elements.Add(CreateElement(
+                source,
+                body[commandParameterIndex.Value],
+                ClauseElementRole.Argument,
+                precedingVerbTokenCount,
+                inlinePayload is null ? ArgKind.Literal : ArgKind.DynamicSkip,
+                isFlag: true,
+                isPath: false,
+                resolved: null));
+        }
+
+        if (inlinePayload is not null)
+        {
+            return elements;
+        }
+
+        var firstPayloadToken = body[payloadStart];
+        var lastPayloadToken = body[payloadEnd];
+        elements.Add(new ClauseElement
+        {
+            Raw = rawPayload,
+            Value = payloadStart == payloadEnd ? firstPayloadToken.Value : rawPayload,
+            Role = ClauseElementRole.Argument,
+            SourceStart = firstPayloadToken.SourceStart,
+            SourceLength = lastPayloadToken.SourceStart + lastPayloadToken.SourceLength
+                - firstPayloadToken.SourceStart,
+            PrecedingVerbElementCount = precedingVerbTokenCount,
+            Kind = ArgKind.DynamicSkip,
+            IsFlag = false,
+            IsPath = false,
+        });
+
+        return elements;
     }
 
     private static bool IsInvokeExpression(ClassifiedVerb verb)

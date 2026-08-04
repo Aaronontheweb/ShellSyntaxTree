@@ -37,7 +37,7 @@ priorities.
       the 64 KiB cap (§11).
 - [x] **11. Multi-shell corpus runner + PII audit** — directory-routed by
       `Corpus/<shell>/`.
-- [x] **12. PowerShell corpus** — 230 entries under `Corpus/powershell/`,
+- [x] **12. PowerShell corpus** — 273 entries under `Corpus/powershell/`,
       every §13 category minimum exceeded.
 - [x] **13. `pwsh` validation gate + `tools/PwshCorpusTool`** —
       `PwshOracleTests` enforces the §13 oracle matrix + the `PwshAliases`
@@ -72,6 +72,11 @@ priorities.
       remains explicitly context-sensitive: the generic table supports
       `docker run`, while consumers use authored elements for global-option
       interpretation.
+      Command-string provenance is integrated with the later
+      `Invoke-Expression` recursion work: static expansion clears unmappable
+      outer spans, while dynamic payloads retain conservative source-aligned
+      elements. Nested and dynamic `bash -c` cases pin the equivalent Bash
+      boundary.
 - [x] **Issue #64 — path-shaped operands after native verb chains.**
       Stop the Bash and PowerShell native greedy passes before a token that
       matches the shared path-shape rules. Preserve that token as a resolved

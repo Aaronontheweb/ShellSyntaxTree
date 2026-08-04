@@ -29,6 +29,8 @@
       log output and curl header output, with paired cross-shell corpus cases.
 - [x] 3.8 Harden the audit with tar helper-script bindings, curl `@file` /
       `@-` operand semantics, and scoped Docker context claims.
+- [x] 3.9 Reconcile command-string provenance with static and dynamic
+      `Invoke-Expression`; audit nested and dynamic `bash -c` behavior.
 
 ## 4. Consumer documentation
 

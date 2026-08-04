@@ -299,9 +299,12 @@ compound operators, grouping delimiters, and shell call operators are excluded.
 Each verb token appears exactly once with `Role=Verb`. Each authored argument
 token appears once with `Role=Argument`; inline forms such as
 `--work-tree=../repo` stay one element even when `Args` exposes separate flag
-and value projections. Each redirect appears once with `Role=Redirect`; its
-ordinal among redirect elements matches its ordinal in `Redirects`, and `Raw`
-spans the operator through its target.
+and value projections. A parser-defined opaque computed region that is
+safe-failed as one `DynamicSkip` argument also appears as one argument element;
+its `Raw` and `Value` are the complete source slice rather than a claim that
+the parser understood the region's interior. Each redirect appears once with
+`Role=Redirect`; its ordinal among redirect elements matches its ordinal in
+`Redirects`, and `Raw` spans the operator through its target.
 
 `PrecedingVerbElementCount` is clause-local and resets to zero at every clause.
 For `git -C /repo commit`, `-C` and `/repo` carry `1`; for

@@ -298,6 +298,77 @@ public class ClauseElementTests
     }
 
     [Fact]
+    public void Nested_bash_command_strings_keep_values_without_outer_source_spans()
+    {
+        var clause = Assert.Single(
+            Bash.Parse("bash -c \"bash -c \\\"git status\\\"\"").Clauses);
+
+        Assert.True(clause.IsCommandStringWrapped);
+        Assert.Equal(
+            new[] { "git", "status" },
+            clause.Elements.Select(element => element.Value).ToArray());
+        Assert.All(clause.Elements, AssertSpanIsUnknown);
+    }
+
+    [Fact]
+    public void Dynamic_bash_command_string_stays_an_outer_source_aligned_clause()
+    {
+        const string source = "bash -c $code";
+        var clause = Assert.Single(Bash.Parse(source).Clauses);
+
+        Assert.False(clause.IsCommandStringWrapped);
+        Assert.Equal(
+            new[] { "bash", "-c", "$code" },
+            clause.Elements.Select(element => element.Value).ToArray());
+        Assert.All(clause.Elements, element => AssertSourceSlice(source, element));
+    }
+
+    [Fact]
+    public void Static_invoke_expression_keeps_values_without_outer_source_spans()
+    {
+        var clause = Assert.Single(
+            Pwsh.Parse("Invoke-Expression 'git -C C:\\repo status'").Clauses);
+
+        Assert.True(clause.IsCommandStringWrapped);
+        Assert.Equal(
+            new[] { "git", "-C", "C:\\repo", "status" },
+            clause.Elements.Select(element => element.Value).ToArray());
+        Assert.All(clause.Elements, AssertSpanIsUnknown);
+    }
+
+    [Fact]
+    public void Dynamic_invoke_expression_keeps_source_aligned_elements()
+    {
+        const string source = "Invoke-Expression $code";
+        var clause = Assert.Single(Pwsh.Parse(source).Clauses);
+
+        Assert.False(clause.IsCommandStringWrapped);
+        Assert.Equal(
+            new[] { "Invoke-Expression", "$code" },
+            clause.Elements.Select(element => element.Value).ToArray());
+        Assert.Equal(
+            new[] { ClauseElementRole.Verb, ClauseElementRole.Argument },
+            clause.Elements.Select(element => element.Role).ToArray());
+        Assert.Equal(ArgKind.DynamicSkip, clause.Elements[1].Kind);
+        Assert.All(clause.Elements, element => AssertSourceSlice(source, element));
+    }
+
+    [Fact]
+    public void Inline_dynamic_invoke_expression_binding_is_one_authored_element()
+    {
+        const string source = "iex -Command:$code";
+        var clause = Assert.Single(Pwsh.Parse(source).Clauses);
+
+        Assert.Equal(new[] { "$code" }, clause.Args.Select(arg => arg.Raw).ToArray());
+        Assert.Equal(
+            new[] { "iex", "-Command:$code" },
+            clause.Elements.Select(element => element.Value).ToArray());
+        Assert.True(clause.Elements[1].IsFlag);
+        Assert.Equal(ArgKind.DynamicSkip, clause.Elements[1].Kind);
+        Assert.All(clause.Elements, element => AssertSourceSlice(source, element));
+    }
+
+    [Fact]
     public void Encoded_command_elements_have_no_invented_outer_spans()
     {
         var payload = Convert.ToBase64String(Encoding.Unicode.GetBytes("git commit -C HEAD~1"));
@@ -313,6 +384,13 @@ public class ClauseElementTests
     {
         yield return ("bash", Bash);
         yield return ("pwsh", Pwsh);
+    }
+
+    private static void AssertSourceSlice(string source, ClauseElement element)
+    {
+        var start = Assert.IsType<int>(element.SourceStart);
+        var length = Assert.IsType<int>(element.SourceLength);
+        Assert.Equal(element.Raw, source.Substring(start, length));
     }
 
     private static void AssertSpanIsUnknown(ClauseElement element)
