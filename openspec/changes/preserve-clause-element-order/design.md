@@ -58,6 +58,19 @@ count alone, to interpret the command.
 This avoids redundant `VerbIndex` and `AfterVerbIndex` fields whose invariants
 could drift.
 
+### Support strict and general consumer matching without defining either
+
+A strict consumer matches the significant authored stream in order and rejects
+unexpected intervening elements. A general consumer may normalize equivalent
+forms only through an executable-aware grammar that completely consumes the
+stream and returns policy-relevant operands and scope alongside the normalized
+identity. Selecting every `Role=Verb` element is not a general matcher: it can
+silently skip options authored between an executable and subcommand.
+
+This division keeps approval fatigue under consumer control. High-frequency
+executables can receive reusable command-aware approvals, while unknown or
+partially understood shapes retain a narrow strict fallback.
+
 ### Match native option spelling case-sensitively
 
 Native executables receive option spelling unchanged under both Bash and

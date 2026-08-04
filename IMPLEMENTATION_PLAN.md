@@ -76,7 +76,10 @@ priorities.
       `Invoke-Expression` recursion work: static expansion clears unmappable
       outer spans, while dynamic payloads retain conservative source-aligned
       elements. Nested and dynamic `bash -c` cases pin the equivalent Bash
-      boundary.
+      boundary. Consumer guidance separates strict authored-stream matching
+      from general executable-aware normalization; Netclaw can use the latter
+      for reusable approvals without treating parser verb roles as semantic
+      command boundaries.
 - [x] **Issue #64 — path-shaped operands after native verb chains.**
       Stop the Bash and PowerShell native greedy passes before a token that
       matches the shared path-shape rules. Preserve that token as a resolved

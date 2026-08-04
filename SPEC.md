@@ -740,25 +740,31 @@ syntactic rule disambiguates `origin` (a branch name) from `worktree`
 (a subcommand verb) without per-CLI semantic knowledge — and we will
 not bake per-CLI knowledge into the parser.
 
-Consumers needing security-grade verb identification should pattern-prefix
-match against the source-ordered `Clause.Elements` view:
+Consumers needing security-grade command identification choose one of two
+strategies over the source-ordered `Clause.Elements` view:
 
-> A command matches an approval pattern `P` if and only if the first
-> `len(P.verb_prefix)` verb elements of the command equal `P.verb_prefix`.
+1. **Strict authored-stream matching.** Match every modeled significant
+   element in source order. A strict matcher may define explicit operand slots
+   or wildcards, but it SHALL NOT discard an intervening argument merely
+   because the parser assigned it `Role=Argument`. Therefore a strict
+   `git commit` pattern does not match `git -C /repo commit`.
+2. **General executable-aware matching.** Pass the complete authored stream to
+   a grammar owned by the consumer. The grammar consumes known options and
+   operands, identifies the executable's semantic command, and returns both a
+   normalized approval identity and every policy-relevant operand or scope.
+   Equivalent syntax may reuse an approval only after complete interpretation.
 
-This punts depth choice to the consumer (via the pattern they author)
-and accommodates the parser's over-extraction transparently:
+For example, a Git-aware matcher may interpret `git -C /repo commit` as the
+general identity `git commit` with effective directory `/repo`. It may then
+reuse a `git commit` approval only when that approval's directory policy covers
+`/repo`. Likewise, executable-aware matchers may intentionally normalize
+`git push origin main` to `git push` or `kubectl get pods my-pod` to
+`kubectl get pods` when their grammars establish which suffixes are operands.
 
-- Pattern `git push *` (verb-prefix length 2) matches `git push origin
-  main` because the first two command tokens are `[git, push]`.
-- Pattern `kubectl get pods *` (verb-prefix length 3) matches
-  `kubectl get pods my-pod` because the first three tokens are
-  `[kubectl, get, pods]`.
-- Auto-proposed patterns for unknown commands should default to
-  the **full** extracted verb chain (greedy match), which is the
-  security-correct default: a subsequent variation re-prompts rather
-  than silently auto-grants. Operators wanting broader grants opt in
-  explicitly.
+There is no shell-generic rule that selects all `Role=Verb` elements and
+compares them as a contiguous semantic prefix. For unknown executables or an
+unrecognized option shape, consumers should use strict matching or prompt;
+they should not silently fall back to a broader general identity.
 
 False-negative (re-prompt) is recoverable. False-positive (silent
 destructive grant) is not. Narrow-by-default favors the recoverable

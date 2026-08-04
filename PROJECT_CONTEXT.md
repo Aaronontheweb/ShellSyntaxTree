@@ -42,7 +42,9 @@ open-source autonomous operations agent. Netclaw's POSIX approval gate consumes
 ShellSyntaxTree's Bash parser to decompose approval units, identify candidate
 verbs and directories, propagate cwd context, inspect redirects, and fail
 closed when parsing is uncertain. Its PowerShell integration is the remaining
-v0.2.0 downstream acceptance item. See
+v0.2.0 downstream acceptance item. Netclaw is expected to use the consumer
+guide's general executable-aware matching path for supported commands, with
+strict authored-stream matching as the fallback for unrecognized shapes. See
 [`docs/CONSUMER_GUIDE.md`](./docs/CONSUMER_GUIDE.md) for the public consumer
 algorithm and immutable Netclaw examples.
 

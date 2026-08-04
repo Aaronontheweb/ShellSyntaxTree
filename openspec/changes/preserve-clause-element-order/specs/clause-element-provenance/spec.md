@@ -32,6 +32,12 @@ collection.
 - **THEN** `-C` has `PrecedingVerbElementCount` equal to `1`
 - **THEN** consumers SHALL NOT interpret that count alone as Git's semantic option scope
 
+#### Scenario: Intervening arguments are not a generic verb prefix
+- **WHEN** either parser parses `git -C /repo commit`
+- **THEN** a strict consumer sees `git`, `-C`, `/repo`, and `commit` in that order
+- **THEN** it does not discard the two argument elements and generically match `git commit`
+- **THEN** a consumer may derive `git commit` only through a Git-aware interpretation that retains `/repo` as policy-relevant scope
+
 #### Scenario: Verb-relative counts reset per clause
 - **WHEN** either parser parses `git -C /repo status | git commit -C HEAD~1`
 - **THEN** the first clause reports `-C` after one verb token

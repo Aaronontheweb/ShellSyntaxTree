@@ -165,9 +165,41 @@ audit UI can still show `gci`.
 `VerbChain` is a best-effort syntactic hint, not a complete executable grammar.
 The greedy native-command walk can include bare lowercase values because a
 generic parser cannot know whether `origin` is a Git remote or a subcommand.
-Unknown commands should therefore default to the full extracted chain, which
-produces narrower approvals and recoverable re-prompts. A consumer may shorten
-the chain only when it owns command-specific knowledge that justifies doing so.
+Unknown commands should therefore retain the complete authored shape through a
+strict pattern, producing narrower approvals and recoverable re-prompts. A
+consumer may normalize or shorten that shape only when it owns command-specific
+knowledge that justifies doing so.
+
+### Choosing strict or general matching
+
+`Clause.Elements` supports two security-conscious consumer strategies. The
+choice belongs to the approval product, not the parser.
+
+**Strict matching** evaluates the significant authored stream in order. A
+pattern may contain explicit operand slots, but unexpected or intervening
+elements prevent a match. For example, a strict `git commit` pattern does not
+match `git -C /repo commit`, because `-C /repo` appears between the executable
+and subcommand. This mode is easy to audit and fail-closed, but syntactic
+variations can produce more prompts.
+
+**General matching** uses an executable-aware interpreter. The interpreter
+consumes the complete element stream according to that executable's option
+grammar and returns a normalized approval identity plus the policy-relevant
+operands and scopes. A Git interpreter can normalize `git -C /repo commit` to
+`git commit` while retaining `/repo` as its effective-directory constraint.
+This preserves reusable approvals without treating the option as irrelevant.
+
+General matching does not mean filtering to `Role=Verb` or trusting
+`PrecedingVerbElementCount` as a semantic boundary. Both fields describe the
+generic parser's projection. If the executable-aware interpreter encounters an
+unknown option, missing operand, dynamic value, or otherwise incomplete shape,
+it should fall back to strict matching or prompt rather than broaden the
+approval.
+
+Netclaw is expected to use general matching for supported high-frequency
+commands so ordinary option placement does not create approval fatigue. Strict
+matching remains the safe fallback for commands whose grammar Netclaw does not
+yet understand.
 
 ## Evaluating arguments and paths
 
@@ -347,7 +379,7 @@ The consumer can collect the attributed cwd and both path operands to propose
 read/write mounts. It should still apply its own cmdlet policy and access-mode
 rules; ShellSyntaxTree reports paths, not filesystem permissions.
 
-### Command-aware policy
+### General command-aware policy
 
 Input:
 

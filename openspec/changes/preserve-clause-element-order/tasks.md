@@ -41,6 +41,9 @@
       this implementation change release-shaped.
 - [x] 4.3 Rewrite the Git consumer example to enumerate every occurrence,
       bind operands, and derive Git semantics from all authored elements.
+- [x] 4.4 Document strict authored-stream and general executable-aware
+      matching; forbid generic verb-role filtering and identify general
+      matching as Netclaw's approval-fatigue mitigation.
 
 ## 5. Completion
 
