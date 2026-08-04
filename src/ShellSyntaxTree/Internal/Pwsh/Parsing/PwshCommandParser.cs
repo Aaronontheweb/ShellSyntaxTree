@@ -710,7 +710,10 @@ internal static class PwshCommandParser
                     continue;
                 }
 
-                if (t.Kind != PwshTokenKind.Word || !PwshVerbs.IsNativeVerbLikeToken(t.Value))
+                // Keep native-command boundaries equal across both shells.
+                if (t.Kind != PwshTokenKind.Word
+                    || BashResolver.LooksLikePath(t.Value)
+                    || !PwshVerbs.IsNativeVerbLikeToken(t.Value))
                 {
                     break;
                 }

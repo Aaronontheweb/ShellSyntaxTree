@@ -478,5 +478,9 @@ internal static class CorpusManifest
             + "can never bind, so the value safe-fails to DynamicSkip."),
         E("bind_question_mark_help", "Get-Help -?",
             "'-?' is a single parameter token, not a bare dash plus a '?' glob."),
+
+        // ---- Issue #64: path-shaped operands after native verb chains ----
+        E("native_kubectl_apply_yaml", "kubectl apply deployment.yaml",
+            "A real non-Git CLI exposes a lowercase YAML file without a command-specific rule."),
     };
 }

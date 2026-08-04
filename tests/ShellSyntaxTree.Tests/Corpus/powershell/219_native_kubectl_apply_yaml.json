@@ -1,0 +1,26 @@
+{
+  "name": "Native kubectl apply yaml",
+  "input": "kubectl apply deployment.yaml",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "kubectl",
+          "apply"
+        ],
+        "args": [
+          {
+            "raw": "deployment.yaml",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/deployment.yaml"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A real non-Git CLI exposes a lowercase YAML file without a command-specific rule."
+}

@@ -394,7 +394,8 @@ verb_chain      := verb_like_word (FW_pair? verb_like_word)*
                                      // greedy walk per §6.1; FW_pair is a
                                      // flag-with-value pair owned by word_0
                                      // (transparent to the walk); stops at
-                                     // the first non-verb-like token. For
+                                     // the first path-shaped or non-verb-like
+                                     // token. For
                                      // word_0 ∈ FileVerbs, exactly 1 token.
 arg             := word | flag | quoted_string
 flag            := "-" letter+ | "--" word
@@ -545,9 +546,9 @@ These are **data**, not logic. Implement as `static readonly` collections.
 ### 6.1 Verb-chain extraction (greedy heuristic)
 
 Per issue #27 (locked in v0.1.4-alpha), the parser does not consult a
-static arity table. Instead, it walks consecutive verb-like Word tokens
-from the start of the clause and stops at the first token that doesn't
-look like a subcommand. This naturally scales to unknown CLIs
+static arity table. It walks consecutive verb-like Word tokens from the
+clause start. The walk stops before a path-shaped or non-verb-like token.
+This rule naturally scales to unknown CLIs
 (`freshdesk ticket list`, `kubectl get pods`, `dotnet ef migrations add`)
 without curated table entries.
 
@@ -568,13 +569,17 @@ paths (`/`, `\`, `~`), env-var refs (`$VAR`), URLs (`://`), globs
 (`* ? [`), and user-named identifiers (uppercase first char like
 `InitialCreate`).
 
+The walk also rejects a token that matches the §8 path-shape heuristic.
+This rule applies even when the lexical predicate accepts the token.
+
 #### Walk algorithm
 
 For a clause whose first token is a Word `firstVerb`:
 
 1. Append `firstVerb` to the verb chain (it does not need to satisfy
    `IsVerbLikeToken` — bare commands like `Curl` or `_init` are still
-   commands).
+   commands). Do not apply the path-shape boundary at command position.
+   A command such as `deploy.sh` or `./deploy.sh` remains the first verb.
 2. Iterate the remaining tokens in order. For each token `t`:
    - If `t.Kind != Word`: **stop**.
    - If `t` is a flag (`IsFlagWord`):
@@ -585,6 +590,8 @@ For a clause whose first token is a Word `firstVerb`:
        and continue walking.
      - Otherwise: **stop**.
    - If `firstVerb ∈ FileVerbs`: **stop** (1-token carveout — see below).
+   - If `BashResolver.LooksLikePath(t.Value)`: **stop**. The argument pass
+     uses the same classifier and preserves the token as a path argument.
    - If `!IsVerbLikeToken(t)`: **stop**.
    - Otherwise: append `t.Value` to the verb chain and continue.
 
@@ -617,6 +624,10 @@ on for zone-gate evaluation.
 | `kubectl get pods my-pod` | `[kubectl, get, pods, my-pod]` | `[]` |
 | `aws s3 cp src dst` | `[aws, s3, cp, src, dst]` | `[]` (bare-word path args over-extract) |
 | `dotnet ef migrations add InitialCreate` | `[dotnet, ef, migrations, add]` | `[InitialCreate]` (stops at uppercase) |
+| `deploy.sh status` | `[deploy.sh, status]` | `[]` (command position wins) |
+| `git diff install-skills.sh` | `[git, diff]` | `[install-skills.sh]` (path-shaped operand) |
+| `kubectl apply deployment.yaml` | `[kubectl, apply]` | `[deployment.yaml]` (path-shaped operand) |
+| `tool plugin.sh list` | `[tool]` | `[plugin.sh, list]` (path evidence wins) |
 | `cat /etc/passwd` | `[cat]` | `[/etc/passwd]` (FileVerb carveout) |
 | `cat README` | `[cat]` | `[README]` (FileVerb carveout preserves IsPath) |
 | `ls -la /tmp` | `[ls]` | `[-la, /tmp]` (FileVerb carveout) |
@@ -654,6 +665,10 @@ and accommodates the parser's over-extraction transparently:
 False-negative (re-prompt) is recoverable. False-positive (silent
 destructive grant) is not. Narrow-by-default favors the recoverable
 failure mode.
+
+The path-shape boundary requires no command dictionary. It uses the same
+curated evidence as argument classification. A rare extension-shaped
+subcommand becomes a path argument because the stronger path evidence wins.
 
 ### 6.2 CWD verbs
 

@@ -864,7 +864,11 @@ internal static class BashCommandParser
                     continue;
                 }
 
-                if (fileVerbCarveout || !BashVerbs.IsVerbLikeToken(t))
+                // Path evidence wins before the lexical verb heuristic.
+                // The argument pass uses the same classifier.
+                if (fileVerbCarveout
+                    || BashResolver.LooksLikePath(t.Value)
+                    || !BashVerbs.IsVerbLikeToken(t))
                 {
                     break;
                 }

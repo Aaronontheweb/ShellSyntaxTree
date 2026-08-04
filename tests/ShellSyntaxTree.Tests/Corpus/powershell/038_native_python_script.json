@@ -7,10 +7,16 @@
       {
         "operator": "None",
         "verb": [
-          "python",
-          "script.py"
+          "python"
         ],
-        "args": [],
+        "args": [
+          {
+            "raw": "script.py",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/script.py"
+          }
+        ],
         "redirects": []
       }
     ]

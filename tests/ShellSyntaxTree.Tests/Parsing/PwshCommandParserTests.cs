@@ -95,6 +95,27 @@ public class PwshCommandParserTests
     }
 
     [Fact]
+    public void Native_path_shaped_operand_terminates_greedy_verb_chain()
+    {
+        var clause = Assert.Single(Parse("git diff install-skills.sh").Clauses);
+
+        Assert.Equal(new[] { "git", "diff" }, clause.Verb.Tokens);
+        var operand = Assert.Single(clause.Args);
+        Assert.Equal("install-skills.sh", operand.Raw);
+        Assert.True(operand.IsPath);
+        Assert.Equal("C:/work/install-skills.sh", operand.Resolved);
+    }
+
+    [Fact]
+    public void Native_path_shaped_first_token_remains_the_command()
+    {
+        var clause = Assert.Single(Parse("deploy.sh status").Clauses);
+
+        Assert.Equal(new[] { "deploy.sh", "status" }, clause.Verb.Tokens);
+        Assert.Empty(clause.Args);
+    }
+
+    [Fact]
     public void Native_chain_stops_at_a_capitalized_token()
     {
         var clause = Assert.Single(Parse("dotnet ef migrations add InitialCreate").Clauses);
