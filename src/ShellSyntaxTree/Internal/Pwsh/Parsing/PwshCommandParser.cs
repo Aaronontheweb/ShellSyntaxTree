@@ -688,6 +688,7 @@ internal static class PwshCommandParser
             Verb = verb,
             Args = argResult.Args,
             Redirects = argResult.Redirects,
+            Elements = argResult.Elements,
             IsSubshell = segment.Depth > 0,
             IsCommandStringWrapped = markWrapped,
         };
@@ -877,12 +878,19 @@ internal static class PwshCommandParser
 
         public IReadOnlyList<Redirect> Redirects { get; }
 
+        public IReadOnlyList<ClauseElement> Elements { get; }
+
         public string? Error { get; }
 
-        public ArgResult(IReadOnlyList<Arg> args, IReadOnlyList<Redirect> redirects, string? error)
+        public ArgResult(
+            IReadOnlyList<Arg> args,
+            IReadOnlyList<Redirect> redirects,
+            IReadOnlyList<ClauseElement> elements,
+            string? error)
         {
             Args = args;
             Redirects = redirects;
+            Elements = elements;
             Error = error;
         }
     }
@@ -893,7 +901,9 @@ internal static class PwshCommandParser
     {
         var args = new List<Arg>();
         var redirects = new List<Redirect>();
+        var elements = new List<ClauseElement>();
         var positionalIndex = 0;
+        var precedingVerbTokenCount = 0;
         string? pendingValueParam = null;          // cmdlet/alias §6.5 value-binding
         string? pendingNativeFlag = null;          // native flag-with-value
         var cmdletStyle = verb.Kind is PwshCommandKind.Cmdlet or PwshCommandKind.Alias
@@ -906,6 +916,17 @@ internal static class PwshCommandParser
         {
             if (verb.VerbPositions.Contains(i))
             {
+                var verbToken = body[i];
+                elements.Add(CreateElement(
+                    source,
+                    verbToken,
+                    ClauseElementRole.Verb,
+                    precedingVerbTokenCount,
+                    verb.IsDynamic ? ArgKind.DynamicSkip : ArgKind.Literal,
+                    isFlag: false,
+                    isPath: false,
+                    resolved: null));
+                precedingVerbTokenCount++;
                 continue;
             }
 
@@ -918,18 +939,28 @@ internal static class PwshCommandParser
                 {
                     // A non-leading '&' is a trailing background-job operator;
                     // the anomaly detector already lifts this, but guard here.
-                    return new ArgResult(args, redirects,
+                    return new ArgResult(args, redirects, elements,
                         "trailing '&' background-job operator is not supported in v0.2");
                 }
 
                 pendingValueParam = null;
                 pendingNativeFlag = null;
                 var consumed = BuildRedirect(
-                    body, i, source, options, workingDirectoryUnknown, redirects, out var redirectError);
+                    body,
+                    i,
+                    source,
+                    options,
+                    workingDirectoryUnknown,
+                    redirects,
+                    precedingVerbTokenCount,
+                    out var redirectElement,
+                    out var redirectError);
                 if (redirectError is not null)
                 {
-                    return new ArgResult(args, redirects, redirectError);
+                    return new ArgResult(args, redirects, elements, redirectError);
                 }
+
+                elements.Add(redirectElement!);
 
                 i += consumed - 1;
                 continue;
@@ -1006,6 +1037,17 @@ internal static class PwshCommandParser
                     }
                 }
 
+                var parameterMetadata = args[args.Count - 1];
+                elements.Add(CreateElement(
+                    source,
+                    t,
+                    ClauseElementRole.Argument,
+                    precedingVerbTokenCount,
+                    parameterMetadata.Kind,
+                    isFlag: true,
+                    isPath: parameterMetadata.IsPath,
+                    resolved: parameterMetadata.Resolved));
+
                 continue;
             }
 
@@ -1019,6 +1061,15 @@ internal static class PwshCommandParser
                     Kind = ArgKind.DynamicSkip,
                     IsPath = false,
                 });
+                elements.Add(CreateElement(
+                    source,
+                    t,
+                    ClauseElementRole.Argument,
+                    precedingVerbTokenCount,
+                    ArgKind.DynamicSkip,
+                    isFlag: false,
+                    isPath: false,
+                    resolved: null));
 
                 if (pendingValueParam is not null || pendingNativeFlag is not null)
                 {
@@ -1057,11 +1108,21 @@ internal static class PwshCommandParser
                 positionalIndex++;
             }
 
-            args.Add(ResolveValueToken(
-                rawValue, t.Value, treatAsPath, options, workingDirectoryUnknown, isLiteralBytes));
+            var resolvedArg = ResolveValueToken(
+                rawValue, t.Value, treatAsPath, options, workingDirectoryUnknown, isLiteralBytes);
+            args.Add(resolvedArg);
+            elements.Add(CreateElement(
+                source,
+                t,
+                ClauseElementRole.Argument,
+                precedingVerbTokenCount,
+                resolvedArg.Kind,
+                isFlag: false,
+                isPath: resolvedArg.IsPath,
+                resolved: resolvedArg.Resolved));
         }
 
-        return new ArgResult(args, redirects, null);
+        return new ArgResult(args, redirects, elements, null);
     }
 
     private static Arg ResolveValueToken(
@@ -1096,10 +1157,13 @@ internal static class PwshCommandParser
     private static int BuildRedirect(
         List<PwshToken> body, int opIndex, string source,
         PwshParserOptions options, bool workingDirectoryUnknown,
-        List<Redirect> redirects, out string? error)
+        List<Redirect> redirects, int precedingVerbTokenCount,
+        out ClauseElement? element, out string? error)
     {
+        element = null;
         error = null;
-        var op = body[opIndex].OperatorText ?? string.Empty;
+        var operatorToken = body[opIndex];
+        var op = operatorToken.OperatorText ?? string.Empty;
         var direction = MapRedirect(op, out var isMerge, out var mergeTarget);
 
         if (isMerge)
@@ -1110,6 +1174,15 @@ internal static class PwshCommandParser
                 Target = mergeTarget ?? op,
                 IsDynamicSkip = true,
             });
+            element = CreateRedirectElement(
+                source,
+                operatorToken,
+                target: null,
+                value: mergeTarget ?? op,
+                precedingVerbTokenCount,
+                ArgKind.DynamicSkip,
+                isPath: false,
+                resolved: null);
             return 1;
         }
 
@@ -1129,6 +1202,15 @@ internal static class PwshCommandParser
                 Target = target.Value,
                 IsDynamicSkip = true,
             });
+            element = CreateRedirectElement(
+                source,
+                operatorToken,
+                target,
+                target.Value,
+                precedingVerbTokenCount,
+                ArgKind.DynamicSkip,
+                isPath: false,
+                resolved: null);
             return 2;
         }
 
@@ -1142,12 +1224,21 @@ internal static class PwshCommandParser
                 Target = "$null",
                 IsDynamicSkip = true,
             });
+            element = CreateRedirectElement(
+                source,
+                operatorToken,
+                target,
+                target.Value,
+                precedingVerbTokenCount,
+                ArgKind.DynamicSkip,
+                isPath: false,
+                resolved: null);
             return 2;
         }
 
         var isLiteralBytes = target.Kind == PwshTokenKind.QuotedString && target.IsSingleQuoted;
         var raw = SourceSlice(source, target);
-        var (kind, resolved, _) = PwshResolver.Resolve(
+        var (kind, resolved, isPath) = PwshResolver.Resolve(
             target.Value, treatAsPath: true, options, workingDirectoryUnknown, isLiteralBytes);
 
         redirects.Add(new Redirect
@@ -1156,7 +1247,67 @@ internal static class PwshCommandParser
             Target = kind == ArgKind.DynamicSkip ? raw : resolved ?? raw,
             IsDynamicSkip = kind == ArgKind.DynamicSkip,
         });
+        element = CreateRedirectElement(
+            source,
+            operatorToken,
+            target,
+            target.Value,
+            precedingVerbTokenCount,
+            kind,
+            isPath,
+            kind == ArgKind.DynamicSkip ? null : resolved);
         return 2;
+    }
+
+    private static ClauseElement CreateElement(
+        string source,
+        PwshToken token,
+        ClauseElementRole role,
+        int precedingVerbTokenCount,
+        ArgKind kind,
+        bool isFlag,
+        bool isPath,
+        string? resolved) => new()
+    {
+        Raw = SourceSlice(source, token),
+        Value = token.Value,
+        Role = role,
+        SourceStart = token.SourceStart,
+        SourceLength = token.SourceLength,
+        PrecedingVerbElementCount = precedingVerbTokenCount,
+        Kind = kind,
+        IsFlag = isFlag,
+        IsPath = isPath,
+        Resolved = resolved,
+    };
+
+    private static ClauseElement CreateRedirectElement(
+        string source,
+        PwshToken operatorToken,
+        PwshToken? target,
+        string value,
+        int precedingVerbTokenCount,
+        ArgKind kind,
+        bool isPath,
+        string? resolved)
+    {
+        var sourceStart = operatorToken.SourceStart;
+        var sourceEnd = target.HasValue
+            ? target.Value.SourceStart + target.Value.SourceLength
+            : operatorToken.SourceStart + operatorToken.SourceLength;
+        return new ClauseElement
+        {
+            Raw = source.Substring(sourceStart, sourceEnd - sourceStart),
+            Value = value,
+            Role = ClauseElementRole.Redirect,
+            SourceStart = sourceStart,
+            SourceLength = sourceEnd - sourceStart,
+            PrecedingVerbElementCount = precedingVerbTokenCount,
+            Kind = kind,
+            IsFlag = false,
+            IsPath = isPath,
+            Resolved = resolved,
+        };
     }
 
     /// <summary>SPEC.POWERSHELL.md §8: map a PowerShell redirect operator
@@ -1481,6 +1632,7 @@ internal static class PwshCommandParser
                     Operator = k == 0 ? segment.PrecedingOperator : ic.Operator,
                     IsSubshell = segment.Depth > 0 || ic.IsSubshell,
                     IsCommandStringWrapped = true,
+                    Elements = ClauseElementProvenance.WithoutOuterSourceSpans(ic.Elements),
                 });
             }
 

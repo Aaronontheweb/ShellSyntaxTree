@@ -54,6 +54,17 @@ priorities.
       Recurse into provably static `Invoke-Expression` / `iex` payloads,
       safe-fail computed and pipeline-fed code, share the existing recursion
       limits, and preserve current-scope PowerShell location attribution.
+- [x] **Issue #62 — source-ordered clause elements.** Added the additive
+      `Clause.Elements` provenance view for Bash and PowerShell with exact raw
+      spelling, decoded values, source spans when available, verb-relative
+      argument placement, path facts, redirects, and conservative wrapper-span
+      handling. Authored order is authoritative; element roles and
+      `PrecedingVerbElementCount` explicitly mirror the greedy parser
+      projection rather than executable semantics. Paired Bash/PowerShell
+      corpus cases cover Git `-c`/`-C`, multiple occurrences, and a valueless
+      option that stops the greedy walk. Existing projection shapes and
+      synthetic cwd attribution remain compatible; native options that differ
+      only by case receive corrected metadata.
 - [x] **Issue #64 — path-shaped operands after native verb chains.**
       Stop the Bash and PowerShell native greedy passes before a token that
       matches the shared path-shape rules. Preserve that token as a resolved
@@ -70,7 +81,9 @@ priorities.
       corpus. Review follow-ups shipped with it: the equals-form split moved
       to a shared `NativeFlagSyntax` so the two parsers can't drift, a colon
       value under an `=`-bearing parameter name safe-fails to `DynamicSkip`,
-      and `-?` lexes as one parameter token.
+      `-?` lexes as one parameter token, and native option tables now use
+      ordinal spelling while PowerShell cmdlet parameters remain
+      case-insensitive.
 
 ### 15. Release 0.2.0 (alpha → beta → stable) — SPEC.PWSH §15 / §17
 
@@ -78,6 +91,8 @@ priorities.
       `ShellSyntaxTree.0.2.0-alpha.nupkg` and it is live on nuget.org
       (released 2026-05-20).
 - [x] `0.2.0-beta.1` so Netclaw validates the parser + the breaking rename
+- [ ] Publish the next `0.2.0` prerelease with the additive issue #62
+      `Clause.Elements` provenance surface and migration guidance
 - [ ] Promote to stable `0.2.0` after Netclaw validation
 
 ### 16. Netclaw v0.2.0 integration — SPEC.PWSH §17 #9

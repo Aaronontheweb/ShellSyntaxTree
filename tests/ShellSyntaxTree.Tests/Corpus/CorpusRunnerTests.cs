@@ -34,6 +34,56 @@ public class CorpusRunnerTests
 
         var actual = CreateParser(shell).Parse(entry.Input);
         AstAssert.Equal(entry.Expected!, actual, $"{shell}/{fileName}");
+        AssertClauseElementInvariants(actual, $"{shell}/{fileName}");
+    }
+
+    private static void AssertClauseElementInvariants(ParsedCommand parsed, string context)
+    {
+        foreach (var clause in parsed.Clauses)
+        {
+            var precedingVerbs = 0;
+            var redirectCount = 0;
+            var previousSourceStart = -1;
+
+            foreach (var element in clause.Elements)
+            {
+                Assert.Equal(precedingVerbs, element.PrecedingVerbElementCount);
+
+                if (element.Role == ClauseElementRole.Verb)
+                {
+                    Assert.True(
+                        precedingVerbs < clause.Verb.Tokens.Count,
+                        $"{context}: verb element has no matching Verb.Tokens entry.");
+                    Assert.Equal(clause.Verb.Tokens[precedingVerbs], element.Value);
+                    precedingVerbs++;
+                }
+                else if (element.Role == ClauseElementRole.Redirect)
+                {
+                    redirectCount++;
+                }
+
+                Assert.Equal(element.SourceStart.HasValue, element.SourceLength.HasValue);
+                if (element.SourceStart.HasValue)
+                {
+                    var sourceStart = element.SourceStart.Value;
+                    var sourceLength = element.SourceLength!.Value;
+                    Assert.True(sourceStart >= previousSourceStart, $"{context}: element order regressed.");
+                    Assert.InRange(sourceStart, 0, parsed.Source.Length);
+                    Assert.InRange(sourceLength, 0, parsed.Source.Length - sourceStart);
+                    Assert.Equal(element.Raw, parsed.Source.Substring(sourceStart, sourceLength));
+                    previousSourceStart = sourceStart;
+                }
+                else
+                {
+                    Assert.True(
+                        clause.IsCommandStringWrapped,
+                        $"{context}: only wrapped clauses may omit outer source spans.");
+                }
+            }
+
+            Assert.Equal(clause.Verb.Tokens.Count, precedingVerbs);
+            Assert.Equal(clause.Redirects.Count, redirectCount);
+        }
     }
 
     /// <summary>
@@ -158,6 +208,12 @@ public sealed record ExpectedClause
 
     public List<ExpectedRedirect>? Redirects { get; init; }
 
+    /// <summary>
+    /// Optional issue #62 provenance expectation. Existing corpus entries may
+    /// omit it; entries that exercise ordered elements compare the full list.
+    /// </summary>
+    public List<ExpectedClauseElement>? Elements { get; init; }
+
     public bool IsSubshell { get; init; }
 
     public bool IsCommandStringWrapped { get; init; }
@@ -214,4 +270,27 @@ public sealed record ExpectedRedirect
     public string Target { get; init; } = "";
 
     public bool? IsDynamicSkip { get; init; }
+}
+
+public sealed record ExpectedClauseElement
+{
+    public string Raw { get; init; } = "";
+
+    public string Value { get; init; } = "";
+
+    public ClauseElementRole Role { get; init; }
+
+    public int? SourceStart { get; init; }
+
+    public int? SourceLength { get; init; }
+
+    public int PrecedingVerbElementCount { get; init; }
+
+    public ArgKind Kind { get; init; }
+
+    public bool IsFlag { get; init; }
+
+    public bool IsPath { get; init; }
+
+    public string? Resolved { get; init; }
 }

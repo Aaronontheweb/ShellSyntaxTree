@@ -284,12 +284,11 @@ public class BashPerVerbRulesTests
     }
 
     [Fact]
-    public void Flag_lookup_is_case_insensitive()
+    public void Native_flag_lookup_is_case_sensitive_while_verb_lookup_is_not()
     {
-        // The per-verb-flag table is case-insensitive; consumers may
-        // typo casing.
-        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("GIT", "-c"));
-        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("Git", "--Git-Dir"));
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("GIT", "-C"));
+        Assert.False(BashPerVerbRules.ValueOfFlagIsPath("GIT", "-c"));
+        Assert.False(BashPerVerbRules.ValueOfFlagIsPath("Git", "--Git-Dir"));
     }
 
     // ---------------------------------------------------------------- empty verb chain

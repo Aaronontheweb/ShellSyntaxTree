@@ -44,7 +44,7 @@ flowchart TD
         D["PwshParser"]
         C --> E["Parse syntax, classify tokens, and resolve static context"]
         D --> E
-        E --> F["ParsedCommand: ordered clauses, verbs, args, redirects, cwd, and uncertainty"]
+        E --> F["ParsedCommand: ordered clauses and elements, semantic projections, cwd, and uncertainty"]
     end
 
     subgraph APP["Consumer-owned policy"]
@@ -354,19 +354,65 @@ Input:
 ```text
 git -C /repo commit
 git commit -C HEAD~1
+git -C /repo commit -C HEAD~1
+git --no-pager commit -C HEAD~1
 ```
 
 These commands demonstrate why source provenance matters. Git assigns different
 meaning to `-C` based on whether it appears before or after `commit`.
 [Issue #62](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/62)
-tracks an ordered clause-element API so a Git-aware consumer can apply that
-rule without re-tokenizing `ParsedCommand.Source`. Until that API ships, the
-current `Verb` and `Args` projections do not preserve their interleaving.
+introduced `Clause.Elements` so a Git-aware consumer can apply that rule
+without re-tokenizing `ParsedCommand.Source`. The consumer must interpret the
+complete authored stream using Git's grammar; `Role` and
+`PrecedingVerbElementCount` mirror ShellSyntaxTree's greedy projection and are
+not Git-semantic boundaries:
 
-When ordered elements are added, this guide should be updated in the same
-change with a complete command-aware-policy example. The existing projections
-should remain documented as compatibility conveniences, while the ordered view
-becomes the source-provenance path for consumers that need positional meaning.
+```csharp
+var authored = clause.Elements
+    .Where(element => element.Role != ClauseElementRole.Redirect)
+    .ToArray();
+
+// Application-owned code: walk every authored element, apply Git's global
+// option arity, locate the semantic subcommand, and bind every option operand.
+if (!GitCommandGrammar.TryInterpret(authored, out var command))
+{
+    return ApprovalDecision.FailClosed;
+}
+
+foreach (var occurrence in command.Options.Where(option => option.Name is "-c" or "-C"))
+{
+    if (occurrence.Operand is null
+        || occurrence.Operand.Kind == ArgKind.DynamicSkip)
+    {
+        return ApprovalDecision.FailClosed;
+    }
+
+    if (occurrence.Scope == GitOptionScope.Global)
+        EvaluateGitGlobalOption(occurrence.Name, occurrence.Operand);
+    else if (command.Subcommand == "commit")
+        EvaluateGitCommitOption(occurrence.Name, occurrence.Operand);
+}
+```
+
+For `git -C /repo commit`, the `-C` and `/repo` elements report one preceding
+verb element. For `git commit -C HEAD~1`, they report two. ShellSyntaxTree still
+applies its generic Git flag/path tables, so a command-aware consumer may
+reinterpret the latter value as a revision rather than a path. The new API
+provides the missing positional evidence; it deliberately does not encode Git
+semantics. `git --no-pager commit -C HEAD~1` demonstrates why the consumer
+cannot use the count alone: `--no-pager` stops the generic greedy walk, so
+`commit` is an argument element even though Git treats it as the subcommand.
+
+The grammar helper above is also responsible for attached forms and for
+binding a spaced flag to the following operand. It enumerates every occurrence,
+so a global `-C /repo` cannot hide a later command-scoped `-C HEAD~1`.
+
+`Raw` preserves exact spelling, `Value` carries the lexer-decoded value, and
+`SourceStart` / `SourceLength` distinguish repeated occurrences. Existing
+`Verb`, `Args`, and `Redirects` remain compatibility conveniences. Synthetic
+cwd attribution remains only in `Args`; elements expanded from a command-string
+wrapper have null source spans when they cannot be mapped exactly into the
+outer source.
 
 ## Netclaw case study
 

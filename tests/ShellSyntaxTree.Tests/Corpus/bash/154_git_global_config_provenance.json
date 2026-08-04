@@ -1,0 +1,65 @@
+{
+  "name": "Issue 62: Git global config provenance",
+  "input": "git -c user.name=Jane commit",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "commit"],
+        "args": [
+          { "raw": "-c", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "user.name=Jane", "kind": "Literal", "isPath": false, "isFlag": false }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "git",
+            "value": "git",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-c",
+            "value": "-c",
+            "role": "Argument",
+            "sourceStart": 4,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "user.name=Jane",
+            "value": "user.name=Jane",
+            "role": "Argument",
+            "sourceStart": 7,
+            "sourceLength": 14,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "commit",
+            "value": "commit",
+            "role": "Verb",
+            "sourceStart": 22,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Issue #62: lowercase -c consumes a non-path configuration value before commit."
+}

@@ -1,0 +1,79 @@
+{
+  "name": "Issue 62: Git subcommand option provenance",
+  "input": "git commit -C HEAD~1",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "commit"],
+        "args": [
+          {
+            "raw": "-C",
+            "kind": "Literal",
+            "isPath": false,
+            "isFlag": true
+          },
+          {
+            "raw": "HEAD~1",
+            "kind": "Literal",
+            "isPath": true,
+            "isFlag": false,
+            "resolved": "/work/HEAD~1"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "git",
+            "value": "git",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "commit",
+            "value": "commit",
+            "role": "Verb",
+            "sourceStart": 4,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-C",
+            "value": "-C",
+            "role": "Argument",
+            "sourceStart": 11,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "HEAD~1",
+            "value": "HEAD~1",
+            "role": "Argument",
+            "sourceStart": 14,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/HEAD~1"
+          }
+        ],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #62: -C and HEAD~1 occur after the git commit verb boundary."
+}

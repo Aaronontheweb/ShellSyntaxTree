@@ -124,7 +124,9 @@ internal static class BashPerVerbRules
     private static readonly IReadOnlyDictionary<(string Verb, string Flag), bool>
         FlagValueIsPath = new Dictionary<(string Verb, string Flag), bool>(FlagKeyComparer.Instance)
         {
-            // git: -C / --git-dir / --work-tree all consume directory paths.
+            // Git native options are case-sensitive: -c consumes a config
+            // key/value while -C consumes a directory path.
+            [("git", "-c")] = false,
             [("git", "-C")] = true,
             [("git", "--git-dir")] = true,
             [("git", "--work-tree")] = true,
@@ -171,9 +173,9 @@ internal static class BashPerVerbRules
     // ---------------------------------------------------------------- key comparer
 
     /// <summary>
-    /// Case-insensitive equality for the (verb, flag) tuple keys. Avoids
-    /// allocating a wrapper record while still matching the per-verb table
-    /// case-insensitivity contract.
+    /// Verb keys retain the existing case-insensitive lookup; native flag
+    /// spelling is ordinal because executables may assign different meanings
+    /// to options that differ only by case.
     /// </summary>
     private sealed class FlagKeyComparer : IEqualityComparer<(string Verb, string Flag)>
     {
@@ -181,11 +183,11 @@ internal static class BashPerVerbRules
 
         public bool Equals((string Verb, string Flag) x, (string Verb, string Flag) y) =>
             string.Equals(x.Verb, y.Verb, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(x.Flag, y.Flag, StringComparison.OrdinalIgnoreCase);
+            && string.Equals(x.Flag, y.Flag, StringComparison.Ordinal);
 
         public int GetHashCode((string Verb, string Flag) obj)
         {
-            // Hash combination via ordinal-ignore-case on each component.
+            // Hash combination follows the mixed verb/flag comparison.
             // Avoid HashCode.Combine for netstandard2.0 parity.
             unchecked
             {
@@ -194,7 +196,7 @@ internal static class BashPerVerbRules
                     : StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Verb);
                 var h2 = obj.Flag is null
                     ? 0
-                    : StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Flag);
+                    : StringComparer.Ordinal.GetHashCode(obj.Flag);
                 return (h1 * 397) ^ h2;
             }
         }

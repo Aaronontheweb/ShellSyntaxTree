@@ -22,7 +22,8 @@ internal sealed record ManifestEntry(
     string RawInput,
     string Notes,
     bool OutOfScope,
-    ManifestTransform Transform)
+    ManifestTransform Transform,
+    bool IncludeElements = false)
 {
     /// <summary>Human-readable corpus entry name, derived from the slug.</summary>
     public string Name =>
@@ -52,6 +53,9 @@ internal static class CorpusManifest
 {
     private static ManifestEntry E(string slug, string input, string notes) =>
         new(slug, input, notes, false, ManifestTransform.None);
+
+    private static ManifestEntry P(string slug, string input, string notes) =>
+        new(slug, input, notes, false, ManifestTransform.None, IncludeElements: true);
 
     private static ManifestEntry Oos(string slug, string input, string notes) =>
         new(slug, input, notes, true, ManifestTransform.None);
@@ -580,5 +584,19 @@ internal static class CorpusManifest
             "A quoted module-qualified inner cmdlet safe-fails under the call operator."),
         Oos("iex_quoted_module_location", "Set-Location C:\\safe; iex \"& 'Microsoft.PowerShell.Management\\Set-Location' C:\\evil\"; Remove-Item child.txt",
             "A quoted module-qualified location mutation cannot preserve stale cwd."),
+
+        // ---- Issue #62: authored option placement and heuristic boundaries ----
+        P("git_global_option_provenance", "git -C C:\\repo commit",
+            "Issue #62: global -C and its path occur before the commit element."),
+        P("git_subcommand_option_provenance", "git commit -C HEAD~1",
+            "Issue #62: command-scoped -C occurs after the parser-classified commit verb."),
+        P("git_global_config_provenance", "git -c user.name=Jane commit",
+            "Issue #62: lowercase -c consumes a non-path configuration value."),
+        P("git_subcommand_config_provenance", "git commit -c HEAD~1",
+            "Issue #62: lowercase command-scoped -c preserves its post-commit position."),
+        P("git_mixed_option_provenance", "git -C C:\\repo commit -C HEAD~1",
+            "Issue #62: both global and command-scoped -C occurrences remain distinct."),
+        P("git_heuristic_boundary_provenance", "git --no-pager commit -C HEAD~1",
+            "Issue #62: authored order survives when a valueless option stops the greedy verb walk."),
     };
 }

@@ -75,9 +75,11 @@ syntax (§5) are all PowerShell 7 semantics. The `pwsh` validation oracle
 
 ## 2. Public API Surface
 
-The shared interface, AST records, and enums are defined in **`SPEC.md` §2**
-and are unchanged. PowerShell adds the following to namespace
-`ShellSyntaxTree`; everything else is internal.
+The shared interface, AST records, and enums are defined in **`SPEC.md` §2**.
+The additive `Clause.Elements`, `ClauseElement`, and `ClauseElementRole`
+provenance surface applies identically to both parsers. PowerShell adds the
+following parser types to namespace `ShellSyntaxTree`; everything else is
+internal.
 
 ```csharp
 namespace ShellSyntaxTree;
@@ -117,14 +119,17 @@ public sealed class PwshParser : IShellParser
 }
 ```
 
-Two shared types gain a change (see §3):
+The shared v0.2 AST gains the following changes (see §3):
 
 - `VerbChain` gains an additive `string? CanonicalVerb` field.
 - `VerbChain` gains an additive `bool IsDynamic` field.
+- `Clause` gains the additive `Elements` provenance view shared with Bash;
+  `ClauseElement` and `ClauseElementRole` define its entries.
 - `Clause.IsBashCWrapped` is renamed `Clause.IsCommandStringWrapped`.
 
 **Versioning.** `PwshParser`, `PwshParserOptions`, `ShellParserOptions`,
-`VerbChain.CanonicalVerb`, and `VerbChain.IsDynamic` are additive. The
+`VerbChain.CanonicalVerb`, `VerbChain.IsDynamic`, `Clause.Elements`,
+`ClauseElement`, and `ClauseElementRole` are additive. The
 `Clause` field rename and the `BashParserOptions` reparenting are
 **breaking**; `SPEC.md` Appendix A permits a breaking AST change on a `0.x`
 minor bump when `RELEASE_NOTES.md` carries the old→new mapping and Netclaw is
@@ -136,9 +141,38 @@ never throws on a well-formed string, exactly like `BashParser`.
 
 ## 3. AST Reference
 
-The AST records and enums are defined in **`SPEC.md` §3** and are emitted
-unchanged by `PwshParser` — a consumer walks a PowerShell `ParsedCommand`
-exactly as it walks a bash one. Two deltas:
+The AST records and enums are defined in **`SPEC.md` §3** and are emitted by
+`PwshParser` under the same shared contract — a consumer walks a PowerShell
+`ParsedCommand` exactly as it walks a bash one. PowerShell has the following
+deltas and provenance rules:
+
+### `Clause.Elements` PowerShell rules
+
+PowerShell parameters, native options, quoted/here-string values, and opaque
+dynamic regions each occupy their authored position in `Clause.Elements`.
+The leading call operator in `& command` and grouping parentheses are shell
+syntax rather than verb/argument/redirect leaves and do not appear.
+
+Inline parameter forms remain one source element. For `-Path:C:\repo`, the
+element's `Raw` and `Value` describe the full parameter token while `Kind`,
+`IsPath`, and `Resolved` describe the bound `C:\repo` value. Native
+`--flag=value` follows the same rule as Bash.
+
+Clauses recursively surfaced from `pwsh -Command` and
+`pwsh -EncodedCommand` retain inner `Raw` and `Value` but have null
+`SourceStart` and `SourceLength`: quote/backtick processing, script-block
+stripping, and base64 decoding do not provide a generally exact map into the
+outer `ParsedCommand.Source`.
+
+`ClauseElement.Role` and `PrecedingVerbElementCount` mirror the shared greedy
+native verb projection. They are AST coordinates, not native-executable
+semantic boundaries. A PowerShell consumer applies executable-specific grammar
+to the complete authored element order exactly as a Bash consumer does.
+
+PowerShell cmdlet names, aliases, and parameter names remain
+case-insensitive. Native option spelling is ordinal and reuses the shared Bash
+native tables unchanged: PowerShell does not make a native executable's `-c`
+and `-C` options equivalent.
 
 ### `VerbChain.CanonicalVerb` (new, additive)
 

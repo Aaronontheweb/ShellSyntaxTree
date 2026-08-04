@@ -59,7 +59,8 @@ int Generate(string outputDir)
     {
         var input = entry.ResolveInput();
         var parsed = parser.Parse(input);
-        var json = CorpusJson.BuildEntry(entry.Name, input, parsed, entry.Notes, entry.OutOfScope);
+        var json = CorpusJson.BuildEntry(
+            entry.Name, input, parsed, entry.Notes, entry.OutOfScope, entry.IncludeElements);
         var fileName = $"{index:D3}_{entry.Slug}.json";
         File.WriteAllText(Path.Combine(outputDir, fileName), json);
         index++;
@@ -79,7 +80,8 @@ int Check(string command)
 
     var parsed = parser.Parse(command);
     Console.WriteLine("---- parser expected AST ----");
-    Console.WriteLine(CorpusJson.BuildEntry("check", command, parsed, "ad-hoc check", parsed.IsUnparseable));
+    Console.WriteLine(CorpusJson.BuildEntry(
+        "check", command, parsed, "ad-hoc check", parsed.IsUnparseable, includeElements: true));
 
     Console.WriteLine("---- real pwsh oracle ----");
     var counts = PwshOracle.CountParseErrors(new[] { command });

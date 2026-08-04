@@ -1,0 +1,79 @@
+{
+  "name": "Issue 62: Git heuristic boundary provenance",
+  "input": "git --no-pager commit -C HEAD~1",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git"],
+        "args": [
+          { "raw": "--no-pager", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "commit", "kind": "Literal", "isPath": false, "isFlag": false },
+          { "raw": "-C", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "HEAD~1", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/work/HEAD~1" }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "git",
+            "value": "git",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "--no-pager",
+            "value": "--no-pager",
+            "role": "Argument",
+            "sourceStart": 4,
+            "sourceLength": 10,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "commit",
+            "value": "commit",
+            "role": "Argument",
+            "sourceStart": 15,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-C",
+            "value": "-C",
+            "role": "Argument",
+            "sourceStart": 22,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "HEAD~1",
+            "value": "HEAD~1",
+            "role": "Argument",
+            "sourceStart": 25,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/HEAD~1"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Issue #62: authored order survives when a valueless option stops the greedy verb walk."
+}

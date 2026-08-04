@@ -19,6 +19,9 @@ The output is a `ParsedCommand` containing:
   when known, and explicit `DynamicSkip` marking for unresolved env vars
   / unexpanded globs
 - redirect operators (`>`, `>>`, `<`, `2>`, `2>>`)
+- source-ordered clause elements with exact spelling, decoded values, source
+  spans when available, and coordinates relative to parser-classified verb
+  elements; executable-specific semantics remain consumer-owned
 - Bash `cd <dir> && cmd` and PowerShell `Set-Location <dir>; cmd`
   propagation — the target is attributed to subsequent clauses
 - recursion into `bash -c`, `pwsh -Command`, and `pwsh -EncodedCommand` so
@@ -83,8 +86,9 @@ zero-native-deps .NET parser sized to what security gates actually need.
   and `.ps1` file-content parsing.
 - Performance optimization beyond "fast enough to invoke per shell call
   without noticeable latency" (~1 ms typical).
-- Full IDE-style source mapping. Security-motivated token provenance is under
-  active design in issue #62.
+- Full IDE-style source mapping. `Clause.Elements` provides security-motivated
+  provenance for significant clause leaves, not a lossless concrete syntax
+  tree.
 
 ### Versioning
 

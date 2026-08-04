@@ -1,0 +1,43 @@
+## 1. Contract
+
+- [x] 1.1 Add `ClauseElement`, `ClauseElementRole`, and `Clause.Elements` to
+      `SPEC.md` and the public API snapshot.
+- [x] 1.2 Add the PowerShell-specific inline-binding and wrapper-span rules to
+      `SPEC.POWERSHELL.md`.
+
+## 2. Parser
+
+- [x] 2.1 Emit ordered elements from the Bash classified token walk.
+- [x] 2.2 Emit equivalent elements from the PowerShell classified token walk.
+- [x] 2.3 Clear source spans when inner command-string clauses are lifted into
+      an outer `ParsedCommand`.
+- [x] 2.4 Keep synthetic cwd-attribution arguments out of `Elements`.
+
+## 3. Verification
+
+- [x] 3.1 Add public API and default-value assertions.
+- [x] 3.2 Cover Git global/subcommand placement, quoted values, repeated text,
+      pipeline reset, redirects, inline bindings, wrappers, and cwd attribution
+      in Bash tests.
+- [x] 3.3 Add equivalent PowerShell native-command and wrapper coverage.
+- [x] 3.4 Verify existing `Verb`, `Args`, and `Redirects` regression coverage
+      remains green.
+- [x] 3.5 Add paired Bash and PowerShell corpus entries for lowercase `-c`,
+      uppercase `-C`, mixed occurrences, and an intervening valueless option.
+- [x] 3.6 Pin native-option case sensitivity and the heuristic-role boundary.
+
+## 4. Consumer documentation
+
+- [x] 4.1 Replace the issue #62 limitation in `docs/CONSUMER_GUIDE.md` with a
+      complete command-aware-policy example.
+- [x] 4.2 Update `PROJECT_CONTEXT.md` and `IMPLEMENTATION_PLAN.md`; explicitly
+      schedule migration guidance with the next prerelease rather than making
+      this implementation change release-shaped.
+- [x] 4.3 Rewrite the Git consumer example to enumerate every occurrence,
+      bind operands, and derive Git semantics from all authored elements.
+
+## 5. Completion
+
+- [x] 5.1 Validate the OpenSpec change.
+- [x] 5.2 Run restore, Release build, full tests/corpus, header verification,
+      and a public API vs. SPEC diff.

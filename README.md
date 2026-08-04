@@ -16,7 +16,9 @@ dotnet add package ShellSyntaxTree --version 0.2.0-beta.1
 ```
 
 The `0.2.0-beta.1` prerelease is required for PowerShell support. The latest
-stable `0.1.x` package supports Bash only.
+stable `0.1.x` package supports Bash only. The public surface documented below
+tracks the `dev` branch; `Clause.Elements` is scheduled for the next `0.2.0`
+prerelease and is not present in `beta.1`.
 
 ## What you get
 
@@ -120,12 +122,14 @@ public sealed record BashParserOptions : ShellParserOptions;
 public sealed record PwshParserOptions : ShellParserOptions;
 
 public sealed record ParsedCommand { /* Source, Clauses, IsUnparseable, … */ }
-public sealed record Clause        { /* Operator, Verb, Args, Redirects, IsSubshell, IsCommandStringWrapped */ }
+public sealed record Clause        { /* Operator, Verb, Args, Redirects, Elements, IsSubshell, IsCommandStringWrapped */ }
+public sealed record ClauseElement { /* Raw, Value, Role, source span, verb-relative position, path facts */ }
 public sealed record VerbChain     { /* Tokens, Joined, CanonicalVerb, IsDynamic */ }
 public sealed record Arg           { /* Raw, Resolved, Kind, IsPath, IsCwdAttribution, IsFlag */ }
 public sealed record Redirect      { /* Direction, Target, IsDynamicSkip */ }
 
 public enum ArgKind            { Literal, EnvVar, Glob, Tilde, DynamicSkip }
+public enum ClauseElementRole  { Verb, Argument, Redirect }
 public enum RedirectDirection  { In, Out, Append, ErrOut, ErrAppend }
 public enum CompoundOperator   { None, AndIf, OrIf, Sequence, Pipe }
 ```

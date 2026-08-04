@@ -135,9 +135,11 @@ public abstract record ShellParserOptions
 // AST records — see §3.
 public sealed record ParsedCommand { ... }
 public sealed record Clause { ... }
+public sealed record ClauseElement { ... }
 public sealed record VerbChain { ... }
 public sealed record Arg { ... }
 public sealed record Redirect { ... }
+public enum ClauseElementRole { Verb, Argument, Redirect }
 public enum ArgKind { Literal, EnvVar, Glob, Tilde, DynamicSkip }
 public enum RedirectDirection { In, Out, Append, ErrOut, ErrAppend }
 public enum CompoundOperator { None, AndIf, OrIf, Sequence, Pipe }
@@ -212,6 +214,13 @@ public sealed record Clause
     public IReadOnlyList<Redirect> Redirects { get; init; } = [];
 
     /// <summary>
+    /// Significant source-authored verbs, arguments, and redirects in source
+    /// order. This is the provenance view; Verb, Args, and Redirects remain
+    /// compatibility projections. Synthetic cwd attribution is excluded.
+    /// </summary>
+    public IReadOnlyList<ClauseElement> Elements { get; init; } = [];
+
+    /// <summary>
     /// True when this clause is wrapped in a subshell (parens). Subshells
     /// isolate cd state — see §9.
     /// </summary>
@@ -230,6 +239,90 @@ public sealed record Clause
     public bool IsCommandStringWrapped { get; init; }
 }
 ```
+
+### `ClauseElement`
+
+One significant source-authored element of a clause. `Elements` preserves the
+cross-projection order that `Verb`, `Args`, and `Redirects` cannot represent on
+their own.
+
+```csharp
+public sealed record ClauseElement
+{
+    /// <summary>Exact authored source slice, including quote delimiters.</summary>
+    public string Raw { get; init; } = "";
+
+    /// <summary>
+    /// Lexer-decoded logical value. For a redirect this is the decoded target;
+    /// for an inline binding it remains the complete decoded source token.
+    /// </summary>
+    public string Value { get; init; } = "";
+
+    public ClauseElementRole Role { get; init; }
+
+    /// <summary>
+    /// Span in ParsedCommand.Source. Null for elements surfaced through a
+    /// decoded command-string wrapper when no exact outer mapping exists.
+    /// </summary>
+    public int? SourceStart { get; init; }
+    public int? SourceLength { get; init; }
+
+    /// <summary>
+    /// Number of parser-classified verb elements authored before this element
+    /// in the clause. For a verb element, this is its zero-based Verb.Tokens
+    /// index. This is an AST coordinate, not an executable-specific semantic
+    /// boundary.
+    /// </summary>
+    public int PrecedingVerbElementCount { get; init; }
+
+    /// <summary>
+    /// Argument classification for this token, inline bound value, or redirect
+    /// target. Verb elements use Literal, except dynamic command names use
+    /// DynamicSkip.
+    /// </summary>
+    public ArgKind Kind { get; init; }
+    public bool IsFlag { get; init; }
+    public bool IsPath { get; init; }
+    public string? Resolved { get; init; }
+}
+
+public enum ClauseElementRole
+{
+    Verb,
+    Argument,
+    Redirect
+}
+```
+
+The collection contains significant leaves only: whitespace, comments,
+compound operators, grouping delimiters, and shell call operators are excluded.
+Each verb token appears exactly once with `Role=Verb`. Each authored argument
+token appears once with `Role=Argument`; inline forms such as
+`--work-tree=../repo` stay one element even when `Args` exposes separate flag
+and value projections. Each redirect appears once with `Role=Redirect`; its
+ordinal among redirect elements matches its ordinal in `Redirects`, and `Raw`
+spans the operator through its target.
+
+`PrecedingVerbElementCount` is clause-local and resets to zero at every clause.
+For `git -C /repo commit`, `-C` and `/repo` carry `1`; for
+`git commit -C HEAD~1`, `-C` and `HEAD~1` carry `2`. ShellSyntaxTree reports
+that parser-relative coordinate but does not assign Git-specific meaning to
+it. `Role=Verb` mirrors the greedy `Clause.Verb` heuristic. Therefore an
+unrecognized option can stop verb extraction and cause a later semantic
+subcommand to appear with `Role=Argument`; consumers SHALL use the complete
+authored element order rather than treating this count as an executable's
+semantic command boundary.
+
+Synthetic cwd-attribution args are deliberately absent from `Elements`: they
+remain available through `Args` with `IsCwdAttribution=true`. Clauses expanded
+from command-string wrappers preserve each element's inner `Raw` and `Value`,
+but set `SourceStart` and `SourceLength` to null rather than guessing how a
+decoded or escaped inner character maps into the outer `ParsedCommand.Source`.
+
+Because `Clause` is a record, `Elements` participates in its generated value
+equality and hashing. Generated `ToString()` and default JSON serialization
+also include the projection. The API addition is source- and binary-additive,
+but these generated behaviors are observably different.
 
 ### `VerbChain`
 
@@ -645,10 +738,10 @@ syntactic rule disambiguates `origin` (a branch name) from `worktree`
 not bake per-CLI knowledge into the parser.
 
 Consumers needing security-grade verb identification should pattern-prefix
-match against the raw token stream:
+match against the source-ordered `Clause.Elements` view:
 
 > A command matches an approval pattern `P` if and only if the first
-> `len(P.verb_prefix)` tokens of the command equal `P.verb_prefix`.
+> `len(P.verb_prefix)` verb elements of the command equal `P.verb_prefix`.
 
 This punts depth choice to the consumer (via the pattern they author)
 and accommodates the parser's over-extraction transparently:
@@ -774,11 +867,11 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
     FlagsWithValue = new Dictionary<string, HashSet<string>>(
         StringComparer.OrdinalIgnoreCase)
 {
-    ["git"]   = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-C", "--git-dir", "--work-tree" },
-    ["curl"]  = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-o", "--output", "-d", "--data" },
-    ["wget"]  = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-O", "--output-document" },
-    ["docker"]= new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-v", "--volume", "-f", "--file" },
-    ["tar"]   = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-f", "--file", "-C", "--directory" },
+    ["git"]   = new HashSet<string>(StringComparer.Ordinal) { "-c", "-C", "--git-dir", "--work-tree" },
+    ["curl"]  = new HashSet<string>(StringComparer.Ordinal) { "-o", "--output", "-d", "--data" },
+    ["wget"]  = new HashSet<string>(StringComparer.Ordinal) { "-O", "--output-document" },
+    ["docker"]= new HashSet<string>(StringComparer.Ordinal) { "-v", "--volume", "-f", "--file" },
+    ["tar"]   = new HashSet<string>(StringComparer.Ordinal) { "-f", "--file", "-C", "--directory" },
     // Add as corpus surfaces real cases.
 };
 ```
@@ -786,6 +879,15 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
 > **Note:** the value type is `HashSet<string>` (not `IReadOnlySet<string>`)
 > because `IReadOnlySet<string>` is .NET 5+ only and the library
 > multi-targets `netstandard2.0`. Internal-only — no public-API impact.
+
+> **Native option case.** The outer verb dictionary retains its existing
+> case-insensitive lookup, but each native option set uses `Ordinal`. Native
+> executables receive option spelling unchanged in Bash and PowerShell and may
+> assign different meanings by case. Git lists both `-c` and `-C`: both consume
+> a value. The generic table classifies uppercase `-C` values as paths and
+> lowercase `-c` values as non-paths. Executable-aware consumers still
+> reinterpret command-scoped forms such as `git commit -c/-C`, where Git uses
+> the operand as a revision rather than the generic table's global meaning.
 
 > **Note:** the verb-chain walk consumes flag-with-value pairs
 > transparently. For `git -C /repo log`, the walk consumes `-C /repo`
@@ -1174,6 +1276,16 @@ Clauses = [
     Args = [
       Arg { Raw = "-C", IsFlag = true },
       Arg { Raw = "/repo", IsPath = true, Resolved = "/repo" }
+    ],
+    Elements = [
+      ClauseElement { Value = "git", Role = Verb,
+                      PrecedingVerbElementCount = 0 },
+      ClauseElement { Value = "-C", Role = Argument,
+                      PrecedingVerbElementCount = 1 },
+      ClauseElement { Value = "/repo", Role = Argument,
+                      PrecedingVerbElementCount = 1 },
+      ClauseElement { Value = "log", Role = Verb,
+                      PrecedingVerbElementCount = 1 }
     ]
   }
 ]
@@ -1274,13 +1386,19 @@ Each file:
         ],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   },
   "notes": "Optional explanation of edge case being captured."
 }
 ```
+
+An entry may add an `elements` list to a clause to pin the complete
+`Clause.Elements` projection (`raw`, `value`, `role`, `sourceStart`,
+`sourceLength`, `precedingVerbElementCount`, `kind`, `isFlag`, `isPath`, and
+`resolved`). The field is opt-in so older corpus entries remain readable;
+issue-specific provenance entries SHALL include it.
 
 ### Coverage targets for v0.1
 
