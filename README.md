@@ -12,8 +12,11 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 `netstandard2.0` and `net8.0`.
 
 ```bash
-dotnet add package ShellSyntaxTree --version 0.2.0-alpha
+dotnet add package ShellSyntaxTree --version 0.2.0-beta.1
 ```
+
+The `0.2.0-beta.1` prerelease is required for PowerShell support. The latest
+stable `0.1.x` package supports Bash only.
 
 ## What you get
 
@@ -95,6 +98,14 @@ AndIf rm
       path: /etc/passwd
 ```
 
+## Consumer guide
+
+The [consumer guide](./docs/CONSUMER_GUIDE.md) develops the quick start into
+a production-oriented algorithm: parser selection, safe-fail handling, command
+identity, paths and cwd attribution, redirects, compounds and pipelines, and
+PowerShell-specific alias and dynamic-command behavior. It also links to
+immutable examples from Netclaw's live approval-gate integration.
+
 ## Public API surface
 
 ```csharp
@@ -146,7 +157,7 @@ policy ("deny writes in `/etc`, `/usr`, `/bin`, `/sbin`, `/lib`",
 "warn on `curl | bash`", "warn on dynamic args in path slots") and
 exits 0 / 1 / 2 by severity. See
 [`samples/ShellSyntaxTree.Cli.Sample/Commands/AuditPolicy.cs`](./samples/ShellSyntaxTree.Cli.Sample/Commands/AuditPolicy.cs)
-for the policy code — ~50 lines.
+for the illustrative policy code.
 
 ### `ShellSyntaxTree.Web.Sample` — Blazor WebAssembly Mermaid visualizer
 
@@ -163,11 +174,11 @@ dotnet run --project samples/ShellSyntaxTree.Web.Sample
 
 ![Build script preset](./assets/sample-web-build-script.png)
 
-A shell selector switches between the bash and PowerShell parsers; each
-ships preset scripts demonstrating compound commands, subshell isolation,
-command-string recursion, alias resolution, dynamic-cwd attribution, and
-unparseable inputs. Each preset shows what the library produces in a
-single click.
+A shell selector switches between the bash and PowerShell parsers. The presets
+demonstrate compound commands, Bash subshell isolation, PowerShell grouping and
+alias resolution, command-string recursion, dynamic-cwd attribution, and
+unparseable inputs. Each preset shows what the library produces in a single
+click.
 
 ## Building from source
 
@@ -210,6 +221,7 @@ workflow asserts this and fails fast on misformatted tags.
 | `tests/ShellSyntaxTree.Tests/Corpus/<shell>/*.json` | Corpus entries — the acceptance contract (bash + powershell) |
 | `samples/ShellSyntaxTree.Cli.Sample/` | Console explainer + audit policy |
 | `samples/ShellSyntaxTree.Web.Sample/` | Blazor WASM Mermaid visualizer |
+| `docs/CONSUMER_GUIDE.md` | Production-oriented consumer algorithm + Netclaw case study |
 | `tools/PwshCorpusTool/` | PowerShell corpus authoring aid |
 | `SPEC.md`, `SPEC.POWERSHELL.md` | The behavioral contract |
 | `openspec/` | Change-proposal history (rationale for design decisions) |
