@@ -63,6 +63,49 @@ public class PwshLexerTests
         Assert.Equal(PwshTokenKind.QuotedString, t.Kind);
         Assert.Equal("path $env:TEMP", t.Value);
         Assert.False(t.IsSingleQuoted);
+        Assert.True(t.HasInterpolation);
+    }
+
+    [Theory]
+    [InlineData("\"Get-$noun\"")]
+    [InlineData("\"Get-$(Get-Variable noun)\"")]
+    [InlineData("\"Get-$é\"")]
+    public void Expandable_string_records_interpolation(string input)
+    {
+        var t = Assert.Single(Significant(input));
+        Assert.True(t.HasInterpolation);
+    }
+
+    [Theory]
+    [InlineData("\"Get-Date\"")]
+    [InlineData("\"Write-Host `$name\"")]
+    [InlineData("\"Write-Output $.\"")]
+    public void Static_expandable_string_has_no_interpolation(string input)
+    {
+        var t = Assert.Single(Significant(input));
+        Assert.False(t.HasInterpolation);
+    }
+
+    [Fact]
+    public void Expandable_here_string_records_interpolation()
+    {
+        var t = Assert.Single(Significant("@\"\nGet-$noun\n\"@"));
+        Assert.True(t.IsHereString);
+        Assert.True(t.HasInterpolation);
+    }
+
+    [Fact]
+    public void Expandable_here_string_records_unicode_interpolation()
+    {
+        var t = Assert.Single(Significant("@\"\nGet-$é\n\"@"));
+        Assert.True(t.HasInterpolation);
+    }
+
+    [Fact]
+    public void Expandable_here_string_ignores_literal_dollar_punctuation()
+    {
+        var t = Assert.Single(Significant("@\"\nWrite-Output $.\n\"@"));
+        Assert.False(t.HasInterpolation);
     }
 
     [Fact]

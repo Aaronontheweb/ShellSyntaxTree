@@ -1,0 +1,24 @@
+{
+  "name": "Iex module qualified dynamic",
+  "input": "Microsoft.PowerShell.Utility\\Invoke-Expression $code",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Microsoft.PowerShell.Utility\\Invoke-Expression"
+        ],
+        "args": [
+          {
+            "raw": "$code",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A module-qualified cmdlet name still receives expression security handling."
+}

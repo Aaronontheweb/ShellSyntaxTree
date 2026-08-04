@@ -1,0 +1,25 @@
+{
+  "name": "Dynamic interpolated iex name",
+  "input": "\u0026 \u0022i$part\u0022 $code",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "i$part"
+        ],
+        "isDynamic": true,
+        "args": [
+          {
+            "raw": "$code",
+            "kind": "EnvVar",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "An interpolated call-operator command name is dynamic and cannot bypass iex handling."
+}

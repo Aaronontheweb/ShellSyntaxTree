@@ -1,0 +1,24 @@
+{
+  "name": "Iex comma array dynamic",
+  "input": "Invoke-Expression Write-Output,OTHER",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Invoke-Expression"
+        ],
+        "args": [
+          {
+            "raw": "Write-Output,OTHER",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "An unquoted comma array is computed rather than one static scalar string."
+}

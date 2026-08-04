@@ -46,9 +46,10 @@ syntax (§5) are all PowerShell 7 semantics. The `pwsh` validation oracle
    `-LiteralPath`, `-Destination`, positional rules).
 4. Honor `Set-Location <dir>; cmd` propagation — subsequent clauses see
    `<dir>` as cwd, mirroring bash `cd` (`SPEC.md` §9).
-5. Recurse into `pwsh -Command "<inner>"`, `pwsh -c`, and
-   `pwsh -EncodedCommand <base64>` so inner command clauses surface to the
-   consumer.
+5. Recurse into `pwsh -Command "<inner>"`, `pwsh -c`,
+   `pwsh -EncodedCommand <base64>`, and provably static
+   `Invoke-Expression` / `iex` payloads so inner command clauses surface to
+   the consumer.
 6. Mark dynamic-content tokens (`$var`, subexpressions, script blocks,
    splatting) with explicit `DynamicSkip` / `IsPath=false`.
 7. Implement `PwshParser : IShellParser` alongside `BashParser` — the
@@ -179,7 +180,8 @@ public bool IsDynamic { get; init; }
 
 `IsDynamic` exists because PowerShell's call operator (`&`) makes invoking a
 dynamically-named command a first-class, common idiom. A clause whose verb is
-`$exe` is otherwise indistinguishable from one whose verb is a literal — and
+`$exe` or an interpolated name such as `"tool-$name"` is otherwise
+indistinguishable from one whose verb is a literal — and
 "we do not know what is being executed" is the most security-relevant state
 the AST can carry, so it gets a field rather than being silently flattened
 into `Tokens`. The clause's args and redirects still parse normally so a
@@ -191,7 +193,7 @@ The v0.1 field `IsBashCWrapped` is renamed `IsCommandStringWrapped`. The
 meaning is unchanged and now shell-neutral: *true when this clause is the
 result of recursing into a command-string wrapper* — bash `bash -c "..."` /
 `sh -c "..."`, or PowerShell `pwsh -Command "..."` / `pwsh -c "..."` /
-`pwsh -EncodedCommand ...` (§10).
+`pwsh -EncodedCommand ...` / static `Invoke-Expression '...'` (§10).
 
 ---
 
@@ -803,7 +805,7 @@ pipeline elements within a statement, not separate statements.
 
 ---
 
-## 10. Subexpression & `pwsh -Command` Recursion
+## 10. Subexpression & Command-String Recursion
 
 ### Opaque regions
 
@@ -878,11 +880,39 @@ failure.
 
 ### `Invoke-Expression`
 
-`Invoke-Expression` / `iex` is **not** recursed into — evaluating its string
-argument requires PowerShell expression semantics, which is out of scope. It
-parses as an ordinary clause; its argument is a normal `Arg` (`DynamicSkip`
-when it is `$var` or `$( ... )`). A consumer that wants to gate dynamic code
-execution can hard-deny the verb `Invoke-Expression` / `iex` itself.
+`Invoke-Expression` and its canonical `iex` alias recurse only when binding
+produces exactly one scalar string token whose value is statically knowable.
+Static call-operator spellings such as `& 'iex' ...` and module-qualified
+`Microsoft.PowerShell.Utility\Invoke-Expression` receive the same handling.
+Accepted payloads are a single-quoted string, a literal here-string, a bare
+non-dynamic word, or a double-quoted string / expandable here-string whose
+lexer token records no unescaped variable or subexpression interpolation.
+An optional exact `-Command` parameter may bind that one token.
+
+For a static payload, the parser consumes the outer expression clause and
+surfaces the inner clauses inline with `IsCommandStringWrapped = true`. The
+first inner clause takes the operator that preceded the outer expression.
+The parse increments the same depth counter used by `pwsh -Command` and
+`-EncodedCommand`, and the payload passes through the same 64 KiB input cap.
+
+`Invoke-Expression` executes in the caller's scope rather than a fresh child
+process. Its inner parse therefore shares the current `Set-Location` context:
+relative paths inherit the caller's effective location, and a static inner
+`Set-Location` updates attribution for clauses following the expression in
+the outer command. Child `pwsh` recursion remains isolated.
+
+The parser never evaluates variables, interpolation, concatenation,
+subexpressions, script blocks, arrays, or other computed expressions. When a
+direct computed payload has a source expression, the outer expression clause
+remains and the entire payload source slice becomes one
+`Arg { Kind=DynamicSkip, IsPath=false, Resolved=null }`. Pipeline input,
+missing payloads, and ambiguous parameter binding set
+`ParsedCommand.IsUnparseable = true`; an incoming pipeline is dynamic even
+when an explicit literal argument also appears. These rules prevent a clean,
+persistently approvable `Invoke-Expression` clause from hiding runtime code.
+Because computed code can call `Set-Location` in the current scope, a direct
+dynamic payload also makes location attribution dynamic for every following
+relative path.
 
 ---
 
@@ -913,10 +943,13 @@ defined in **`SPEC.md` §11** and is unchanged.
 7. **Assignment statement** — a statement that begins `$var = ...`.
 8. **Bare type-literal / .NET method call** — a statement that is just
    `[type]::Member(...)`, which has no verb.
-9. **`pwsh` recursion failure** — `pwsh -Command` / `-EncodedCommand`
-   recursion depth exceeds 5, an `-EncodedCommand` payload fails to decode,
-   or an inner parse itself yields `IsUnparseable` (§10).
-10. **Oversized input** — the command string, or a decoded `-EncodedCommand`
+9. **PowerShell command-string recursion failure** — the shared
+   `Invoke-Expression` / `pwsh -Command` / `-EncodedCommand` recursion depth
+   exceeds 5, an `-EncodedCommand` payload fails to decode, an expression
+   payload comes from a pipeline or cannot be bound safely, or an inner parse
+   itself yields `IsUnparseable` (§10).
+10. **Oversized input** — the command string, a static `Invoke-Expression`
+     payload, or a decoded `-EncodedCommand`
     payload, exceeds the parser's input cap. The cap guards the
     per-shell-call hot path against a pathological or malicious input (a
     multi-megabyte base64 blob would otherwise decode and recurse up to five
@@ -933,8 +966,8 @@ defined in **`SPEC.md` §11** and is unchanged.
 `UnparseableSentinel` tokens; (3) a control-flow / definition / block keyword
 at statement position; (4) a trailing `&` background job; (5) an assignment
 or bare type-literal statement; (6) grouping `( )` balance errors or an
-unexpected operator; (7) the `pwsh` recursion cap, an inner-parse
-`IsUnparseable`, or an `-EncodedCommand` decode failure.
+unexpected operator; (7) a command-string binding failure or recursion cap,
+an inner-parse `IsUnparseable`, or an `-EncodedCommand` decode failure.
 
 Consumers route an unparseable command to safe-fail exactly as for bash
 (`SPEC.md` §11, Appendix A).
@@ -1058,9 +1091,9 @@ The shared corpus DTO gains two optional fields:
   parser deliberately does not model — real `pwsh` must accept it). Defaults
   to `SyntaxError`. `OutOfScope` also covers an input that is valid
   PowerShell but that the parser declines for a non-grammar reason — an
-  `-EncodedCommand` decode failure, an over-cap input (§11), or a
-  recursion-depth overflow — because real `pwsh` parses the *outer*
-  invocation without error.
+  `-EncodedCommand` decode failure, dynamic pipeline-fed
+  `Invoke-Expression`, an over-cap input (§11), or a recursion-depth overflow
+  — because real `pwsh` parses the *outer* invocation without error.
 
 ### Coverage targets for v0.2.0
 
@@ -1075,7 +1108,7 @@ The shared corpus DTO gains two optional fields:
 | Quote handling (single, double, here-string, backtick escape) | 10 |
 | Parameter binding — named, positional, switch vs. value-binding (§6.5), colon-form, splat | 25 |
 | Redirect (including streams 1–6 / `*` and `2>&1`) | 10 |
-| `pwsh -Command` / `-EncodedCommand` recursion — incl. bare/script-block `-Command` forms and adversarial `-EncodedCommand` payloads (bad base64, BOM, decodes-to-control-flow, nested) | 15 |
+| Command-string recursion — `pwsh -Command`, `-EncodedCommand`, and static/dynamic `Invoke-Expression` payloads, including nesting and location scope | 25 |
 | Dynamic skip (`$var`, `$( )`, glob, script block, dynamic verb `& $exe`) | 10 |
 | Per-verb / per-parameter path rules | 10 |
 | Unparseable (control flow, definitions, `param()`, blocks, assignment, type-literal, trailing `&`, recursion overflow, over-cap input) | 20 |
@@ -1180,7 +1213,8 @@ testable step; most are a single PR.
 6. **`PwshResolver`** — §8.
 7. **Per-verb / per-parameter path rules** — §7.
 8. **`Set-Location`-in-compound propagation** — §9.
-9. **`pwsh -Command` / `-EncodedCommand` recursion** — §10.
+9. **PowerShell command-string recursion** — `pwsh -Command`,
+   `-EncodedCommand`, and `Invoke-Expression` (§10).
 10. **Anomaly safe-fail** — §11.
 11. **Multi-shell refactor** of the corpus runner and PII audit — §13 — so
     both enumerate every `Corpus/<shell>/` directory. This MUST precede

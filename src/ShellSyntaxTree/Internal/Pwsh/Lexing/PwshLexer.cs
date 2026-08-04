@@ -349,6 +349,7 @@ internal static class PwshLexer
         // interpolation, but the parser does NOT expand — $var stays literal
         // in the value (SPEC §5).
         var sb = new StringBuilder();
+        var hasInterpolation = false;
         var i = start + 1;
         while (i < src.Length)
         {
@@ -365,7 +366,8 @@ internal static class PwshLexer
 
                 tokens.Add(new PwshToken(
                     PwshTokenKind.QuotedString, sb.ToString(), null,
-                    start, (i - start) + 1, null));
+                    start, (i - start) + 1, null)
+                    { HasInterpolation = hasInterpolation });
                 return i + 1;
             }
 
@@ -386,6 +388,11 @@ internal static class PwshLexer
                 });
                 i += 2;
                 continue;
+            }
+
+            if (c == '$' && StartsInterpolation(src, i))
+            {
+                hasInterpolation = true;
             }
 
             sb.Append(c);
@@ -508,11 +515,17 @@ internal static class PwshLexer
                 var body = bodyEnd >= bodyStart
                     ? src.Slice(bodyStart, bodyEnd - bodyStart).ToString()
                     : string.Empty;
+                var hasInterpolation = quote == '"'
+                    && ContainsInterpolation(src.Slice(bodyStart, bodyEnd - bodyStart));
                 var end = k + 2; // past quote + '@'
                 tokens.Add(new PwshToken(
                     PwshTokenKind.QuotedString, body, null,
                     start, end - start, null)
-                    { IsHereString = true, IsSingleQuoted = quote == '\'' });
+                    {
+                        IsHereString = true,
+                        IsSingleQuoted = quote == '\'',
+                        HasInterpolation = hasInterpolation,
+                    });
                 return end;
             }
 
@@ -524,6 +537,37 @@ internal static class PwshLexer
             src.Slice(start).ToString(), null, start, src.Length - start,
             $"unterminated here-string at position {start}"));
         return src.Length;
+    }
+
+    private static bool ContainsInterpolation(ReadOnlySpan<char> value)
+    {
+        for (var i = 0; i < value.Length; i++)
+        {
+            if (value[i] == '`' && i + 1 < value.Length)
+            {
+                i++;
+                continue;
+            }
+
+            if (value[i] == '$' && StartsInterpolation(value, i))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool StartsInterpolation(ReadOnlySpan<char> value, int dollarIndex)
+    {
+        if (dollarIndex + 1 >= value.Length)
+        {
+            return false;
+        }
+
+        var next = value[dollarIndex + 1];
+        return next is '(' or '{' or '?' or '^' or '$' or '_'
+            || char.IsLetterOrDigit(next);
     }
 
     // ---------------------------------------------------------------- regions
@@ -700,6 +744,7 @@ internal static class PwshLexer
         ReadOnlySpan<char> src, int start, List<PwshToken> tokens)
     {
         var sb = new StringBuilder();
+        var hasInterpolation = false;
         var i = start;
         while (i < src.Length)
         {
@@ -740,6 +785,7 @@ internal static class PwshLexer
             // ${name} is absorbed verbatim into the word.
             if (c == '$' && i + 1 < src.Length && src[i + 1] == '{')
             {
+                hasInterpolation = true;
                 var scan = OpaqueRegionScanner.Scan(
                     src, i + 1, '{', '}', OpaqueRegionScanner.PwshEscape);
                 if (!scan.Closed)
@@ -761,6 +807,11 @@ internal static class PwshLexer
                 continue;
             }
 
+            if (c == '$' && StartsInterpolation(src, i))
+            {
+                hasInterpolation = true;
+            }
+
             sb.Append(c);
             i++;
         }
@@ -772,7 +823,8 @@ internal static class PwshLexer
         }
 
         tokens.Add(new PwshToken(
-            PwshTokenKind.Word, sb.ToString(), null, start, i - start, null));
+            PwshTokenKind.Word, sb.ToString(), null, start, i - start, null)
+            { HasInterpolation = hasInterpolation });
         return i;
     }
 

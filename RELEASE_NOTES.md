@@ -1,3 +1,15 @@
+#### Unreleased ####
+
+## Added
+
+- **Surfaced static `Invoke-Expression` payloads for security gates (#63)**
+  `PwshParser` now recurses into provably static `Invoke-Expression` / `iex`
+  strings, preserves current-scope `Set-Location` attribution, and applies the
+  existing command-string size and depth limits. Variables, interpolation,
+  concatenation, subexpressions, and pipeline input now route through
+  `DynamicSkip` or `IsUnparseable` instead of producing a clean persistent
+  approval shape.
+
 #### 0.2.0-beta.1 2026-07-22 ####
 
 ## Fixed

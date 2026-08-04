@@ -220,7 +220,8 @@ public sealed record Clause
     /// <summary>
     /// True when this clause is the result of recursing into a
     /// command-string wrapper — `bash -c "..."` / `sh -c "..."`, or (v0.2.0)
-    /// PowerShell `pwsh -Command "..."` / `pwsh -EncodedCommand ...`. Useful
+    /// PowerShell `pwsh -Command "..."` / `pwsh -EncodedCommand ...` /
+    /// static `Invoke-Expression '...'`. Useful
     /// for consumers that want to surface "this came from a wrapped
     /// invocation" in UI.
     /// </summary>
@@ -256,7 +257,8 @@ public sealed record VerbChain
 
     /// <summary>
     /// True when the clause's command name is a dynamic token the parser
-    /// cannot statically identify — `& $exe`, `& { ... }` (added v0.2.0).
+    /// cannot statically identify — `& $exe`, `& "tool-$name"`,
+    /// `& { ... }` (added v0.2.0).
     /// Always false for bash clauses. See SPEC.POWERSHELL.md §3.
     /// </summary>
     public bool IsDynamic { get; init; }

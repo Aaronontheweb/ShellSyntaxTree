@@ -1,0 +1,10 @@
+{
+  "name": "Iex pipeline dynamic",
+  "input": "Get-Content script.ps1 | Invoke-Expression",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "Invoke-Expression pipeline input is dynamic and cannot be parsed safely"
+  },
+  "notes": "Pipeline-fed expression code is valid PowerShell but safe-fails as unparseable.",
+  "oracleExpectation": "OutOfScope"
+}

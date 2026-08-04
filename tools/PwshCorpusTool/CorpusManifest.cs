@@ -65,6 +65,16 @@ internal static class CorpusManifest
     private static string B64(string s) =>
         Convert.ToBase64String(Encoding.Unicode.GetBytes(s));
 
+    private static string NestIex(string inner, int depth)
+    {
+        for (var i = 0; i < depth; i++)
+        {
+            inner = "iex '" + inner.Replace("'", "''") + "'";
+        }
+
+        return inner;
+    }
+
     internal static IReadOnlyList<ManifestEntry> All() => new List<ManifestEntry>
     {
         // ---- Simple cmdlet (§13: ≥10) ----
@@ -344,8 +354,8 @@ internal static class CorpusManifest
             "A malformed base64 -EncodedCommand payload — the outer pwsh invocation still parses."),
         E("recursion_file_not_recursed", "pwsh -File C:\\scripts\\deploy.ps1",
             "pwsh -File is not recursion; the script path is an ordinary path arg."),
-        E("recursion_iex_not_recursed", "iex \"Remove-Item C:\\x\"",
-            "Invoke-Expression / iex is never recursed into (§10)."),
+        E("recursion_iex_static", "iex \"Remove-Item C:\\x\"",
+            "A static iex payload surfaces its inner Remove-Item clause (§10)."),
         Oos("recursion_depth_overflow",
             "pwsh -Command { pwsh -Command { pwsh -Command { pwsh -Command { pwsh -Command { pwsh -Command { Get-Date } } } } } }",
             "Six nested -Command levels exceed the depth-5 cap."),
@@ -482,5 +492,37 @@ internal static class CorpusManifest
         // ---- Issue #64: path-shaped operands after native verb chains ----
         E("native_kubectl_apply_yaml", "kubectl apply deployment.yaml",
             "A real non-Git CLI exposes a lowercase YAML file without a command-specific rule."),
+
+        // ---- Issue #63: Invoke-Expression command-string recursion ----
+        E("iex_full_name_static", "Invoke-Expression 'Get-Date'",
+            "The full cmdlet name recurses into one static literal payload."),
+        E("iex_command_parameter_static", "Invoke-Expression -Command 'Get-Process'",
+            "The exact -Command parameter binds one static payload."),
+        E("iex_variable_dynamic", "Invoke-Expression $code",
+            "A variable payload remains an Invoke-Expression clause with one DynamicSkip arg."),
+        E("iex_interpolated_dynamic", "iex \"Remove-$noun C:\\x\"",
+            "An interpolated payload remains opaque and dynamic."),
+        E("iex_concatenated_dynamic", "iex ('Get-' + 'Date')",
+            "Literal concatenation is not evaluated and collapses to one DynamicSkip arg."),
+        Oos("iex_pipeline_dynamic", "Get-Content script.ps1 | Invoke-Expression",
+            "Pipeline-fed expression code is valid PowerShell but safe-fails as unparseable."),
+        E("iex_inherits_location", "Set-Location C:\\a; iex 'Remove-Item child.txt'",
+            "A static payload inherits the caller's effective location."),
+        E("iex_exports_location", "iex 'Set-Location C:\\b'; Remove-Item child.txt",
+            "A location change inside iex affects following outer clauses."),
+        Oos("iex_recursion_depth_overflow", NestIex("Get-Date", 6),
+            "Six nested static expression strings exceed the shared depth-five cap."),
+        E("iex_quoted_alias_dynamic", "& 'iex' $code",
+            "A quoted alias invoked through the call operator still safe-fails its payload."),
+        E("iex_module_qualified_dynamic", "Microsoft.PowerShell.Utility\\Invoke-Expression $code",
+            "A module-qualified cmdlet name still receives expression security handling."),
+        E("iex_unicode_interpolation_dynamic", "iex \"Remove-$é C:\\x\"",
+            "Unicode variable interpolation cannot hide a clean inner verb."),
+        E("iex_comma_array_dynamic", "Invoke-Expression Write-Output,OTHER",
+            "An unquoted comma array is computed rather than one static scalar string."),
+        E("iex_dynamic_location", "Set-Location C:\\safe; iex $code; Remove-Item child.txt",
+            "Dynamic current-scope code invalidates location attribution for following paths."),
+        E("dynamic_interpolated_iex_name", "& \"i$part\" $code",
+            "An interpolated call-operator command name is dynamic and cannot bypass iex handling."),
     };
 }

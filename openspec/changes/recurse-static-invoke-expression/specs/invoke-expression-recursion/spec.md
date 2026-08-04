@@ -126,6 +126,11 @@ context.
 - **WHEN** PowerShell parses `pwsh -Command 'Set-Location C:\b'; Remove-Item child.txt` with a different outer working directory
 - **THEN** the outer `Remove-Item` does not inherit `C:\b`
 
+#### Scenario: Dynamic expression invalidates following location
+- **WHEN** PowerShell parses `Set-Location C:\safe; iex $code; Remove-Item child.txt`
+- **THEN** the following `child.txt` path is `DynamicSkip`
+- **THEN** the following clause carries dynamic cwd attribution
+
 ### Requirement: PowerShell command-string constructs share security limits
 
 `Invoke-Expression`, `pwsh -Command`, and `pwsh -EncodedCommand` SHALL share the existing depth-five PowerShell command-string recursion counter.

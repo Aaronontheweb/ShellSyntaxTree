@@ -53,6 +53,13 @@ internal readonly record struct PwshToken(
     public bool IsHereString { get; init; }
 
     /// <summary>
+    /// True when a word or expandable quoted string contains an unescaped
+    /// PowerShell interpolation marker. Literal strings always leave this
+    /// false.
+    /// </summary>
+    public bool HasInterpolation { get; init; }
+
+    /// <summary>
     /// True when this <see cref="PwshTokenKind.Whitespace"/> token contains
     /// a newline and therefore acts as a statement separator equivalent to
     /// <c>;</c> (SPEC.POWERSHELL.md §4). The parser retains these past the

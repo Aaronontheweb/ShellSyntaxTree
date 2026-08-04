@@ -71,6 +71,10 @@ one `Arg { Kind = DynamicSkip, IsPath = false, Resolved = null }`. Returning
 the current collection of literal-looking expression fragments was rejected
 because a consumer could mistake it for a stable approval shape.
 
+Computed code can call `Set-Location` in the current scope. The parser will
+therefore mark the shared location context dynamic after a computed payload,
+preventing later relative paths from resolving against stale attribution.
+
 Pipeline-only, missing, or ambiguously bound payloads will mark the outer
 `ParsedCommand` unparseable. A synthetic `<pipeline-input>` argument was
 rejected because `Arg.Raw` promises a verbatim source token.

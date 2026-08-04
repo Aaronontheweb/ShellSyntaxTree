@@ -1,0 +1,19 @@
+{
+  "name": "Iex full name static",
+  "input": "Invoke-Expression \u0027Get-Date\u0027",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "The full cmdlet name recurses into one static literal payload."
+}

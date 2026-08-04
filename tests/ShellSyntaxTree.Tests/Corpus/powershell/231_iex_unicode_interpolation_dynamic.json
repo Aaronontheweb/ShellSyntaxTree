@@ -1,0 +1,25 @@
+{
+  "name": "Iex unicode interpolation dynamic",
+  "input": "iex \u0022Remove-$\u00E9 C:\\x\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "iex"
+        ],
+        "canonicalVerb": "Invoke-Expression",
+        "args": [
+          {
+            "raw": "\u0022Remove-$\u00E9 C:\\x\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Unicode variable interpolation cannot hide a clean inner verb."
+}

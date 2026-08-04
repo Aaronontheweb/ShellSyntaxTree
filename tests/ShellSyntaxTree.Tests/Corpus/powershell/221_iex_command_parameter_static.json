@@ -1,0 +1,19 @@
+{
+  "name": "Iex command parameter static",
+  "input": "Invoke-Expression -Command \u0027Get-Process\u0027",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Process"
+        ],
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "The exact -Command parameter binds one static payload."
+}

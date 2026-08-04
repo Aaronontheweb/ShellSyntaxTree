@@ -1,0 +1,25 @@
+{
+  "name": "Iex concatenated dynamic",
+  "input": "iex (\u0027Get-\u0027 \u002B \u0027Date\u0027)",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "iex"
+        ],
+        "canonicalVerb": "Invoke-Expression",
+        "args": [
+          {
+            "raw": "(\u0027Get-\u0027 \u002B \u0027Date\u0027)",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Literal concatenation is not evaluated and collapses to one DynamicSkip arg."
+}
