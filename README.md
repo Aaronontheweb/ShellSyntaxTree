@@ -12,13 +12,12 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 `netstandard2.0` and `net8.0`.
 
 ```bash
-dotnet add package ShellSyntaxTree --version 0.2.0-beta.1
+dotnet add package ShellSyntaxTree --version 0.2.0
 ```
 
-The `0.2.0-beta.1` prerelease is required for PowerShell support. The latest
-stable `0.1.x` package supports Bash only. The public surface documented below
-tracks the `dev` branch; `Clause.Elements` is scheduled for the next `0.2.0`
-prerelease and is not present in `beta.1`.
+The `0.2.0` release adds PowerShell support. The latest stable
+`0.2.x` package supports bash and PowerShell together. The public surface
+documented below tracks the `dev` branch.
 
 ## What you get
 

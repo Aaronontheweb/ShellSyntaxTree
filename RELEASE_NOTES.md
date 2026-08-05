@@ -2,47 +2,25 @@
 
 #### 0.2.0 2026-08-05 ####
 
-## Added
+This stable release includes all behavior and API surface from the
+`0.2.0-alpha` and `0.2.0-beta.1` prereleases, plus the final `0.2.0`
+hardening and release-readiness work.
 
-- **Added source-ordered clause-element provenance (`Clause.Elements`) for richer approvals (#62, #68)**
-  Clause-level elements now preserve source order and metadata such as spans,
-  decoded values, path facts, redirects, and verb-relative placement for both
-  Bash and PowerShell. This adds additive, shell-neutral data for downstream
-  security consumers and preserves compatibility with prior AST shapes.
-  See [#62](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/62) and
-  [#68](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/68).
-
-## Fixed
-
-- **Preserved static `Invoke-Expression` payload parsing in PowerShell (#63, #67)**
-  Static `Invoke-Expression` / `iex` command strings now follow the same
-  safe-recursion path as `pwsh -Command`: known-safe payloads recurse with the
-  existing depth/size limits, while dynamic content stays conservative via
-  `DynamicSkip` / `IsUnparseable` and remains safe-fail for approvals.
-  See [#63](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/63) and
-  [#67](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/67).
-
-- **Preserved path-shaped command operands after native chains (#65)**
-  Path-shaped operands now remain intact through native option parsing, so
-  command strings that mix native options and path-like inputs keep their
-  intended argument shape instead of being split or dropped by parser heuristics.
-  See [#65](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/65).
-
-#### 0.2.0-beta.1 2026-07-22 ####
+#### 0.2.0-beta.1 2026-07-22
 
 ## Fixed
 
 - **Preserved hyphenated PowerShell native options for safer parsing (#60)**
   PowerShell native options now keep their full hyphenated form when present in
-  command text. Parameter forms like `-Native-Flag` and `-Native-Flag=value` now
-  stay correctly grouped instead of being split in ways that could confuse
-  downstream approvals. The parser also avoids over-reading ambiguous colon-value
-  combinations by marking those cases as `DynamicSkip` when the shape is unclear.
+  command text. Parameter forms like `-Native-Flag` and `-Native-Flag=value`
+  now stay correctly grouped instead of being split in ways that could confuse
+  downstream approvals. The parser also avoids over-reading ambiguous
+  colon-value combinations by marking those cases as `DynamicSkip` when the
+  shape is unclear.
   See [#60](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/60) for
   details.
 
-
-#### 0.2.0-alpha May 19th 2026 ####
+#### 0.2.0-alpha May 19th 2026
 
 First **PowerShell** parser. ShellSyntaxTree now ships two `IShellParser`
 implementations — `BashParser` (unchanged) and the new `PwshParser` — both
@@ -123,6 +101,32 @@ or reflected over its declared members is affected.
   matrix; a `PwshAliases`-vs-live-`Get-Alias` completeness `[Fact]`
   confirms the alias table has no gaps.
 - `tools/PwshCorpusTool` — the corpus authoring aid (see `TOOLING.md`).
+
+## Added
+
+- **Added source-ordered clause-element provenance (`Clause.Elements`) for richer approvals (#62, #68)**
+  Clause-level elements now preserve source order and metadata such as spans,
+  decoded values, path facts, redirects, and verb-relative placement for both
+  Bash and PowerShell. This adds additive, shell-neutral data for downstream
+  security consumers and preserves compatibility with prior AST shapes.
+  See [#62](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/62) and
+  [#68](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/68).
+
+- **Preserved path-shaped command operands after native chains (#65)**
+  Path-shaped operands now remain intact through native option parsing, so
+  command strings that mix native options and path-like inputs keep their
+  intended argument shape instead of being split or dropped by parser heuristics.
+  See [#65](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/65).
+
+## Fixed
+
+- **Preserved static `Invoke-Expression` payload parsing in PowerShell (#63, #67)**
+  Static `Invoke-Expression` / `iex` command strings now follow the same
+  safe-recursion path as `pwsh -Command`: known-safe payloads recurse with the
+  existing depth/size limits, while dynamic content stays conservative via
+  `DynamicSkip` / `IsUnparseable` and remains safe-fail for approvals.
+  See [#63](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/63) and
+  [#67](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/67).
 
 ---
 

@@ -14,8 +14,8 @@ priorities.
 
 > **Spec:** `SPEC.POWERSHELL.md` (v0.2.0). The PowerShell parser is
 > implemented — phases 1–14 of `SPEC.POWERSHELL.md` §16 are complete (see
-> below). What remains is the release flow and the downstream Netclaw
-> integration, both of which need actions outside this repository.
+> below). What remains is the downstream Netclaw integration, which needs
+> actions outside this repository.
 
 ### Implemented (SPEC.POWERSHELL.md §16 phases 1–14) — done
 
