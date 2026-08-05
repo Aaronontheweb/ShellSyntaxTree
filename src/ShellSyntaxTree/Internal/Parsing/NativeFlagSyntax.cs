@@ -48,22 +48,6 @@ internal static class NativeFlagSyntax
     }
 
     /// <summary>
-    /// Recognize the first fragment of an equals-form option whose value is
-    /// supplied by an immediately adjacent quoted or opaque token.
-    /// </summary>
-    internal static bool TryGetTrailingEqualsFlag(string raw, out string flagPart)
-    {
-        if (raw.Length < 3 || raw[0] != '-' || raw[raw.Length - 1] != '=')
-        {
-            flagPart = "";
-            return false;
-        }
-
-        flagPart = raw.Substring(0, raw.Length - 1);
-        return true;
-    }
-
-    /// <summary>
     /// Split an equals-form option while allowing an empty value prefix. This
     /// is used when later adjacent shell fragments complete the same argv
     /// entry.
