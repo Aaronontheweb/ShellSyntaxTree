@@ -91,31 +91,34 @@ internal static class BashVerbs
     /// Value type is <see cref="HashSet{T}"/> rather than
     /// <c>IReadOnlySet&lt;string&gt;</c> for netstandard2.0 parity —
     /// <c>IReadOnlySet&lt;T&gt;</c> ships in net5+ only. Internally the
-    /// shape is identical (case-insensitive set lookup).
+    /// shape is identical. Native option spelling is case-sensitive even
+    /// when the host shell is PowerShell; the outer command lookup remains
+    /// case-insensitive for the existing verb-table contract.
     /// </remarks>
     internal static readonly IReadOnlyDictionary<string, HashSet<string>>
         FlagsWithValue = new Dictionary<string, HashSet<string>>(
             StringComparer.OrdinalIgnoreCase)
         {
-            ["git"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            ["git"] = new HashSet<string>(StringComparer.Ordinal)
             {
-                "-C", "--git-dir", "--work-tree",
+                "-c", "-C", "--git-dir", "--work-tree",
             },
-            ["curl"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            ["curl"] = new HashSet<string>(StringComparer.Ordinal)
             {
-                "-o", "--output", "-d", "--data",
+                "-o", "--output", "-d", "--data", "-D", "--dump-header",
             },
-            ["wget"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            ["wget"] = new HashSet<string>(StringComparer.Ordinal)
             {
-                "-O", "--output-document",
+                "-o", "--output-file", "-O", "--output-document",
             },
-            ["docker"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            ["docker"] = new HashSet<string>(StringComparer.Ordinal)
             {
                 "-v", "--volume", "-f", "--file",
             },
-            ["tar"] = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            ["tar"] = new HashSet<string>(StringComparer.Ordinal)
             {
-                "-f", "--file", "-C", "--directory",
+                "-f", "--file", "-C", "--directory", "-F",
+                "--info-script", "--new-volume-script",
             },
         };
 

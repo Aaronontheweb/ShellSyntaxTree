@@ -1,0 +1,94 @@
+{
+  "name": "Wget case-distinct output options",
+  "input": "wget -o wget.log -O download.bin https://example.invalid/file",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["wget"],
+        "args": [
+          { "raw": "-o", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "wget.log", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/work/wget.log" },
+          { "raw": "-O", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "download.bin", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/work/download.bin" },
+          { "raw": "https://example.invalid/file", "kind": "Literal", "isPath": false, "isFlag": false }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "wget",
+            "value": "wget",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-o",
+            "value": "-o",
+            "role": "Argument",
+            "sourceStart": 5,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "wget.log",
+            "value": "wget.log",
+            "role": "Argument",
+            "sourceStart": 8,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/wget.log"
+          },
+          {
+            "raw": "-O",
+            "value": "-O",
+            "role": "Argument",
+            "sourceStart": 17,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "download.bin",
+            "value": "download.bin",
+            "role": "Argument",
+            "sourceStart": 20,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/download.bin"
+          },
+          {
+            "raw": "https://example.invalid/file",
+            "value": "https://example.invalid/file",
+            "role": "Argument",
+            "sourceStart": 33,
+            "sourceLength": 28,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      }
+    ]
+  },
+  "notes": "Wget -o writes a log file while -O writes the downloaded document; both operands are paths."
+}

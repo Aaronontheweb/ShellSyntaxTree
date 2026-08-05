@@ -22,7 +22,8 @@ internal sealed record ManifestEntry(
     string RawInput,
     string Notes,
     bool OutOfScope,
-    ManifestTransform Transform)
+    ManifestTransform Transform,
+    bool IncludeElements = false)
 {
     /// <summary>Human-readable corpus entry name, derived from the slug.</summary>
     public string Name =>
@@ -52,6 +53,9 @@ internal static class CorpusManifest
 {
     private static ManifestEntry E(string slug, string input, string notes) =>
         new(slug, input, notes, false, ManifestTransform.None);
+
+    private static ManifestEntry P(string slug, string input, string notes) =>
+        new(slug, input, notes, false, ManifestTransform.None, IncludeElements: true);
 
     private static ManifestEntry Oos(string slug, string input, string notes) =>
         new(slug, input, notes, true, ManifestTransform.None);
@@ -580,5 +584,63 @@ internal static class CorpusManifest
             "A quoted module-qualified inner cmdlet safe-fails under the call operator."),
         Oos("iex_quoted_module_location", "Set-Location C:\\safe; iex \"& 'Microsoft.PowerShell.Management\\Set-Location' C:\\evil\"; Remove-Item child.txt",
             "A quoted module-qualified location mutation cannot preserve stale cwd."),
+
+        // ---- Issue #62: authored option placement and heuristic boundaries ----
+        P("git_global_option_provenance", "git -C C:\\repo commit",
+            "Issue #62: global -C and its path occur before the commit element."),
+        P("git_subcommand_option_provenance", "git commit -C HEAD~1",
+            "Issue #62: command-scoped -C occurs after the parser-classified commit verb."),
+        P("git_global_config_provenance", "git -c user.name=Jane commit",
+            "Issue #62: lowercase -c consumes a non-path configuration value."),
+        P("git_subcommand_config_provenance", "git commit -c HEAD~1",
+            "Issue #62: lowercase command-scoped -c preserves its post-commit position."),
+        P("git_mixed_option_provenance", "git -C C:\\repo commit -C HEAD~1",
+            "Issue #62: both global and command-scoped -C occurrences remain distinct."),
+        P("git_heuristic_boundary_provenance", "git --no-pager commit -C HEAD~1",
+            "Issue #62: authored order survives when a valueless option stops the greedy verb walk."),
+
+        // ---- Issue #62 adversarial follow-up: native option case collisions ----
+        P("wget_case_distinct_output_options",
+            "wget -o wget.log -O download.bin https://example.invalid/file",
+            "Wget -o writes a log file while -O writes the downloaded document; both operands are paths."),
+        P("curl_case_distinct_data_and_header_options",
+            "curl -d payload -D headers.txt https://example.invalid/api",
+            "Curl -d consumes non-path request data while -D consumes a header-output path."),
+
+        // ---- Native option hardening: value- and context-sensitive cases ----
+        P("tar_info_script_commands",
+            "tar -F ./volume-helper.sh --info-script=./info-helper.sh "
+            + "--new-volume-script ./next-volume.sh archive",
+            "Tar helper hooks execute commands and safe-fail; the bare archive operand remains a path argument."),
+        P("curl_data_file_references",
+            "curl -d \"@request.json\" --data=@payload.bin https://example.invalid/api",
+            "Curl data operands prefixed with @ read files; authored values retain the @ marker."),
+        P("curl_data_stdin_reference",
+            "curl -d \"@-\" https://example.invalid/api",
+            "Curl @- reads stdin and is not a filesystem path."),
+        P("curl_data_quoted_inline_reference",
+            "curl --data='@C:\\payload file' https://example.invalid/api",
+            "An adjacent quoted inline value is one native argument and preserves curl's file-read metadata."),
+        P("inline_colon_backtick_path",
+            "Remove-Item -Path:C:\\payload` file.txt",
+            "An inline cmdlet path decodes its backtick escape before resolution."),
+        P("recursion_command_outer_redirect",
+            "pwsh -Command \"git status\" > outer.txt",
+            "A redirect authored on a pwsh wrapper remains visible after command-string recursion."),
+        P("curl_data_multiple_adjacent_fragments",
+            "curl --data='@request'\" file.json\" https://example.invalid/api",
+            "The complete adjacent fragment run becomes one native argument and one path-aware element."),
+        P("recursion_empty_command_outer_redirect",
+            "pwsh -Command \"\" > empty.txt",
+            "An empty wrapped payload still surfaces its outer redirect as a redirect-only clause."),
+        P("curl_data_unquoted_prefix_fragment",
+            "curl --data=@request\".json\" https://example.invalid/api",
+            "An unquoted equals-value prefix joins the complete adjacent native argument."),
+        P("curl_data_mixed_literal_dynamic",
+            "curl --data='@$HOME'\".json\" https://example.invalid/api",
+            "Resolver-sensitive mixed quoting safe-fails instead of expanding literal bytes."),
+        P("curl_data_transformed_literal_dynamic",
+            "curl --data='@~'\"/secret.json\" https://example.invalid/api",
+            "Resolver-sensitive syntax exposed after curl's @ marker is removed still safe-fails."),
     };
 }

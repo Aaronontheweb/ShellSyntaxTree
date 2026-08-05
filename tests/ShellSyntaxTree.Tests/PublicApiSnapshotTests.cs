@@ -255,6 +255,7 @@ public class PublicApiSnapshotTests
         AssertInitProperty(t, "Verb", typeof(VerbChain));
         AssertInitProperty(t, "Args", typeof(IReadOnlyList<Arg>));
         AssertInitProperty(t, "Redirects", typeof(IReadOnlyList<Redirect>));
+        AssertInitProperty(t, "Elements", typeof(IReadOnlyList<ClauseElement>));
         AssertInitProperty(t, "IsSubshell", typeof(bool));
         AssertInitProperty(t, "IsCommandStringWrapped", typeof(bool));
 
@@ -264,8 +265,43 @@ public class PublicApiSnapshotTests
         Assert.Empty(instance.Verb.Tokens);
         Assert.Empty(instance.Args);
         Assert.Empty(instance.Redirects);
+        Assert.Empty(instance.Elements);
         Assert.False(instance.IsSubshell);
         Assert.False(instance.IsCommandStringWrapped);
+    }
+
+    // -------- ClauseElement --------
+
+    [Fact]
+    public void ClauseElement_has_expected_shape()
+    {
+        var t = typeof(ClauseElement);
+        Assert.True(t.IsPublic);
+        Assert.True(t.IsSealed);
+        AssertIsRecord(t);
+
+        AssertInitProperty(t, "Raw", typeof(string));
+        AssertInitProperty(t, "Value", typeof(string));
+        AssertInitProperty(t, "Role", typeof(ClauseElementRole));
+        AssertInitProperty(t, "SourceStart", typeof(int?), nullable: true);
+        AssertInitProperty(t, "SourceLength", typeof(int?), nullable: true);
+        AssertInitProperty(t, "PrecedingVerbElementCount", typeof(int));
+        AssertInitProperty(t, "Kind", typeof(ArgKind));
+        AssertInitProperty(t, "IsFlag", typeof(bool));
+        AssertInitProperty(t, "IsPath", typeof(bool));
+        AssertInitProperty(t, "Resolved", typeof(string), nullable: true);
+
+        var instance = new ClauseElement();
+        Assert.Equal("", instance.Raw);
+        Assert.Equal("", instance.Value);
+        Assert.Equal(ClauseElementRole.Verb, instance.Role);
+        Assert.Null(instance.SourceStart);
+        Assert.Null(instance.SourceLength);
+        Assert.Equal(0, instance.PrecedingVerbElementCount);
+        Assert.Equal(ArgKind.Literal, instance.Kind);
+        Assert.False(instance.IsFlag);
+        Assert.False(instance.IsPath);
+        Assert.Null(instance.Resolved);
     }
 
     // -------- VerbChain --------
@@ -377,6 +413,18 @@ public class PublicApiSnapshotTests
     }
 
     [Fact]
+    public void ClauseElementRole_has_expected_members()
+    {
+        Assert.Equal(
+            new[] { "Verb", "Argument", "Redirect" },
+            Enum.GetNames(typeof(ClauseElementRole)));
+
+        Assert.Equal(0, (int)ClauseElementRole.Verb);
+        Assert.Equal(1, (int)ClauseElementRole.Argument);
+        Assert.Equal(2, (int)ClauseElementRole.Redirect);
+    }
+
+    [Fact]
     public void RedirectDirection_has_expected_members()
     {
         Assert.Equal(
@@ -423,6 +471,8 @@ public class PublicApiSnapshotTests
             nameof(BashParser),
             nameof(BashParserOptions),
             nameof(Clause),
+            nameof(ClauseElement),
+            nameof(ClauseElementRole),
             nameof(CompoundOperator),
             nameof(IShellParser),
             nameof(ParsedCommand),

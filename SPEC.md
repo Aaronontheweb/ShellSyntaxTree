@@ -135,9 +135,11 @@ public abstract record ShellParserOptions
 // AST records — see §3.
 public sealed record ParsedCommand { ... }
 public sealed record Clause { ... }
+public sealed record ClauseElement { ... }
 public sealed record VerbChain { ... }
 public sealed record Arg { ... }
 public sealed record Redirect { ... }
+public enum ClauseElementRole { Verb, Argument, Redirect }
 public enum ArgKind { Literal, EnvVar, Glob, Tilde, DynamicSkip }
 public enum RedirectDirection { In, Out, Append, ErrOut, ErrAppend }
 public enum CompoundOperator { None, AndIf, OrIf, Sequence, Pipe }
@@ -212,6 +214,13 @@ public sealed record Clause
     public IReadOnlyList<Redirect> Redirects { get; init; } = [];
 
     /// <summary>
+    /// Significant source-authored verbs, arguments, and redirects in source
+    /// order. This is the provenance view; Verb, Args, and Redirects remain
+    /// compatibility projections. Synthetic cwd attribution is excluded.
+    /// </summary>
+    public IReadOnlyList<ClauseElement> Elements { get; init; } = [];
+
+    /// <summary>
     /// True when this clause is wrapped in a subshell (parens). Subshells
     /// isolate cd state — see §9.
     /// </summary>
@@ -230,6 +239,100 @@ public sealed record Clause
     public bool IsCommandStringWrapped { get; init; }
 }
 ```
+
+### `ClauseElement`
+
+One significant source-authored element of a clause. `Elements` preserves the
+cross-projection order that `Verb`, `Args`, and `Redirects` cannot represent on
+their own.
+
+```csharp
+public sealed record ClauseElement
+{
+    /// <summary>Exact authored source slice, including quote delimiters.</summary>
+    public string Raw { get; init; } = "";
+
+    /// <summary>
+    /// Lexer-decoded logical value. For a redirect this is the decoded target;
+    /// for an inline binding it remains the complete decoded source token.
+    /// </summary>
+    public string Value { get; init; } = "";
+
+    public ClauseElementRole Role { get; init; }
+
+    /// <summary>
+    /// Span in ParsedCommand.Source. Null for elements surfaced through a
+    /// decoded command-string wrapper when no exact outer mapping exists.
+    /// </summary>
+    public int? SourceStart { get; init; }
+    public int? SourceLength { get; init; }
+
+    /// <summary>
+    /// Number of parser-classified verb elements authored before this element
+    /// in the clause. For a verb element, this is its zero-based Verb.Tokens
+    /// index. This is an AST coordinate, not an executable-specific semantic
+    /// boundary.
+    /// </summary>
+    public int PrecedingVerbElementCount { get; init; }
+
+    /// <summary>
+    /// Argument classification for this token, inline bound value, or redirect
+    /// target. Verb elements use Literal, except dynamic command names use
+    /// DynamicSkip.
+    /// </summary>
+    public ArgKind Kind { get; init; }
+    public bool IsFlag { get; init; }
+    public bool IsPath { get; init; }
+    public string? Resolved { get; init; }
+}
+
+public enum ClauseElementRole
+{
+    Verb,
+    Argument,
+    Redirect
+}
+```
+
+The collection contains significant leaves only: whitespace, comments,
+compound operators, grouping delimiters, and shell call operators are excluded.
+Each verb token appears exactly once with `Role=Verb`. Each authored argument
+token appears once with `Role=Argument`; inline forms such as
+`--work-tree=../repo` stay one element even when `Args` exposes separate flag
+and value projections. Shell-adjacent fragments that form one native argument,
+such as `--data="@request file.json"`, likewise stay one element spanning the
+complete authored argument. The parser consumes the full contiguous fragment
+run, including an unquoted value prefix such as `--data=@request".json"`.
+Mixed quoting that prevents safe reconstruction of resolver-sensitive literal
+syntax (`$`, glob metacharacters, `~`, provider prefixes) safe-fails the bound
+value as `DynamicSkip`, including syntax exposed only after an operand marker
+such as curl's leading `@` is removed. A parser-defined opaque computed region that is
+safe-failed as one `DynamicSkip` argument also appears as one argument element;
+its `Raw` and `Value` are the complete source slice rather than a claim that
+the parser understood the region's interior. Each redirect appears once with
+`Role=Redirect`; its ordinal among redirect elements matches its ordinal in
+`Redirects`, and `Raw` spans the operator through its target.
+
+`PrecedingVerbElementCount` is clause-local and resets to zero at every clause.
+For `git -C /repo commit`, `-C` and `/repo` carry `1`; for
+`git commit -C HEAD~1`, `-C` and `HEAD~1` carry `2`. ShellSyntaxTree reports
+that parser-relative coordinate but does not assign Git-specific meaning to
+it. `Role=Verb` mirrors the greedy `Clause.Verb` heuristic. Therefore an
+unrecognized option can stop verb extraction and cause a later semantic
+subcommand to appear with `Role=Argument`; consumers SHALL use the complete
+authored element order rather than treating this count as an executable's
+semantic command boundary.
+
+Synthetic cwd-attribution args are deliberately absent from `Elements`: they
+remain available through `Args` with `IsCwdAttribution=true`. Clauses expanded
+from command-string wrappers preserve each element's inner `Raw` and `Value`,
+but set `SourceStart` and `SourceLength` to null rather than guessing how a
+decoded or escaped inner character maps into the outer `ParsedCommand.Source`.
+
+Because `Clause` is a record, `Elements` participates in its generated value
+equality and hashing. Generated `ToString()` and default JSON serialization
+also include the projection. The API addition is source- and binary-additive,
+but these generated behaviors are observably different.
 
 ### `VerbChain`
 
@@ -644,25 +747,31 @@ syntactic rule disambiguates `origin` (a branch name) from `worktree`
 (a subcommand verb) without per-CLI semantic knowledge — and we will
 not bake per-CLI knowledge into the parser.
 
-Consumers needing security-grade verb identification should pattern-prefix
-match against the raw token stream:
+Consumers needing security-grade command identification choose one of two
+strategies over the source-ordered `Clause.Elements` view:
 
-> A command matches an approval pattern `P` if and only if the first
-> `len(P.verb_prefix)` tokens of the command equal `P.verb_prefix`.
+1. **Strict authored-stream matching.** Match every modeled significant
+   element in source order. A strict matcher may define explicit operand slots
+   or wildcards, but it SHALL NOT discard an intervening argument merely
+   because the parser assigned it `Role=Argument`. Therefore a strict
+   `git commit` pattern does not match `git -C /repo commit`.
+2. **General executable-aware matching.** Pass the complete authored stream to
+   a grammar owned by the consumer. The grammar consumes known options and
+   operands, identifies the executable's semantic command, and returns both a
+   normalized approval identity and every policy-relevant operand or scope.
+   Equivalent syntax may reuse an approval only after complete interpretation.
 
-This punts depth choice to the consumer (via the pattern they author)
-and accommodates the parser's over-extraction transparently:
+For example, a Git-aware matcher may interpret `git -C /repo commit` as the
+general identity `git commit` with effective directory `/repo`. It may then
+reuse a `git commit` approval only when that approval's directory policy covers
+`/repo`. Likewise, executable-aware matchers may intentionally normalize
+`git push origin main` to `git push` or `kubectl get pods my-pod` to
+`kubectl get pods` when their grammars establish which suffixes are operands.
 
-- Pattern `git push *` (verb-prefix length 2) matches `git push origin
-  main` because the first two command tokens are `[git, push]`.
-- Pattern `kubectl get pods *` (verb-prefix length 3) matches
-  `kubectl get pods my-pod` because the first three tokens are
-  `[kubectl, get, pods]`.
-- Auto-proposed patterns for unknown commands should default to
-  the **full** extracted verb chain (greedy match), which is the
-  security-correct default: a subsequent variation re-prompts rather
-  than silently auto-grants. Operators wanting broader grants opt in
-  explicitly.
+There is no shell-generic rule that selects all `Role=Verb` elements and
+compares them as a contiguous semantic prefix. For unknown executables or an
+unrecognized option shape, consumers should use strict matching or prompt;
+they should not silently fall back to a broader general identity.
 
 False-negative (re-prompt) is recoverable. False-positive (silent
 destructive grant) is not. Narrow-by-default favors the recoverable
@@ -758,8 +867,9 @@ verb chain is a path. Per-verb overrides:
 | `rg` | First positional is **pattern**; rest are paths. |
 | `sed` | First positional is **script**; rest are paths. |
 | `awk` | First positional is **program**; rest are paths. |
-| `tar` | Action flag determines path roles; default to extracting all non-flag positionals as paths. |
-| `curl`, `wget` | First positional is **URL**, not a path. `-o file` flag arg is a path. |
+| `tar` | Action flag determines path roles; default to extracting all non-flag positionals as paths. `-F` / `--info-script` / `--new-volume-script` values are executable command text and safe-fail as `DynamicSkip`, never paths. |
+| `curl` | First positional is **URL**, not a path. `-o` / `--output` and `-D` / `--dump-header` values are paths. `-d` / `--data` values are request data unless prefixed with `@`, which reads a file; `@-` reads stdin and is not a path. |
+| `wget` | First positional is **URL**, not a path. `-o` / `--output-file` writes a log path; `-O` / `--output-document` writes the downloaded document path. |
 | `scp`, `rsync`, `sftp` | All positionals are paths (some remote). |
 | `cd`, `chdir`, `pushd`, `popd` | First non-flag positional is the cwd target (a path). |
 | Others (in FileVerbs, no override) | All non-flag positionals are paths. |
@@ -774,11 +884,11 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
     FlagsWithValue = new Dictionary<string, HashSet<string>>(
         StringComparer.OrdinalIgnoreCase)
 {
-    ["git"]   = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-C", "--git-dir", "--work-tree" },
-    ["curl"]  = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-o", "--output", "-d", "--data" },
-    ["wget"]  = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-O", "--output-document" },
-    ["docker"]= new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-v", "--volume", "-f", "--file" },
-    ["tar"]   = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "-f", "--file", "-C", "--directory" },
+    ["git"]   = new HashSet<string>(StringComparer.Ordinal) { "-c", "-C", "--git-dir", "--work-tree" },
+    ["curl"]  = new HashSet<string>(StringComparer.Ordinal) { "-o", "--output", "-d", "--data", "-D", "--dump-header" },
+    ["wget"]  = new HashSet<string>(StringComparer.Ordinal) { "-o", "--output-file", "-O", "--output-document" },
+    ["docker"]= new HashSet<string>(StringComparer.Ordinal) { "-v", "--volume", "-f", "--file" },
+    ["tar"]   = new HashSet<string>(StringComparer.Ordinal) { "-f", "--file", "-C", "--directory", "-F", "--info-script", "--new-volume-script" },
     // Add as corpus surfaces real cases.
 };
 ```
@@ -786,6 +896,38 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
 > **Note:** the value type is `HashSet<string>` (not `IReadOnlySet<string>`)
 > because `IReadOnlySet<string>` is .NET 5+ only and the library
 > multi-targets `netstandard2.0`. Internal-only — no public-API impact.
+
+> **Native option case.** The outer verb dictionary retains its existing
+> case-insensitive lookup, but each native option set uses `Ordinal`. Native
+> executables receive option spelling unchanged in Bash and PowerShell and may
+> assign different meanings by case. Git lists both `-c` and `-C`: both consume
+> a value. The generic table classifies uppercase `-C` values as paths and
+> lowercase `-c` values as non-paths. Executable-aware consumers still
+> reinterpret command-scoped forms such as `git commit -c/-C`, where Git uses
+> the operand as a revision rather than the generic table's global meaning.
+> Every supported case-distinct spelling is listed explicitly: curl `-d`
+> consumes request data while `-D` consumes a header-output path;
+> Wget `-o` and `-O` both consume paths but write different files.
+
+> **Operand-sensitive values.** A fixed `(verb, flag)` boolean is insufficient
+> for curl `-d` / `--data`: a value beginning with `@` names a file curl reads.
+> The parser preserves the authored marker in the value `Arg.Raw` and in the
+> complete `ClauseElement.Value`, strips the leading `@` only for path
+> resolution, and leaves `@-` non-path because it denotes stdin. Dynamic and
+> glob filenames continue through the normal §8 safe-fail rules after the
+> prefix is removed.
+
+> **Command-valued options.** GNU tar executes `-F` / `--info-script` /
+> `--new-volume-script` operands. Those options still consume a value, but the
+> value is `Kind=DynamicSkip`, `IsPath=false`, and `Resolved=null`; resolving
+> command text as a path would give a security gate false confidence.
+
+> **Executable context.** `FlagsWithValue` is a curated parser heuristic, not
+> a complete executable grammar. In particular, Docker's global `-v` means
+> `--version`, while `docker run -v` consumes a volume specification. The
+> generic table preserves the established `docker run` projection; a
+> Docker-aware consumer uses `Clause.Elements` to interpret placement and MUST
+> NOT treat the table as universal Docker semantics.
 
 > **Note:** the verb-chain walk consumes flag-with-value pairs
 > transparently. For `git -C /repo log`, the walk consumes `-C /repo`
@@ -1174,6 +1316,16 @@ Clauses = [
     Args = [
       Arg { Raw = "-C", IsFlag = true },
       Arg { Raw = "/repo", IsPath = true, Resolved = "/repo" }
+    ],
+    Elements = [
+      ClauseElement { Value = "git", Role = Verb,
+                      PrecedingVerbElementCount = 0 },
+      ClauseElement { Value = "-C", Role = Argument,
+                      PrecedingVerbElementCount = 1 },
+      ClauseElement { Value = "/repo", Role = Argument,
+                      PrecedingVerbElementCount = 1 },
+      ClauseElement { Value = "log", Role = Verb,
+                      PrecedingVerbElementCount = 1 }
     ]
   }
 ]
@@ -1274,13 +1426,25 @@ Each file:
         ],
         "redirects": [],
         "isSubshell": false,
-        "isBashCWrapped": false
+        "isCommandStringWrapped": false
       }
     ]
   },
   "notes": "Optional explanation of edge case being captured."
 }
 ```
+
+An entry may add an `elements` list to a clause to pin the complete
+`Clause.Elements` projection (`raw`, `value`, `role`, `sourceStart`,
+`sourceLength`, `precedingVerbElementCount`, `kind`, `isFlag`, `isPath`, and
+`resolved`). The field is opt-in so older corpus entries remain readable;
+issue-specific provenance entries SHALL include it.
+
+The corpus runner also lexes every direct, parseable input and verifies that
+each authored verb, argument, opaque region, and redirect token is covered by
+exactly-positioned clause-element provenance. This invariant applies even when
+an older entry omits the optional field, preventing silent argument loss across
+the legacy corpus.
 
 ### Coverage targets for v0.1
 

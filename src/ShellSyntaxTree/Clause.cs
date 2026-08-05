@@ -40,6 +40,13 @@ public sealed record Clause
     public IReadOnlyList<Redirect> Redirects { get; init; } = Array.Empty<Redirect>();
 
     /// <summary>
+    /// Significant source-authored verbs, arguments, and redirects in source
+    /// order. Synthetic cwd attribution is intentionally excluded. See
+    /// SPEC §3 <c>ClauseElement</c>.
+    /// </summary>
+    public IReadOnlyList<ClauseElement> Elements { get; init; } = Array.Empty<ClauseElement>();
+
+    /// <summary>
     /// True when this clause is wrapped in a subshell (parens). Subshells
     /// isolate cd state — see SPEC §9.
     /// </summary>

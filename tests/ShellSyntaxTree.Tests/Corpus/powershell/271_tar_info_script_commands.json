@@ -1,0 +1,135 @@
+{
+  "name": "Tar info script commands",
+  "input": "tar -F ./volume-helper.sh --info-script=./info-helper.sh --new-volume-script ./next-volume.sh archive",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "tar"
+        ],
+        "args": [
+          {
+            "raw": "-F",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "./volume-helper.sh",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "--info-script",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "./info-helper.sh",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "--new-volume-script",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "./next-volume.sh",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "archive",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/archive"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "tar",
+            "value": "tar",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-F",
+            "value": "-F",
+            "role": "Argument",
+            "sourceStart": 4,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "./volume-helper.sh",
+            "value": "./volume-helper.sh",
+            "role": "Argument",
+            "sourceStart": 7,
+            "sourceLength": 18,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "--info-script=./info-helper.sh",
+            "value": "--info-script=./info-helper.sh",
+            "role": "Argument",
+            "sourceStart": 26,
+            "sourceLength": 30,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "--new-volume-script",
+            "value": "--new-volume-script",
+            "role": "Argument",
+            "sourceStart": 57,
+            "sourceLength": 19,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "./next-volume.sh",
+            "value": "./next-volume.sh",
+            "role": "Argument",
+            "sourceStart": 77,
+            "sourceLength": 16,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "archive",
+            "value": "archive",
+            "role": "Argument",
+            "sourceStart": 94,
+            "sourceLength": 7,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/archive"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Tar helper hooks execute commands and safe-fail; the bare archive operand remains a path argument."
+}

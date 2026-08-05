@@ -37,7 +37,7 @@ priorities.
       the 64 KiB cap (§11).
 - [x] **11. Multi-shell corpus runner + PII audit** — directory-routed by
       `Corpus/<shell>/`.
-- [x] **12. PowerShell corpus** — 211 entries under `Corpus/powershell/`,
+- [x] **12. PowerShell corpus** — 273 entries under `Corpus/powershell/`,
       every §13 category minimum exceeded.
 - [x] **13. `pwsh` validation gate + `tools/PwshCorpusTool`** —
       `PwshOracleTests` enforces the §13 oracle matrix + the `PwshAliases`
@@ -54,6 +54,39 @@ priorities.
       Recurse into provably static `Invoke-Expression` / `iex` payloads,
       safe-fail computed and pipeline-fed code, share the existing recursion
       limits, and preserve current-scope PowerShell location attribution.
+- [x] **Issue #62 — source-ordered clause elements.** Added the additive
+      `Clause.Elements` provenance view for Bash and PowerShell with exact raw
+      spelling, decoded values, source spans when available, verb-relative
+      argument placement, path facts, redirects, and conservative wrapper-span
+      handling. Authored order is authoritative; element roles and
+      `PrecedingVerbElementCount` explicitly mirror the greedy parser
+      projection rather than executable semantics. Paired Bash/PowerShell
+      corpus cases cover Git `-c`/`-C`, multiple occurrences, and a valueless
+      option that stops the greedy walk. Existing projection shapes and
+      synthetic cwd attribution remain compatible; native options that differ
+      only by case receive corrected metadata. The post-implementation option
+      audit explicitly covers Wget `-o` / `-O`, curl `-d` / `-D` / `-o` /
+      `-O`, Git `-c` / `-C`, and tar `-c` / `-C` / `-f` / `-F`; paired corpus
+      cases pin Wget log/document output, curl data/header-output and `@file`
+      semantics, and tar helper-command safe-fail behavior in both shells.
+      Adversarial review added deterministic coverage for quoted inline native
+      fragment runs (including unquoted prefixes and mixed-quote safe-fail),
+      PowerShell backtick-decoded colon bindings, native file-verb boundaries,
+      and outer redirects on PowerShell command wrappers, including empty
+      payloads. The
+      corpus runner now verifies direct authored-token coverage even for legacy
+      entries without explicit element expectations. Docker `-v`
+      remains explicitly context-sensitive: the generic table supports
+      `docker run`, while consumers use authored elements for global-option
+      interpretation.
+      Command-string provenance is integrated with the later
+      `Invoke-Expression` recursion work: static expansion clears unmappable
+      outer spans, while dynamic payloads retain conservative source-aligned
+      elements. Nested and dynamic `bash -c` cases pin the equivalent Bash
+      boundary. Consumer guidance separates strict authored-stream matching
+      from general executable-aware normalization; Netclaw can use the latter
+      for reusable approvals without treating parser verb roles as semantic
+      command boundaries.
 - [x] **Issue #64 — path-shaped operands after native verb chains.**
       Stop the Bash and PowerShell native greedy passes before a token that
       matches the shared path-shape rules. Preserve that token as a resolved
@@ -70,7 +103,9 @@ priorities.
       corpus. Review follow-ups shipped with it: the equals-form split moved
       to a shared `NativeFlagSyntax` so the two parsers can't drift, a colon
       value under an `=`-bearing parameter name safe-fails to `DynamicSkip`,
-      and `-?` lexes as one parameter token.
+      `-?` lexes as one parameter token, and native option tables now use
+      ordinal spelling while PowerShell cmdlet parameters remain
+      case-insensitive.
 
 ### 15. Release 0.2.0 (alpha → beta → stable) — SPEC.PWSH §15 / §17
 
@@ -78,6 +113,8 @@ priorities.
       `ShellSyntaxTree.0.2.0-alpha.nupkg` and it is live on nuget.org
       (released 2026-05-20).
 - [x] `0.2.0-beta.1` so Netclaw validates the parser + the breaking rename
+- [ ] Publish the next `0.2.0` prerelease with the additive issue #62
+      `Clause.Elements` provenance surface and migration guidance
 - [ ] Promote to stable `0.2.0` after Netclaw validation
 
 ### 16. Netclaw v0.2.0 integration — SPEC.PWSH §17 #9
@@ -105,6 +142,9 @@ priorities.
 - PowerShell script-level constructs — control flow, `function` / `class` /
   `enum` definitions, `param()` / `begin` / `process` / `end` blocks,
   `.ps1` file parsing (`SPEC.POWERSHELL.md` §18).
+- [Issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69) —
+  extract shared native argument-fragment classification before adding a third
+  shell or another fragment rule; keep shell tokenization and parsing local.
 - Extract a shared lexer/parser core now that two parsers exist — the seam
   can be designed from real duplication (`SPEC.POWERSHELL.md` §18); the
   path-normalization helpers duplicated between `BashResolver` and

@@ -1,0 +1,65 @@
+{
+  "name": "Issue 62: Git subcommand config provenance",
+  "input": "git commit -c HEAD~1",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "commit"],
+        "args": [
+          { "raw": "-c", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "HEAD~1", "kind": "Literal", "isPath": false, "isFlag": false }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "git",
+            "value": "git",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "commit",
+            "value": "commit",
+            "role": "Verb",
+            "sourceStart": 4,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-c",
+            "value": "-c",
+            "role": "Argument",
+            "sourceStart": 11,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "HEAD~1",
+            "value": "HEAD~1",
+            "role": "Argument",
+            "sourceStart": 14,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Issue #62: lowercase command-scoped -c preserves its post-commit position."
+}

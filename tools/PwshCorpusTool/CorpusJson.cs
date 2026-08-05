@@ -25,13 +25,18 @@ internal static class CorpusJson
     };
 
     internal static string BuildEntry(
-        string name, string input, ParsedCommand parsed, string notes, bool outOfScope)
+        string name,
+        string input,
+        ParsedCommand parsed,
+        string notes,
+        bool outOfScope,
+        bool includeElements)
     {
         var obj = new JsonObject
         {
             ["name"] = name,
             ["input"] = input,
-            ["expected"] = BuildExpected(parsed),
+            ["expected"] = BuildExpected(parsed, includeElements),
             ["notes"] = notes,
         };
 
@@ -43,7 +48,7 @@ internal static class CorpusJson
         return obj.ToJsonString(WriteOptions) + "\n";
     }
 
-    private static JsonObject BuildExpected(ParsedCommand parsed)
+    private static JsonObject BuildExpected(ParsedCommand parsed, bool includeElements)
     {
         var expected = new JsonObject { ["isUnparseable"] = parsed.IsUnparseable };
         if (parsed.IsUnparseable)
@@ -55,14 +60,14 @@ internal static class CorpusJson
         var clauses = new JsonArray();
         foreach (var clause in parsed.Clauses)
         {
-            clauses.Add(BuildClause(clause));
+            clauses.Add(BuildClause(clause, includeElements));
         }
 
         expected["clauses"] = clauses;
         return expected;
     }
 
-    private static JsonObject BuildClause(Clause clause)
+    private static JsonObject BuildClause(Clause clause, bool includeElements)
     {
         var verb = new JsonArray();
         foreach (var token in clause.Verb.Tokens)
@@ -101,6 +106,17 @@ internal static class CorpusJson
         }
 
         obj["redirects"] = redirects;
+
+        if (includeElements)
+        {
+            var elements = new JsonArray();
+            foreach (var element in clause.Elements)
+            {
+                elements.Add(BuildElement(element));
+            }
+
+            obj["elements"] = elements;
+        }
 
         if (clause.IsSubshell)
         {
@@ -148,6 +164,29 @@ internal static class CorpusJson
         if (redirect.IsDynamicSkip)
         {
             obj["isDynamicSkip"] = true;
+        }
+
+        return obj;
+    }
+
+    private static JsonObject BuildElement(ClauseElement element)
+    {
+        var obj = new JsonObject
+        {
+            ["raw"] = element.Raw,
+            ["value"] = element.Value,
+            ["role"] = element.Role.ToString(),
+            ["sourceStart"] = element.SourceStart,
+            ["sourceLength"] = element.SourceLength,
+            ["precedingVerbElementCount"] = element.PrecedingVerbElementCount,
+            ["kind"] = element.Kind.ToString(),
+            ["isFlag"] = element.IsFlag,
+            ["isPath"] = element.IsPath,
+        };
+
+        if (element.Resolved is not null)
+        {
+            obj["resolved"] = element.Resolved;
         }
 
         return obj;

@@ -59,9 +59,9 @@ internal static class BashPerVerbRules
             ["sed"] = i => i >= 1,
             ["awk"] = i => i >= 1,
 
-            // curl / wget: first positional is a URL (not a path). The
-            // file-path comes from a flag-with-value (-o / -O), handled
-            // separately by ValueOfFlagIsPath.
+            // curl / wget: first positional is a URL (not a path). File
+            // operands come from curated flag values, including curl's
+            // operand-sensitive @file data form.
             ["curl"] = _ => false,
             ["wget"] = _ => false,
 
@@ -124,18 +124,25 @@ internal static class BashPerVerbRules
     private static readonly IReadOnlyDictionary<(string Verb, string Flag), bool>
         FlagValueIsPath = new Dictionary<(string Verb, string Flag), bool>(FlagKeyComparer.Instance)
         {
-            // git: -C / --git-dir / --work-tree all consume directory paths.
+            // Git native options are case-sensitive: -c consumes a config
+            // key/value while -C consumes a directory path.
+            [("git", "-c")] = false,
             [("git", "-C")] = true,
             [("git", "--git-dir")] = true,
             [("git", "--work-tree")] = true,
 
-            // curl: -o / --output is a file path; -d / --data is body text.
+            // curl: output and header-dump values are file paths; data is body text.
             [("curl", "-o")] = true,
             [("curl", "--output")] = true,
             [("curl", "-d")] = false,
             [("curl", "--data")] = false,
+            [("curl", "-D")] = true,
+            [("curl", "--dump-header")] = true,
 
-            // wget: -O / --output-document is the saved file path.
+            // wget: -o writes logs and -O writes the downloaded document;
+            // both operands name files even though their meanings differ.
+            [("wget", "-o")] = true,
+            [("wget", "--output-file")] = true,
             [("wget", "-O")] = true,
             [("wget", "--output-document")] = true,
 
@@ -146,8 +153,8 @@ internal static class BashPerVerbRules
             [("docker", "-v")] = false,
             [("docker", "--volume")] = false,
 
-            // tar: -f / --file is the archive path; -C / --directory is a
-            // directory path.
+            // tar: archive and directory values are paths. Multi-volume
+            // helper values are commands and are safe-failed separately.
             [("tar", "-f")] = true,
             [("tar", "--file")] = true,
             [("tar", "-C")] = true,
@@ -155,8 +162,20 @@ internal static class BashPerVerbRules
         };
 
     /// <summary>
-    /// Whether the value following <paramref name="flag"/> for
-    /// <paramref name="verb"/> should be classified as a path.
+    /// True when a flag value is executable command text rather than a file
+    /// operand. The parser must not publish a resolved path for these values.
+    /// </summary>
+    internal static bool ValueOfFlagIsOpaqueCommand(string verb, string flag) =>
+        string.Equals(verb, "tar", StringComparison.OrdinalIgnoreCase)
+        && (string.Equals(flag, "-F", StringComparison.Ordinal)
+            || string.Equals(flag, "--info-script", StringComparison.Ordinal)
+            || string.Equals(flag, "--new-volume-script", StringComparison.Ordinal));
+
+    /// <summary>
+    /// Whether every value following <paramref name="flag"/> for
+    /// <paramref name="verb"/> should be classified as a path. Concrete
+    /// operand-sensitive classification goes through
+    /// <see cref="TryGetFlagValuePath"/>.
     /// </summary>
     internal static bool ValueOfFlagIsPath(string verb, string flag)
     {
@@ -168,12 +187,45 @@ internal static class BashPerVerbRules
         return FlagValueIsPath.TryGetValue((verb, flag), out var isPath) && isPath;
     }
 
+    /// <summary>
+    /// Classifies a concrete native flag value and returns the logical value
+    /// the resolver should treat as the path. Most flags use the fixed table;
+    /// curl data flags additionally interpret a leading <c>@</c> as a file
+    /// read, except <c>@-</c> which denotes stdin.
+    /// </summary>
+    internal static bool TryGetFlagValuePath(
+        string verb,
+        string flag,
+        string value,
+        out string pathValue)
+    {
+        pathValue = value;
+
+        if (ValueOfFlagIsPath(verb, flag))
+        {
+            return true;
+        }
+
+        if (string.Equals(verb, "curl", StringComparison.OrdinalIgnoreCase)
+            && (string.Equals(flag, "-d", StringComparison.Ordinal)
+                || string.Equals(flag, "--data", StringComparison.Ordinal))
+            && value.Length > 1
+            && value[0] == '@'
+            && !string.Equals(value, "@-", StringComparison.Ordinal))
+        {
+            pathValue = value.Substring(1);
+            return true;
+        }
+
+        return false;
+    }
+
     // ---------------------------------------------------------------- key comparer
 
     /// <summary>
-    /// Case-insensitive equality for the (verb, flag) tuple keys. Avoids
-    /// allocating a wrapper record while still matching the per-verb table
-    /// case-insensitivity contract.
+    /// Verb keys retain the existing case-insensitive lookup; native flag
+    /// spelling is ordinal because executables may assign different meanings
+    /// to options that differ only by case.
     /// </summary>
     private sealed class FlagKeyComparer : IEqualityComparer<(string Verb, string Flag)>
     {
@@ -181,11 +233,11 @@ internal static class BashPerVerbRules
 
         public bool Equals((string Verb, string Flag) x, (string Verb, string Flag) y) =>
             string.Equals(x.Verb, y.Verb, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(x.Flag, y.Flag, StringComparison.OrdinalIgnoreCase);
+            && string.Equals(x.Flag, y.Flag, StringComparison.Ordinal);
 
         public int GetHashCode((string Verb, string Flag) obj)
         {
-            // Hash combination via ordinal-ignore-case on each component.
+            // Hash combination follows the mixed verb/flag comparison.
             // Avoid HashCode.Combine for netstandard2.0 parity.
             unchecked
             {
@@ -194,7 +246,7 @@ internal static class BashPerVerbRules
                     : StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Verb);
                 var h2 = obj.Flag is null
                     ? 0
-                    : StringComparer.OrdinalIgnoreCase.GetHashCode(obj.Flag);
+                    : StringComparer.Ordinal.GetHashCode(obj.Flag);
                 return (h1 * 397) ^ h2;
             }
         }

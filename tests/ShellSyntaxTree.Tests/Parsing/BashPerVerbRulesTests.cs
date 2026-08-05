@@ -242,17 +242,21 @@ public class BashPerVerbRulesTests
     }
 
     [Fact]
-    public void Curl_dash_o_value_is_a_path_dash_d_is_not()
+    public void Curl_output_and_dump_header_values_are_paths_data_is_not()
     {
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("curl", "-o"));
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("curl", "--output"));
         Assert.False(BashPerVerbRules.ValueOfFlagIsPath("curl", "-d"));
         Assert.False(BashPerVerbRules.ValueOfFlagIsPath("curl", "--data"));
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("curl", "-D"));
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("curl", "--dump-header"));
     }
 
     [Fact]
-    public void Wget_dash_O_value_is_a_path()
+    public void Wget_log_and_document_output_values_are_paths()
     {
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("wget", "-o"));
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("wget", "--output-file"));
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("wget", "-O"));
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("wget", "--output-document"));
     }
@@ -284,12 +288,66 @@ public class BashPerVerbRulesTests
     }
 
     [Fact]
-    public void Flag_lookup_is_case_insensitive()
+    public void Native_flag_lookup_is_case_sensitive_while_verb_lookup_is_not()
     {
-        // The per-verb-flag table is case-insensitive; consumers may
-        // typo casing.
-        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("GIT", "-c"));
-        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("Git", "--Git-Dir"));
+        Assert.True(BashPerVerbRules.ValueOfFlagIsPath("GIT", "-C"));
+        Assert.False(BashPerVerbRules.ValueOfFlagIsPath("GIT", "-c"));
+        Assert.False(BashPerVerbRules.ValueOfFlagIsPath("Git", "--Git-Dir"));
+    }
+
+    [Theory]
+    [InlineData("git", "-c", true, false, false)]
+    [InlineData("git", "-C", true, true, false)]
+    [InlineData("curl", "-d", true, false, false)]
+    [InlineData("curl", "-D", true, true, false)]
+    [InlineData("curl", "-o", true, true, false)]
+    [InlineData("curl", "-O", false, false, false)]
+    [InlineData("curl", "--data", true, false, false)]
+    [InlineData("curl", "--dump-header", true, true, false)]
+    [InlineData("curl", "--output", true, true, false)]
+    [InlineData("wget", "-o", true, true, false)]
+    [InlineData("wget", "-O", true, true, false)]
+    [InlineData("wget", "--output-file", true, true, false)]
+    [InlineData("wget", "--output-document", true, true, false)]
+    [InlineData("tar", "-c", false, false, false)]
+    [InlineData("tar", "-C", true, true, false)]
+    [InlineData("tar", "-f", true, true, false)]
+    [InlineData("tar", "-F", true, false, true)]
+    [InlineData("tar", "--info-script", true, false, true)]
+    [InlineData("tar", "--new-volume-script", true, false, true)]
+    public void Native_option_binding_matrix(
+        string verb,
+        string flag,
+        bool consumesValue,
+        bool valueIsPath,
+        bool valueIsOpaqueCommand)
+    {
+        Assert.True(BashVerbs.FlagsWithValue.TryGetValue(verb, out var flags));
+        Assert.Equal(consumesValue, flags.Contains(flag));
+        Assert.Equal(valueIsPath, BashPerVerbRules.ValueOfFlagIsPath(verb, flag));
+        Assert.Equal(
+            valueIsOpaqueCommand,
+            BashPerVerbRules.ValueOfFlagIsOpaqueCommand(verb, flag));
+    }
+
+    [Theory]
+    [InlineData("-d", "payload", false, "payload")]
+    [InlineData("--data", "name=Jane", false, "name=Jane")]
+    [InlineData("-d", "@request.json", true, "request.json")]
+    [InlineData("--data", "@/etc/passwd", true, "/etc/passwd")]
+    [InlineData("-d", "@-", false, "@-")]
+    [InlineData("--data-raw", "@request.json", false, "@request.json")]
+    public void Curl_data_file_reference_is_operand_sensitive(
+        string flag,
+        string value,
+        bool isPath,
+        string expectedPathValue)
+    {
+        var actual = BashPerVerbRules.TryGetFlagValuePath(
+            "curl", flag, value, out var pathValue);
+
+        Assert.Equal(isPath, actual);
+        Assert.Equal(expectedPathValue, pathValue);
     }
 
     // ---------------------------------------------------------------- empty verb chain

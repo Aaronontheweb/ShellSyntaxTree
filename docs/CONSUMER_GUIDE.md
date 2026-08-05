@@ -44,7 +44,7 @@ flowchart TD
         D["PwshParser"]
         C --> E["Parse syntax, classify tokens, and resolve static context"]
         D --> E
-        E --> F["ParsedCommand: ordered clauses, verbs, args, redirects, cwd, and uncertainty"]
+        E --> F["ParsedCommand: ordered clauses and elements, semantic projections, cwd, and uncertainty"]
     end
 
     subgraph APP["Consumer-owned policy"]
@@ -165,9 +165,41 @@ audit UI can still show `gci`.
 `VerbChain` is a best-effort syntactic hint, not a complete executable grammar.
 The greedy native-command walk can include bare lowercase values because a
 generic parser cannot know whether `origin` is a Git remote or a subcommand.
-Unknown commands should therefore default to the full extracted chain, which
-produces narrower approvals and recoverable re-prompts. A consumer may shorten
-the chain only when it owns command-specific knowledge that justifies doing so.
+Unknown commands should therefore retain the complete authored shape through a
+strict pattern, producing narrower approvals and recoverable re-prompts. A
+consumer may normalize or shorten that shape only when it owns command-specific
+knowledge that justifies doing so.
+
+### Choosing strict or general matching
+
+`Clause.Elements` supports two security-conscious consumer strategies. The
+choice belongs to the approval product, not the parser.
+
+**Strict matching** evaluates the significant authored stream in order. A
+pattern may contain explicit operand slots, but unexpected or intervening
+elements prevent a match. For example, a strict `git commit` pattern does not
+match `git -C /repo commit`, because `-C /repo` appears between the executable
+and subcommand. This mode is easy to audit and fail-closed, but syntactic
+variations can produce more prompts.
+
+**General matching** uses an executable-aware interpreter. The interpreter
+consumes the complete element stream according to that executable's option
+grammar and returns a normalized approval identity plus the policy-relevant
+operands and scopes. A Git interpreter can normalize `git -C /repo commit` to
+`git commit` while retaining `/repo` as its effective-directory constraint.
+This preserves reusable approvals without treating the option as irrelevant.
+
+General matching does not mean filtering to `Role=Verb` or trusting
+`PrecedingVerbElementCount` as a semantic boundary. Both fields describe the
+generic parser's projection. If the executable-aware interpreter encounters an
+unknown option, missing operand, dynamic value, or otherwise incomplete shape,
+it should fall back to strict matching or prompt rather than broaden the
+approval.
+
+Netclaw is expected to use general matching for supported high-frequency
+commands so ordinary option placement does not create approval fatigue. Strict
+matching remains the safe fallback for commands whose grammar Netclaw does not
+yet understand.
 
 ## Evaluating arguments and paths
 
@@ -218,6 +250,9 @@ foreach (var arg in clause.Args)
 The policy decides whether an unknown argument matters. `echo $message` may be
 acceptable to one product, while `Remove-Item $target` should normally prompt.
 Never treat `DynamicSkip.Raw` as a statically resolved path.
+Command-valued native options use the same signal. GNU tar's `-F`,
+`--info-script`, and `--new-volume-script` operands execute code, so the parser
+reports their values as `DynamicSkip` rather than misleading path facts.
 
 ### Working-directory attribution
 
@@ -282,6 +317,9 @@ ShellSyntaxTree also looks through supported command-string wrappers. Clauses
 surfaced from `bash -c`, `pwsh -Command`, and `pwsh -EncodedCommand` carry
 `IsCommandStringWrapped = true`. The outer wrapper is not the action a
 verb-based policy should authorize; the surfaced inner clauses are.
+Redirects authored on the outer PowerShell wrapper remain attached to the last
+surfaced clause, so redirect policy still sees paths such as
+`pwsh -Command "git status" > audit.log`.
 
 PowerShell script blocks, subexpressions, splats, and `--%` regions are opaque
 and surface as `DynamicSkip`. A dynamically invoked command such as `& $exe`
@@ -347,26 +385,72 @@ The consumer can collect the attributed cwd and both path operands to propose
 read/write mounts. It should still apply its own cmdlet policy and access-mode
 rules; ShellSyntaxTree reports paths, not filesystem permissions.
 
-### Command-aware policy
+### General command-aware policy
 
 Input:
 
 ```text
 git -C /repo commit
 git commit -C HEAD~1
+git -C /repo commit -C HEAD~1
+git --no-pager commit -C HEAD~1
 ```
 
 These commands demonstrate why source provenance matters. Git assigns different
 meaning to `-C` based on whether it appears before or after `commit`.
 [Issue #62](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/62)
-tracks an ordered clause-element API so a Git-aware consumer can apply that
-rule without re-tokenizing `ParsedCommand.Source`. Until that API ships, the
-current `Verb` and `Args` projections do not preserve their interleaving.
+introduced `Clause.Elements` so a Git-aware consumer can apply that rule
+without re-tokenizing `ParsedCommand.Source`. The consumer must interpret the
+complete authored stream using Git's grammar; `Role` and
+`PrecedingVerbElementCount` mirror ShellSyntaxTree's greedy projection and are
+not Git-semantic boundaries:
 
-When ordered elements are added, this guide should be updated in the same
-change with a complete command-aware-policy example. The existing projections
-should remain documented as compatibility conveniences, while the ordered view
-becomes the source-provenance path for consumers that need positional meaning.
+```csharp
+var authored = clause.Elements
+    .Where(element => element.Role != ClauseElementRole.Redirect)
+    .ToArray();
+
+// Application-owned code: walk every authored element, apply Git's global
+// option arity, locate the semantic subcommand, and bind every option operand.
+if (!GitCommandGrammar.TryInterpret(authored, out var command))
+{
+    return ApprovalDecision.FailClosed;
+}
+
+foreach (var occurrence in command.Options.Where(option => option.Name is "-c" or "-C"))
+{
+    if (occurrence.Operand is null
+        || occurrence.Operand.Kind == ArgKind.DynamicSkip)
+    {
+        return ApprovalDecision.FailClosed;
+    }
+
+    if (occurrence.Scope == GitOptionScope.Global)
+        EvaluateGitGlobalOption(occurrence.Name, occurrence.Operand);
+    else if (command.Subcommand == "commit")
+        EvaluateGitCommitOption(occurrence.Name, occurrence.Operand);
+}
+```
+
+For `git -C /repo commit`, the `-C` and `/repo` elements report one preceding
+verb element. For `git commit -C HEAD~1`, they report two. ShellSyntaxTree still
+applies its generic Git flag/path tables, so a command-aware consumer may
+reinterpret the latter value as a revision rather than a path. The new API
+provides the missing positional evidence; it deliberately does not encode Git
+semantics. `git --no-pager commit -C HEAD~1` demonstrates why the consumer
+cannot use the count alone: `--no-pager` stops the generic greedy walk, so
+`commit` is an argument element even though Git treats it as the subcommand.
+
+The grammar helper above is also responsible for attached forms and for
+binding a spaced flag to the following operand. It enumerates every occurrence,
+so a global `-C /repo` cannot hide a later command-scoped `-C HEAD~1`.
+
+`Raw` preserves exact spelling, `Value` carries the lexer-decoded value, and
+`SourceStart` / `SourceLength` distinguish repeated occurrences. Existing
+`Verb`, `Args`, and `Redirects` remain compatibility conveniences. Synthetic
+cwd attribution remains only in `Args`; elements expanded from a command-string
+wrapper have null source spans when they cannot be mapped exactly into the
+outer source.
 
 ## Netclaw case study
 

@@ -1,0 +1,68 @@
+{
+  "name": "Curl data stdin reference",
+  "input": "curl -d \"@-\" https://example.invalid/api",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["curl"],
+        "args": [
+          { "raw": "-d", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "\"@-\"", "kind": "Literal", "isPath": false, "isFlag": false },
+          { "raw": "https://example.invalid/api", "kind": "Literal", "isPath": false, "isFlag": false }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "curl",
+            "value": "curl",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-d",
+            "value": "-d",
+            "role": "Argument",
+            "sourceStart": 5,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "\"@-\"",
+            "value": "@-",
+            "role": "Argument",
+            "sourceStart": 8,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "value": "https://example.invalid/api",
+            "role": "Argument",
+            "sourceStart": 13,
+            "sourceLength": 27,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      }
+    ]
+  },
+  "notes": "Curl @- reads stdin and is not a filesystem path."
+}

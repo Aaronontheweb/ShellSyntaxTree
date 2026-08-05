@@ -1,0 +1,91 @@
+{
+  "name": "Issue 62: Git mixed option provenance",
+  "input": "git -C /repo commit -C HEAD~1",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["git", "commit"],
+        "args": [
+          { "raw": "-C", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "/repo", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/repo" },
+          { "raw": "-C", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "HEAD~1", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/work/HEAD~1" }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "git",
+            "value": "git",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-C",
+            "value": "-C",
+            "role": "Argument",
+            "sourceStart": 4,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "/repo",
+            "value": "/repo",
+            "role": "Argument",
+            "sourceStart": 7,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/repo"
+          },
+          {
+            "raw": "commit",
+            "value": "commit",
+            "role": "Verb",
+            "sourceStart": 13,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-C",
+            "value": "-C",
+            "role": "Argument",
+            "sourceStart": 20,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "HEAD~1",
+            "value": "HEAD~1",
+            "role": "Argument",
+            "sourceStart": 23,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/HEAD~1"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Issue #62: both global and command-scoped -C occurrences remain distinct."
+}

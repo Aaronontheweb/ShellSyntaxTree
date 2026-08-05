@@ -43,7 +43,8 @@ namespace ShellSyntaxTree.Tests.Corpus;
 ///   <item>
 ///     Per clause: <c>Operator</c>, <c>Verb.Tokens</c> (sequence equality),
 ///     <c>Args.Count</c>, per-arg fields, <c>Redirects.Count</c>, per-
-///     redirect fields, <c>IsSubshell</c>, <c>IsCommandStringWrapped</c>.
+///     redirect fields, optional <c>Elements</c>, <c>IsSubshell</c>,
+///     <c>IsCommandStringWrapped</c>.
 ///   </item>
 ///   <item>
 ///     Per arg: <c>Raw</c>, <c>Kind</c>, <c>IsPath</c>, <c>IsCwdAttribution</c>
@@ -51,6 +52,10 @@ namespace ShellSyntaxTree.Tests.Corpus;
 ///     pin it for documentation but it's not required). <c>Resolved</c>
 ///     opt-in via the JSON sentinel <c>"__NULL__"</c> for null or a literal
 ///     string for value equality; omitting the field skips the comparison.
+///   </item>
+///   <item>
+///     <c>Elements</c> is opt-in for legacy corpus compatibility. When the
+///     expectation supplies it, every provenance field is compared.
 ///   </item>
 /// </list>
 /// </remarks>
@@ -163,6 +168,24 @@ internal static class AstAssert
             AssertRedirectEqual(expectedRedirects[i], actual.Redirects[i], $"{path}.redirects[{i}]");
         }
 
+        if (expected.Elements is not null)
+        {
+            if (expected.Elements.Count != actual.Elements.Count)
+            {
+                throw new XunitException(
+                    $"{path}.elements.count: expected={expected.Elements.Count}, actual={actual.Elements.Count}\n"
+                    + "  actual elements: "
+                    + string.Join(", ", actual.Elements.Select(element =>
+                        $"{{raw={element.Raw}, role={element.Role}, precedingVerbs={element.PrecedingVerbElementCount}}}")));
+            }
+
+            for (var i = 0; i < expected.Elements.Count; i++)
+            {
+                AssertClauseElementEqual(
+                    expected.Elements[i], actual.Elements[i], $"{path}.elements[{i}]");
+            }
+        }
+
         if (expected.IsSubshell != actual.IsSubshell)
         {
             throw new XunitException(
@@ -225,6 +248,34 @@ internal static class AstAssert
                 throw new XunitException(
                     $"{path}.resolved: expected='{expected.Resolved}', actual='{actual.Resolved}'");
             }
+        }
+    }
+
+    private static void AssertClauseElementEqual(
+        ExpectedClauseElement expected,
+        ClauseElement actual,
+        string path)
+    {
+        if (expected.Raw != actual.Raw
+            || expected.Value != actual.Value
+            || expected.Role != actual.Role
+            || expected.SourceStart != actual.SourceStart
+            || expected.SourceLength != actual.SourceLength
+            || expected.PrecedingVerbElementCount != actual.PrecedingVerbElementCount
+            || expected.Kind != actual.Kind
+            || expected.IsFlag != actual.IsFlag
+            || expected.IsPath != actual.IsPath
+            || expected.Resolved != actual.Resolved)
+        {
+            throw new XunitException(
+                $"{path}: expected={{raw={Quote(expected.Raw)}, value={Quote(expected.Value)}, "
+                + $"role={expected.Role}, span={expected.SourceStart}:{expected.SourceLength}, "
+                + $"precedingVerbs={expected.PrecedingVerbElementCount}, kind={expected.Kind}, "
+                + $"isFlag={expected.IsFlag}, isPath={expected.IsPath}, resolved={Quote(expected.Resolved)}}}; "
+                + $"actual={{raw={Quote(actual.Raw)}, value={Quote(actual.Value)}, "
+                + $"role={actual.Role}, span={actual.SourceStart}:{actual.SourceLength}, "
+                + $"precedingVerbs={actual.PrecedingVerbElementCount}, kind={actual.Kind}, "
+                + $"isFlag={actual.IsFlag}, isPath={actual.IsPath}, resolved={Quote(actual.Resolved)}}}");
         }
     }
 

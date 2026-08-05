@@ -1,0 +1,55 @@
+{
+  "name": "Inline colon backtick path",
+  "input": "Remove-Item -Path:C:\\payload\u0060 file.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\payload file.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/payload file.txt"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Remove-Item",
+            "value": "Remove-Item",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-Path:C:\\payload\u0060 file.txt",
+            "value": "-Path:C:\\payload file.txt",
+            "role": "Argument",
+            "sourceStart": 12,
+            "sourceLength": 26,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": true,
+            "resolved": "C:/payload file.txt"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "An inline cmdlet path decodes its backtick escape before resolution."
+}

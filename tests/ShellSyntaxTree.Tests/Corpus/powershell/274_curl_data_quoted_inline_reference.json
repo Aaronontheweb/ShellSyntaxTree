@@ -1,0 +1,71 @@
+{
+  "name": "Curl data quoted inline reference",
+  "input": "curl --data=\u0027@C:\\payload file\u0027 https://example.invalid/api",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "curl"
+        ],
+        "args": [
+          {
+            "raw": "--data",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0027@C:\\payload file\u0027",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/payload file"
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "curl",
+            "value": "curl",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "--data=\u0027@C:\\payload file\u0027",
+            "value": "--data=@C:\\payload file",
+            "role": "Argument",
+            "sourceStart": 5,
+            "sourceLength": 25,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": true,
+            "resolved": "C:/payload file"
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "value": "https://example.invalid/api",
+            "role": "Argument",
+            "sourceStart": 31,
+            "sourceLength": 27,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "An adjacent quoted inline value is one native argument and preserves curl\u0027s file-read metadata."
+}
