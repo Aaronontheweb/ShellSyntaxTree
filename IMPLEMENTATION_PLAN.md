@@ -142,6 +142,9 @@ priorities.
 - PowerShell script-level constructs — control flow, `function` / `class` /
   `enum` definitions, `param()` / `begin` / `process` / `end` blocks,
   `.ps1` file parsing (`SPEC.POWERSHELL.md` §18).
+- [Issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69) —
+  extract shared native argument-fragment classification before adding a third
+  shell or another fragment rule; keep shell tokenization and parsing local.
 - Extract a shared lexer/parser core now that two parsers exist — the seam
   can be designed from real duplication (`SPEC.POWERSHELL.md` §18); the
   path-normalization helpers duplicated between `BashResolver` and
