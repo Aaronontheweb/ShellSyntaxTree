@@ -1,15 +1,32 @@
 #### Unreleased ####
 
+#### 0.2.0 2026-08-05 ####
+
 ## Added
 
-- **Surfaced static `Invoke-Expression` payloads for security gates (#63)**
-  `PwshParser` now recurses into provably static `Invoke-Expression` / `iex`
-  strings, preserves current-scope `Set-Location` attribution, and applies the
-  existing command-string size and depth limits. Variables, interpolation,
-  concatenation, subexpressions, and pipeline input now route through
-  `DynamicSkip` or `IsUnparseable` instead of producing a clean persistent
-  approval shape. PowerShell backtick and Unicode escapes are decoded before
-  recursion, and exact colon-form `-Command:` binding is supported.
+- **Added source-ordered clause-element provenance (`Clause.Elements`) for richer approvals (#62, #68)**
+  Clause-level elements now preserve source order and metadata such as spans,
+  decoded values, path facts, redirects, and verb-relative placement for both
+  Bash and PowerShell. This adds additive, shell-neutral data for downstream
+  security consumers and preserves compatibility with prior AST shapes.
+  See [#62](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/62) and
+  [#68](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/68).
+
+## Fixed
+
+- **Preserved static `Invoke-Expression` payload parsing in PowerShell (#63, #67)**
+  Static `Invoke-Expression` / `iex` command strings now follow the same
+  safe-recursion path as `pwsh -Command`: known-safe payloads recurse with the
+  existing depth/size limits, while dynamic content stays conservative via
+  `DynamicSkip` / `IsUnparseable` and remains safe-fail for approvals.
+  See [#63](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/63) and
+  [#67](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/67).
+
+- **Preserved path-shaped command operands after native chains (#65)**
+  Path-shaped operands now remain intact through native option parsing, so
+  command strings that mix native options and path-like inputs keep their
+  intended argument shape instead of being split or dropped by parser heuristics.
+  See [#65](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/65).
 
 #### 0.2.0-beta.1 2026-07-22 ####
 

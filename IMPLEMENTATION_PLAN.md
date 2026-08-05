@@ -113,9 +113,9 @@ priorities.
       `ShellSyntaxTree.0.2.0-alpha.nupkg` and it is live on nuget.org
       (released 2026-05-20).
 - [x] `0.2.0-beta.1` so Netclaw validates the parser + the breaking rename
-- [ ] Publish the next `0.2.0` prerelease with the additive issue #62
+- [x] Publish the next `0.2.0` prerelease with the additive issue #62
       `Clause.Elements` provenance surface and migration guidance
-- [ ] Promote to stable `0.2.0` after Netclaw validation
+- [x] Promote to stable `0.2.0` after Netclaw validation
 
 ### 16. Netclaw v0.2.0 integration — SPEC.PWSH §17 #9
 
