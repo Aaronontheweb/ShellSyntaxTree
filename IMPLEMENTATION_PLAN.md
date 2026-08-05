@@ -14,8 +14,8 @@ priorities.
 
 > **Spec:** `SPEC.POWERSHELL.md` (v0.2.0). The PowerShell parser is
 > implemented — phases 1–14 of `SPEC.POWERSHELL.md` §16 are complete (see
-> below). What remains is the release flow and the downstream Netclaw
-> integration, both of which need actions outside this repository.
+> below). What remains is the downstream Netclaw integration, which needs
+> actions outside this repository.
 
 ### Implemented (SPEC.POWERSHELL.md §16 phases 1–14) — done
 
@@ -113,9 +113,9 @@ priorities.
       `ShellSyntaxTree.0.2.0-alpha.nupkg` and it is live on nuget.org
       (released 2026-05-20).
 - [x] `0.2.0-beta.1` so Netclaw validates the parser + the breaking rename
-- [ ] Publish the next `0.2.0` prerelease with the additive issue #62
+- [x] Publish the next `0.2.0` prerelease with the additive issue #62
       `Clause.Elements` provenance surface and migration guidance
-- [ ] Promote to stable `0.2.0` after Netclaw validation
+- [x] Promote to stable `0.2.0` after Netclaw validation
 
 ### 16. Netclaw v0.2.0 integration — SPEC.PWSH §17 #9
 
