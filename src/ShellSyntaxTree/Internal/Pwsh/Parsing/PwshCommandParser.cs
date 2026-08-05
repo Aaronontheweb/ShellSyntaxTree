@@ -658,7 +658,8 @@ internal static class PwshCommandParser
         if (classified.Kind == PwshCommandKind.PwshInvocation)
         {
             var recursion = TryRecurseIntoPwsh(
-                body, start, classified, source, baseOptions, recursionDepth,
+                body, start, classified, source, baseOptions, effectiveOptions,
+                workingDirectoryUnknown, recursionDepth,
                 segment, markWrapped, out var recursionResult);
             if (recursion)
             {
@@ -814,7 +815,7 @@ internal static class PwshCommandParser
         // file utility (xcopy, robocopy, ...) gets a 1-token chain so its
         // arguments classify as paths.
         var verbTokens = new List<string> { word };
-        if (!PwshVerbs.FileVerbs.Contains(word))
+        if (!PwshVerbs.FileVerbs.Contains(word) && !BashVerbs.FileVerbs.Contains(word))
         {
             BashVerbs.FlagsWithValue.TryGetValue(word, out var flagsForVerb);
             var i = start + 1;
@@ -973,6 +974,22 @@ internal static class PwshCommandParser
                 pendingNativeFlag = null;
 
                 var raw = t.Value;
+                var bindingSeparator = FirstBindingSeparator(raw);
+                if (bindingSeparator >= 0 && bindingSeparator + 1 < raw.Length)
+                {
+                    var encodedValue = raw.Substring(bindingSeparator + 1);
+                    if (!PwshLexer.TryDecodeExpandableValue(
+                        encodedValue, out var decodedValue, out _))
+                    {
+                        return new ArgResult(
+                            args,
+                            redirects,
+                            elements,
+                            "invalid PowerShell Unicode escape in inline parameter value");
+                    }
+
+                    raw = raw.Substring(0, bindingSeparator + 1) + decodedValue;
+                }
 
                 if (cmdletStyle)
                 {
@@ -1011,21 +1028,137 @@ internal static class PwshCommandParser
                 {
                     var verbKey = verb.VerbTokens.Count > 0 ? verb.VerbTokens[0] : string.Empty;
 
+                    // PowerShell passes adjacent native argument fragments as
+                    // one argv entry. Keep an inline option and its quoted or
+                    // opaque value together in the provenance view.
+                    if (NativeFlagSyntax.TrySplitEqualsPrefix(
+                            raw, out var adjacentFlagPart, out var adjacentValuePrefix)
+                        && i + 1 < body.Count
+                        && IsAdjacent(t, body[i + 1])
+                        && body[i + 1].Kind is PwshTokenKind.QuotedString
+                            or PwshTokenKind.ScriptBlock
+                            or PwshTokenKind.Subexpression
+                            or PwshTokenKind.Splat)
+                    {
+                        var valueStart = i + 1;
+                        var valueEnd = valueStart;
+                        var valueBuilder = new StringBuilder(adjacentValuePrefix);
+                        var hasOpaqueFragment = false;
+                        var allFragmentsSingleQuoted = adjacentValuePrefix.Length == 0;
+                        var hasSingleQuotedFragment = false;
+                        var hasNonSingleQuotedFragment = adjacentValuePrefix.Length > 0;
+                        var hasSensitiveLiteralFragment = false;
+                        var previousFragment = t;
+                        while (valueEnd < body.Count
+                            && IsAdjacent(previousFragment, body[valueEnd])
+                            && IsNativeArgumentFragment(body[valueEnd]))
+                        {
+                            var fragment = body[valueEnd];
+                            valueBuilder.Append(fragment.Value);
+                            hasOpaqueFragment |= fragment.Kind != PwshTokenKind.Word
+                                && fragment.Kind != PwshTokenKind.QuotedString;
+                            hasSingleQuotedFragment |= fragment.Kind == PwshTokenKind.QuotedString
+                                && fragment.IsSingleQuoted;
+                            hasNonSingleQuotedFragment |= fragment.Kind != PwshTokenKind.QuotedString
+                                || !fragment.IsSingleQuoted;
+                            hasSensitiveLiteralFragment |= fragment.Kind == PwshTokenKind.QuotedString
+                                && fragment.IsSingleQuoted
+                                && NativeFlagSyntax.ContainsResolverSensitiveLiteralSyntax(fragment.Value);
+                            allFragmentsSingleQuoted &= fragment.Kind == PwshTokenKind.QuotedString
+                                && fragment.IsSingleQuoted;
+                            previousFragment = fragment;
+                            valueEnd++;
+                        }
+
+                        var lastValueToken = body[valueEnd - 1];
+                        var adjacentValue = valueBuilder.ToString();
+                        var equalsOffset = SourceSlice(source, t).IndexOf('=');
+                        var adjacentRawStart = t.SourceStart + equalsOffset + 1;
+                        var adjacentRaw = source.Substring(
+                            adjacentRawStart,
+                            lastValueToken.SourceStart + lastValueToken.SourceLength
+                            - adjacentRawStart);
+                        args.Add(new Arg
+                        {
+                            Raw = adjacentFlagPart,
+                            Kind = ArgKind.Literal,
+                            IsPath = false,
+                        });
+
+                        Arg valueArg;
+                        if (hasOpaqueFragment
+                            || (hasSingleQuotedFragment
+                                && hasNonSingleQuotedFragment
+                                && hasSensitiveLiteralFragment)
+                            || BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
+                                verbKey, adjacentFlagPart))
+                        {
+                            valueArg = new Arg
+                            {
+                                Raw = adjacentRaw,
+                                Kind = ArgKind.DynamicSkip,
+                                IsPath = false,
+                            };
+                        }
+                        else
+                        {
+                            var adjacentValueForResolution = adjacentValue;
+                            var adjacentValueIsPath = BashPerVerbRules.TryGetFlagValuePath(
+                                verbKey,
+                                adjacentFlagPart,
+                                adjacentValue,
+                                out adjacentValueForResolution);
+                            valueArg = ResolveValueToken(
+                                adjacentRaw,
+                                adjacentValueForResolution,
+                                adjacentValueIsPath,
+                                options,
+                                workingDirectoryUnknown,
+                                allFragmentsSingleQuoted);
+                        }
+
+                        args.Add(valueArg);
+                        elements.Add(CreateCombinedElement(
+                            source,
+                            t,
+                            lastValueToken,
+                            adjacentFlagPart + "=" + adjacentValue,
+                            precedingVerbTokenCount,
+                            valueArg.Kind,
+                            isFlag: true,
+                            valueArg.IsPath,
+                            valueArg.Resolved));
+                        i = valueEnd - 1;
+                        continue;
+                    }
+
                     // Native --flag=value follows Bash exactly: surface the
                     // flag and value separately, and classify a curated
                     // flag's value through the shared per-verb table.
                     if (NativeFlagSyntax.TrySplitEqualsFlag(raw, out var flagPart, out var valuePart))
                     {
                         args.Add(new Arg { Raw = flagPart, Kind = ArgKind.Literal, IsPath = false });
-                        var valueIsPath = BashPerVerbRules.TryGetFlagValuePath(
-                            verbKey, flagPart, valuePart, out var inlineValueForResolution);
-                        args.Add(ResolveValueToken(
-                            valuePart,
-                            inlineValueForResolution,
-                            valueIsPath,
-                            options,
-                            workingDirectoryUnknown,
-                            false));
+                        if (BashPerVerbRules.ValueOfFlagIsOpaqueCommand(verbKey, flagPart))
+                        {
+                            args.Add(new Arg
+                            {
+                                Raw = valuePart,
+                                Kind = ArgKind.DynamicSkip,
+                                IsPath = false,
+                            });
+                        }
+                        else
+                        {
+                            var valueIsPath = BashPerVerbRules.TryGetFlagValuePath(
+                                verbKey, flagPart, valuePart, out var inlineValueForResolution);
+                            args.Add(ResolveValueToken(
+                                valuePart,
+                                inlineValueForResolution,
+                                valueIsPath,
+                                options,
+                                workingDirectoryUnknown,
+                                false));
+                        }
                     }
                     else
                     {
@@ -1052,7 +1185,8 @@ internal static class PwshCommandParser
                     parameterMetadata.Kind,
                     isFlag: true,
                     isPath: parameterMetadata.IsPath,
-                    resolved: parameterMetadata.Resolved));
+                    resolved: parameterMetadata.Resolved,
+                    value: raw));
 
                 continue;
             }
@@ -1095,6 +1229,7 @@ internal static class PwshCommandParser
             var rawValue = SourceSlice(source, t);
 
             var valueForResolution = t.Value;
+            var valueIsOpaqueCommand = false;
             bool treatAsPath;
             if (pendingValueParam is not null)
             {
@@ -1104,11 +1239,14 @@ internal static class PwshCommandParser
             else if (pendingNativeFlag is not null)
             {
                 var verbKey = verb.VerbTokens.Count > 0 ? verb.VerbTokens[0] : string.Empty;
-                treatAsPath = BashPerVerbRules.TryGetFlagValuePath(
-                    verbKey,
-                    pendingNativeFlag,
-                    t.Value,
-                    out valueForResolution);
+                valueIsOpaqueCommand = BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
+                    verbKey, pendingNativeFlag);
+                treatAsPath = !valueIsOpaqueCommand
+                    && BashPerVerbRules.TryGetFlagValuePath(
+                        verbKey,
+                        pendingNativeFlag,
+                        t.Value,
+                        out valueForResolution);
                 pendingNativeFlag = null;
             }
             else
@@ -1119,13 +1257,15 @@ internal static class PwshCommandParser
                 positionalIndex++;
             }
 
-            var resolvedArg = ResolveValueToken(
-                rawValue,
-                valueForResolution,
-                treatAsPath,
-                options,
-                workingDirectoryUnknown,
-                isLiteralBytes);
+            var resolvedArg = valueIsOpaqueCommand
+                ? new Arg { Raw = rawValue, Kind = ArgKind.DynamicSkip, IsPath = false }
+                : ResolveValueToken(
+                    rawValue,
+                    valueForResolution,
+                    treatAsPath,
+                    options,
+                    workingDirectoryUnknown,
+                    isLiteralBytes);
             args.Add(resolvedArg);
             elements.Add(CreateElement(
                 source,
@@ -1283,10 +1423,11 @@ internal static class PwshCommandParser
         ArgKind kind,
         bool isFlag,
         bool isPath,
-        string? resolved) => new()
+        string? resolved,
+        string? value = null) => new()
     {
         Raw = SourceSlice(source, token),
-        Value = token.Value,
+        Value = value ?? token.Value,
         Role = role,
         SourceStart = token.SourceStart,
         SourceLength = token.SourceLength,
@@ -1296,6 +1437,34 @@ internal static class PwshCommandParser
         IsPath = isPath,
         Resolved = resolved,
     };
+
+    private static ClauseElement CreateCombinedElement(
+        string source,
+        PwshToken first,
+        PwshToken last,
+        string value,
+        int precedingVerbTokenCount,
+        ArgKind kind,
+        bool isFlag,
+        bool isPath,
+        string? resolved)
+    {
+        var sourceStart = first.SourceStart;
+        var sourceEnd = last.SourceStart + last.SourceLength;
+        return new ClauseElement
+        {
+            Raw = source.Substring(sourceStart, sourceEnd - sourceStart),
+            Value = value,
+            Role = ClauseElementRole.Argument,
+            SourceStart = sourceStart,
+            SourceLength = sourceEnd - sourceStart,
+            PrecedingVerbElementCount = precedingVerbTokenCount,
+            Kind = kind,
+            IsFlag = isFlag,
+            IsPath = isPath,
+            Resolved = resolved,
+        };
+    }
 
     private static ClauseElement CreateRedirectElement(
         string source,
@@ -1324,6 +1493,33 @@ internal static class PwshCommandParser
             IsPath = isPath,
             Resolved = resolved,
         };
+    }
+
+    private static bool IsAdjacent(PwshToken first, PwshToken second) =>
+        first.SourceStart + first.SourceLength == second.SourceStart;
+
+    private static bool IsNativeArgumentFragment(PwshToken token) =>
+        token.Kind is PwshTokenKind.Word
+            or PwshTokenKind.QuotedString
+            or PwshTokenKind.ScriptBlock
+            or PwshTokenKind.Subexpression
+            or PwshTokenKind.Splat;
+
+    private static int FirstBindingSeparator(string value)
+    {
+        var colon = value.IndexOf(':');
+        var equals = value.IndexOf('=');
+        if (colon < 0)
+        {
+            return equals;
+        }
+
+        if (equals < 0)
+        {
+            return colon;
+        }
+
+        return Math.Min(colon, equals);
     }
 
     /// <summary>SPEC.POWERSHELL.md §8: map a PowerShell redirect operator
@@ -1647,7 +1843,8 @@ internal static class PwshCommandParser
 
     private static bool TryRecurseIntoPwsh(
         List<PwshToken> body, int start, ClassifiedVerb verb, string source,
-        PwshParserOptions options, int recursionDepth, Segment segment, bool markWrapped,
+        PwshParserOptions options, PwshParserOptions redirectOptions,
+        bool workingDirectoryUnknown, int recursionDepth, Segment segment, bool markWrapped,
         out BuildResult result)
     {
         result = default;
@@ -1665,6 +1862,8 @@ internal static class PwshCommandParser
             var colon = raw.IndexOf(':');
             var name = colon > 0 ? raw.Substring(0, colon) : raw;
             var colonValue = colon > 0 ? raw.Substring(colon + 1) : null;
+            var redirectStart = FindWrapperRedirectStart(body, i + 1);
+            var payloadEndExclusive = redirectStart < 0 ? body.Count : redirectStart;
 
             string? inner = null;
             string? failure = null;
@@ -1672,7 +1871,8 @@ internal static class PwshCommandParser
 
             if (IsCommandParameter(name))
             {
-                inner = ResolveCommandPayload(body, i, colonValue, source);
+                inner = ResolveCommandPayload(
+                    body, i, colonValue, source, payloadEndExclusive, out failure);
             }
             else if (IsEncodedCommandParameter(name))
             {
@@ -1684,7 +1884,15 @@ internal static class PwshCommandParser
                 }
                 else
                 {
-                    inner = TryDecodeEncodedCommand(payloadToken, out failure);
+                    var expectedPayloadEnd = colonValue is null ? i + 2 : i + 1;
+                    if (expectedPayloadEnd < payloadEndExclusive)
+                    {
+                        failure = "-EncodedCommand has unsupported trailing arguments";
+                    }
+                    else
+                    {
+                        inner = TryDecodeEncodedCommand(payloadToken, out failure);
+                    }
                 }
             }
             else
@@ -1703,6 +1911,20 @@ internal static class PwshCommandParser
                 result = BuildResult.Fail(
                     isEncoded ? "-EncodedCommand payload could not be decoded"
                               : "-Command is missing its payload");
+                return true;
+            }
+
+            if (!TryBuildWrapperRedirects(
+                body,
+                redirectStart,
+                source,
+                redirectOptions,
+                workingDirectoryUnknown,
+                out var wrapperRedirects,
+                out var wrapperRedirectElements,
+                out failure))
+            {
+                result = BuildResult.Fail(failure);
                 return true;
             }
 
@@ -1733,6 +1955,46 @@ internal static class PwshCommandParser
                     IsCommandStringWrapped = true,
                     Elements = ClauseElementProvenance.WithoutOuterSourceSpans(ic.Elements),
                 });
+            }
+
+            if (expanded.Count == 0 && wrapperRedirects.Count > 0)
+            {
+                expanded.Add(new Clause
+                {
+                    Operator = segment.PrecedingOperator,
+                    Verb = new VerbChain(),
+                    Args = Array.Empty<Arg>(),
+                    Redirects = wrapperRedirects,
+                    Elements = wrapperRedirectElements,
+                    IsSubshell = segment.Depth > 0,
+                    IsCommandStringWrapped = true,
+                });
+            }
+            else if (expanded.Count > 0 && wrapperRedirects.Count > 0)
+            {
+                var lastIndex = expanded.Count - 1;
+                var lastClause = expanded[lastIndex];
+                var redirects = new List<Redirect>(lastClause.Redirects.Count + wrapperRedirects.Count);
+                redirects.AddRange(lastClause.Redirects);
+                redirects.AddRange(wrapperRedirects);
+
+                var elements = new List<ClauseElement>(
+                    lastClause.Elements.Count + wrapperRedirectElements.Count);
+                elements.AddRange(lastClause.Elements);
+                var precedingVerbCount = lastClause.Verb.Tokens.Count;
+                foreach (var redirectElement in wrapperRedirectElements)
+                {
+                    elements.Add(redirectElement with
+                    {
+                        PrecedingVerbElementCount = precedingVerbCount,
+                    });
+                }
+
+                expanded[lastIndex] = lastClause with
+                {
+                    Redirects = redirects,
+                    Elements = elements,
+                };
             }
 
             result = BuildResult.Recursion(expanded);
@@ -1772,14 +2034,26 @@ internal static class PwshCommandParser
     /// to the end of the segment body.
     /// </summary>
     private static string? ResolveCommandPayload(
-        List<PwshToken> body, int paramIndex, string? colonValue, string source)
+        List<PwshToken> body,
+        int paramIndex,
+        string? colonValue,
+        string source,
+        int payloadEndExclusive,
+        out string? failure)
     {
+        failure = null;
         if (colonValue is not null)
         {
+            if (paramIndex + 1 < payloadEndExclusive)
+            {
+                failure = "-Command has unsupported trailing arguments";
+                return null;
+            }
+
             return colonValue;
         }
 
-        if (paramIndex + 1 >= body.Count)
+        if (paramIndex + 1 >= payloadEndExclusive)
         {
             return null;
         }
@@ -1787,11 +2061,23 @@ internal static class PwshCommandParser
         var next = body[paramIndex + 1];
         if (next.Kind == PwshTokenKind.QuotedString)
         {
+            if (paramIndex + 2 < payloadEndExclusive)
+            {
+                failure = "-Command has unsupported trailing arguments";
+                return null;
+            }
+
             return next.Value;
         }
 
         if (next.Kind == PwshTokenKind.ScriptBlock)
         {
+            if (paramIndex + 2 < payloadEndExclusive)
+            {
+                failure = "-Command has unsupported trailing arguments";
+                return null;
+            }
+
             // Strip the outer { }.
             var v = next.Value;
             if (v.Length >= 2 && v[0] == '{' && v[v.Length - 1] == '}')
@@ -1803,7 +2089,7 @@ internal static class PwshCommandParser
         }
 
         // Bare / multi-token: verbatim slice to the end of the segment body.
-        var last = body[body.Count - 1];
+        var last = body[payloadEndExclusive - 1];
         var sliceStart = next.SourceStart;
         var sliceEnd = last.SourceStart + last.SourceLength;
         if (sliceStart < 0 || sliceStart >= source.Length)
@@ -1818,6 +2104,81 @@ internal static class PwshCommandParser
 
         return source.Substring(sliceStart, sliceEnd - sliceStart);
     }
+
+    private static int FindWrapperRedirectStart(List<PwshToken> body, int start)
+    {
+        for (var i = start; i < body.Count; i++)
+        {
+            if (IsRedirectOperator(body[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    private static bool TryBuildWrapperRedirects(
+        List<PwshToken> body,
+        int redirectStart,
+        string source,
+        PwshParserOptions options,
+        bool workingDirectoryUnknown,
+        out IReadOnlyList<Redirect> redirects,
+        out IReadOnlyList<ClauseElement> elements,
+        out string? failure)
+    {
+        var redirectList = new List<Redirect>();
+        var elementList = new List<ClauseElement>();
+        failure = null;
+        if (redirectStart < 0)
+        {
+            redirects = redirectList;
+            elements = elementList;
+            return true;
+        }
+
+        var i = redirectStart;
+        while (i < body.Count)
+        {
+            if (!IsRedirectOperator(body[i]))
+            {
+                redirects = redirectList;
+                elements = elementList;
+                failure = "pwsh command-string wrapper has unsupported tokens after a redirect";
+                return false;
+            }
+
+            var consumed = BuildRedirect(
+                body,
+                i,
+                source,
+                options,
+                workingDirectoryUnknown,
+                redirectList,
+                precedingVerbTokenCount: 0,
+                out var element,
+                out failure);
+            if (failure is not null)
+            {
+                redirects = redirectList;
+                elements = elementList;
+                return false;
+            }
+
+            elementList.Add(element!);
+            i += consumed;
+        }
+
+        redirects = redirectList;
+        elements = elementList;
+        return true;
+    }
+
+    private static bool IsRedirectOperator(PwshToken token) =>
+        token.Kind == PwshTokenKind.Operator
+        && token.OperatorText is not null
+        && (token.OperatorText == "<" || token.OperatorText.IndexOf('>') >= 0);
 
     private static string? NextTokenValue(List<PwshToken> body, int paramIndex) =>
         paramIndex + 1 < body.Count ? body[paramIndex + 1].Value : null;

@@ -296,34 +296,38 @@ public class BashPerVerbRulesTests
     }
 
     [Theory]
-    [InlineData("git", "-c", true, false)]
-    [InlineData("git", "-C", true, true)]
-    [InlineData("curl", "-d", true, false)]
-    [InlineData("curl", "-D", true, true)]
-    [InlineData("curl", "-o", true, true)]
-    [InlineData("curl", "-O", false, false)]
-    [InlineData("curl", "--data", true, false)]
-    [InlineData("curl", "--dump-header", true, true)]
-    [InlineData("curl", "--output", true, true)]
-    [InlineData("wget", "-o", true, true)]
-    [InlineData("wget", "-O", true, true)]
-    [InlineData("wget", "--output-file", true, true)]
-    [InlineData("wget", "--output-document", true, true)]
-    [InlineData("tar", "-c", false, false)]
-    [InlineData("tar", "-C", true, true)]
-    [InlineData("tar", "-f", true, true)]
-    [InlineData("tar", "-F", true, true)]
-    [InlineData("tar", "--info-script", true, true)]
-    [InlineData("tar", "--new-volume-script", true, true)]
+    [InlineData("git", "-c", true, false, false)]
+    [InlineData("git", "-C", true, true, false)]
+    [InlineData("curl", "-d", true, false, false)]
+    [InlineData("curl", "-D", true, true, false)]
+    [InlineData("curl", "-o", true, true, false)]
+    [InlineData("curl", "-O", false, false, false)]
+    [InlineData("curl", "--data", true, false, false)]
+    [InlineData("curl", "--dump-header", true, true, false)]
+    [InlineData("curl", "--output", true, true, false)]
+    [InlineData("wget", "-o", true, true, false)]
+    [InlineData("wget", "-O", true, true, false)]
+    [InlineData("wget", "--output-file", true, true, false)]
+    [InlineData("wget", "--output-document", true, true, false)]
+    [InlineData("tar", "-c", false, false, false)]
+    [InlineData("tar", "-C", true, true, false)]
+    [InlineData("tar", "-f", true, true, false)]
+    [InlineData("tar", "-F", true, false, true)]
+    [InlineData("tar", "--info-script", true, false, true)]
+    [InlineData("tar", "--new-volume-script", true, false, true)]
     public void Native_option_binding_matrix(
         string verb,
         string flag,
         bool consumesValue,
-        bool valueIsPath)
+        bool valueIsPath,
+        bool valueIsOpaqueCommand)
     {
         Assert.True(BashVerbs.FlagsWithValue.TryGetValue(verb, out var flags));
         Assert.Equal(consumesValue, flags.Contains(flag));
         Assert.Equal(valueIsPath, BashPerVerbRules.ValueOfFlagIsPath(verb, flag));
+        Assert.Equal(
+            valueIsOpaqueCommand,
+            BashPerVerbRules.ValueOfFlagIsOpaqueCommand(verb, flag));
     }
 
     [Theory]

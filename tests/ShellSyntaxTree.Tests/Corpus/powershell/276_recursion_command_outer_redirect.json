@@ -1,0 +1,61 @@
+{
+  "name": "Recursion command outer redirect",
+  "input": "pwsh -Command \u0022git status\u0022 \u003E outer.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git",
+          "status"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/work/outer.txt"
+          }
+        ],
+        "elements": [
+          {
+            "raw": "git",
+            "value": "git",
+            "role": "Verb",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "status",
+            "value": "status",
+            "role": "Verb",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "\u003E outer.txt",
+            "value": "outer.txt",
+            "role": "Redirect",
+            "sourceStart": 27,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/outer.txt"
+          }
+        ],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "A redirect authored on a pwsh wrapper remains visible after command-string recursion."
+}

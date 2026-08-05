@@ -250,6 +250,9 @@ foreach (var arg in clause.Args)
 The policy decides whether an unknown argument matters. `echo $message` may be
 acceptable to one product, while `Remove-Item $target` should normally prompt.
 Never treat `DynamicSkip.Raw` as a statically resolved path.
+Command-valued native options use the same signal. GNU tar's `-F`,
+`--info-script`, and `--new-volume-script` operands execute code, so the parser
+reports their values as `DynamicSkip` rather than misleading path facts.
 
 ### Working-directory attribution
 
@@ -314,6 +317,9 @@ ShellSyntaxTree also looks through supported command-string wrappers. Clauses
 surfaced from `bash -c`, `pwsh -Command`, and `pwsh -EncodedCommand` carry
 `IsCommandStringWrapped = true`. The outer wrapper is not the action a
 verb-based policy should authorize; the surfaced inner clauses are.
+Redirects authored on the outer PowerShell wrapper remain attached to the last
+surfaced clause, so redirect policy still sees paths such as
+`pwsh -Command "git status" > audit.log`.
 
 PowerShell script blocks, subexpressions, splats, and `--%` regions are opaque
 and surface as `DynamicSkip`. A dynamically invoked command such as `& $exe`

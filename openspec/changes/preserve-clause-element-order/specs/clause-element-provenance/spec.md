@@ -68,6 +68,21 @@ Argument elements SHALL carry the parser's `Kind`, `IsFlag`, `IsPath`, and
 - **THEN** `--work-tree=../repo` is one argument element
 - **THEN** the element is a flag and carries the bound value's path metadata
 
+#### Scenario: Adjacent quoted inline native value
+- **WHEN** either parser parses `curl --data="@request file.json" URL`
+- **THEN** `--data="@request file.json"` is one argument element
+- **THEN** its decoded value is `--data=@request file.json`
+- **THEN** it carries path metadata for `request file.json`
+
+#### Scenario: Complete adjacent fragment run
+- **WHEN** either parser parses `curl --data=@request".json" URL`
+- **THEN** the unquoted prefix and quoted suffix form one argument element
+- **THEN** its decoded value is `--data=@request.json`
+- **WHEN** either parser parses `curl --data='@$HOME'".json" URL`
+- **THEN** the mixed resolver-sensitive value is `DynamicSkip`
+- **WHEN** either parser parses `curl --data='@~'"/secret.json" URL`
+- **THEN** the value remains `DynamicSkip` after curl's `@` marker is removed
+
 #### Scenario: Native option spelling remains case-sensitive
 - **WHEN** either parser parses `git -c key=value commit`
 - **THEN** `key=value` is not classified as a path
@@ -90,9 +105,10 @@ Argument elements SHALL carry the parser's `Kind`, `IsFlag`, `IsPath`, and
 - **WHEN** either parser parses `curl -d "@-" URL`
 - **THEN** `@-` is not classified as a path
 
-#### Scenario: Tar helper-script bindings are explicit
-- **WHEN** either parser parses `tar -F=./helper.sh --info-script=./info.sh --new-volume-script ./next.sh archive.tar`
-- **THEN** all three helper-script values are classified as paths
+#### Scenario: Tar helper commands safe-fail
+- **WHEN** either parser parses `tar -F ./helper.sh --info-script=./info.sh --new-volume-script ./next.sh archive`
+- **THEN** all three command values are `DynamicSkip` and not paths
+- **THEN** the bare `archive` operand remains a path argument rather than a verb
 
 ### Requirement: Redirects occupy their authored position
 Each redirect SHALL appear as one redirect element at the source position of
@@ -130,6 +146,12 @@ null spans when they cannot be mapped exactly into the outer
 - **WHEN** PowerShell parses a valid encoded command payload
 - **THEN** the surfaced clause elements retain their decoded values
 - **THEN** every surfaced element has null `SourceStart` and `SourceLength`
+
+#### Scenario: PowerShell wrapper preserves an outer redirect
+- **WHEN** PowerShell parses `pwsh -Command "git status" > outer.txt`
+- **THEN** the surfaced clause contains the output redirect in both `Redirects` and `Elements`
+- **THEN** the inner verb elements have null spans
+- **THEN** the redirect element retains its exact outer source span
 
 #### Scenario: PowerShell Invoke-Expression expansion
 - **WHEN** PowerShell parses `Invoke-Expression 'git -C C:\repo status'`

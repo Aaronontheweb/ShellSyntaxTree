@@ -153,15 +153,23 @@ internal static class BashPerVerbRules
             [("docker", "-v")] = false,
             [("docker", "--volume")] = false,
 
-            // tar: archive, directory, and multi-volume helper values are paths.
+            // tar: archive and directory values are paths. Multi-volume
+            // helper values are commands and are safe-failed separately.
             [("tar", "-f")] = true,
             [("tar", "--file")] = true,
             [("tar", "-C")] = true,
             [("tar", "--directory")] = true,
-            [("tar", "-F")] = true,
-            [("tar", "--info-script")] = true,
-            [("tar", "--new-volume-script")] = true,
         };
+
+    /// <summary>
+    /// True when a flag value is executable command text rather than a file
+    /// operand. The parser must not publish a resolved path for these values.
+    /// </summary>
+    internal static bool ValueOfFlagIsOpaqueCommand(string verb, string flag) =>
+        string.Equals(verb, "tar", StringComparison.OrdinalIgnoreCase)
+        && (string.Equals(flag, "-F", StringComparison.Ordinal)
+            || string.Equals(flag, "--info-script", StringComparison.Ordinal)
+            || string.Equals(flag, "--new-volume-script", StringComparison.Ordinal));
 
     /// <summary>
     /// Whether every value following <paramref name="flag"/> for

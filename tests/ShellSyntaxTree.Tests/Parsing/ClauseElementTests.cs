@@ -249,6 +249,117 @@ public class ClauseElementTests
     }
 
     [Fact]
+    public void Adjacent_quoted_native_binding_is_one_path_aware_element()
+    {
+        const string source = "curl --data=\"@request file.json\" https://example.invalid/api";
+        foreach (var (shell, parser) in Parsers())
+        {
+            var clause = Assert.Single(parser.Parse(source).Clauses);
+            var option = Assert.Single(
+                clause.Elements,
+                element => element.Raw == "--data=\"@request file.json\"");
+
+            Assert.Equal("--data=@request file.json", option.Value);
+            Assert.True(option.IsFlag, shell);
+            Assert.True(option.IsPath, shell);
+            Assert.EndsWith("/request file.json", option.Resolved, StringComparison.Ordinal);
+            Assert.DoesNotContain(clause.Elements, element => element.Raw == "--data=");
+        }
+    }
+
+    [Fact]
+    public void Complete_adjacent_fragment_run_is_one_native_element()
+    {
+        const string source = "curl --data='@request'\" file.json\" https://example.invalid/api";
+        foreach (var (shell, parser) in Parsers())
+        {
+            var clause = Assert.Single(parser.Parse(source).Clauses);
+            var option = Assert.Single(
+                clause.Elements,
+                element => element.Value == "--data=@request file.json");
+
+            Assert.Equal("--data='@request'\" file.json\"", option.Raw);
+            Assert.True(option.IsPath, shell);
+            Assert.EndsWith("/request file.json", option.Resolved, StringComparison.Ordinal);
+            Assert.DoesNotContain(
+                clause.Elements,
+                element => element.Raw is "'@request'" or "\" file.json\"");
+        }
+    }
+
+    [Fact]
+    public void Unquoted_value_prefix_joins_adjacent_native_fragments()
+    {
+        const string source = "curl --data=@request\".json\" https://example.invalid/api";
+        foreach (var (shell, parser) in Parsers())
+        {
+            var clause = Assert.Single(parser.Parse(source).Clauses);
+            var option = Assert.Single(
+                clause.Elements,
+                element => element.Value == "--data=@request.json");
+
+            Assert.Equal("--data=@request\".json\"", option.Raw);
+            Assert.True(option.IsPath, shell);
+            Assert.EndsWith("/request.json", option.Resolved, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void Resolver_sensitive_mixed_quoting_safe_fails()
+    {
+        const string source = "curl --data='@$HOME'\".json\" https://example.invalid/api";
+        foreach (var (shell, parser) in Parsers())
+        {
+            var clause = Assert.Single(parser.Parse(source).Clauses);
+            var option = Assert.Single(
+                clause.Elements,
+                element => element.Value == "--data=@$HOME.json");
+
+            Assert.Equal(ArgKind.DynamicSkip, option.Kind);
+            Assert.False(option.IsPath, shell);
+            Assert.Null(option.Resolved);
+        }
+
+        const string transformedSource =
+            "curl --data='@~'\"/secret.json\" https://example.invalid/api";
+        foreach (var (shell, parser) in Parsers())
+        {
+            var clause = Assert.Single(parser.Parse(transformedSource).Clauses);
+            var option = Assert.Single(
+                clause.Elements,
+                element => element.Value == "--data=@~/secret.json");
+
+            Assert.Equal(ArgKind.DynamicSkip, option.Kind);
+            Assert.False(option.IsPath, shell);
+            Assert.Null(option.Resolved);
+        }
+    }
+
+    [Fact]
+    public void Tar_helper_commands_safe_fail_and_native_paths_remain_arguments()
+    {
+        const string source = "tar -F ./helper.sh archive --file out.tar";
+        foreach (var (shell, parser) in Parsers())
+        {
+            var clause = Assert.Single(parser.Parse(source).Clauses);
+            Assert.Equal(new[] { "tar" }, clause.Verb.Tokens);
+
+            var helper = Assert.Single(
+                clause.Elements,
+                element => element.Value == "./helper.sh");
+            Assert.Equal(ArgKind.DynamicSkip, helper.Kind);
+            Assert.False(helper.IsPath, shell);
+            Assert.Null(helper.Resolved);
+
+            var archive = Assert.Single(
+                clause.Elements,
+                element => element.Value == "archive");
+            Assert.Equal(ClauseElementRole.Argument, archive.Role);
+            Assert.True(archive.IsPath, shell);
+        }
+    }
+
+    [Fact]
     public void PowerShell_inline_cmdlet_binding_carries_bound_value_metadata()
     {
         var clause = Assert.Single(Pwsh.Parse("Remove-Item -Path:C:\\repo").Clauses);
@@ -261,6 +372,21 @@ public class ClauseElementTests
         Assert.True(option.IsFlag);
         Assert.True(option.IsPath);
         Assert.Equal("C:/repo", option.Resolved);
+    }
+
+    [Fact]
+    public void PowerShell_inline_cmdlet_binding_decodes_backtick_escapes()
+    {
+        const string source = "Remove-Item -Path:C:\\payload` file.txt";
+        var clause = Assert.Single(Pwsh.Parse(source).Clauses);
+        var option = Assert.Single(
+            clause.Elements,
+            element => element.Role == ClauseElementRole.Argument);
+
+        Assert.Equal("-Path:C:\\payload` file.txt", option.Raw);
+        Assert.Equal("-Path:C:\\payload file.txt", option.Value);
+        Assert.True(option.IsPath);
+        Assert.Equal("C:/payload file.txt", option.Resolved);
     }
 
     [Fact]
@@ -378,6 +504,43 @@ public class ClauseElementTests
             new[] { "git", "commit", "-C", "HEAD~1" },
             clause.Elements.Select(element => element.Value).ToArray());
         Assert.All(clause.Elements, AssertSpanIsUnknown);
+    }
+
+    [Fact]
+    public void PowerShell_command_wrapper_preserves_outer_redirect()
+    {
+        const string source = "pwsh -Command \"git status\" > outer.txt";
+        var clause = Assert.Single(Pwsh.Parse(source).Clauses);
+        var redirect = Assert.Single(clause.Redirects);
+        var redirectElement = Assert.Single(
+            clause.Elements,
+            element => element.Role == ClauseElementRole.Redirect);
+
+        Assert.Equal("C:/work/outer.txt", redirect.Target);
+        Assert.Equal("> outer.txt", redirectElement.Raw);
+        Assert.Equal("outer.txt", redirectElement.Value);
+        Assert.Equal(source.IndexOf('>'), redirectElement.SourceStart);
+        Assert.True(redirectElement.IsPath);
+        Assert.Equal("C:/work/outer.txt", redirectElement.Resolved);
+        Assert.All(
+            clause.Elements.Where(element => element.Role != ClauseElementRole.Redirect),
+            AssertSpanIsUnknown);
+
+        var payload = Convert.ToBase64String(Encoding.Unicode.GetBytes("git status"));
+        var encodedSource = $"pwsh -EncodedCommand {payload} > encoded.txt";
+        var encodedClause = Assert.Single(Pwsh.Parse(encodedSource).Clauses);
+        var encodedRedirect = Assert.Single(
+            encodedClause.Elements,
+            element => element.Role == ClauseElementRole.Redirect);
+        Assert.Equal("> encoded.txt", encodedRedirect.Raw);
+        Assert.Equal("C:/work/encoded.txt", encodedRedirect.Resolved);
+
+        var emptyClause = Assert.Single(Pwsh.Parse("pwsh -Command \"\" > empty.txt").Clauses);
+        Assert.Empty(emptyClause.Verb.Tokens);
+        Assert.Equal("C:/work/empty.txt", Assert.Single(emptyClause.Redirects).Target);
+        Assert.Equal(
+            "> empty.txt",
+            Assert.Single(emptyClause.Elements, element => element.Role == ClauseElementRole.Redirect).Raw);
     }
 
     private static IEnumerable<(string Shell, IShellParser Parser)> Parsers()

@@ -83,8 +83,8 @@ Ordinal matching requires every supported spelling to be explicit. The shared
 native table therefore distinguishes curl `-d` request data from `-D` header
 output, and lists both Wget `-o` log output and `-O` document output as
 path-valued bindings. It also lists tar `-F` independently from `-f`. An
-option-binding matrix pins consuming and path semantics independently so a
-comparer change cannot silently alter either; the long aliases are pinned
+option-binding matrix pins consuming, path, and executable-command semantics independently so a
+comparer change cannot silently alter any of them; the long aliases are pinned
 alongside the case-colliding short forms.
 
 Some native meaning is operand- or command-context-sensitive rather than
@@ -93,6 +93,8 @@ the parser preserves the authored value while stripping `@` only for path
 resolution; `@-` remains stdin. Docker's global `-v` and `docker run -v` have
 different meanings, so the collision matrix does not claim a universal Docker
 binding. Executable-aware consumers interpret that placement from `Elements`.
+GNU tar executes `-F` / `--info-script` / `--new-volume-script` operands, so
+those values are opaque `DynamicSkip` command text rather than resolved paths.
 
 This corrects pre-existing metadata drift. It does not make the shared parser
 Git-semantic: a Git-aware consumer must still reinterpret `git commit -c/-C`
@@ -113,6 +115,9 @@ and `Value`, but their spans are null after expansion because escaping and
 decoding prevent a generally exact mapping into the outer source.
 
 Nullable spans are an uncertainty signal; the parser does not guess offsets.
+An outer redirect after a PowerShell command-string payload is not decoded
+inner text: it retains its exact outer span and is appended to the surfaced
+wrapped clause.
 
 When another parser feature deliberately collapses a computed source
 expression into one `DynamicSkip` compatibility argument, the ordered view
@@ -138,6 +143,9 @@ and therefore one clause element. Their `Raw` and `Value` describe the full
 token; `IsPath`, `Kind`, and `Resolved` describe the bound value when the
 parser can classify it. Existing `Args` may continue splitting such a token
 into multiple semantic arguments.
+Adjacent fragments that the shell passes as one native argument, such as
+`--data="@request file.json"`, are also one element. Its span covers every
+fragment and its metadata describes the complete bound value.
 
 ### Build elements in the classified token walk
 

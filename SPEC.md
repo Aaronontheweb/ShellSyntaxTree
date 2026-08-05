@@ -299,7 +299,14 @@ compound operators, grouping delimiters, and shell call operators are excluded.
 Each verb token appears exactly once with `Role=Verb`. Each authored argument
 token appears once with `Role=Argument`; inline forms such as
 `--work-tree=../repo` stay one element even when `Args` exposes separate flag
-and value projections. A parser-defined opaque computed region that is
+and value projections. Shell-adjacent fragments that form one native argument,
+such as `--data="@request file.json"`, likewise stay one element spanning the
+complete authored argument. The parser consumes the full contiguous fragment
+run, including an unquoted value prefix such as `--data=@request".json"`.
+Mixed quoting that prevents safe reconstruction of resolver-sensitive literal
+syntax (`$`, glob metacharacters, `~`, provider prefixes) safe-fails the bound
+value as `DynamicSkip`, including syntax exposed only after an operand marker
+such as curl's leading `@` is removed. A parser-defined opaque computed region that is
 safe-failed as one `DynamicSkip` argument also appears as one argument element;
 its `Raw` and `Value` are the complete source slice rather than a claim that
 the parser understood the region's interior. Each redirect appears once with
@@ -860,7 +867,7 @@ verb chain is a path. Per-verb overrides:
 | `rg` | First positional is **pattern**; rest are paths. |
 | `sed` | First positional is **script**; rest are paths. |
 | `awk` | First positional is **program**; rest are paths. |
-| `tar` | Action flag determines path roles; default to extracting all non-flag positionals as paths. `-F` / `--info-script` / `--new-volume-script` values are helper-script paths. |
+| `tar` | Action flag determines path roles; default to extracting all non-flag positionals as paths. `-F` / `--info-script` / `--new-volume-script` values are executable command text and safe-fail as `DynamicSkip`, never paths. |
 | `curl` | First positional is **URL**, not a path. `-o` / `--output` and `-D` / `--dump-header` values are paths. `-d` / `--data` values are request data unless prefixed with `@`, which reads a file; `@-` reads stdin and is not a path. |
 | `wget` | First positional is **URL**, not a path. `-o` / `--output-file` writes a log path; `-O` / `--output-document` writes the downloaded document path. |
 | `scp`, `rsync`, `sftp` | All positionals are paths (some remote). |
@@ -909,6 +916,11 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
 > resolution, and leaves `@-` non-path because it denotes stdin. Dynamic and
 > glob filenames continue through the normal §8 safe-fail rules after the
 > prefix is removed.
+
+> **Command-valued options.** GNU tar executes `-F` / `--info-script` /
+> `--new-volume-script` operands. Those options still consume a value, but the
+> value is `Kind=DynamicSkip`, `IsPath=false`, and `Resolved=null`; resolving
+> command text as a path would give a security gate false confidence.
 
 > **Executable context.** `FlagsWithValue` is a curated parser heuristic, not
 > a complete executable grammar. In particular, Docker's global `-v` means
@@ -1427,6 +1439,12 @@ An entry may add an `elements` list to a clause to pin the complete
 `sourceLength`, `precedingVerbElementCount`, `kind`, `isFlag`, `isPath`, and
 `resolved`). The field is opt-in so older corpus entries remain readable;
 issue-specific provenance entries SHALL include it.
+
+The corpus runner also lexes every direct, parseable input and verifies that
+each authored verb, argument, opaque region, and redirect token is covered by
+exactly-positioned clause-element provenance. This invariant applies even when
+an older entry omits the optional field, preventing silent argument loss across
+the legacy corpus.
 
 ### Coverage targets for v0.1
 

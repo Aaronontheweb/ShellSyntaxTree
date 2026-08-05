@@ -1,0 +1,36 @@
+{
+  "name": "Recursion empty command outer redirect",
+  "input": "pwsh -Command \u0022\u0022 \u003E empty.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/work/empty.txt"
+          }
+        ],
+        "elements": [
+          {
+            "raw": "\u003E empty.txt",
+            "value": "empty.txt",
+            "role": "Redirect",
+            "sourceStart": 17,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/empty.txt"
+          }
+        ],
+        "isCommandStringWrapped": true
+      }
+    ]
+  },
+  "notes": "An empty wrapped payload still surfaces its outer redirect as a redirect-only clause."
+}

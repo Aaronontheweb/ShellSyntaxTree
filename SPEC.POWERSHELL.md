@@ -156,13 +156,22 @@ syntax rather than verb/argument/redirect leaves and do not appear.
 Inline parameter forms remain one source element. For `-Path:C:\repo`, the
 element's `Raw` and `Value` describe the full parameter token while `Kind`,
 `IsPath`, and `Resolved` describe the bound `C:\repo` value. Native
-`--flag=value` follows the same rule as Bash.
+`--flag=value` follows the same rule as Bash. Backtick escapes in an inline
+bound value are decoded before `Value` and path metadata are produced. Adjacent
+native fragments such as `--data='@C:\payload file'` form one element because
+PowerShell passes them to the executable as one argument. The complete
+contiguous fragment run is consumed. Resolver-sensitive syntax inside a
+single-quoted fragment mixed with expandable fragments safe-fails as
+`DynamicSkip` rather than being expanded.
 
 Clauses recursively surfaced from `pwsh -Command` and
 `pwsh -EncodedCommand` retain inner `Raw` and `Value` but have null
 `SourceStart` and `SourceLength`: quote/backtick processing, script-block
 stripping, and base64 decoding do not provide a generally exact map into the
 outer `ParsedCommand.Source`.
+An outer redirect authored after a `pwsh -Command` or `-EncodedCommand`
+payload remains on the surfaced wrapped clause with its exact outer source
+span; only decoded inner elements have null spans.
 
 `ClauseElement.Role` and `PrecedingVerbElementCount` mirror the shared greedy
 native verb projection. They are AST coordinates, not native-executable
@@ -708,8 +717,9 @@ Native commands reuse the bash per-verb rules table verbatim — `git`,
 `curl`, `tar`, etc. behave identically to `SPEC.md` §7 (`curl` / `wget`:
 the first positional is a URL; curl `-o` / `-D` values and Wget `-o` / `-O`
 values are paths, while curl `-d` data is non-path unless `@file` requests a
-file read; `@-` denotes stdin). Tar `-F` / `--info-script` helper values are
-paths. This
+file read; `@-` denotes stdin). Tar `-F` / `--info-script` /
+`--new-volume-script` values execute commands and therefore safe-fail as
+`DynamicSkip`, not paths. This
 includes hyphenated option names and the bash `--flag=value` split: the
 flag and value surface as separate args, and a curated flag's value receives
 the same path classification in both parsers. Native `--flag:value` has no
@@ -717,7 +727,9 @@ cmdlet-binding semantics and remains verbatim. PowerShell still owns outer
 tokenization: spaced curl operands beginning with `@` should be quoted because
 `@name` is splatting and bare `@-` is a parse error. Use forms such as
 `-d "@request.json"` / `-d "@-"`, or bind a file inline as
-`--data=@request.json`, so the native command receives one value.
+`--data=@request.json`, so the native command receives one value. An equals
+prefix adjacent to a quoted value, such as `--data='@C:\payload file'`, is
+also one native argument and one clause element.
 
 ---
 
@@ -894,8 +906,8 @@ not just one quoted token. The parser handles all three real forms:
 - **Script block** — `pwsh -Command { Remove-Item C:\tmp\x }`. Parse the
   script-block *interior* (braces stripped) as a fresh `ParsedCommand`.
 - **Bare / multi-token** — `pwsh -Command Remove-Item C:\tmp\x`. Take the
-  verbatim source slice from the first token after `-Command` to the end of
-  the statement and parse *that* as a fresh `ParsedCommand`.
+  verbatim source slice from the first token after `-Command` through the last
+  command token and parse *that* as a fresh `ParsedCommand`.
 
 In every form the inner clauses surface inline, each with
 `IsCommandStringWrapped = true`. **Not** recognizing the bare/multi-token
@@ -905,6 +917,12 @@ recursion cap applies; deeper nesting, **or an inner parse that itself
 yields `IsUnparseable = true`** (e.g. a `-Command` payload that decodes to a
 control-flow script), sets the outer `ParsedCommand.IsUnparseable = true` so
 the whole command routes to safe-fail (`SPEC.md` §10).
+
+A terminal redirect belongs to the outer PowerShell invocation, not the child
+command string. The parser appends each such redirect to the last surfaced
+inner clause's `Redirects` and `Elements`; its outer source span remains exact.
+Non-redirect arguments after a quoted, script-block, colon-bound, or encoded
+payload are not modeled and set `IsUnparseable=true` rather than disappearing.
 
 `pwsh -File script.ps1` is **not** recursion — the file content is not
 available to the parser. It parses as an ordinary clause with `script.ps1`

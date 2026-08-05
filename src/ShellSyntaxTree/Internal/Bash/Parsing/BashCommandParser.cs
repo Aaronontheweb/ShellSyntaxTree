@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using System.Text;
 using ShellSyntaxTree.Internal.Bash.Lexing;
 using ShellSyntaxTree.Internal.Bash.Verbs;
 using ShellSyntaxTree.Internal.Parsing;
@@ -1143,6 +1144,117 @@ internal static class BashCommandParser
                 {
                     var sourceRaw = SourceSlice(source, t);
 
+                    // Bash concatenates adjacent word fragments into one
+                    // argv entry. Preserve that behavior for an inline option
+                    // whose value is quoted or computed:
+                    // `--data="@request file"` / `--data=$(generate)`.
+                    if (NativeFlagSyntax.TrySplitEqualsPrefix(
+                            t.Value, out var adjacentFlagPart, out var adjacentValuePrefix)
+                        && i + 1 < segmentTokens.Count
+                        && IsAdjacent(t, segmentTokens[i + 1])
+                        && segmentTokens[i + 1].Kind is BashTokenKind.QuotedString
+                            or BashTokenKind.OpaqueSubstitution)
+                    {
+                        var valueStart = i + 1;
+                        var valueEnd = valueStart;
+                        var valueBuilder = new StringBuilder(adjacentValuePrefix);
+                        var hasOpaqueFragment = false;
+                        var allFragmentsSingleQuoted = adjacentValuePrefix.Length == 0;
+                        var hasSingleQuotedFragment = false;
+                        var hasNonSingleQuotedFragment = adjacentValuePrefix.Length > 0;
+                        var hasSensitiveLiteralFragment = false;
+                        var previousFragment = t;
+                        while (valueEnd < segmentTokens.Count
+                            && IsAdjacent(previousFragment, segmentTokens[valueEnd])
+                            && IsNativeArgumentFragment(segmentTokens[valueEnd]))
+                        {
+                            var fragment = segmentTokens[valueEnd];
+                            valueBuilder.Append(fragment.Value);
+                            hasOpaqueFragment |= fragment.Kind == BashTokenKind.OpaqueSubstitution;
+                            hasSingleQuotedFragment |= fragment.Kind == BashTokenKind.QuotedString
+                                && fragment.IsSingleQuoted;
+                            hasNonSingleQuotedFragment |= fragment.Kind != BashTokenKind.QuotedString
+                                || !fragment.IsSingleQuoted;
+                            hasSensitiveLiteralFragment |= fragment.Kind == BashTokenKind.QuotedString
+                                && fragment.IsSingleQuoted
+                                && NativeFlagSyntax.ContainsResolverSensitiveLiteralSyntax(fragment.Value);
+                            allFragmentsSingleQuoted &= fragment.Kind == BashTokenKind.QuotedString
+                                && fragment.IsSingleQuoted;
+                            previousFragment = fragment;
+                            valueEnd++;
+                        }
+
+                        var lastValueToken = segmentTokens[valueEnd - 1];
+                        var adjacentValue = valueBuilder.ToString();
+                        var equalsOffset = SourceSlice(source, t).IndexOf('=');
+                        var adjacentRawStart = t.SourceStart + equalsOffset + 1;
+                        var adjacentRaw = source.Substring(
+                            adjacentRawStart,
+                            lastValueToken.SourceStart + lastValueToken.SourceLength
+                            - adjacentRawStart);
+                        argList.Add(new Arg
+                        {
+                            Raw = adjacentFlagPart,
+                            Resolved = null,
+                            Kind = ArgKind.Literal,
+                            IsPath = false,
+                        });
+
+                        Arg valueArg;
+                        if (hasOpaqueFragment
+                            || (hasSingleQuotedFragment
+                                && hasNonSingleQuotedFragment
+                                && hasSensitiveLiteralFragment)
+                            || (verbKeyForFlagValuePaths is not null
+                                && BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
+                                    verbKeyForFlagValuePaths, adjacentFlagPart)))
+                        {
+                            valueArg = new Arg
+                            {
+                                Raw = adjacentRaw,
+                                Kind = ArgKind.DynamicSkip,
+                                IsPath = false,
+                            };
+                        }
+                        else
+                        {
+                            var adjacentValueForResolution = adjacentValue;
+                            var adjacentValueIsPath = verbKeyForFlagValuePaths is not null
+                                && BashPerVerbRules.TryGetFlagValuePath(
+                                    verbKeyForFlagValuePaths,
+                                    adjacentFlagPart,
+                                    adjacentValue,
+                                    out adjacentValueForResolution);
+                            var (adjacentKind, adjacentResolved, adjacentIsPath) = BashResolver.Resolve(
+                                adjacentValueForResolution,
+                                adjacentValueIsPath,
+                                options,
+                                workingDirectoryUnknown,
+                                allFragmentsSingleQuoted);
+                            valueArg = new Arg
+                            {
+                                Raw = adjacentRaw,
+                                Resolved = adjacentResolved,
+                                Kind = adjacentKind,
+                                IsPath = adjacentIsPath,
+                            };
+                        }
+
+                        argList.Add(valueArg);
+                        elementList.Add(CreateCombinedElement(
+                            source,
+                            t,
+                            lastValueToken,
+                            adjacentFlagPart + "=" + adjacentValue,
+                            precedingVerbTokenCount,
+                            valueArg.Kind,
+                            isFlag: true,
+                            valueArg.IsPath,
+                            valueArg.Resolved));
+                        i = valueEnd;
+                        continue;
+                    }
+
                     // Equals-form flag-with-value: `--output=file.txt`. The
                     // flag half is a Literal arg with IsFlag=true (Raw
                     // starts with '-'); the value half is classified per
@@ -1164,14 +1276,20 @@ internal static class BashCommandParser
                         // literal (the equals-form is its own visible split,
                         // so we don't apply LooksLikePath here).
                         var inlineValueForResolution = valuePart;
-                        var valueIsPath = verbKeyForFlagValuePaths is not null
+                        var inlineValueIsOpaqueCommand = verbKeyForFlagValuePaths is not null
+                            && BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
+                                verbKeyForFlagValuePaths, flagPart);
+                        var valueIsPath = !inlineValueIsOpaqueCommand
+                            && verbKeyForFlagValuePaths is not null
                             && BashPerVerbRules.TryGetFlagValuePath(
                                 verbKeyForFlagValuePaths,
                                 flagPart,
                                 valuePart,
                                 out inlineValueForResolution);
-                        var (vKind, vResolved, vIsPath) = BashResolver.Resolve(
-                            inlineValueForResolution, valueIsPath, options, workingDirectoryUnknown);
+                        var (vKind, vResolved, vIsPath) = inlineValueIsOpaqueCommand
+                            ? (ArgKind.DynamicSkip, null, false)
+                            : BashResolver.Resolve(
+                                inlineValueForResolution, valueIsPath, options, workingDirectoryUnknown);
                         argList.Add(new Arg
                         {
                             Raw = valuePart,
@@ -1237,16 +1355,20 @@ internal static class BashCommandParser
 
                     // Non-flag positional. Classify path / resolve.
                     var valueForResolution = t.Value;
+                    var valueIsOpaqueCommand = false;
                     bool treatAsPath;
                     if (pendingFlagForValue is not null && verbKeyForFlagValuePaths is not null)
                     {
                         // This is the value of a preceding flag — use the
                         // flag-value rule, NOT the positional-index rule.
-                        treatAsPath = BashPerVerbRules.TryGetFlagValuePath(
-                            verbKeyForFlagValuePaths,
-                            pendingFlagForValue,
-                            t.Value,
-                            out valueForResolution);
+                        valueIsOpaqueCommand = BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
+                            verbKeyForFlagValuePaths, pendingFlagForValue);
+                        treatAsPath = !valueIsOpaqueCommand
+                            && BashPerVerbRules.TryGetFlagValuePath(
+                                verbKeyForFlagValuePaths,
+                                pendingFlagForValue,
+                                t.Value,
+                                out valueForResolution);
                         pendingFlagForValue = null;
                     }
                     else
@@ -1255,8 +1377,10 @@ internal static class BashCommandParser
                         positionalIndex++;
                     }
 
-                    var (kind, resolved, isPath) = BashResolver.Resolve(
-                        valueForResolution, treatAsPath, options, workingDirectoryUnknown);
+                    var (kind, resolved, isPath) = valueIsOpaqueCommand
+                        ? (ArgKind.DynamicSkip, null, false)
+                        : BashResolver.Resolve(
+                            valueForResolution, treatAsPath, options, workingDirectoryUnknown);
                     argList.Add(new Arg
                     {
                         Raw = sourceRaw,
@@ -1286,14 +1410,18 @@ internal static class BashCommandParser
                     // still classify as positional path / non-path through
                     // the per-verb rule + resolver.
                     var valueForResolution = t.Value;
+                    var valueIsOpaqueCommand = false;
                     bool treatAsPath;
                     if (pendingFlagForValue is not null && verbKeyForFlagValuePaths is not null)
                     {
-                        treatAsPath = BashPerVerbRules.TryGetFlagValuePath(
-                            verbKeyForFlagValuePaths,
-                            pendingFlagForValue,
-                            t.Value,
-                            out valueForResolution);
+                        valueIsOpaqueCommand = BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
+                            verbKeyForFlagValuePaths, pendingFlagForValue);
+                        treatAsPath = !valueIsOpaqueCommand
+                            && BashPerVerbRules.TryGetFlagValuePath(
+                                verbKeyForFlagValuePaths,
+                                pendingFlagForValue,
+                                t.Value,
+                                out valueForResolution);
                         pendingFlagForValue = null;
                     }
                     else
@@ -1305,12 +1433,14 @@ internal static class BashCommandParser
                     // Single-quoted tokens carry literal bytes per SPEC §5
                     // — bypass tilde / $HOME / $VAR / glob handling so
                     // `'$HOME'` doesn't expand.
-                    var (kind, resolved, isPath) = BashResolver.Resolve(
-                        valueForResolution,
-                        treatAsPath,
-                        options,
-                        workingDirectoryUnknown,
-                        t.IsSingleQuoted);
+                    var (kind, resolved, isPath) = valueIsOpaqueCommand
+                        ? (ArgKind.DynamicSkip, null, false)
+                        : BashResolver.Resolve(
+                            valueForResolution,
+                            treatAsPath,
+                            options,
+                            workingDirectoryUnknown,
+                            t.IsSingleQuoted);
                     argList.Add(new Arg
                     {
                         Raw = sourceRaw,
@@ -1490,6 +1620,34 @@ internal static class BashCommandParser
         Resolved = resolved,
     };
 
+    private static ClauseElement CreateCombinedElement(
+        string source,
+        BashToken first,
+        BashToken last,
+        string value,
+        int precedingVerbTokenCount,
+        ArgKind kind,
+        bool isFlag,
+        bool isPath,
+        string? resolved)
+    {
+        var sourceStart = first.SourceStart;
+        var sourceEnd = last.SourceStart + last.SourceLength;
+        return new ClauseElement
+        {
+            Raw = source.Substring(sourceStart, sourceEnd - sourceStart),
+            Value = value,
+            Role = ClauseElementRole.Argument,
+            SourceStart = sourceStart,
+            SourceLength = sourceEnd - sourceStart,
+            PrecedingVerbElementCount = precedingVerbTokenCount,
+            Kind = kind,
+            IsFlag = isFlag,
+            IsPath = isPath,
+            Resolved = resolved,
+        };
+    }
+
     private static ClauseElement CreateRedirectElement(
         string source,
         BashToken redirectOperator,
@@ -1518,6 +1676,14 @@ internal static class BashCommandParser
 
     private static bool IsFlag(string raw) =>
         raw.Length > 0 && raw[0] == '-';
+
+    private static bool IsAdjacent(BashToken first, BashToken second) =>
+        first.SourceStart + first.SourceLength == second.SourceStart;
+
+    private static bool IsNativeArgumentFragment(BashToken token) =>
+        token.Kind is BashTokenKind.Word
+            or BashTokenKind.QuotedString
+            or BashTokenKind.OpaqueSubstitution;
 
     private static bool IsFdDupTarget(string value)
     {

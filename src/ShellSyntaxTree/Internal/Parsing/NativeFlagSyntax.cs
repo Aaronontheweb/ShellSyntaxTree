@@ -46,4 +46,70 @@ internal static class NativeFlagSyntax
         valuePart = raw.Substring(eq + 1);
         return true;
     }
+
+    /// <summary>
+    /// Recognize the first fragment of an equals-form option whose value is
+    /// supplied by an immediately adjacent quoted or opaque token.
+    /// </summary>
+    internal static bool TryGetTrailingEqualsFlag(string raw, out string flagPart)
+    {
+        if (raw.Length < 3 || raw[0] != '-' || raw[raw.Length - 1] != '=')
+        {
+            flagPart = "";
+            return false;
+        }
+
+        flagPart = raw.Substring(0, raw.Length - 1);
+        return true;
+    }
+
+    /// <summary>
+    /// Split an equals-form option while allowing an empty value prefix. This
+    /// is used when later adjacent shell fragments complete the same argv
+    /// entry.
+    /// </summary>
+    internal static bool TrySplitEqualsPrefix(
+        string raw, out string flagPart, out string valuePrefix)
+    {
+        if (raw.Length < 2 || raw[0] != '-')
+        {
+            flagPart = "";
+            valuePrefix = "";
+            return false;
+        }
+
+        var eq = raw.IndexOf('=');
+        if (eq <= 0)
+        {
+            flagPart = "";
+            valuePrefix = "";
+            return false;
+        }
+
+        flagPart = raw.Substring(0, eq);
+        valuePrefix = raw.Substring(eq + 1);
+        return true;
+    }
+
+    /// <summary>
+    /// Characters whose meaning changes when a shell fragment is literal
+    /// rather than expandable. Mixed-fragment values containing these must
+    /// safe-fail unless fragment-level provenance is retained.
+    /// </summary>
+    internal static bool ContainsResolverSensitiveLiteralSyntax(string value)
+    {
+        var transformedValue = value.Length > 0 && value[0] == '@'
+            ? value.Substring(1)
+            : value;
+        return value.IndexOf('$') >= 0
+            || value.IndexOf('*') >= 0
+            || value.IndexOf('?') >= 0
+            || value.IndexOf('[') >= 0
+            || transformedValue.StartsWith("~", System.StringComparison.Ordinal)
+            || transformedValue.StartsWith(
+                "filesystem::", System.StringComparison.OrdinalIgnoreCase)
+            || transformedValue.StartsWith(
+                "Microsoft.PowerShell.Core\\FileSystem::",
+                System.StringComparison.OrdinalIgnoreCase);
+    }
 }

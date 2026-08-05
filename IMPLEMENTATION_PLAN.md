@@ -68,7 +68,14 @@ priorities.
       audit explicitly covers Wget `-o` / `-O`, curl `-d` / `-D` / `-o` /
       `-O`, Git `-c` / `-C`, and tar `-c` / `-C` / `-f` / `-F`; paired corpus
       cases pin Wget log/document output, curl data/header-output and `@file`
-      semantics, and tar helper-script paths in both shells. Docker `-v`
+      semantics, and tar helper-command safe-fail behavior in both shells.
+      Adversarial review added deterministic coverage for quoted inline native
+      fragment runs (including unquoted prefixes and mixed-quote safe-fail),
+      PowerShell backtick-decoded colon bindings, native file-verb boundaries,
+      and outer redirects on PowerShell command wrappers, including empty
+      payloads. The
+      corpus runner now verifies direct authored-token coverage even for legacy
+      entries without explicit element expectations. Docker `-v`
       remains explicitly context-sensitive: the generic table supports
       `docker run`, while consumers use authored elements for global-option
       interpretation.

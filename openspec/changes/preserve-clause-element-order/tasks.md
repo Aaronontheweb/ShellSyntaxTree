@@ -31,6 +31,16 @@
       `@-` operand semantics, and scoped Docker context claims.
 - [x] 3.9 Reconcile command-string provenance with static and dynamic
       `Invoke-Expression`; audit nested and dynamic `bash -c` behavior.
+- [x] 3.10 Apply adversarial-review fixes: safe-fail tar command hooks,
+      coalesce adjacent inline native fragments, decode PowerShell colon
+      values, preserve PowerShell wrapper redirects, and enforce direct-token
+      element coverage across the corpus.
+- [x] 3.11 Re-run adversarial review over the fixes; consume maximal adjacent
+      fragment runs, safe-fail resolver-sensitive mixed quoting, preserve
+      redirects for empty wrapped payloads, and require outer redirect-target
+      provenance.
+- [x] 3.12 Safe-fail resolver-sensitive literal syntax exposed only after a
+      native operand marker such as curl's leading `@` is removed.
 
 ## 4. Consumer documentation
 

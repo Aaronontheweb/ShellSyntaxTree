@@ -9,6 +9,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using ShellSyntaxTree.Internal.Bash.Lexing;
+using ShellSyntaxTree.Internal.Pwsh.Lexing;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests.Corpus;
@@ -35,6 +37,219 @@ public class CorpusRunnerTests
         var actual = CreateParser(shell).Parse(entry.Input);
         AstAssert.Equal(entry.Expected!, actual, $"{shell}/{fileName}");
         AssertClauseElementInvariants(actual, $"{shell}/{fileName}");
+        AssertAuthoredTokenCoverage(shell, actual, $"{shell}/{fileName}");
+    }
+
+    private static void AssertAuthoredTokenCoverage(
+        string shell, ParsedCommand parsed, string context)
+    {
+        if (parsed.IsUnparseable)
+        {
+            return;
+        }
+
+        var elements = parsed.Clauses
+            .SelectMany(clause => clause.Elements)
+            .Where(element => element.SourceStart.HasValue)
+            .ToArray();
+
+        if (shell == "bash")
+        {
+            var tokens = BashLexer.Tokenize(parsed.Source);
+            var directSegments = DirectBashSegments(parsed, tokens);
+            var segment = 0;
+            var redirectTargetPending = false;
+            foreach (var token in tokens)
+            {
+                if (RequiresBashElement(token))
+                {
+                    var isRedirectOperator = IsBashRedirectOperator(token);
+                    var isRedirectTarget = redirectTargetPending && !isRedirectOperator;
+                    AssertTokenCovered(
+                        token.SourceStart,
+                        token.SourceLength,
+                        elements,
+                        context,
+                        token.Value,
+                        !parsed.Clauses.Any(clause => clause.IsCommandStringWrapped)
+                        || directSegments.Contains(segment)
+                        || isRedirectOperator
+                        || isRedirectTarget);
+                    redirectTargetPending = isRedirectOperator;
+                }
+
+                if (IsBashSegmentSeparator(token))
+                {
+                    segment++;
+                }
+            }
+
+            return;
+        }
+
+        var pwshTokens = PwshLexer.Tokenize(parsed.Source);
+        var pwshDirectSegments = DirectPwshSegments(parsed, pwshTokens);
+        var pwshSegment = 0;
+        var pwshRedirectTargetPending = false;
+        foreach (var token in pwshTokens)
+        {
+            if (RequiresPwshElement(token))
+            {
+                var isRedirectOperator = IsPwshRedirectOperator(token);
+                var isRedirectTarget = pwshRedirectTargetPending && !isRedirectOperator;
+                AssertTokenCovered(
+                    token.SourceStart,
+                    token.SourceLength,
+                    elements,
+                    context,
+                    token.Value,
+                    !parsed.Clauses.Any(clause => clause.IsCommandStringWrapped)
+                    || pwshDirectSegments.Contains(pwshSegment)
+                    || isRedirectOperator
+                    || isRedirectTarget);
+                pwshRedirectTargetPending = isRedirectOperator
+                    && token.OperatorText is not null
+                    && token.OperatorText.IndexOf(">&", StringComparison.Ordinal) < 0;
+            }
+
+            if (IsPwshSegmentSeparator(token))
+            {
+                pwshSegment++;
+            }
+        }
+    }
+
+    private static HashSet<int> DirectBashSegments(
+        ParsedCommand parsed, IReadOnlyList<BashToken> tokens)
+    {
+        var segments = new HashSet<int>();
+        foreach (var element in parsed.Clauses
+            .Where(clause => !clause.IsCommandStringWrapped)
+            .SelectMany(clause => clause.Elements)
+            .Where(element => element.SourceStart.HasValue))
+        {
+            segments.Add(BashSegmentAt(tokens, element.SourceStart!.Value));
+        }
+
+        return segments;
+    }
+
+    private static int BashSegmentAt(IReadOnlyList<BashToken> tokens, int sourceStart)
+    {
+        var segment = 0;
+        foreach (var token in tokens)
+        {
+            if (token.SourceStart >= sourceStart)
+            {
+                break;
+            }
+
+            if (IsBashSegmentSeparator(token))
+            {
+                segment++;
+            }
+        }
+
+        return segment;
+    }
+
+    private static HashSet<int> DirectPwshSegments(
+        ParsedCommand parsed, IReadOnlyList<PwshToken> tokens)
+    {
+        var segments = new HashSet<int>();
+        foreach (var element in parsed.Clauses
+            .Where(clause => !clause.IsCommandStringWrapped)
+            .SelectMany(clause => clause.Elements)
+            .Where(element => element.SourceStart.HasValue))
+        {
+            segments.Add(PwshSegmentAt(tokens, element.SourceStart!.Value));
+        }
+
+        return segments;
+    }
+
+    private static int PwshSegmentAt(IReadOnlyList<PwshToken> tokens, int sourceStart)
+    {
+        var segment = 0;
+        foreach (var token in tokens)
+        {
+            if (token.SourceStart >= sourceStart)
+            {
+                break;
+            }
+
+            if (IsPwshSegmentSeparator(token))
+            {
+                segment++;
+            }
+        }
+
+        return segment;
+    }
+
+    private static bool RequiresBashElement(BashToken token)
+    {
+        if (token.Kind is BashTokenKind.Whitespace
+            or BashTokenKind.Continuation
+            or BashTokenKind.Comment
+            or BashTokenKind.UnparseableSentinel)
+        {
+            return false;
+        }
+
+        return token.Kind != BashTokenKind.Operator
+            || token.OperatorText is ">" or ">>" or "<" or "2>" or "2>>" or "<<" or "<<-";
+    }
+
+    private static bool IsBashRedirectOperator(BashToken token) =>
+        token.Kind == BashTokenKind.Operator
+        && token.OperatorText is ">" or ">>" or "<" or "2>" or "2>>" or "<<" or "<<-";
+
+    private static bool IsBashSegmentSeparator(BashToken token) =>
+        (token.Kind == BashTokenKind.Operator
+            && token.OperatorText is "&&" or "||" or ";" or "|")
+        || (token.Kind == BashTokenKind.Whitespace && token.IsStatementSeparator);
+
+    private static bool RequiresPwshElement(PwshToken token)
+    {
+        if (token.Kind is PwshTokenKind.Whitespace
+            or PwshTokenKind.Continuation
+            or PwshTokenKind.Comment
+            or PwshTokenKind.UnparseableSentinel)
+        {
+            return false;
+        }
+
+        return token.Kind != PwshTokenKind.Operator
+            || token.OperatorText == "<"
+            || (token.OperatorText?.IndexOf('>') ?? -1) >= 0;
+    }
+
+    private static bool IsPwshRedirectOperator(PwshToken token) =>
+        token.Kind == PwshTokenKind.Operator
+        && (token.OperatorText == "<" || (token.OperatorText?.IndexOf('>') ?? -1) >= 0);
+
+    private static bool IsPwshSegmentSeparator(PwshToken token) =>
+        (token.Kind == PwshTokenKind.Operator
+            && token.OperatorText is "&&" or "||" or ";" or "|")
+        || (token.Kind == PwshTokenKind.Whitespace && token.IsStatementSeparator);
+
+    private static void AssertTokenCovered(
+        int sourceStart,
+        int sourceLength,
+        IReadOnlyList<ClauseElement> elements,
+        string context,
+        string tokenValue,
+        bool coverageRequired)
+    {
+        var sourceEnd = sourceStart + sourceLength;
+        var coveringElements = elements.Count(element =>
+                element.SourceStart!.Value <= sourceStart
+                && element.SourceStart.Value + element.SourceLength!.Value >= sourceEnd);
+        Assert.True(
+            coveringElements == 1 || (!coverageRequired && coveringElements == 0),
+            $"{context}: authored token '{tokenValue}' at {sourceStart}:{sourceLength} "
+            + $"is covered by {coveringElements} clause elements; expected exactly one.");
     }
 
     private static void AssertClauseElementInvariants(ParsedCommand parsed, string context)
