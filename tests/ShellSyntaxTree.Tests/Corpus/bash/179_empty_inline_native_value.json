@@ -1,0 +1,18 @@
+{
+  "name": "Empty inline native value preserves argv cardinality",
+  "input": "curl --data=\"\" https://example.invalid/api",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["curl"],
+      "args": [
+        { "raw": "--data", "kind": "Literal", "isPath": false, "isFlag": true },
+        { "raw": "\"\"", "kind": "Literal", "isPath": false },
+        { "raw": "https://example.invalid/api", "kind": "Literal", "isPath": false }
+      ],
+      "redirects": []
+    }]
+  },
+  "notes": "A zero-length quote boundary still contributes one native option value."
+}

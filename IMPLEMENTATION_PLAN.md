@@ -151,7 +151,7 @@ priorities.
       synchronize the accepted shared and PowerShell contracts into
       `SPEC.md` / `SPEC.POWERSHELL.md` together with source and snapshot tests
       so the repository authority never intentionally drifts from the assembly.
-- [ ] Correct the lexer-to-resolver provenance boundary before issue #69.
+- [x] Correct the lexer-to-resolver provenance boundary before issue #69.
       Paired Bash and PowerShell shell-oracle cases must distinguish escaped
       literal resolver syntax from expandable syntax even when both decode to
       the same string, including standalone, adjacent-token, all-static
@@ -180,6 +180,20 @@ priorities.
       tilde, wildcard, provider, and PSDrive semantics after quote removal;
       unknown wildcard cardinality or drive mappings fail closed without
       enumeration. Bash redirects instead require exactly one proved target.
+      The completed correction uses an internal ordered `ShellValue` fragment
+      model in both front ends and passes an explicit consumer context into
+      each resolver without changing the public API. Direct lexer tests pin
+      typed Bash special and multidigit positional parameters, quote-sensitive
+      `$*` / `$@` cardinality, and PowerShell special, numeric, scoped, braced,
+      and Unicode variable identity. Paired live-shell oracles cover standalone
+      and adjacent escapes, static mixed quoting, literal-plus-expandable
+      composition, runtime parameter forms, incomplete versus escaped braced
+      interpolation, Bash provider-looking literals, native versus cmdlet
+      provider and wildcard behavior, `Path` versus `LiteralPath`, adjacent and
+      wildcard redirects, and PowerShell tilde/provider/PSDrive redirects.
+      Executable corpus cases preserve the corrected v0.2 compatibility
+      projection; unknown facts remain `DynamicSkip` or unparseable, while
+      completely proved mixed fragments resolve exactly.
 - [ ] Implement [issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69)
       against the corrected fragment contract. Preserve raw, decoded, and span
       facts plus unaffected classifications; explicitly document only

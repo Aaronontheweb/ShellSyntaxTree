@@ -1,0 +1,14 @@
+{
+  "name": "Bash provider-looking quoted path remains literal",
+  "input": "cat \"filesystem::/safe\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "\"filesystem::/safe\"", "kind": "Literal", "isPath": true, "resolved": "/work/filesystem::/safe" }],
+      "redirects": []
+    }]
+  },
+  "notes": "Quote removal does not introduce foreign provider semantics into Bash."
+}

@@ -5,8 +5,8 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
-using System.Text;
 using ShellSyntaxTree.Internal.Lexing;
+using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Bash.Lexing;
 
@@ -91,7 +91,7 @@ internal static class BashLexer
 
                 tokens.Add(new BashToken(
                     BashTokenKind.Whitespace, "", null, start, i - start, null)
-                    { IsStatementSeparator = true });
+                { IsStatementSeparator = true });
                 continue;
             }
 
@@ -151,6 +151,20 @@ internal static class BashLexer
             if (c == '$' && i + 1 < src.Length)
             {
                 var next = src[i + 1];
+                if (next is '\'' or '"')
+                {
+                    tokens.Add(new BashToken(
+                        BashTokenKind.UnparseableSentinel,
+                        src.Slice(i).ToString(),
+                        null,
+                        i,
+                        src.Length - i,
+                        next == '\''
+                            ? "ANSI-C quoted strings are not supported"
+                            : "localized quoted strings are not supported"));
+                    return tokens;
+                }
+
                 if (next == '(')
                 {
                     // $(( -> arithmetic, unparseable. Detect before $(.
@@ -284,7 +298,10 @@ internal static class BashLexer
         var inner = src.Slice(start + 1, i - start - 1).ToString();
         tokens.Add(new BashToken(
             BashTokenKind.QuotedString, inner, null, start, (i - start) + 1, null)
-            { IsSingleQuoted = true });
+        {
+            IsSingleQuoted = true,
+            ResolverValue = ShellValue.Literal(inner, start + 1, i - start - 1),
+        });
         return i + 1;
     }
 
@@ -293,17 +310,21 @@ internal static class BashLexer
     {
         // Double quotes preserve whitespace but recognize \", \\, \$, and
         // \\+newline as escape sequences (SPEC §5). Other backslashes are
-        // preserved literally. $VAR / ${VAR} are *not* expanded — kept literal.
-        var sb = new StringBuilder();
+        // preserved literally. Expansion spelling stays decoded while its
+        // typed resolver provenance remains attached to the token.
+        var value = new ShellValueBuilder();
+        value.AppendBoundary(start + 1);
         var i = start + 1;
         while (i < src.Length)
         {
             var c = src[i];
             if (c == '"')
             {
+                var resolverValue = value.Build();
                 tokens.Add(new BashToken(
-                    BashTokenKind.QuotedString, sb.ToString(), null,
-                    start, (i - start) + 1, null));
+                    BashTokenKind.QuotedString, resolverValue.Decoded, null,
+                    start, (i - start) + 1, null)
+                { ResolverValue = resolverValue });
                 return i + 1;
             }
 
@@ -312,7 +333,7 @@ internal static class BashLexer
                 var n = src[i + 1];
                 if (n == '"' || n == '\\' || n == '$' || n == '`')
                 {
-                    sb.Append(n);
+                    value.AppendLiteral(n, i, 2);
                     i += 2;
                     continue;
                 }
@@ -325,12 +346,56 @@ internal static class BashLexer
                 }
 
                 // Other backslashes preserved literally per SPEC §5.
-                sb.Append(c);
+                value.AppendLiteral(c, i, 1);
                 i++;
                 continue;
             }
 
-            sb.Append(c);
+            if (c == '$'
+                && TryAppendBashExpansion(
+                    src, ref i, value, allowFieldSplit: false, out var error))
+            {
+                if (error is not null)
+                {
+                    tokens.Add(new BashToken(
+                        BashTokenKind.UnparseableSentinel,
+                        src.Slice(start).ToString(),
+                        null,
+                        start,
+                        src.Length - start,
+                        error));
+                    return src.Length;
+                }
+
+                continue;
+            }
+
+            if (c == '`')
+            {
+                var scan = OpaqueRegionScanner.ScanSymmetric(src, i, '`');
+                if (!scan.Closed)
+                {
+                    tokens.Add(new BashToken(
+                        BashTokenKind.UnparseableSentinel,
+                        src.Slice(start).ToString(),
+                        null,
+                        start,
+                        src.Length - start,
+                        "unbalanced backtick command substitution"));
+                    return src.Length;
+                }
+
+                var length = scan.EndIndex - i + 1;
+                value.AppendOpaque(
+                    src.Slice(i, length).ToString(),
+                    ShellOpaqueCause.CommandSubstitution,
+                    i,
+                    length);
+                i += length;
+                continue;
+            }
+
+            value.AppendLiteral(c, i, 1);
             i++;
         }
 
@@ -374,7 +439,14 @@ internal static class BashLexer
             null,
             start,
             length,
-            null));
+            null)
+        {
+            ResolverValue = ShellValue.Opaque(
+                    src.Slice(start, length).ToString(),
+                    ShellOpaqueCause.CommandSubstitution,
+                    start,
+                    length),
+        });
         return start + length;
     }
 
@@ -401,7 +473,14 @@ internal static class BashLexer
             null,
             start,
             length,
-            null));
+            null)
+        {
+            ResolverValue = ShellValue.Opaque(
+                    src.Slice(start, length).ToString(),
+                    ShellOpaqueCause.CommandSubstitution,
+                    start,
+                    length),
+        });
         return start + length;
     }
 
@@ -543,7 +622,7 @@ internal static class BashLexer
         // resolver classifies based on the original source positions if
         // necessary. SPEC §5 explicitly says `echo \$HOME` produces a
         // Literal token.)
-        var sb = new StringBuilder();
+        var value = new ShellValueBuilder();
         var i = start;
         while (i < src.Length)
         {
@@ -560,7 +639,7 @@ internal static class BashLexer
                 if (i + 1 >= src.Length)
                 {
                     // Trailing lone backslash — preserve it as literal.
-                    sb.Append('\\');
+                    value.AppendLiteral('\\', i, 1);
                     i++;
                     break;
                 }
@@ -573,7 +652,7 @@ internal static class BashLexer
                     break;
                 }
 
-                sb.Append(n);
+                value.AppendLiteral(n, i, 2);
                 i += 2;
                 continue;
             }
@@ -599,25 +678,55 @@ internal static class BashLexer
 
                     if (bodyHasSlash) break;
 
-                    // Simple form — absorb whole ${...} verbatim.
-                    // StringBuilder.Append(ReadOnlySpan<char>) is net6+
-                    // only; spell out the loop for netstandard2.0 parity.
-                    var braceLen = scan.EndIndex - i + 1;
-                    for (var k = 0; k < braceLen; k++)
+                    if (TryAppendBashExpansion(
+                            src, ref i, value, allowFieldSplit: true, out var error))
                     {
-                        sb.Append(src[i + k]);
-                    }
+                        if (error is not null)
+                        {
+                            break;
+                        }
 
-                    i += braceLen;
+                        continue;
+                    }
+                }
+
+                if (TryAppendBashExpansion(
+                        src, ref i, value, allowFieldSplit: true, out _))
+                {
                     continue;
                 }
             }
 
-            sb.Append(c);
+            if (c == '~' && i == start)
+            {
+                value.AppendExpansion(
+                    "~",
+                    ShellLexicalTransform.Tilde,
+                    new ShellExpansionReference(ShellExpansionKind.Tilde, null),
+                    ShellValueCardinality.ExactlyOne,
+                    i,
+                    1);
+            }
+            else if (c is '*' or '?' or '[')
+            {
+                value.AppendExpansion(
+                    c.ToString(),
+                    ShellLexicalTransform.Glob,
+                    new ShellExpansionReference(ShellExpansionKind.Glob, null),
+                    ShellValueCardinality.ZeroOrMore,
+                    i,
+                    1);
+            }
+            else
+            {
+                value.AppendLiteral(c, i, 1);
+            }
+
             i++;
         }
 
-        if (sb.Length == 0)
+        var resolverValue = value.Build();
+        if (resolverValue.Decoded.Length == 0)
         {
             // Defensive: caller should not invoke ReadWord on a position
             // that produces no chars (would loop forever). Advance one
@@ -628,9 +737,144 @@ internal static class BashLexer
         }
 
         tokens.Add(new BashToken(
-            BashTokenKind.Word, sb.ToString(), null, start, i - start, null));
+            BashTokenKind.Word, resolverValue.Decoded, null, start, i - start, null)
+        { ResolverValue = resolverValue });
         return i;
     }
+
+    private static bool TryAppendBashExpansion(
+        ReadOnlySpan<char> src,
+        ref int index,
+        ShellValueBuilder value,
+        bool allowFieldSplit,
+        out string? error)
+    {
+        error = null;
+        var start = index;
+        if (start + 1 >= src.Length || src[start] != '$')
+        {
+            return false;
+        }
+
+        var next = src[start + 1];
+        if (next == '(')
+        {
+            if (start + 2 < src.Length && src[start + 2] == '(')
+            {
+                error = "arithmetic expansion '$((…))' not supported in v0.1";
+                index = src.Length;
+                return true;
+            }
+
+            var scan = OpaqueRegionScanner.Scan(src, start + 1, '(', ')');
+            if (!scan.Closed)
+            {
+                error = "unbalanced '$(' command substitution";
+                index = src.Length;
+                return true;
+            }
+
+            var length = scan.EndIndex - start + 1;
+            value.AppendOpaque(
+                src.Slice(start, length).ToString(),
+                ShellOpaqueCause.CommandSubstitution,
+                start,
+                length);
+            index += length;
+            return true;
+        }
+
+        string name;
+        int expansionLength;
+        if (next == '{')
+        {
+            var scan = OpaqueRegionScanner.Scan(src, start + 1, '{', '}');
+            if (!scan.Closed)
+            {
+                error = "unbalanced '${' parameter expansion";
+                index = src.Length;
+                return true;
+            }
+
+            expansionLength = scan.EndIndex - start + 1;
+            name = src.Slice(start + 2, expansionLength - 3).ToString();
+            if (name.Length == 0 || name.IndexOf('/') >= 0)
+            {
+                error = "complex parameter expansion '${var//pat/repl}' not supported in v0.1";
+                index += expansionLength;
+                return true;
+            }
+        }
+        else if (IsBashIdentifierStart(next))
+        {
+            var end = start + 2;
+            while (end < src.Length && IsBashIdentifierContinuation(src[end]))
+            {
+                end++;
+            }
+
+            expansionLength = end - start;
+            name = src.Slice(start + 1, expansionLength - 1).ToString();
+        }
+        else if (next is '?' or '$' or '#' or '-' or '!' or '@' or '*'
+            || next is >= '0' and <= '9')
+        {
+            expansionLength = 2;
+            name = next.ToString();
+        }
+        else
+        {
+            return false;
+        }
+
+        var kind = IsAllAsciiDigits(name)
+            ? ShellExpansionKind.PositionalParameter
+            : name.Length == 1 && name[0] is '?' or '$' or '#' or '-' or '!' or '@' or '*'
+                ? ShellExpansionKind.SpecialParameter
+                : ShellExpansionKind.Variable;
+        var cardinality = name == "@" || (name == "*" && allowFieldSplit)
+            ? ShellValueCardinality.ZeroOrMore
+            : ShellValueCardinality.ExactlyOne;
+        var transforms = ShellLexicalTransform.Variable;
+        if (allowFieldSplit)
+        {
+            transforms |= ShellLexicalTransform.FieldSplit;
+        }
+
+        value.AppendExpansion(
+            src.Slice(start, expansionLength).ToString(),
+            transforms,
+            new ShellExpansionReference(kind, name),
+            cardinality,
+            start,
+            expansionLength);
+        index += expansionLength;
+        return true;
+    }
+
+    private static bool IsAllAsciiDigits(string value)
+    {
+        if (value.Length == 0)
+        {
+            return false;
+        }
+
+        foreach (var character in value)
+        {
+            if (character is < '0' or > '9')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsBashIdentifierStart(char value) =>
+        value == '_' || value is >= 'A' and <= 'Z' or >= 'a' and <= 'z';
+
+    private static bool IsBashIdentifierContinuation(char value) =>
+        IsBashIdentifierStart(value) || value is >= '0' and <= '9';
 
     private static bool IsOperatorStart(ReadOnlySpan<char> src, int i)
     {
@@ -772,7 +1016,7 @@ internal static class BashLexer
                 {
                     tokens.Add(new BashToken(
                         BashTokenKind.Whitespace, "", null, j, 1, null)
-                        { IsStatementSeparator = true });
+                    { IsStatementSeparator = true });
                     return j + 1;
                 }
 

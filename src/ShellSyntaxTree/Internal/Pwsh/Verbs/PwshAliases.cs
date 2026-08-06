@@ -223,4 +223,17 @@ internal static class PwshAliases
 
         return Map.TryGetValue(token, out var canonical) ? canonical : null;
     }
+
+    internal static bool IsKnownCanonical(string token)
+    {
+        foreach (var canonical in Map.Values)
+        {
+            if (string.Equals(canonical, token, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }

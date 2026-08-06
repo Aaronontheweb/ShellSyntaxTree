@@ -1,0 +1,14 @@
+{
+  "name": "Escaped interpolation start remains a literal path",
+  "input": "cat \"\\${HOME\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "\"\\${HOME\"", "kind": "Literal", "isPath": true, "resolved": "/work/${HOME" }],
+      "redirects": []
+    }]
+  },
+  "notes": "Escaping the dollar prevents interpolation; the unmatched-looking brace is literal shell data."
+}

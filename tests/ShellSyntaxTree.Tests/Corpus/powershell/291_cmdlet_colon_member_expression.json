@@ -1,0 +1,17 @@
+{
+  "name": "Cmdlet colon member expression fails closed",
+  "input": "Get-Content -Path:$HOME.Length",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Get-Content"],
+      "args": [
+        { "raw": "-Path", "kind": "Literal", "isPath": false, "isFlag": true },
+        { "raw": "$HOME.Length", "kind": "DynamicSkip", "isPath": false }
+      ],
+      "redirects": []
+    }]
+  },
+  "notes": "PowerShell binds the colon tail as a MemberExpressionAst and the parser does not evaluate it."
+}

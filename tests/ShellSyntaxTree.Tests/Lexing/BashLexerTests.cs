@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 using System.Linq;
 using ShellSyntaxTree.Internal.Bash.Lexing;
+using ShellSyntaxTree.Internal.Resolving;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests.Lexing;
@@ -309,6 +310,27 @@ public class BashLexerTests
         var tokens = LexNonWs("echo $HOME");
         Assert.Equal(2, tokens.Length);
         Assert.Equal("$HOME", tokens[1].Value);
+    }
+
+    [Theory]
+    [InlineData("${10}", "PositionalParameter", "ExactlyOne")]
+    [InlineData("$*", "SpecialParameter", "ZeroOrMore")]
+    [InlineData("\"$*\"", "SpecialParameter", "ExactlyOne")]
+    [InlineData("\"$@\"", "SpecialParameter", "ZeroOrMore")]
+    public void Runtime_parameter_provenance_retains_identity_and_cardinality(
+        string input,
+        string expectedKind,
+        string expectedCardinality)
+    {
+        var token = Assert.Single(LexNonWs(input));
+        Assert.NotNull(token.ResolverValue);
+        var expansion = Assert.Single(
+            token.ResolverValue.Fragments,
+            fragment => fragment.Kind == ShellValueFragmentKind.Expansion);
+
+        Assert.NotNull(expansion.Expansion);
+        Assert.Equal(expectedKind, expansion.Expansion.Value.Kind.ToString());
+        Assert.Equal(expectedCardinality, expansion.Cardinality.ToString());
     }
 
     // ------------------------------------------------------------ opaque regions

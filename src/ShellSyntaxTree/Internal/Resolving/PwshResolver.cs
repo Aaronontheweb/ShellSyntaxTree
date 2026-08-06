@@ -142,6 +142,230 @@ internal static class PwshResolver
     }
 
     /// <summary>
+    /// Resolve a lexer-proved value under an explicit PowerShell consumer.
+    /// Provider and PSDrive semantics are deliberately absent from native
+    /// arguments and applied only by cmdlet path and redirect consumers.
+    /// </summary>
+    internal static (ArgKind Kind, string? Resolved, bool IsPath) Resolve(
+        ShellValue value,
+        bool treatAsPath,
+        ShellParserOptions options,
+        bool workingDirectoryUnknown,
+        ShellResolutionConsumer consumer)
+    {
+        if (consumer is not ShellResolutionConsumer.PowerShellNativeArgument
+            and not ShellResolutionConsumer.PowerShellCmdletPath
+            and not ShellResolutionConsumer.PowerShellCmdletLiteralPath
+            and not ShellResolutionConsumer.PowerShellRedirect)
+        {
+            throw new ArgumentOutOfRangeException(nameof(consumer));
+        }
+
+        if (treatAsPath && value.Decoded.Length == 0)
+        {
+            return (ArgKind.DynamicSkip, null, false);
+        }
+
+        var composed = new StringBuilder(value.Decoded.Length);
+        var hadHomeish = false;
+        var hasLexicalGlob = false;
+        var expandableStringContextProven = false;
+        for (var fragmentIndex = 0; fragmentIndex < value.Fragments.Count; fragmentIndex++)
+        {
+            var fragment = value.Fragments[fragmentIndex];
+            if (fragment.Kind == ShellValueFragmentKind.Literal)
+            {
+                composed.Append(fragment.Value);
+                expandableStringContextProven = true;
+                continue;
+            }
+
+            if (fragment.Kind == ShellValueFragmentKind.Opaque
+                || fragment.Expansion is null)
+            {
+                if (fragment.Kind == ShellValueFragmentKind.Opaque
+                    && fragment.OpaqueCause == ShellOpaqueCause.PowerShellExpressionSuffix
+                    && expandableStringContextProven)
+                {
+                    composed.Append(fragment.Value);
+                    continue;
+                }
+
+                return (ArgKind.DynamicSkip, null, false);
+            }
+
+            var expansion = fragment.Expansion.Value;
+            switch (expansion.Kind)
+            {
+                case ShellExpansionKind.Variable:
+                case ShellExpansionKind.SpecialParameter:
+                case ShellExpansionKind.PositionalParameter:
+                    if (!IsHomeVariable(expansion.Name)
+                        || (fragment.AllowedTransforms & ShellLexicalTransform.Variable) == 0)
+                    {
+                        return treatAsPath
+                            ? (ArgKind.DynamicSkip, null, false)
+                            : (ArgKind.EnvVar, null, false);
+                    }
+
+                    composed.Append(GetHomeDirectory(options));
+                    hadHomeish = true;
+                    break;
+
+                case ShellExpansionKind.Tilde:
+                    if (consumer == ShellResolutionConsumer.PowerShellNativeArgument
+                        && fragmentIndex == 0
+                        && (fragment.AllowedTransforms & ShellLexicalTransform.Tilde) != 0)
+                    {
+                        if (value.Decoded.Length > 1
+                            && value.Decoded[1] != '/'
+                            && value.Decoded[1] != '\\')
+                        {
+                            return treatAsPath
+                                ? (ArgKind.DynamicSkip, null, false)
+                                : (ArgKind.Tilde, null, false);
+                        }
+
+                        composed.Append(GetHomeDirectory(options).TrimEnd('/', '\\'));
+                        hadHomeish = true;
+                    }
+                    else
+                    {
+                        composed.Append(fragment.Value);
+                    }
+
+                    break;
+
+                case ShellExpansionKind.Glob:
+                    composed.Append(fragment.Value);
+                    hasLexicalGlob = true;
+                    break;
+
+                case ShellExpansionKind.ArraySeparator:
+                    return (ArgKind.DynamicSkip, null, false);
+
+                default:
+                    return (ArgKind.DynamicSkip, null, false);
+            }
+        }
+
+        var working = composed.ToString();
+        var pathLikeConsumer = consumer is ShellResolutionConsumer.PowerShellCmdletPath
+            or ShellResolutionConsumer.PowerShellCmdletLiteralPath
+            or ShellResolutionConsumer.PowerShellRedirect;
+        if (pathLikeConsumer && working.Length > 0 && working[0] == '~')
+        {
+            if (working.Length > 1 && working[1] != '/' && working[1] != '\\')
+            {
+                return (ArgKind.DynamicSkip, null, false);
+            }
+
+            var home = GetHomeDirectory(options).TrimEnd('/', '\\');
+            working = home + working.Substring(1);
+            hadHomeish = true;
+        }
+
+        if (pathLikeConsumer)
+        {
+            var fileSystemProviderProven = false;
+            foreach (var qualifier in ProviderQualifiers)
+            {
+                if (working.StartsWith(qualifier, StringComparison.OrdinalIgnoreCase))
+                {
+                    working = working.Substring(qualifier.Length);
+                    fileSystemProviderProven = true;
+                    break;
+                }
+            }
+
+            var colon = working.IndexOf(':');
+            if (colon >= 1 && IsDriveQualifier(working, colon))
+            {
+                var driveName = working.Substring(0, colon);
+                if (driveName.Length == 1)
+                {
+                    if (!fileSystemProviderProven
+                        && !IsProvedFileSystemDrive(driveName, options))
+                    {
+                        return (ArgKind.DynamicSkip, null, false);
+                    }
+                }
+                else if (IsKnownNonFileSystemDrive(driveName)
+                    && consumer != ShellResolutionConsumer.PowerShellRedirect)
+                {
+                    return (ArgKind.Literal, null, false);
+                }
+                else if (driveName.Length > 1)
+                {
+                    return (ArgKind.DynamicSkip, null, false);
+                }
+            }
+        }
+
+        var hasPostFormationGlob = pathLikeConsumer
+            && working.IndexOfAny(new[] { '*', '?', '[' }) >= 0;
+        if (consumer == ShellResolutionConsumer.PowerShellRedirect
+            && (hasLexicalGlob || hasPostFormationGlob))
+        {
+            return (ArgKind.DynamicSkip, null, false);
+        }
+
+        if (consumer == ShellResolutionConsumer.PowerShellCmdletPath
+            && (hasLexicalGlob || hasPostFormationGlob))
+        {
+            return (ArgKind.Glob, null, treatAsPath);
+        }
+
+        if (consumer == ShellResolutionConsumer.PowerShellNativeArgument
+            && hasLexicalGlob)
+        {
+            return (ArgKind.Glob, null, treatAsPath);
+        }
+
+        if (!treatAsPath)
+        {
+            return (hadHomeish ? ArgKind.Tilde : ArgKind.Literal, null, false);
+        }
+
+        var resolved = TryResolveAbsolutePath(
+            working, options, workingDirectoryUnknown);
+        return resolved is null
+            ? (ArgKind.DynamicSkip, null, false)
+            : (hadHomeish ? ArgKind.Tilde : ArgKind.Literal, resolved, true);
+    }
+
+    private static bool IsHomeVariable(string? name) =>
+        string.Equals(name, "HOME", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "env:USERPROFILE", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsKnownNonFileSystemDrive(string name) =>
+        string.Equals(name, "Alias", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "Cert", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "Env", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "Function", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "HKCU", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "HKLM", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "Variable", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "WSMan", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsProvedFileSystemDrive(
+        string driveName, ShellParserOptions options) =>
+        HasDrive(options.WorkingDirectory, driveName)
+        || HasDrive(options.HomeDirectory, driveName);
+
+    private static bool HasDrive(string? path, string driveName) =>
+        !string.IsNullOrEmpty(path)
+        && path!.Length >= 2
+        && path[1] == ':'
+        && string.Equals(path.Substring(0, 1), driveName, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsDriveRelativePath(string path) =>
+        path.Length >= 2
+        && IsAsciiLetter(path[0])
+        && path[1] == ':'
+        && (path.Length == 2 || (path[2] != '/' && path[2] != '\\'));
+
+    /// <summary>
     /// True when <paramref name="token"/> contains an unquoted top-level
     /// comma — PowerShell's array operator (SPEC.POWERSHELL.md §8). A
     /// comma-array path token is marked <c>DynamicSkip</c>; the parser
@@ -349,7 +573,7 @@ internal static class PwshResolver
     private static string? TryResolveAbsolutePath(
         string token, ShellParserOptions options, bool workingDirectoryUnknown)
     {
-        if (string.IsNullOrEmpty(token))
+        if (string.IsNullOrEmpty(token) || IsDriveRelativePath(token))
         {
             return null;
         }
@@ -491,7 +715,10 @@ internal static class PwshResolver
             return true;
         }
 
-        if (token.Length >= 2 && IsAsciiLetter(token[0]) && token[1] == ':')
+        if (token.Length >= 3
+            && IsAsciiLetter(token[0])
+            && token[1] == ':'
+            && (token[2] == '/' || token[2] == '\\'))
         {
             return true;
         }
