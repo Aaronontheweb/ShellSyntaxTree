@@ -10,7 +10,7 @@ priorities.
 
 ---
 
-## NOW (0.2.0 — PowerShell parser)
+## NOW (0.2.0 downstream acceptance / 0.3.0 contract design)
 
 > **Spec:** `SPEC.POWERSHELL.md` (v0.2.0). The PowerShell parser is
 > implemented — phases 1–14 of `SPEC.POWERSHELL.md` §16 are complete (see
@@ -124,6 +124,26 @@ priorities.
 - [ ] ≥1 Netclaw integration test exercises a real PowerShell corpus entry
       through the live matcher and gets the expected gate decision
 
+### 17. v0.3 structured shell analysis contract — issue #72
+
+- [x] Create the release-level OpenSpec proposal, design, capability deltas,
+      and ordered task list under
+      `openspec/changes/v0-3-structured-shell-analysis/`.
+- [x] Create [issue #72](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/72)
+      as the v0.3 roadmap and cross-link issue #71 control flow and issue #69
+      shared native argument-fragment classification without merging their
+      scopes.
+- [ ] Complete OpenSpec task group 1: lock the additive public type names,
+      compatibility projection, fixed analysis bounds, and supported-construct
+      matrix before production implementation.
+- [ ] Implement [issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69)
+      as the first behavior-preserving preparation after contract lock.
+- [ ] Add the structural and command-occurrence projections for the existing
+      grammar before enabling any control-flow construct.
+- [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
+      language-specific vertical slices, then extract only the shared analysis
+      proven by both implementations.
+
 ---
 
 ## NEXT (0.1.x / 0.2.x — additive)
@@ -136,23 +156,20 @@ priorities.
 
 ## LATER (post-0.2.0)
 
-- v0.2.x candidates from `SPEC.POWERSHELL.md` §18 — lossless redirect-stream
-  identity (grow the `RedirectDirection` enum), per-element comma-array
-  path extraction (`-Path a,b,c`).
-- PowerShell script-level constructs — control flow, `function` / `class` /
-  `enum` definitions, `param()` / `begin` / `process` / `end` blocks,
-  `.ps1` file parsing (`SPEC.POWERSHELL.md` §18).
-- [Issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69) —
-  extract shared native argument-fragment classification before adding a third
-  shell or another fragment rule; keep shell tokenization and parsing local.
-- Extract a shared lexer/parser core now that two parsers exist — the seam
-  can be designed from real duplication (`SPEC.POWERSHELL.md` §18); the
-  path-normalization helpers duplicated between `BashResolver` and
-  `PwshResolver` are the first candidate.
+- The remaining v0.2.x candidate from `SPEC.POWERSHELL.md` §18 is per-element
+  comma-array path extraction (`-Path a,b,c`). Lossless cross-shell redirect
+  identity is now part of issue #72's explicit v0.3 redirect model.
+- PowerShell definitions, `param()` / `begin` / `process` / `end` blocks, and
+  `.ps1` file parsing remain outside issue #72 (`SPEC.POWERSHELL.md` §18).
+- Any broader shared parser/analysis extraction beyond issue #69 follows the
+  two language-specific tracer bullets in issue #72; lexers and structural
+  parsers remain shell-specific unless proven duplication justifies a narrower
+  composed helper.
 - Windows `cmd` parser.
 - Source-mapping (line/column on AST nodes) — only if an IDE consumer asks.
-- Heredoc body extraction, process substitution, bash function definitions
-  — only if a real consumer need surfaces.
+- Heredoc body preservation and process substitution are separately gated
+  issue #72 tasks backed by production need; Bash function definitions remain
+  deferred until a consumer need surfaces.
 
 ## Parked
 
