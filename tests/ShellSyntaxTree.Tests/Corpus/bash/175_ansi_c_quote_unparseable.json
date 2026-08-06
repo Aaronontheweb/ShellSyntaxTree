@@ -1,0 +1,10 @@
+{
+  "name": "Unsupported ANSI-C quoting fails closed",
+  "input": "cat $'/etc/passwd'",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "ANSI-C",
+    "clauses": []
+  },
+  "notes": "ANSI-C quoting transforms authored bytes and remains outside the supported grammar."
+}

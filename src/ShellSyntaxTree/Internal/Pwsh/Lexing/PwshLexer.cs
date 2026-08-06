@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using ShellSyntaxTree.Internal.Lexing;
+using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Pwsh.Lexing;
 
@@ -85,7 +86,7 @@ internal static class PwshLexer
 
                 tokens.Add(new PwshToken(
                     PwshTokenKind.Whitespace, "", null, start, i - start, null)
-                    { IsStatementSeparator = true });
+                { IsStatementSeparator = true });
                 continue;
             }
 
@@ -321,7 +322,8 @@ internal static class PwshLexer
     {
         // Single quotes preserve bytes literally (SPEC §5). A doubled '' is
         // an escaped single quote.
-        var sb = new StringBuilder();
+        var value = new ShellValueBuilder();
+        value.AppendBoundary(start + 1);
         var i = start + 1;
         while (i < src.Length)
         {
@@ -329,18 +331,23 @@ internal static class PwshLexer
             {
                 if (i + 1 < src.Length && src[i + 1] == '\'')
                 {
-                    sb.Append('\'');
+                    value.AppendLiteral('\'', i, 2);
                     i += 2;
                     continue;
                 }
 
+                var resolverValue = value.Build();
                 tokens.Add(new PwshToken(
-                    PwshTokenKind.QuotedString, sb.ToString(), null,
-                    start, (i - start) + 1, null) { IsSingleQuoted = true });
+                    PwshTokenKind.QuotedString, resolverValue.Decoded, null,
+                    start, (i - start) + 1, null)
+                {
+                    IsSingleQuoted = true,
+                    ResolverValue = resolverValue,
+                });
                 return i + 1;
             }
 
-            sb.Append(src[i]);
+            value.AppendLiteral(src[i], i, 1);
             i++;
         }
 
@@ -355,9 +362,10 @@ internal static class PwshLexer
         ReadOnlySpan<char> src, int start, List<PwshToken> tokens)
     {
         // Double quotes allow backtick escapes and recognize $var / $(...)
-        // interpolation, but the parser does NOT expand — $var stays literal
-        // in the value (SPEC §5).
-        var sb = new StringBuilder();
+        // interpolation. The lexer does not evaluate it; the typed region is
+        // retained for the resolver.
+        var value = new ShellValueBuilder();
+        value.AppendBoundary(start + 1);
         var hasInterpolation = false;
         var i = start + 1;
         while (i < src.Length)
@@ -368,15 +376,19 @@ internal static class PwshLexer
                 // A doubled "" is an escaped double quote.
                 if (i + 1 < src.Length && src[i + 1] == '"')
                 {
-                    sb.Append('"');
+                    value.AppendLiteral('"', i, 2);
                     i += 2;
                     continue;
                 }
 
+                var resolverValue = value.Build();
                 tokens.Add(new PwshToken(
-                    PwshTokenKind.QuotedString, sb.ToString(), null,
+                    PwshTokenKind.QuotedString, resolverValue.Decoded, null,
                     start, (i - start) + 1, null)
-                    { HasInterpolation = hasInterpolation });
+                {
+                    HasInterpolation = hasInterpolation,
+                    ResolverValue = resolverValue,
+                });
                 return i + 1;
             }
 
@@ -388,16 +400,32 @@ internal static class PwshLexer
                     return src.Length;
                 }
 
-                i = AppendBacktickEscape(src, i, sb);
+                i = AppendBacktickEscapeFragment(src, i, value, 0);
                 continue;
             }
 
             if (c == '$' && StartsInterpolation(src, i))
             {
                 hasInterpolation = true;
+                if (TryAppendPwshExpansion(src, ref i, value, out var error))
+                {
+                    if (error is not null)
+                    {
+                        tokens.Add(new PwshToken(
+                            PwshTokenKind.UnparseableSentinel,
+                            src.Slice(start).ToString(),
+                            null,
+                            start,
+                            src.Length - start,
+                            error));
+                        return src.Length;
+                    }
+
+                    continue;
+                }
             }
 
-            sb.Append(c);
+            value.AppendLiteral(c, i, 1);
             i++;
         }
 
@@ -459,7 +487,14 @@ internal static class PwshLexer
 
             tokens.Add(new PwshToken(
                 PwshTokenKind.Splat, src.Slice(start, i - start).ToString(),
-                null, start, i - start, null));
+                null, start, i - start, null)
+            {
+                ResolverValue = ShellValue.Opaque(
+                        src.Slice(start, i - start).ToString(),
+                        ShellOpaqueCause.Splat,
+                        start,
+                        i - start),
+            });
             return i;
         }
 
@@ -519,10 +554,16 @@ internal static class PwshLexer
                     : ReadOnlySpan<char>.Empty;
                 var hasInterpolation = false;
                 var invalidUnicodeAt = -1;
-                var body = quote == '"'
-                    ? DecodeExpandableString(
-                        bodySpan, out hasInterpolation, out invalidUnicodeAt)
-                    : bodySpan.ToString();
+                string? interpolationError = null;
+                var resolverValue = quote == '"'
+                    ? DecodeExpandableValue(
+                        bodySpan,
+                        bodyStart,
+                        out hasInterpolation,
+                        out invalidUnicodeAt,
+                        out interpolationError)
+                    : ShellValue.Literal(
+                        bodySpan.ToString(), bodyStart, bodySpan.Length);
                 if (quote == '"' && invalidUnicodeAt >= 0)
                 {
                     var sourcePosition = bodyStart + invalidUnicodeAt;
@@ -530,15 +571,28 @@ internal static class PwshLexer
                     return src.Length;
                 }
 
+                if (interpolationError is not null)
+                {
+                    tokens.Add(new PwshToken(
+                        PwshTokenKind.UnparseableSentinel,
+                        src.Slice(start).ToString(),
+                        null,
+                        start,
+                        src.Length - start,
+                        interpolationError));
+                    return src.Length;
+                }
+
                 var end = k + 2; // past quote + '@'
                 tokens.Add(new PwshToken(
-                    PwshTokenKind.QuotedString, body, null,
+                    PwshTokenKind.QuotedString, resolverValue.Decoded, null,
                     start, end - start, null)
-                    {
-                        IsHereString = true,
-                        IsSingleQuoted = quote == '\'',
-                        HasInterpolation = hasInterpolation,
-                    });
+                {
+                    IsHereString = true,
+                    IsSingleQuoted = quote == '\'',
+                    HasInterpolation = hasInterpolation,
+                    ResolverValue = resolverValue,
+                });
                 return end;
             }
 
@@ -552,12 +606,18 @@ internal static class PwshLexer
         return src.Length;
     }
 
-    private static string DecodeExpandableString(
-        ReadOnlySpan<char> value, out bool hasInterpolation, out int invalidUnicodeAt)
+    private static ShellValue DecodeExpandableValue(
+        ReadOnlySpan<char> value,
+        int? sourceStart,
+        out bool hasInterpolation,
+        out int invalidUnicodeAt,
+        out string? interpolationError)
     {
-        var decoded = new StringBuilder(value.Length);
+        var decoded = new ShellValueBuilder();
+        decoded.AppendBoundary(sourceStart);
         hasInterpolation = false;
         invalidUnicodeAt = -1;
+        interpolationError = null;
         for (var i = 0; i < value.Length; i++)
         {
             if (value[i] == '`' && i + 1 < value.Length)
@@ -565,30 +625,51 @@ internal static class PwshLexer
                 if (IsMalformedUnicodeEscape(value, i))
                 {
                     invalidUnicodeAt = i;
-                    return decoded.ToString();
+                    return decoded.Build();
                 }
 
-                i = AppendBacktickEscape(value, i, decoded) - 1;
+                i = AppendBacktickEscapeFragment(value, i, decoded, sourceStart) - 1;
                 continue;
             }
 
             if (value[i] == '$' && StartsInterpolation(value, i))
             {
                 hasInterpolation = true;
+                var expansionIndex = i;
+                if (TryAppendPwshExpansion(
+                        value,
+                        ref expansionIndex,
+                        decoded,
+                        out interpolationError,
+                        sourceStart))
+                {
+                    if (interpolationError is not null)
+                    {
+                        return decoded.Build();
+                    }
+
+                    i = expansionIndex - 1;
+                    continue;
+                }
             }
 
-            decoded.Append(value[i]);
+            decoded.AppendLiteral(value[i], sourceStart + i, 1);
         }
 
-        return decoded.ToString();
+        return decoded.Build();
     }
 
     internal static bool TryDecodeExpandableValue(
         string value, out string decoded, out bool hasInterpolation)
     {
-        decoded = DecodeExpandableString(
-            value.AsSpan(), out hasInterpolation, out var invalidUnicodeAt);
-        return invalidUnicodeAt < 0;
+        var resolverValue = DecodeExpandableValue(
+            value.AsSpan(),
+            null,
+            out hasInterpolation,
+            out var invalidUnicodeAt,
+            out var interpolationError);
+        decoded = resolverValue.Decoded;
+        return invalidUnicodeAt < 0 && interpolationError is null;
     }
 
     private static bool StartsInterpolation(ReadOnlySpan<char> value, int dollarIndex)
@@ -601,6 +682,133 @@ internal static class PwshLexer
         var next = value[dollarIndex + 1];
         return next is '(' or '{' or '?' or '^' or '$' or '_' or ':'
             || char.IsLetterOrDigit(next);
+    }
+
+    private static bool TryAppendPwshExpansion(
+        ReadOnlySpan<char> value,
+        ref int index,
+        ShellValueBuilder target,
+        out string? error,
+        int? sourceOffset = 0)
+    {
+        error = null;
+        var start = index;
+        if (start + 1 >= value.Length || value[start] != '$')
+        {
+            return false;
+        }
+
+        var next = value[start + 1];
+        if (next == '(')
+        {
+            var scan = OpaqueRegionScanner.Scan(
+                value,
+                start + 1,
+                '(',
+                ')',
+                OpaqueRegionScanner.PwshEscape);
+            if (!scan.Closed)
+            {
+                error = "unbalanced '$(' subexpression";
+                index = value.Length;
+                return true;
+            }
+
+            var subexpressionLength = scan.EndIndex - start + 1;
+            target.AppendOpaque(
+                value.Slice(start, subexpressionLength).ToString(),
+                ShellOpaqueCause.PowerShellSubexpression,
+                sourceOffset + start,
+                subexpressionLength);
+            index += subexpressionLength;
+            return true;
+        }
+
+        string name;
+        int length;
+        if (next == '{')
+        {
+            var scan = OpaqueRegionScanner.Scan(
+                value,
+                start + 1,
+                '{',
+                '}',
+                OpaqueRegionScanner.PwshEscape);
+            if (!scan.Closed)
+            {
+                error = "unbalanced '${' variable interpolation";
+                index = value.Length;
+                return true;
+            }
+
+            length = scan.EndIndex - start + 1;
+            name = value.Slice(start + 2, length - 3).ToString();
+            if (name.Length == 0)
+            {
+                error = "empty '${}' variable interpolation";
+                index += length;
+                return true;
+            }
+        }
+        else if (next is '?' or '^' or '$')
+        {
+            length = 2;
+            name = next.ToString();
+        }
+        else if (next == '_' || char.IsLetterOrDigit(next))
+        {
+            var end = start + 2;
+            while (end < value.Length
+                && (value[end] == '_' || char.IsLetterOrDigit(value[end])))
+            {
+                end++;
+            }
+
+            if (end < value.Length && value[end] == ':')
+            {
+                end++;
+                while (end < value.Length
+                    && (value[end] == '_' || char.IsLetterOrDigit(value[end])))
+                {
+                    end++;
+                }
+            }
+
+            length = end - start;
+            name = value.Slice(start + 1, length - 1).ToString();
+        }
+        else
+        {
+            return false;
+        }
+
+        var kind = name is "?" or "^" or "$"
+            ? ShellExpansionKind.SpecialParameter
+            : ShellExpansionKind.Variable;
+        target.AppendExpansion(
+            value.Slice(start, length).ToString(),
+            ShellLexicalTransform.Variable,
+            new ShellExpansionReference(kind, name),
+            ShellValueCardinality.ExactlyOne,
+            sourceOffset + start,
+            length);
+        index += length;
+        return true;
+    }
+
+    private static int AppendBacktickEscapeFragment(
+        ReadOnlySpan<char> value,
+        int backtickIndex,
+        ShellValueBuilder target,
+        int? sourceStart)
+    {
+        var decoded = new StringBuilder();
+        var end = AppendBacktickEscape(value, backtickIndex, decoded);
+        target.AppendLiteral(
+            decoded.ToString(),
+            sourceStart + backtickIndex,
+            end - backtickIndex);
+        return end;
     }
 
     private static int AppendBacktickEscape(
@@ -736,7 +944,16 @@ internal static class PwshLexer
 
         var length = scan.EndIndex - start + 1;
         tokens.Add(new PwshToken(
-            kind, src.Slice(start, length).ToString(), null, start, length, null));
+            kind, src.Slice(start, length).ToString(), null, start, length, null)
+        {
+            ResolverValue = ShellValue.Opaque(
+                    src.Slice(start, length).ToString(),
+                    kind == PwshTokenKind.Subexpression
+                        ? ShellOpaqueCause.PowerShellSubexpression
+                        : ShellOpaqueCause.Unsupported,
+                    start,
+                    length),
+        });
         return start + length;
     }
 
@@ -865,9 +1082,11 @@ internal static class PwshLexer
         // Keep an unquoted inline value attached to its source token. The
         // parser interprets ':' only for cmdlet-style parameters and '='
         // only for native options.
+        var valueStart = -1;
         if (i < src.Length && (src[i] == ':' || src[i] == '='))
         {
             i++;
+            valueStart = i;
             i = ScanWordRun(src, i, out var invalidUnicodeAt);
             if (invalidUnicodeAt >= 0)
             {
@@ -876,9 +1095,117 @@ internal static class PwshLexer
             }
         }
 
+        var resolverValue = ShellValue.Literal(
+            src.Slice(start, i - start).ToString(),
+            start,
+            i - start);
+        var hasInterpolation = false;
+        if (valueStart >= 0)
+        {
+            var valueBuilder = new ShellValueBuilder();
+            valueBuilder.AppendLiteral(
+                src.Slice(start, valueStart - start).ToString(),
+                start,
+                valueStart - start);
+            var valueIndex = valueStart;
+            while (valueIndex < i)
+            {
+                var character = src[valueIndex];
+                if (character == '`' && valueIndex + 1 < i)
+                {
+                    valueIndex = AppendBacktickEscapeFragment(
+                        src,
+                        valueIndex,
+                        valueBuilder,
+                        0);
+                    continue;
+                }
+
+                if (character == '$' && StartsInterpolation(src, valueIndex))
+                {
+                    hasInterpolation = true;
+                    if (TryAppendPwshExpansion(
+                        src,
+                        ref valueIndex,
+                        valueBuilder,
+                        out var interpolationError))
+                    {
+                        if (interpolationError is not null)
+                        {
+                            resolverValue = ShellValue.Opaque(
+                                src.Slice(start, i - start).ToString(),
+                                ShellOpaqueCause.Unsupported,
+                                start,
+                                i - start);
+                            break;
+                        }
+
+                        if (IsPowerShellExpressionSuffix(src, valueIndex, i))
+                        {
+                            valueBuilder.AppendOpaque(
+                                src.Slice(valueIndex, i - valueIndex).ToString(),
+                                ShellOpaqueCause.PowerShellExpressionSuffix,
+                                valueIndex,
+                                i - valueIndex);
+                            valueIndex = i;
+                        }
+
+                        continue;
+                    }
+                }
+
+                if (character == '~' && valueIndex == valueStart)
+                {
+                    valueBuilder.AppendExpansion(
+                        "~",
+                        ShellLexicalTransform.Tilde,
+                        new ShellExpansionReference(ShellExpansionKind.Tilde, null),
+                        ShellValueCardinality.ExactlyOne,
+                        valueIndex,
+                        1);
+                }
+                else if (character is '*' or '?' or '[')
+                {
+                    valueBuilder.AppendExpansion(
+                        character.ToString(),
+                        ShellLexicalTransform.Glob,
+                        new ShellExpansionReference(ShellExpansionKind.Glob, null),
+                        ShellValueCardinality.ZeroOrMore,
+                        valueIndex,
+                        1);
+                }
+                else if (character == ',')
+                {
+                    valueBuilder.AppendExpansion(
+                        ",",
+                        ShellLexicalTransform.FieldSplit,
+                        new ShellExpansionReference(ShellExpansionKind.ArraySeparator, null),
+                        ShellValueCardinality.ZeroOrMore,
+                        valueIndex,
+                        1);
+                }
+                else
+                {
+                    valueBuilder.AppendLiteral(character, valueIndex, 1);
+                }
+
+                valueIndex++;
+            }
+
+            if (resolverValue.Fragments.Count == 1
+                && resolverValue.Fragments[0].Kind == ShellValueFragmentKind.Literal)
+            {
+                resolverValue = valueBuilder.Build();
+            }
+        }
+
         tokens.Add(new PwshToken(
             PwshTokenKind.Parameter, src.Slice(start, i - start).ToString(),
-            null, start, i - start, null));
+            null, start, i - start, null)
+        {
+            HasInterpolation = hasInterpolation,
+            ResolverValue = resolverValue,
+        });
         return i;
     }
 
@@ -887,7 +1214,7 @@ internal static class PwshLexer
     private static int ReadWord(
         ReadOnlySpan<char> src, int start, List<PwshToken> tokens)
     {
-        var sb = new StringBuilder();
+        var value = new ShellValueBuilder();
         var hasInterpolation = false;
         var i = start;
         while (i < src.Length)
@@ -904,7 +1231,7 @@ internal static class PwshLexer
             {
                 if (i + 1 >= src.Length)
                 {
-                    sb.Append('`');
+                    value.AppendLiteral('`', i, 1);
                     i++;
                     break;
                 }
@@ -921,7 +1248,7 @@ internal static class PwshLexer
                     return src.Length;
                 }
 
-                i = AppendBacktickEscape(src, i, sb);
+                i = AppendBacktickEscapeFragment(src, i, value, 0);
                 continue;
             }
 
@@ -939,41 +1266,138 @@ internal static class PwshLexer
                     src, i + 1, '{', '}', OpaqueRegionScanner.PwshEscape);
                 if (!scan.Closed)
                 {
-                    // Unbalanced — emit the $ literally and let the outer
-                    // loop reach the '{' and produce a sentinel.
-                    sb.Append('$');
-                    i++;
+                    tokens.Add(new PwshToken(
+                        PwshTokenKind.UnparseableSentinel,
+                        src.Slice(i).ToString(),
+                        null,
+                        i,
+                        src.Length - i,
+                        "unbalanced '${' variable interpolation"));
+                    return src.Length;
+                }
+
+                if (TryAppendPwshExpansion(src, ref i, value, out var error))
+                {
+                    if (error is not null)
+                    {
+                        tokens.Add(new PwshToken(
+                            PwshTokenKind.UnparseableSentinel,
+                            src.Slice(start).ToString(),
+                            null,
+                            start,
+                            src.Length - start,
+                            error));
+                        return src.Length;
+                    }
+
+                    if (IsPowerShellExpressionSuffix(src, i, src.Length))
+                    {
+                        var suffixEnd = i;
+                        while (suffixEnd < src.Length && !IsWordBoundary(src[suffixEnd]))
+                        {
+                            suffixEnd++;
+                        }
+
+                        value.AppendOpaque(
+                            src.Slice(i, suffixEnd - i).ToString(),
+                            ShellOpaqueCause.PowerShellExpressionSuffix,
+                            i,
+                            suffixEnd - i);
+                        i = suffixEnd;
+                    }
+
                     continue;
                 }
-
-                var braceLen = scan.EndIndex - i + 1;
-                for (var k = 0; k < braceLen; k++)
-                {
-                    sb.Append(src[i + k]);
-                }
-
-                i += braceLen;
-                continue;
             }
 
             if (c == '$' && StartsInterpolation(src, i))
             {
                 hasInterpolation = true;
+                if (TryAppendPwshExpansion(src, ref i, value, out var error))
+                {
+                    if (error is not null)
+                    {
+                        tokens.Add(new PwshToken(
+                            PwshTokenKind.UnparseableSentinel,
+                            src.Slice(start).ToString(),
+                            null,
+                            start,
+                            src.Length - start,
+                            error));
+                        return src.Length;
+                    }
+
+                    if (IsPowerShellExpressionSuffix(src, i, src.Length))
+                    {
+                        var suffixEnd = i;
+                        while (suffixEnd < src.Length && !IsWordBoundary(src[suffixEnd]))
+                        {
+                            suffixEnd++;
+                        }
+
+                        value.AppendOpaque(
+                            src.Slice(i, suffixEnd - i).ToString(),
+                            ShellOpaqueCause.PowerShellExpressionSuffix,
+                            i,
+                            suffixEnd - i);
+                        i = suffixEnd;
+                    }
+
+                    continue;
+                }
             }
 
-            sb.Append(c);
+            if (c == '~' && i == start)
+            {
+                value.AppendExpansion(
+                    "~",
+                    ShellLexicalTransform.Tilde,
+                    new ShellExpansionReference(ShellExpansionKind.Tilde, null),
+                    ShellValueCardinality.ExactlyOne,
+                    i,
+                    1);
+            }
+            else if (c is '*' or '?' or '[')
+            {
+                value.AppendExpansion(
+                    c.ToString(),
+                    ShellLexicalTransform.Glob,
+                    new ShellExpansionReference(ShellExpansionKind.Glob, null),
+                    ShellValueCardinality.ZeroOrMore,
+                    i,
+                    1);
+            }
+            else if (c == ',')
+            {
+                value.AppendExpansion(
+                    ",",
+                    ShellLexicalTransform.FieldSplit,
+                    new ShellExpansionReference(ShellExpansionKind.ArraySeparator, null),
+                    ShellValueCardinality.ZeroOrMore,
+                    i,
+                    1);
+            }
+            else
+            {
+                value.AppendLiteral(c, i, 1);
+            }
+
             i++;
         }
 
-        if (sb.Length == 0)
+        var resolverValue = value.Build();
+        if (resolverValue.Decoded.Length == 0)
         {
             // Defensive: make progress on a char the dispatcher missed.
             return start + 1;
         }
 
         tokens.Add(new PwshToken(
-            PwshTokenKind.Word, sb.ToString(), null, start, i - start, null)
-            { HasInterpolation = hasInterpolation });
+            PwshTokenKind.Word, resolverValue.Decoded, null, start, i - start, null)
+        {
+            HasInterpolation = hasInterpolation,
+            ResolverValue = resolverValue,
+        });
         return i;
     }
 
@@ -1046,6 +1470,13 @@ internal static class PwshLexer
 
         return i;
     }
+
+    private static bool IsPowerShellExpressionSuffix(
+        ReadOnlySpan<char> source, int index, int end) =>
+        index < end && (source[index] == '['
+            || (source[index] == '.'
+                && index + 1 < end
+                && (source[index + 1] == '_' || char.IsLetter(source[index + 1]))));
 
     private static bool IsWordBoundary(char c)
     {

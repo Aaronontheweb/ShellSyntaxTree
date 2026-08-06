@@ -229,6 +229,138 @@ internal static class BashResolver
     }
 
     /// <summary>
+    /// Resolve a lexer-proved shell value without reconstructing expansion
+    /// eligibility from its decoded text.
+    /// </summary>
+    internal static (ArgKind Kind, string? Resolved, bool IsPath) Resolve(
+        ShellValue value,
+        bool treatAsPath,
+        BashParserOptions options,
+        bool workingDirectoryUnknown,
+        ShellResolutionConsumer consumer)
+    {
+        if (consumer is not ShellResolutionConsumer.BashArgument
+            and not ShellResolutionConsumer.BashRedirect)
+        {
+            throw new ArgumentOutOfRangeException(nameof(consumer));
+        }
+
+        if (treatAsPath && value.Decoded.Length == 0)
+        {
+            return (ArgKind.DynamicSkip, null, false);
+        }
+
+        var composed = new StringBuilder(value.Decoded.Length);
+        var hadHomeExpansion = false;
+        var hasGlobExpansion = false;
+        for (var fragmentIndex = 0; fragmentIndex < value.Fragments.Count; fragmentIndex++)
+        {
+            var fragment = value.Fragments[fragmentIndex];
+            if (fragment.Kind == ShellValueFragmentKind.Literal)
+            {
+                composed.Append(fragment.Value);
+                continue;
+            }
+
+            if (fragment.Kind == ShellValueFragmentKind.Opaque
+                || fragment.Expansion is null)
+            {
+                return (ArgKind.DynamicSkip, null, false);
+            }
+
+            var expansion = fragment.Expansion.Value;
+            switch (expansion.Kind)
+            {
+                case ShellExpansionKind.Variable:
+                case ShellExpansionKind.SpecialParameter:
+                case ShellExpansionKind.PositionalParameter:
+                    if (fragment.Cardinality != ShellValueCardinality.ExactlyOne
+                        || !string.Equals(expansion.Name, "HOME", StringComparison.Ordinal)
+                        || (fragment.AllowedTransforms & ShellLexicalTransform.Variable) == 0)
+                    {
+                        return treatAsPath
+                            ? (ArgKind.DynamicSkip, null, false)
+                            : (ArgKind.EnvVar, null, false);
+                    }
+
+                    var home = GetHomeDirectory(options);
+                    if ((fragment.AllowedTransforms & ShellLexicalTransform.FieldSplit) != 0
+                        && ContainsFieldSplitOrGlobCharacter(home))
+                    {
+                        return (ArgKind.DynamicSkip, null, false);
+                    }
+
+                    composed.Append(home);
+                    hadHomeExpansion = true;
+                    break;
+
+                case ShellExpansionKind.Tilde:
+                    // An empty quoted fragment before '~' is still an authored
+                    // word prefix and suppresses Bash tilde expansion.
+                    if (fragmentIndex != 0
+                        || (fragment.AllowedTransforms & ShellLexicalTransform.Tilde) == 0)
+                    {
+                        composed.Append(fragment.Value);
+                        break;
+                    }
+
+                    if (value.Decoded.Length > 1
+                        && value.Decoded[1] != '/'
+                        && value.Decoded[1] != '\\')
+                    {
+                        return treatAsPath
+                            ? (ArgKind.DynamicSkip, null, false)
+                            : (ArgKind.Tilde, null, false);
+                    }
+
+                    composed.Append(GetHomeDirectory(options).TrimEnd('/', '\\'));
+                    hadHomeExpansion = true;
+                    break;
+
+                case ShellExpansionKind.Glob:
+                    composed.Append(fragment.Value);
+                    hasGlobExpansion = true;
+                    break;
+
+                default:
+                    return (ArgKind.DynamicSkip, null, false);
+            }
+        }
+
+        if (hasGlobExpansion)
+        {
+            return consumer == ShellResolutionConsumer.BashRedirect
+                ? (ArgKind.DynamicSkip, null, false)
+                : (ArgKind.Glob, null, treatAsPath);
+        }
+
+        if (!treatAsPath)
+        {
+            return (hadHomeExpansion ? ArgKind.Tilde : ArgKind.Literal, null, false);
+        }
+
+        var resolved = TryResolveAbsolutePath(
+            composed.ToString(), options, workingDirectoryUnknown);
+        return resolved is null
+            ? (ArgKind.DynamicSkip, null, false)
+            : (hadHomeExpansion ? ArgKind.Tilde : ArgKind.Literal, resolved, true);
+    }
+
+    private static bool ContainsFieldSplitOrGlobCharacter(string value)
+    {
+        foreach (var character in value)
+        {
+            if (char.IsWhiteSpace(character)
+                || character is '*' or '?' or '[')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// SPEC §8 LooksLikePath heuristic. Used to fall back when no per-verb
     /// rule applies. Conservative — when a token "looks like a path" we run
     /// it through the resolver; when it doesn't, we leave it as a plain

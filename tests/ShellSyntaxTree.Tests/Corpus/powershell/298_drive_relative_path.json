@@ -1,0 +1,14 @@
+{
+  "name": "Drive-relative path fails closed",
+  "input": "Get-Content C:relative.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Get-Content"],
+      "args": [{ "raw": "C:relative.txt", "kind": "DynamicSkip", "isPath": false }],
+      "redirects": []
+    }]
+  },
+  "notes": "C:relative.txt depends on PowerShell's per-drive current location, which parser options do not model."
+}

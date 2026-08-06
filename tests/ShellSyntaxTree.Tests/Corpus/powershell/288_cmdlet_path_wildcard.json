@@ -1,0 +1,17 @@
+{
+  "name": "Cmdlet Path wildcard remains a pattern",
+  "input": "Get-Content -Path \"*.txt\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Get-Content"],
+      "args": [
+        { "raw": "-Path", "kind": "Literal", "isPath": false, "isFlag": true },
+        { "raw": "\"*.txt\"", "kind": "Glob", "isPath": true, "resolved": "__NULL__" }
+      ],
+      "redirects": []
+    }]
+  },
+  "notes": "Cmdlet Path applies wildcard semantics after quote removal, unlike native arguments."
+}

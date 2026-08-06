@@ -1,0 +1,10 @@
+{
+  "name": "Unterminated braced interpolation is unparseable",
+  "input": "cat \"${HOME\"",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unbalanced '${'",
+    "clauses": []
+  },
+  "notes": "The outer quote does not complete the open braced parameter expansion."
+}

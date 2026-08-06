@@ -9,7 +9,7 @@
         "verb": ["curl"],
         "args": [
           { "raw": "--data", "kind": "Literal", "isPath": false, "isFlag": true },
-          { "raw": "'@~'\"/secret.json\"", "kind": "DynamicSkip", "isPath": false, "isFlag": false, "resolved": "__NULL__" },
+          { "raw": "'@~'\"/secret.json\"", "kind": "Literal", "isPath": true, "isFlag": false, "resolved": "/work/~/secret.json" },
           { "raw": "https://example.invalid/api", "kind": "Literal", "isPath": false, "isFlag": false }
         ],
         "redirects": [],
@@ -32,9 +32,10 @@
             "sourceStart": 5,
             "sourceLength": 25,
             "precedingVerbElementCount": 1,
-            "kind": "DynamicSkip",
+            "kind": "Literal",
             "isFlag": true,
-            "isPath": false
+            "isPath": true,
+            "resolved": "/work/~/secret.json"
           },
           {
             "raw": "https://example.invalid/api",
@@ -53,5 +54,5 @@
       }
     ]
   },
-  "notes": "Resolver-sensitive syntax exposed after curl's @ marker is removed still safe-fails."
+  "notes": "The quoted tilde remains literal after curl's @ marker is removed."
 }

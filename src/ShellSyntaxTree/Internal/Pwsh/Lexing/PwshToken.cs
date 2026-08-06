@@ -3,6 +3,8 @@
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
+using ShellSyntaxTree.Internal.Resolving;
+
 namespace ShellSyntaxTree.Internal.Pwsh.Lexing;
 
 /// <summary>
@@ -58,6 +60,12 @@ internal readonly record struct PwshToken(
     /// false.
     /// </summary>
     public bool HasInterpolation { get; init; }
+
+    /// <summary>
+    /// Resolver-relevant decoded fragments. Null only for token kinds that
+    /// never carry an argument value.
+    /// </summary>
+    public ShellValue? ResolverValue { get; init; }
 
     /// <summary>
     /// True when this <see cref="PwshTokenKind.Whitespace"/> token contains

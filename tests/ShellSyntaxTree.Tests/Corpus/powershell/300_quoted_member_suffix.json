@@ -1,0 +1,17 @@
+{
+  "name": "Quoted member-looking suffix remains exact",
+  "input": "Get-Content -Path $HOME\".Length\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Get-Content"],
+      "args": [
+        { "raw": "-Path", "kind": "Literal", "isPath": false, "isFlag": true },
+        { "raw": "$HOME\".Length\"", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user.Length" }
+      ],
+      "redirects": []
+    }]
+  },
+  "notes": "The quote boundary makes .Length literal text rather than a MemberExpressionAst."
+}

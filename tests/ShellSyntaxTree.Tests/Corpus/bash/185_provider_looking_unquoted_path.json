@@ -1,0 +1,14 @@
+{
+  "name": "Bash provider-looking unquoted path remains literal",
+  "input": "cat filesystem::/safe",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "filesystem::/safe", "kind": "Literal", "isPath": true, "resolved": "/work/filesystem::/safe" }],
+      "redirects": []
+    }]
+  },
+  "notes": "Bash does not apply PowerShell provider semantics to authored argument text."
+}

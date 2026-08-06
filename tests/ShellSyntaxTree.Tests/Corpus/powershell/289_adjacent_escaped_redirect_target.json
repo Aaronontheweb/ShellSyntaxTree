@@ -1,0 +1,14 @@
+{
+  "name": "Adjacent escaped PowerShell redirect fragments form one target",
+  "input": "Write-Output ok > `$HOME\".txt\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Write-Output"],
+      "args": [{ "raw": "ok", "kind": "Literal", "isPath": false }],
+      "redirects": [{ "direction": "Out", "target": "C:/work/$HOME.txt", "isDynamicSkip": false }]
+    }]
+  },
+  "notes": "The redirect target is aggregated before provider-aware resolution."
+}

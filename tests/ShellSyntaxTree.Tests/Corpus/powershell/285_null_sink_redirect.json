@@ -1,0 +1,14 @@
+{
+  "name": "PowerShell null sink redirect remains non-file",
+  "input": "Write-Output ok > $null",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Write-Output"],
+      "args": [{ "raw": "ok", "kind": "Literal", "isPath": false }],
+      "redirects": [{ "direction": "Out", "target": "$null", "isDynamicSkip": true }]
+    }]
+  },
+  "notes": "The unescaped variable token is the PowerShell discard sink, not a filesystem target."
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Backtick escaped HOME remains a literal path",
+  "input": "Get-Content `$HOME",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Get-Content"],
+      "args": [{ "raw": "`$HOME", "kind": "Literal", "isPath": true, "resolved": "C:/work/$HOME" }],
+      "redirects": []
+    }]
+  },
+  "notes": "The backtick escape removes interpolation eligibility without erasing the authored path value."
+}

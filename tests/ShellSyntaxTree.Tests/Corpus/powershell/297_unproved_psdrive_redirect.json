@@ -1,0 +1,14 @@
+{
+  "name": "Unproved PSDrive redirect fails closed",
+  "input": "Write-Output ok > Z:\\x",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Write-Output"],
+      "args": [{ "raw": "ok", "kind": "Literal", "isPath": false }],
+      "redirects": [{ "direction": "Out", "target": "Z:\\x", "isDynamicSkip": true }]
+    }]
+  },
+  "notes": "Redirect path semantics require a proved PSDrive provider mapping."
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Adjacent escaped redirect fragments form one literal target",
+  "input": "echo ok > \\$HOME\".txt\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["echo", "ok"],
+      "args": [],
+      "redirects": [{ "direction": "Out", "target": "/work/$HOME.txt", "isDynamicSkip": false }]
+    }]
+  },
+  "notes": "The complete adjacent target run is aggregated before redirect resolution."
+}

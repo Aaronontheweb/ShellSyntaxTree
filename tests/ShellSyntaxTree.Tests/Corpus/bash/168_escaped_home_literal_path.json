@@ -1,0 +1,14 @@
+{
+  "name": "Escaped HOME remains a literal path",
+  "input": "cat \\$HOME",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "\\$HOME", "kind": "Literal", "isPath": true, "resolved": "/work/$HOME" }],
+      "redirects": []
+    }]
+  },
+  "notes": "The escape removes variable-transform eligibility without erasing the authored path value."
+}

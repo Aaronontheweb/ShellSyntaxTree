@@ -9,7 +9,7 @@
         "verb": ["curl"],
         "args": [
           { "raw": "-s", "kind": "Literal", "isPath": false, "isFlag": true },
-          { "raw": "\"https://api.github.com/repos/sample-org/sample-repo/pulls?state=open\"", "kind": "Glob", "isPath": false, "resolved": "__NULL__" }
+          { "raw": "\"https://api.github.com/repos/sample-org/sample-repo/pulls?state=open\"", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -40,5 +40,5 @@
       }
     ]
   },
-  "notes": "Issue #25 follow-up: leading comment + `||`-fallback that surfaced the approval-state desync cascade (verb-chain extracted as `# Get` at persistence time → cache miss at retry-authorization → tool fails after user clicked Approve). Paths and org names sanitized per SPEC §14."
+  "notes": "Issue #25 follow-up: leading comment + `||`-fallback that surfaced the approval-state desync cascade (verb-chain extracted as `# Get` at persistence time → cache miss at retry-authorization → tool fails after user clicked Approve). The quoted URL wildcard marker is literal. Paths and org names sanitized per SPEC §14."
 }

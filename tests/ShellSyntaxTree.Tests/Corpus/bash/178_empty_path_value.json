@@ -1,0 +1,14 @@
+{
+  "name": "Empty Bash path value fails closed",
+  "input": "cat \"\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "\"\"", "kind": "DynamicSkip", "isPath": false }],
+      "redirects": []
+    }]
+  },
+  "notes": "An empty filename cannot be normalized into a truthful static path."
+}

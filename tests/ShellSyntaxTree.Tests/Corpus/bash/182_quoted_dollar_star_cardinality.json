@@ -1,0 +1,14 @@
+{
+  "name": "Quoted dollar-star has one unknown runtime value",
+  "input": "cat \"$*\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "\"$*\"", "kind": "DynamicSkip", "isPath": false }],
+      "redirects": []
+    }]
+  },
+  "notes": "Inside double quotes, $* produces exactly one argv value, but its runtime text remains unknown."
+}
