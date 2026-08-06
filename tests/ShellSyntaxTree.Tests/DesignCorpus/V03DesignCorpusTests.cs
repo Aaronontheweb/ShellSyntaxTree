@@ -154,6 +154,23 @@ public class V03DesignCorpusTests
                 {
                     ValidateValue(shell, designCase.Id, redirect.Target);
                 }
+
+                Assert.Equal(
+                    redirect.Operation == DesignRedirectOperation.HereDocument,
+                    redirect.HereDocument is not null);
+
+                if (redirect.HereDocument is not null)
+                {
+                    Assert.False(string.IsNullOrWhiteSpace(redirect.HereDocument.DelimiterRaw));
+                    Assert.NotEqual(
+                        DesignHereDocumentExpansionMode.Unknown,
+                        redirect.HereDocument.ExpansionMode);
+                }
+
+                if (redirect.Operation == DesignRedirectOperation.HereString)
+                {
+                    Assert.NotNull(redirect.Target);
+                }
             }
         }
 
@@ -328,9 +345,31 @@ public sealed record DesignRedirectExpectation
 
     public DesignValueExpectation? Target { get; init; }
 
+    public DesignHereDocumentExpectation? HereDocument { get; init; }
+
     public bool IsPathRelevant { get; init; }
 
     public bool IsComplete { get; init; }
+}
+
+public sealed record DesignHereDocumentExpectation
+{
+    public string DelimiterRaw { get; init; } = "";
+
+    public string BodyRaw { get; init; } = "";
+
+    public DesignHereDocumentExpansionMode ExpansionMode { get; init; }
+
+    public bool StripLeadingTabs { get; init; }
+
+    public bool IsComplete { get; init; }
+}
+
+public enum DesignHereDocumentExpansionMode
+{
+    Unknown,
+    Literal,
+    Expand,
 }
 
 public enum DesignShell

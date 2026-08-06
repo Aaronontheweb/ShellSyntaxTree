@@ -459,6 +459,32 @@
         "compatibility": { "verbs": ["Set-Location", "Get-ChildItem"], "preservesAuthoredDynamicValues": true },
         "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "StateJoinConservative", "UnknownPolicyValueFailsClosed"]
       }
+    },
+    {
+      "id": "pwsh-literal-here-string-is-value",
+      "concern": "PowerShell here-string syntax remains an argument rather than a redirect",
+      "input": "Write-Output @'\n$literal text\n'@",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Write-Output",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "@'\n$literal text\n'@", "kind": "Exact", "values": ["$literal text"], "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "PowerShell's literal here string does not interpolate the dollar expression and does not produce a RedirectAnalysis entry."
     }
   ]
 }

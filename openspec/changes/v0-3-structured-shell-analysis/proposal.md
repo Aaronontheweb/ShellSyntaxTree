@@ -31,9 +31,10 @@ fail-closed behavior for incomplete analysis.
   nested executable commands. Unparseable results expose no command or clause
   authorization projection.
 - Expand grammar in vertical slices: Bash `for ... in`, PowerShell `foreach`,
-  then the locked condition loops and branches. Heredoc body interpretation,
-  process substitution, background lists, C-style loops, arithmetic, Bash
-  `case`, and PowerShell `switch` are deferred beyond stable v0.3 and remain
+  then the locked condition loops and branches. Preserve the existing Bash
+  heredoc grammar while adding body, delimiter, and expansion facts, and add
+  Bash `<<<` here-string semantics. Process substitution, background lists,
+  C-style loops, arithmetic, Bash `case`, and PowerShell `switch` remain
   independently gated by explicit executable-region and value-semantics
   requirements.
 - Keep executable-specific option and operand interpretation, authorization

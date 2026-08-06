@@ -5,6 +5,11 @@ The analysis SHALL classify a policy-relevant shell value as exact, finite,
 bounded symbolic pattern, or unknown, and SHALL NOT present a weaker proof as a
 stronger domain.
 
+`Unknown` SHALL contain no values or pattern fields. `Exact` SHALL contain one
+value. `FiniteSet` SHALL contain 2–32 distinct values. `Pattern` SHALL contain
+no values and SHALL contain a non-empty pattern and covering directory. The
+parser SHALL NOT emit any other member combination.
+
 #### Scenario: One literal value
 - **WHEN** a loop binds a variable from the single literal `a.txt`
 - **THEN** the binding domain is exact with value `a.txt`
@@ -43,13 +48,25 @@ becomes unknown rather than being truncated.
 - **THEN** the resulting domain may remain finite and complete
 
 ### Requirement: Structural analysis has fixed depth limits
-The parser SHALL support at most 16 nested structural container nodes and at
-most 5 decoded command-string wrapper recursions. These bounds SHALL NOT be
-caller-configurable. Exceeding either bound SHALL make the whole result
-unparseable rather than returning an authorization projection for a subset.
+The parser SHALL support at most 16 nested executable containers and at most 5
+decoded command-string wrapper recursions. Structural depth starts at zero for
+the root and increments once when entering a foreach loop, condition loop,
+conditional, group, or command substitution. Blocks, conditional-branch
+records, command lists, pipelines, and simple-command leaves do not increment
+the depth independently. These bounds SHALL NOT be caller-configurable.
+Exceeding either bound SHALL make the whole result unparseable rather than
+returning an authorization projection for a subset.
+
+The limits SHALL be exposed as static get-only properties rather than public
+compile-time constants so downstream assemblies read the installed parser's
+contract instead of inlining stale values.
+
+#### Scenario: Structural nesting reaches the limit
+- **WHEN** a supported input enters exactly 16 nested executable containers
+- **THEN** the input remains structurally eligible for complete analysis
 
 #### Scenario: Structural nesting exceeds the limit
-- **WHEN** a seventeenth nested loop or other structural container is encountered
+- **WHEN** a seventeenth nested executable container is entered
 - **THEN** the result is unparseable
 - **THEN** command and compatibility projections are empty
 

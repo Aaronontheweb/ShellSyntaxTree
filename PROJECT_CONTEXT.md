@@ -87,9 +87,10 @@ zero-native-deps .NET parser sized to what security gates actually need.
 - Deliver Bash `for ... in` and PowerShell `foreach` first, then the locked
   `while` and `if` subsets independently for each shell. Shared lowering and
   analysis are extracted only after both front ends prove identical behavior.
-- Keep heredoc body interpretation, process substitution, background lists,
-  Bash `case`, PowerShell `switch`, arithmetic/C-style loops, and definitions
-  unparseable through stable v0.3.
+- Preserve existing Bash heredocs and add explicit body/expansion facts plus
+  Bash `<<<` here strings. Keep process substitution, background lists, Bash
+  `case`, PowerShell `switch`, arithmetic/C-style loops, and definitions
+  independently gated.
 - Treat `openspec/changes/v0-3-structured-shell-analysis/` and its paired design
   corpus as the review authority until the accepted contract is synchronized
   into `SPEC.md` and `SPEC.POWERSHELL.md` with the production API change.

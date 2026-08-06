@@ -133,7 +133,7 @@ priorities.
       as the v0.3 roadmap and cross-link issue #71 control flow and issue #69
       shared native argument-fragment classification without merging their
       scopes.
-- [x] Add a versioned pre-implementation design corpus with 17 Bash and 17
+- [x] Add a versioned pre-implementation design corpus with paired Bash and
       PowerShell representative, boundary, and adversarial cases. The validator
       rejects schema drift, checks references and command ordering, confirms
       every `current` expectation against the v0.2 parsers, and includes the
@@ -158,6 +158,9 @@ priorities.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.
+- [ ] Preserve the existing Bash heredoc grammar, fix quoted-delimiter
+      adjacency, expose body/delimiter/expansion/completeness facts, and add a
+      separately tested Bash `<<<` here-string redirect slice.
 
 ---
 
@@ -182,9 +185,8 @@ priorities.
   composed helper.
 - Windows `cmd` parser.
 - Source-mapping (line/column on AST nodes) — only if an IDE consumer asks.
-- Heredoc body preservation and process substitution are separately gated
-  issue #72 tasks backed by production need; Bash function definitions remain
-  deferred until a consumer need surfaces.
+- Process substitution remains a separately gated issue #72 task; Bash
+  function definitions remain deferred until a consumer need surfaces.
 
 ## Parked
 

@@ -169,6 +169,14 @@ are:
    scope, cwd, or redirects. A structurally complete occurrence may still have
    an unknown value; those are separate facts.
 
+Heredoc and Bash here-string bodies are stdin data, not implicit child commands
+or filesystem paths. Authorize any command substitutions surfaced from an
+expanding heredoc as normal occurrences, then let executable-specific policy
+decide whether the remaining data matters. Complete literal data need not cause
+a prompt merely because it uses `<<`, `<<-`, or `<<<`; unknown data passed to a
+receiver that interprets stdin as code remains policy-sensitive and fails
+closed.
+
 `ParsedCommand.Clauses` remains as a conservative v0.2 compatibility
 projection during migration. For a successful result, the syntax leaf,
 occurrence, and compatibility projection share the same in-memory `Clause`

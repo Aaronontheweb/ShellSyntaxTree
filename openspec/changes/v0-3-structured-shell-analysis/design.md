@@ -307,9 +307,10 @@ into the release specifications before production types are added.
    never need a type switch.
 2. A value domain contains at most 32 candidates. Supported structural nesting
    is at most 16 container nodes. Existing decoded-command wrapper recursion
-   remains capped at 5. The limits are fixed public constants, not parser
-   options. Candidate overflow produces `Unknown`; structural or wrapper-depth
-   overflow makes the whole result unparseable.
+   remains capped at 5. The limits are public static get-only properties, not
+   caller-configurable parser options or compile-time constants. Candidate
+   overflow produces `Unknown`; structural or wrapper-depth overflow makes the
+   whole result unparseable.
 3. Within one successful `ParsedCommand`, a simple-command syntax leaf, its
    command occurrence, and its compatibility `Clauses` entry reference the
    identical `Clause` instance. This is an in-memory parser-result guarantee,
@@ -327,11 +328,12 @@ into the release specifications before production types are added.
 6. The stable v0.3 grammar includes the existing simple-command grammar,
    structural projection, Bash `for ... in`, `while` / `until`, and
    `if` / `elif` / `else`, plus PowerShell `foreach`, `while`, and
-   `if` / `elseif` / `else` within the bounded subsets below. Heredoc body
-   interpretation, process substitution, single-`&` background lists, Bash
-   `case`, PowerShell `switch`, arithmetic/C-style loops, implicit Bash
-   positional-parameter loops, and function/definition bodies remain
-   unparseable and are deferred to additive releases.
+   `if` / `elseif` / `else` within the bounded subsets below. It also preserves
+   the existing Bash heredoc grammar while adding explicit body, delimiter,
+   expansion, and completeness facts, and adds Bash `<<<` here strings.
+   Process substitution, single-`&` background lists, Bash `case`, PowerShell
+   `switch`, arithmetic/C-style loops, implicit Bash positional-parameter
+   loops, and function/definition bodies remain independently gated.
 
 On every unparseable result, `Commands` and the v0.2 `Clauses` projection are
 empty. `Syntax` may contain a partial diagnostic tree, but it cannot be used as
@@ -565,9 +567,9 @@ public enum ShellValueDomainKind
 
 public static class ShellAnalysisLimits
 {
-    public const int MaxValueCandidates = 32;
-    public const int MaxStructuralNesting = 16;
-    public const int MaxWrapperRecursionDepth = 5;
+    public static int MaxValueCandidates => 32;
+    public static int MaxStructuralNesting => 16;
+    public static int MaxWrapperRecursionDepth => 5;
 }
 ```
 
@@ -588,6 +590,17 @@ element's outer source span is unavailable.
 An `Unknown` value at one of those coordinates does not by itself make the
 occurrence structurally incomplete.
 
+The parser emits only valid value-domain combinations:
+
+- `Unknown`: no values, pattern, or covering directory;
+- `Exact`: exactly one value and no pattern fields;
+- `FiniteSet`: 2–32 distinct values and no pattern fields;
+- `Pattern`: no values, a non-empty pattern, and a non-empty covering directory.
+
+Any internally invalid combination is a parser bug. A consumer reading an
+externally persisted or reconstructed instance fails closed rather than trying
+to repair it.
+
 ### Explicit redirect facts
 
 ```csharp
@@ -598,8 +611,25 @@ public sealed record RedirectAnalysis
     public RedirectOperation Operation { get; init; }
     public int? TargetDescriptor { get; init; }
     public ShellValueDomain Target { get; init; } = ShellValueDomain.Unknown;
+    public HereDocumentAnalysis? HereDocument { get; init; }
     public bool IsPathRelevant { get; init; }
     public bool IsComplete { get; init; }
+}
+
+public sealed record HereDocumentAnalysis
+{
+    public ShellSourceFragment Delimiter { get; init; } = new();
+    public ShellSourceFragment Body { get; init; } = new();
+    public HereDocumentExpansionMode ExpansionMode { get; init; }
+    public bool StripLeadingTabs { get; init; }
+    public bool IsComplete { get; init; }
+}
+
+public enum HereDocumentExpansionMode
+{
+    Unknown,
+    Literal,
+    Expand,
 }
 
 public sealed record RedirectSource
@@ -640,6 +670,14 @@ correlates to `Clause.Redirects`. `RedirectSource` represents the operator's
 default stream, a numeric Bash/PowerShell descriptor, or PowerShell's `*`
 selector without losing shell identity. Invalid source-kind/descriptor
 combinations are incomplete and fail closed.
+
+`HereDocument` is non-null only for `HereDocument` operations and preserves the
+authored delimiter and body independently. `Literal` means delimiter quoting
+disables body expansion; `Expand` means every execution-bearing substitution
+must be discovered and surfaced before the redirect can be complete.
+`HereString` specifically represents Bash `<<<`; its operand and exact, finite,
+or unknown effective data use `Target`. PowerShell `@"..."@` and `@'...'@`
+here-strings remain ordinary PowerShell value tokens, not redirects.
 
 ### ParsedCommand composition and consumer entry point
 
@@ -786,7 +824,9 @@ existing lexer values and spans.
 | `if` / `elif` / `else` command lists | Supported |
 | Completely delimited command substitution in a supported iterable | Inner commands visible; produced value `Unknown` |
 | Static path-shaped glob in a supported iterable | `Pattern` only under the locked covering-directory rule |
-| Heredoc body interpretation, process substitution, single-`&` background lists | Deferred; whole result unparseable |
+| Existing `<<` / `<<-` heredocs | Supported; preserve delimiter, body, expansion mode, and completeness without treating body data as commands |
+| Bash `<<<` here strings | Supported with explicit here-string redirect facts |
+| Process substitution and single-`&` background lists | Independently gated; whole result unparseable until supported |
 | `case`, C-style or implicit loops, functions, arithmetic execution | Deferred; whole result unparseable when execution may be hidden |
 
 ### Candidate Bash recursive-descent flow

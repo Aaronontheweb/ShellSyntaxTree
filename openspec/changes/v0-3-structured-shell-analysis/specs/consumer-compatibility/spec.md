@@ -61,6 +61,29 @@ position.
 - **WHEN** a consumer encounters a syntax, role, domain, or redirect kind it does not recognize
 - **THEN** it fails closed for authorization
 
+### Requirement: Non-path redirect data does not create implicit approval scope
+The consumer guide SHALL distinguish complete heredoc and here-string data from
+command occurrences and filesystem redirect targets. A consumer SHALL NOT
+prompt solely because complete non-path data uses heredoc or here-string shell
+syntax. It SHALL still apply executable-specific policy to determine whether
+stdin data affects authorization, and unknown data in such a sensitive position
+SHALL prompt or deny.
+
+#### Scenario: Literal data sent to a non-interpreting command
+- **WHEN** a complete literal heredoc or here string feeds a command whose stdin is not policy-sensitive
+- **THEN** the consumer evaluates the receiving command and any independent path redirects
+- **THEN** it need not create a separate command or path approval for the data body
+
+#### Scenario: Receiver interprets stdin as code
+- **WHEN** a command such as a shell interpreter receives unknown here-string data
+- **THEN** an executable-aware consumer treats that stdin position as policy-sensitive
+- **THEN** the unknown value prompts or denies rather than reusing a broader approval
+
+#### Scenario: Expanding heredoc executes a substitution
+- **WHEN** an expanding heredoc contains a supported command substitution
+- **THEN** the substitution is authorized as its own command occurrence
+- **THEN** the remaining body is still data rather than an invented child command
+
 ### Requirement: Proven candidates are interpreted individually
 For every exact or finite effective value, the consumer guide SHALL require
 the consumer to reapply executable-specific option and operand semantics. A

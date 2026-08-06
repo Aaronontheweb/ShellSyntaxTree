@@ -90,14 +90,18 @@
 - [ ] 9.6 Defer PowerShell `switch` until after stable v0.3 and add it only after string, regex, wildcard, and script-block modes are bounded explicitly.
 - [ ] 9.7 Add paired security scenarios proving every condition and branch command remains visible.
 
-## 10. Separately Gated Additive Follow-ups
+## 10. Heredoc / Here-String Slice and Separately Gated Follow-ups
 
-- [ ] 10.1 After stable v0.3, specify heredoc delimiter adjacency and quoting, expansion mode, body provenance, substitutions, and completeness before enabling heredoc bodies.
-- [ ] 10.2 After stable v0.3, specify process-substitution command discovery and the unknown produced descriptor/path value before enabling it.
-- [ ] 10.3 After stable v0.3, specify background-list concurrency, ordering, and shell-state boundaries before enabling single `&`.
-- [ ] 10.4 Specify C-style loop and arithmetic hidden-execution behavior before enabling either construct.
-- [ ] 10.5 Keep URL-versus-glob and environment-assignment approval behavior in executable-aware consumer issues unless a shell lexical fact is missing.
-- [ ] 10.6 Reproduce multiline quoted-argument reports against exact parser input before assigning a parser change.
+- [x] 10.1 Specify heredoc delimiter adjacency and quoting, expansion mode, body provenance, substitutions, tab stripping, completeness, and Bash here-string semantics.
+- [ ] 10.2 Preserve existing `<<` / `<<-` behavior and fix quoted-delimiter adjacency without regressing the v0.2 compatibility redirect.
+- [ ] 10.3 Add explicit heredoc delimiter/body/expansion/completeness facts and surface every supported substitution command.
+- [ ] 10.4 Add Bash `<<<` here-string tokenization, explicit redirect facts, bounded operand analysis, and trailing-newline semantics.
+- [ ] 10.5 Add direct, malformed, quoted/unquoted, tab-stripped, dynamic, and substitution-bearing corpus cases plus real-Bash parse-only validation.
+- [ ] 10.6 After stable v0.3, specify process-substitution command discovery and the unknown produced descriptor/path value before enabling it.
+- [ ] 10.7 After stable v0.3, specify background-list concurrency, ordering, and shell-state boundaries before enabling single `&`.
+- [ ] 10.8 Specify C-style loop and arithmetic hidden-execution behavior before enabling either construct.
+- [ ] 10.9 Keep URL-versus-glob and environment-assignment approval behavior in executable-aware consumer issues unless a shell lexical fact is missing.
+- [ ] 10.10 Reproduce multiline quoted-argument reports against exact parser input before assigning a parser change.
 
 ## 11. Verification and Release
 

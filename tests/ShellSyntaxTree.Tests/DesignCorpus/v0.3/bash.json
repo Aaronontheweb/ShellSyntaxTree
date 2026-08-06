@@ -412,17 +412,108 @@
     },
     {
       "id": "bash-heredoc-body-is-data",
-      "concern": "Heredoc body interpretation remains separately gated",
+      "concern": "Literal heredoc data does not create hidden commands or unnecessary approval scope",
       "input": "cat > output.txt <<'EOF'\nhello\nEOF\n",
       "current": { "isUnparseable": true, "reasonContains": "missing delimiter" },
       "desired": {
-        "isUnparseable": true,
         "syntax": [
-          { "id": "root", "kind": "Unsupported", "slot": "Root" }
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
         ],
-        "securityInvariants": ["PartialTreeDiagnosticOnly", "OpaqueDataNotExecuted"]
+        "commands": [
+          {
+            "authoredVerb": "cat",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "redirects": [
+              {
+                "operation": "FileOutput",
+                "target": { "sourceElement": "output.txt", "kind": "Exact", "values": ["output.txt"], "isPolicySensitive": true },
+                "isPathRelevant": true,
+                "isComplete": true
+              },
+              {
+                "operation": "HereDocument",
+                "hereDocument": {
+                  "delimiterRaw": "'EOF'",
+                  "bodyRaw": "hello\n",
+                  "expansionMode": "Literal",
+                  "stripLeadingTabs": false,
+                  "isComplete": true
+                },
+                "isPathRelevant": false,
+                "isComplete": true
+              }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted", "StaticRedirectNotDynamic"]
       },
-      "notes": "Stable v0.3 keeps heredoc bodies unparseable until delimiter adjacency, expansion, provenance, and executable substitutions are specified and implemented together."
+      "notes": "v0.3 fixes quoted-delimiter adjacency, preserves the literal body as data, and keeps the output path independently policy-relevant."
+    },
+    {
+      "id": "bash-here-string-literal-data",
+      "concern": "Static here-string data does not force a raw-command approval prompt",
+      "input": "cat <<< \"hello\"",
+      "current": { "isUnparseable": true, "reasonContains": "missing delimiter" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "cat",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "redirects": [
+              {
+                "operation": "HereString",
+                "target": { "sourceElement": "\"hello\"", "kind": "Exact", "values": ["hello\n"], "isPolicySensitive": false },
+                "isPathRelevant": false,
+                "isComplete": true
+              }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted", "StaticRedirectNotDynamic"]
+      },
+      "notes": "The exact value includes Bash's appended newline; an executable-aware consumer may ignore stdin data only when that data is not policy-sensitive for the receiver."
+    },
+    {
+      "id": "bash-here-string-dynamic-data",
+      "concern": "Unknown stdin data does not make an otherwise complete redirect structurally incomplete",
+      "input": "cat <<< \"$value\"",
+      "current": { "isUnparseable": true, "reasonContains": "missing delimiter" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "cat",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "redirects": [
+              {
+                "operation": "HereString",
+                "target": { "sourceElement": "\"$value\"", "kind": "Unknown", "isPolicySensitive": false },
+                "isPathRelevant": false,
+                "isComplete": true
+              }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted"]
+      },
+      "notes": "The unknown value is not automatically approval-sensitive for cat, but a consumer can classify the same stdin position as sensitive for an interpreter such as bash."
     }
   ]
 }
