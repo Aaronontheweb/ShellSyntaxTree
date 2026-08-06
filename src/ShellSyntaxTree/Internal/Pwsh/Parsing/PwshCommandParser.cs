@@ -1203,49 +1203,19 @@ internal static class PwshCommandParser
                     // opaque value together in the provenance view.
                     if (NativeFlagSyntax.TrySplitEqualsPrefix(
                             raw, out var adjacentFlagPart, out var adjacentValuePrefix)
-                        && i + 1 < body.Count
-                        && IsAdjacent(t, body[i + 1])
-                        && IsNativeArgumentFragment(body[i + 1]))
+                        && NativeArgumentFragmentClassifier.TryClassify(
+                            source,
+                            t.SourceStart,
+                            t.SourceStart + t.SourceLength,
+                            t.SourceStart + SourceSlice(source, t).IndexOf('=') + 1,
+                            adjacentFlagPart + "=",
+                            GetResolverValue(t, adjacentValuePrefix),
+                            body,
+                            i + 1,
+                            new PwshNativeArgumentFragmentAdapter(),
+                            out var fragmentClassification))
                     {
-                        var valueStart = i + 1;
-                        var valueEnd = valueStart;
-                        var valueBuilder = new StringBuilder(adjacentValuePrefix);
-                        var hasOpaqueFragment = false;
-                        var previousFragment = t;
-                        while (valueEnd < body.Count
-                            && IsAdjacent(previousFragment, body[valueEnd])
-                            && IsNativeArgumentFragment(body[valueEnd]))
-                        {
-                            var fragment = body[valueEnd];
-                            valueBuilder.Append(fragment.Value);
-                            hasOpaqueFragment |= fragment.Kind != PwshTokenKind.Word
-                                && fragment.Kind != PwshTokenKind.QuotedString;
-                            previousFragment = fragment;
-                            valueEnd++;
-                        }
-
-                        var lastValueToken = body[valueEnd - 1];
-                        var adjacentValue = valueBuilder.ToString();
-                        var prefixResolverValue = GetResolverValue(t, adjacentValuePrefix);
-                        var resolverFragments = new List<ShellValue> { prefixResolverValue };
-                        for (var fragmentIndex = valueStart; fragmentIndex < valueEnd; fragmentIndex++)
-                        {
-                            var fragmentToken = body[fragmentIndex];
-                            resolverFragments.Add(fragmentToken.ResolverValue
-                                ?? ShellValue.Opaque(
-                                    fragmentToken.Value,
-                                    ShellOpaqueCause.Unsupported,
-                                    fragmentToken.SourceStart,
-                                    fragmentToken.SourceLength));
-                        }
-
-                        var adjacentResolverValue = ShellValue.Concat(resolverFragments);
-                        var equalsOffset = SourceSlice(source, t).IndexOf('=');
-                        var adjacentRawStart = t.SourceStart + equalsOffset + 1;
-                        var adjacentRaw = source.Substring(
-                            adjacentRawStart,
-                            lastValueToken.SourceStart + lastValueToken.SourceLength
-                            - adjacentRawStart);
+                        var adjacentValue = fragmentClassification.DecodedValue;
                         args.Add(new Arg
                         {
                             Raw = adjacentFlagPart,
@@ -1254,15 +1224,14 @@ internal static class PwshCommandParser
                         });
 
                         Arg valueArg;
-                        if (hasOpaqueFragment
-                            || adjacentResolverValue.HasOpaqueFragmentOtherThan(
+                        if (fragmentClassification.ResolverValue.HasOpaqueFragmentOtherThan(
                                 ShellOpaqueCause.PowerShellExpressionSuffix)
                             || BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
                                 verbKey, adjacentFlagPart))
                         {
                             valueArg = new Arg
                             {
-                                Raw = adjacentRaw,
+                                Raw = fragmentClassification.ValueRaw,
                                 Kind = ArgKind.DynamicSkip,
                                 IsPath = false,
                             };
@@ -1276,7 +1245,7 @@ internal static class PwshCommandParser
                                 adjacentValue,
                                 out adjacentValueForResolution);
                             var effectiveResolverValue = GetResolverValue(
-                                adjacentResolverValue,
+                                fragmentClassification.ResolverValue,
                                 adjacentValueForResolution,
                                 preserveLiteralPrefixBoundary: true);
                             var (kind, resolved, isPath) = PwshResolver.Resolve(
@@ -1287,7 +1256,7 @@ internal static class PwshCommandParser
                                 ShellResolutionConsumer.PowerShellNativeArgument);
                             valueArg = new Arg
                             {
-                                Raw = adjacentRaw,
+                                Raw = fragmentClassification.ValueRaw,
                                 Kind = kind,
                                 Resolved = resolved,
                                 IsPath = isPath,
@@ -1296,16 +1265,13 @@ internal static class PwshCommandParser
 
                         args.Add(valueArg);
                         elements.Add(CreateCombinedElement(
-                            source,
-                            t,
-                            lastValueToken,
-                            adjacentFlagPart + "=" + adjacentValue,
+                            fragmentClassification,
                             precedingVerbTokenCount,
                             valueArg.Kind,
                             isFlag: true,
                             valueArg.IsPath,
                             valueArg.Resolved));
-                        i = valueEnd - 1;
+                        i = fragmentClassification.NextTokenIndex - 1;
                         continue;
                     }
 
@@ -1710,6 +1676,26 @@ internal static class PwshCommandParser
             Role = role,
             SourceStart = token.SourceStart,
             SourceLength = token.SourceLength,
+            PrecedingVerbElementCount = precedingVerbTokenCount,
+            Kind = kind,
+            IsFlag = isFlag,
+            IsPath = isPath,
+            Resolved = resolved,
+        };
+
+    private static ClauseElement CreateCombinedElement(
+        NativeArgumentFragmentClassification classification,
+        int precedingVerbTokenCount,
+        ArgKind kind,
+        bool isFlag,
+        bool isPath,
+        string? resolved) => new()
+        {
+            Raw = classification.Raw,
+            Value = classification.DecodedArgument,
+            Role = ClauseElementRole.Argument,
+            SourceStart = classification.SourceStart,
+            SourceLength = classification.SourceLength,
             PrecedingVerbElementCount = precedingVerbTokenCount,
             Kind = kind,
             IsFlag = isFlag,
