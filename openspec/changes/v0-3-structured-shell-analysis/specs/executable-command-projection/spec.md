@@ -20,6 +20,11 @@ Each command occurrence SHALL identify its immediate structural execution role
 and SHALL retain compositional ancestry for analysis, diagnostics, and UI
 grouping.
 
+`CommandOccurrenceRole.Unknown` and `CommandAncestryRegion.Unknown` SHALL be
+their enum zero values. Ancestry SHALL be ordered outermost to innermost,
+exclude the simple-command leaf, and retain child indices and exact-or-null
+source ranges for correlation.
+
 #### Scenario: While condition and body roles
 - **WHEN** Bash parses `while curl URL; do sleep 1; done`
 - **THEN** `curl` is identified as a condition occurrence

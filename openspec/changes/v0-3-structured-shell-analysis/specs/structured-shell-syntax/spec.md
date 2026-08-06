@@ -5,6 +5,12 @@ Every fully parsed command SHALL expose one library-owned syntax root that
 preserves the authored nesting and source order of supported command lists,
 pipelines, groups, simple commands, loops, and branches.
 
+The public syntax family SHALL be a closed hierarchy of records derived from
+`ShellSyntaxNode`. Every node SHALL expose a `ShellSyntaxKind` discriminant and
+zero SHALL mean `Unknown`. The locked family SHALL include block, simple
+command, pipeline, command list, group, foreach, condition loop, conditional,
+conditional branch, and command substitution nodes.
+
 #### Scenario: Existing flat command receives a structural root
 - **WHEN** either parser parses `git status && dotnet test`
 - **THEN** the syntax root contains the two simple commands in authored order
@@ -13,6 +19,11 @@ pipelines, groups, simple commands, loops, and branches.
 #### Scenario: External code cannot invent syntax nodes
 - **WHEN** a consumer references the public syntax-node base type
 - **THEN** it cannot derive and inject an external node implementation
+
+#### Scenario: Later node kind is not silently authorized
+- **WHEN** a later package returns a derived node or kind an older consumer does not recognize
+- **THEN** a display visitor may show an unknown node
+- **THEN** an authorization visitor fails closed
 
 ### Requirement: Simple-command nodes preserve existing leaves
 A simple-command syntax node SHALL expose the existing `Clause` facts rather
@@ -50,6 +61,17 @@ without treating the script block as one opaque argument.
 - **THEN** the root contains one loop node binding `f`
 - **THEN** the iterable preserves the two literal array elements
 - **THEN** the body contains one simple command for `Remove-Item`
+
+### Requirement: Shared loop structure does not erase shell grammar
+`ForEachSyntax` SHALL preserve the normalized binding name, the authored
+binding source, the raw iterable source fragment, commands discovered in the
+iterator, and the body. It SHALL NOT normalize Bash words and PowerShell
+expressions into a false shared expression grammar.
+
+#### Scenario: Iterator with no exact outer span
+- **WHEN** a loop is lifted from decoded wrapper content without an exact mapping to the outer source
+- **THEN** the iterable raw text remains available
+- **THEN** its outer source start and length are null
 
 ### Requirement: Condition loops and branches preserve executable regions
 The parser SHALL preserve the condition, every branch body, and the
@@ -92,3 +114,16 @@ syntax SHALL be diagnostic evidence only.
 #### Scenario: Unknown PowerShell expression boundary
 - **WHEN** a PowerShell control-flow expression contains execution-bearing syntax the parser cannot delimit completely
 - **THEN** the result is unparseable even if the body commands were discovered
+
+#### Scenario: Deferred Bash process substitution
+- **WHEN** Bash encounters `diff <(git show HEAD) <(git show HEAD~1)` in v0.3
+- **THEN** the whole result is unparseable until both commands and the produced descriptors are modeled
+
+#### Scenario: Deferred background execution
+- **WHEN** Bash encounters a single-`&` background list in v0.3
+- **THEN** the whole result is unparseable until concurrency and state boundaries are specified
+
+#### Scenario: Ordinary PowerShell script-block argument
+- **WHEN** PowerShell parses a script block as an ordinary command argument rather than a recognized statement body
+- **THEN** it remains an opaque dynamic argument
+- **THEN** the parser does not invent the block contents as commands that necessarily execute

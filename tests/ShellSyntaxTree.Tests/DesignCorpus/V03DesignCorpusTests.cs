@@ -15,6 +15,8 @@ namespace ShellSyntaxTree.Tests.DesignCorpus;
 
 public class V03DesignCorpusTests
 {
+    private const int MaxValueCandidates = 32;
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -43,6 +45,15 @@ public class V03DesignCorpusTests
                 Assert.False(string.IsNullOrWhiteSpace(designCase.Input));
                 ValidateDesiredShape(file.Shell, designCase);
             }
+
+            var values = file.Cases
+                .SelectMany(designCase => designCase.Desired.Commands)
+                .SelectMany(command => command.EffectiveValues)
+                .ToArray();
+            Assert.True(values.Any(value =>
+                    value.Kind == DesignValueKind.FiniteSet
+                    && value.Values.Count == MaxValueCandidates),
+                $"{file.Shell}: no case exercises the finite candidate cap.");
         }
     }
 
@@ -100,6 +111,8 @@ public class V03DesignCorpusTests
         if (desired.IsUnparseable)
         {
             Assert.Contains(SecurityInvariant.PartialTreeDiagnosticOnly, desired.SecurityInvariants);
+            Assert.Empty(desired.Commands);
+            Assert.Empty(desired.Compatibility.Verbs);
         }
         else
         {
@@ -160,8 +173,7 @@ public class V03DesignCorpusTests
                 Assert.Null(value.Pattern);
                 break;
             case DesignValueKind.FiniteSet:
-                Assert.True(value.Values.Count > 1,
-                    $"{caseId}: finite set must contain at least two values.");
+                Assert.InRange(value.Values.Count, 2, MaxValueCandidates);
                 Assert.Equal(value.Values.Count, value.Values.Distinct(StringComparer.Ordinal).Count());
                 Assert.Null(value.Pattern);
                 break;

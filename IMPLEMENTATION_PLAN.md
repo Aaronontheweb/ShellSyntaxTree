@@ -133,14 +133,15 @@ priorities.
       as the v0.3 roadmap and cross-link issue #71 control flow and issue #69
       shared native argument-fragment classification without merging their
       scopes.
-- [x] Add a versioned pre-implementation design corpus with 15 Bash and 15
+- [x] Add a versioned pre-implementation design corpus with 17 Bash and 17
       PowerShell representative, boundary, and adversarial cases. The validator
       rejects schema drift, checks references and command ordering, confirms
       every `current` expectation against the v0.2 parsers, and includes the
       files in the PII audit. Corpus review established that command role must
       be immediate while ancestry remains compositional, occurrence
       completeness is independent of value precision, and PowerShell authored
-      parameter classification must remain distinct from effective values.
+      parameter classification must remain distinct from effective values. The
+      paired 32/33-candidate boundary cases lock finite-versus-unknown behavior.
 - [ ] Complete OpenSpec task group 1: lock the additive public type names,
       compatibility projection, fixed analysis bounds, and supported-construct
       matrix before production implementation.

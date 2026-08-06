@@ -7,6 +7,16 @@ input, file output, append, descriptor duplicate, descriptor close,
 descriptor move, combined output, and any separately supported here-document
 or here-string form.
 
+The redirect source SHALL distinguish the shell-default stream, a numeric
+descriptor, and PowerShell's all-streams selector. `Unknown` SHALL be the zero
+source kind and operation, and invalid source-kind/descriptor combinations
+SHALL be incomplete.
+
+#### Scenario: PowerShell all-streams redirect
+- **WHEN** PowerShell parses `Get-ChildItem *> output.txt`
+- **THEN** the source is explicitly PowerShell all streams
+- **THEN** the target is a path-relevant file output rather than a guessed numeric descriptor
+
 #### Scenario: Static descriptor duplication
 - **WHEN** Bash parses `dotnet test 2>&1`
 - **THEN** the redirect operation is descriptor duplicate

@@ -328,6 +328,60 @@
       }
     },
     {
+      "id": "pwsh-foreach-candidate-cap-32",
+      "concern": "Finite candidate domain at the fixed cap",
+      "input": "foreach ($f in @('v01','v02','v03','v04','v05','v06','v07','v08','v09','v10','v11','v12','v13','v14','v15','v16','v17','v18','v19','v20','v21','v22','v23','v24','v25','v26','v27','v28','v29','v30','v31','v32')) { Write-Output $f }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Write-Output",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$f", "kind": "FiniteSet", "values": ["v01", "v02", "v03", "v04", "v05", "v06", "v07", "v08", "v09", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "v32"], "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-candidate-overflow-33",
+      "concern": "Candidate overflow collapses instead of truncating",
+      "input": "foreach ($f in @('v01','v02','v03','v04','v05','v06','v07','v08','v09','v10','v11','v12','v13','v14','v15','v16','v17','v18','v19','v20','v21','v22','v23','v24','v25','v26','v27','v28','v29','v30','v31','v32','v33')) { Write-Output $f }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Write-Output",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$f", "kind": "Unknown", "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
       "id": "pwsh-static-stream-merge",
       "concern": "Static PowerShell stream merge",
       "input": "Get-ChildItem 2>&1",

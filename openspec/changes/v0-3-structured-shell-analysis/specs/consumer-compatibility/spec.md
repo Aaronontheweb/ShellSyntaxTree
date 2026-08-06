@@ -15,15 +15,21 @@ nested condition, iterator, branch, body, and substitution commands.
 - **THEN** `Clause.Operator` represents only an actual authored operator relationship
 - **THEN** no synthetic `Sequence`, `AndIf`, `OrIf`, or `Pipe` relationship is invented
 
+#### Scenario: Projections share one Clause instance
+- **WHEN** a fully parseable simple command appears in syntax, command, and compatibility projections
+- **THEN** all three projections reference the identical in-memory `Clause` instance
+- **THEN** serialization is not required to preserve that reference identity
+
 ### Requirement: Unparseable results are never authorization evidence
-All syntax, occurrence, clause, value, and redirect facts SHALL be treated as
-partial diagnostic evidence when `ParsedCommand.IsUnparseable=true`. The
-consumer guide SHALL require prompt or deny before evaluating them for allow.
+When `ParsedCommand.IsUnparseable=true`, `Commands` and `Clauses` SHALL be
+empty. `Syntax` MAY contain partial diagnostic evidence, and the consumer guide
+SHALL require prompt or deny without using that tree for allow.
 
 #### Scenario: Partial body discovered before unsupported syntax
 - **WHEN** the parser discovers a command in a body but later encounters an unsupported executable region
 - **THEN** the result remains unparseable
-- **THEN** a consumer does not authorize from the discovered subset
+- **THEN** command and compatibility projections are empty
+- **THEN** a consumer does not authorize from the partial syntax tree
 
 ### Requirement: Security consumers authorize command occurrences
 The consumer guide SHALL direct v0.3 security consumers to evaluate every
@@ -79,3 +85,15 @@ effects, and the period during which `Clauses` remains supported.
 - **WHEN** Netclaw migrates to the occurrence and explicit redirect APIs
 - **THEN** integration tests cover ordinary commands, static fd operations, bounded loops, and unknown-value fallback
 - **THEN** its temporary raw-prefix redirect workaround can be removed
+
+### Requirement: Persistence is consumer-versioned
+ShellSyntaxTree SHALL define an in-memory typed API but SHALL NOT claim a stable
+serialized wire format for polymorphic syntax nodes. The consumer guide SHALL
+document generated record equality, hashing, `ToString()`, and default
+serialization changes, and SHALL direct persistence consumers to versioned DTOs
+or explicit serializer configuration.
+
+#### Scenario: Consumer persists parser results
+- **WHEN** a consumer needs to store or transmit a v0.3 parser result
+- **THEN** it does not assume the closed record hierarchy is an implicit stable JSON union
+- **THEN** it owns an explicit versioned representation or serializer mapping

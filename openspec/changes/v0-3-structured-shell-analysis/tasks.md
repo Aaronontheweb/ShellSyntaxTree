@@ -1,10 +1,10 @@
 ## 1. Contract Lock
 
-- [ ] 1.1 Review Appendix A and lock the public syntax-root, node, occurrence, ancestry, value-domain, and redirect-detail type names and members.
-- [ ] 1.2 Decide and document whether projections share identical `Clause` instances or guarantee value equality only.
-- [ ] 1.3 Lock candidate-count, structural-nesting, and existing wrapper-recursion limits with boundary scenarios.
-- [ ] 1.4 Review Appendix B, lock the v0.3 grammar separately for Bash and PowerShell, and park every deferred form explicitly.
-- [ ] 1.5 Resolve the initial pattern and divergent-cwd exposure rules, updating the bounded-analysis specification.
+- [x] 1.1 Review Appendix A and lock the public syntax-root, node, occurrence, ancestry, value-domain, and redirect-detail type names and members.
+- [x] 1.2 Decide and document whether projections share identical `Clause` instances or guarantee value equality only.
+- [x] 1.3 Lock candidate-count, structural-nesting, and existing wrapper-recursion limits with boundary scenarios.
+- [x] 1.4 Review Appendix B, lock the v0.3 grammar separately for Bash and PowerShell, and park every deferred form explicitly.
+- [x] 1.5 Resolve the initial pattern and divergent-cwd exposure rules, updating the bounded-analysis specification.
 - [ ] 1.6 Synchronize the accepted public API and shared requirements into `SPEC.md`.
 - [ ] 1.7 Synchronize PowerShell grammar and analysis deltas into `SPEC.POWERSHELL.md`.
 - [ ] 1.8 Update `PROJECT_CONTEXT.md` and `IMPLEMENTATION_PLAN.md` with the accepted v0.3 scope and delivery slices.
@@ -84,17 +84,17 @@
 
 - [ ] 9.1 Add Bash `while` and `until` with condition and body command occurrences.
 - [ ] 9.2 Add Bash `if` / `elif` / `else` with conservative branch-state joins.
-- [ ] 9.3 Add Bash `case` only after pattern and branch-selection uncertainty is specified.
-- [ ] 9.4 Add PowerShell `while` and `do` forms with separately specified expression boundaries.
+- [ ] 9.3 Defer Bash `case` until after stable v0.3 and add it only after pattern and branch-selection uncertainty is specified.
+- [ ] 9.4 Add PowerShell `while` with the locked condition-pipeline boundary; defer `do` forms until after stable v0.3.
 - [ ] 9.5 Add PowerShell `if` / `elseif` / `else` with conservative branch-state joins.
-- [ ] 9.6 Add PowerShell `switch` only after string, regex, wildcard, and script-block modes are bounded explicitly.
+- [ ] 9.6 Defer PowerShell `switch` until after stable v0.3 and add it only after string, regex, wildcard, and script-block modes are bounded explicitly.
 - [ ] 9.7 Add paired security scenarios proving every condition and branch command remains visible.
 
-## 10. Separately Gated Syntax Concerns
+## 10. Separately Gated Additive Follow-ups
 
-- [ ] 10.1 Specify heredoc delimiter adjacency and quoting, expansion mode, body provenance, substitutions, and completeness before enabling heredoc bodies.
-- [ ] 10.2 Specify process-substitution command discovery and the unknown produced descriptor/path value before enabling it.
-- [ ] 10.3 Specify background-list concurrency, ordering, and shell-state boundaries before enabling single `&`.
+- [ ] 10.1 After stable v0.3, specify heredoc delimiter adjacency and quoting, expansion mode, body provenance, substitutions, and completeness before enabling heredoc bodies.
+- [ ] 10.2 After stable v0.3, specify process-substitution command discovery and the unknown produced descriptor/path value before enabling it.
+- [ ] 10.3 After stable v0.3, specify background-list concurrency, ordering, and shell-state boundaries before enabling single `&`.
 - [ ] 10.4 Specify C-style loop and arithmetic hidden-execution behavior before enabling either construct.
 - [ ] 10.5 Keep URL-versus-glob and environment-assignment approval behavior in executable-aware consumer issues unless a shell lexical fact is missing.
 - [ ] 10.6 Reproduce multiline quoted-argument reports against exact parser input before assigning a parser change.

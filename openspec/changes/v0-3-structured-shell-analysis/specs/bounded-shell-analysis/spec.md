@@ -19,18 +19,43 @@ stronger domain.
 
 ### Requirement: Analysis is bounded and non-executing
 The parser SHALL NOT execute commands, enumerate filesystem matches, inspect
-runtime shell variables, or expand candidate combinations beyond a fixed
-documented bound. Any value exceeding the bound SHALL become unknown.
+runtime shell variables, or expand a value domain beyond 32 candidates. A
+domain of 32 candidates remains finite; a domain that would contain 33 or more
+becomes unknown rather than being truncated.
 
 #### Scenario: Glob is not enumerated
 - **WHEN** Bash parses `for f in /tmp/*.txt; do rm -- "$f"; done`
 - **THEN** the parser does not read `/tmp`
-- **THEN** it may expose a pattern with conservative covering directory `/tmp`
+- **THEN** it exposes a pattern with conservative covering directory `/tmp`
+
+#### Scenario: Dynamic glob root is unknown
+- **WHEN** Bash parses `for f in "$ROOT"/*.txt; do rm -- "$f"; done`
+- **THEN** the dynamic root prevents a static covering-directory proof
+- **THEN** the iterable value is unknown
 
 #### Scenario: Candidate cross product exceeds the limit
-- **WHEN** combining finite values would exceed the locked candidate cap
+- **WHEN** combining finite values would produce 33 candidates
 - **THEN** the resulting domain is unknown
 - **THEN** the parser does not truncate the set and call the truncated result complete
+
+#### Scenario: Candidate cross product reaches the limit
+- **WHEN** combining finite values produces exactly 32 candidates
+- **THEN** the resulting domain may remain finite and complete
+
+### Requirement: Structural analysis has fixed depth limits
+The parser SHALL support at most 16 nested structural container nodes and at
+most 5 decoded command-string wrapper recursions. These bounds SHALL NOT be
+caller-configurable. Exceeding either bound SHALL make the whole result
+unparseable rather than returning an authorization projection for a subset.
+
+#### Scenario: Structural nesting exceeds the limit
+- **WHEN** a seventeenth nested loop or other structural container is encountered
+- **THEN** the result is unparseable
+- **THEN** command and compatibility projections are empty
+
+#### Scenario: Existing wrapper recursion limit remains fixed
+- **WHEN** a sixth decoded command-string wrapper would be entered
+- **THEN** the result is unparseable under the existing wrapper-depth rule
 
 ### Requirement: Variable substitution preserves argument-boundary uncertainty
 A loop binding SHALL affect an effective command value only when the selected
@@ -83,7 +108,11 @@ SHALL never be resolved by arbitrarily choosing one path.
 #### Scenario: Branch-dependent cwd
 - **WHEN** one branch changes cwd to `/a` and another changes cwd to `/b`
 - **THEN** a following relative path is not resolved solely under `/a` or solely under `/b`
-- **THEN** the cwd is unknown unless a bounded multi-state contract is explicitly supported
+- **THEN** the cwd is unknown because v0.3 does not publish divergent cwd alternatives
+
+#### Scenario: Identical branch cwd
+- **WHEN** every supported branch exits with the same exact cwd
+- **THEN** the joined cwd remains exact
 
 #### Scenario: Zero-iteration loop path
 - **WHEN** a loop may execute zero times and its body changes cwd

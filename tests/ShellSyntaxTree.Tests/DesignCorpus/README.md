@@ -29,3 +29,8 @@ deliberately separate: a pipeline stage nested inside a loop body is immediately
 a pipeline stage and still carries the enclosing loop-body context. Likewise,
 `isComplete` describes command discovery and structure, not value precision; a
 complete occurrence may contain an `Unknown` effective value.
+
+The v0.3 contract fixes the candidate cap at 32. Each shell has a case at the
+cap and a 33-value overflow case that collapses to `Unknown` rather than
+publishing a truncated finite set. Constructs deliberately deferred beyond
+stable v0.3 remain in the corpus as unparseable security boundaries.

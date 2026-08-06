@@ -28,11 +28,14 @@ fail-closed behavior for incomplete analysis.
 - Preserve `Clause`, `Arg`, `Redirect`, `ClauseElement`, `VerbChain`, and
   `ParsedCommand.Clauses` as compatibility projections. Existing consumers
   that check `IsUnparseable` continue to fail closed and do not silently miss
-  nested executable commands.
+  nested executable commands. Unparseable results expose no command or clause
+  authorization projection.
 - Expand grammar in vertical slices: Bash `for ... in`, PowerShell `foreach`,
-  then condition loops and branches. Heredocs, process substitution,
-  background lists, C-style loops, and arithmetic remain independently gated
-  by explicit executable-region and value-semantics requirements.
+  then the locked condition loops and branches. Heredoc body interpretation,
+  process substitution, background lists, C-style loops, arithmetic, Bash
+  `case`, and PowerShell `switch` are deferred beyond stable v0.3 and remain
+  independently gated by explicit executable-region and value-semantics
+  requirements.
 - Keep executable-specific option and operand interpretation, authorization
   policy, and durable approval scope consumer-owned.
 - Update `docs/CONSUMER_GUIDE.md` and the README usage path so security gates
