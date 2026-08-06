@@ -35,9 +35,9 @@ fail-closed behavior for incomplete analysis.
   by explicit executable-region and value-semantics requirements.
 - Keep executable-specific option and operand interpretation, authorization
   policy, and durable approval scope consumer-owned.
-- Update the consumer contract so security gates authorize the complete
-  command-occurrence projection and use the syntax tree only for structure,
-  display, and specialized analysis.
+- Update `docs/CONSUMER_GUIDE.md` and the README usage path so security gates
+  authorize the complete command-occurrence projection and use the syntax tree
+  only for structure, display, and specialized analysis.
 
 ## Capabilities
 

@@ -44,8 +44,9 @@
 - [ ] 5.2 Document syntax-tree display traversal separately from authorization traversal.
 - [ ] 5.3 Document exact, finite, pattern, unknown, joined-state, redirect, and incomplete-result handling.
 - [ ] 5.4 Document record equality, hashing, `ToString()`, serialization, and `Clauses` compatibility effects.
-- [ ] 5.5 Publish a 0.3.0 prerelease containing the structural API before enabling control flow.
-- [ ] 5.6 Migrate Netclaw's existing-command analysis to the occurrence and redirect APIs behind focused regression tests.
+- [ ] 5.5 Update the README getting-started and migration examples to direct v0.3 consumers to the command-occurrence API and full consumer guide.
+- [ ] 5.6 Publish a 0.3.0 prerelease containing the structural API before enabling control flow.
+- [ ] 5.7 Migrate Netclaw's existing-command analysis to the occurrence and redirect APIs behind focused regression tests.
 
 ## 6. Bash For-In Vertical Slice
 
