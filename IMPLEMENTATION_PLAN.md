@@ -142,9 +142,15 @@ priorities.
       completeness is independent of value precision, and PowerShell authored
       parameter classification must remain distinct from effective values. The
       paired 32/33-candidate boundary cases lock finite-versus-unknown behavior.
-- [ ] Complete OpenSpec task group 1: lock the additive public type names,
-      compatibility projection, fixed analysis bounds, and supported-construct
-      matrix before production implementation.
+- [x] Lock OpenSpec task-group decisions 1.1–1.5 and 1.8: exact public type
+      candidates and safe defaults, in-memory `Clause` identity, fixed 32/16/5
+      analysis limits, separate Bash and PowerShell grammar matrices, static
+      pattern-cover rules, divergent-cwd fallback, deferred forms, project
+      context, and the preimplementation consumer-guide migration contract.
+- [ ] Complete OpenSpec tasks 1.6–1.7 in the public-API implementation PR:
+      synchronize the accepted shared and PowerShell contracts into
+      `SPEC.md` / `SPEC.POWERSHELL.md` together with source and snapshot tests
+      so the repository authority never intentionally drifts from the assembly.
 - [ ] Implement [issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69)
       as the first behavior-preserving preparation after contract lock.
 - [ ] Add the structural and command-occurrence projections for the existing

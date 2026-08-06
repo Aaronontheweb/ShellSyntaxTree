@@ -141,6 +141,49 @@ return GateDecision.Allow();
 The example returns on the first non-allow result for brevity. A real UI may
 collect every clause decision so the operator can see the complete command.
 
+## Planned v0.3 migration contract
+
+> This section describes the locked v0.3 design and is not an API available in
+> the current v0.2 package. The production example above remains correct until
+> a v0.3 prerelease ships.
+
+v0.3 adds `ParsedCommand.Commands` as the authorization projection and
+`ParsedCommand.Syntax` as the typed display/analysis tree. The migration rules
+are:
+
+1. Check `IsUnparseable` first. An unparseable result has empty `Commands` and
+   `Clauses`; any partial `Syntax` is diagnostic only.
+2. Authorize every `CommandOccurrence`, including iterator, condition, branch,
+   substitution, and loop-body commands. Do not recursively walk `Syntax` to
+   discover commands.
+3. Require `CommandOccurrence.IsComplete`, a recognized `ImmediateRole`, and a
+   static command identity before considering approval reuse.
+4. Preserve authored PowerShell parameter/argument classification, then apply
+   shell binding and executable-specific grammar to every exact or finite
+   effective value. A value that begins with `-` can affect a native command;
+   it does not retroactively become a PowerShell cmdlet parameter token.
+5. Evaluate every redirect through its explicit operation, source, target,
+   path relevance, and completeness. Do not infer descriptor safety from raw
+   prefixes.
+6. Prompt or deny when an unknown value can affect identity, options, path
+   scope, cwd, or redirects. A structurally complete occurrence may still have
+   an unknown value; those are separate facts.
+
+`ParsedCommand.Clauses` remains as a conservative v0.2 compatibility
+projection during migration. For a successful result, the syntax leaf,
+occurrence, and compatibility projection share the same in-memory `Clause`
+instance. Nested authored commands are flattened in source order, no operator
+is invented across structural boundaries, and loop variables remain authored
+as dynamic values rather than being silently substituted into compatibility
+records.
+
+The new records change generated equality, hashing, `ToString()`, and default
+serialization output. ShellSyntaxTree does not promise a stable serialized
+wire format for its closed polymorphic syntax family. Consumers that persist
+results should own a versioned DTO or explicit serializer mapping. The full
+compiling v0.3 consumer example replaces this preview when the prerelease API
+lands.
+
 ## Choosing a command identity
 
 For PowerShell aliases, prefer the canonical cmdlet identity while retaining
