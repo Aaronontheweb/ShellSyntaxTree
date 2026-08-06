@@ -575,7 +575,7 @@ public class ShellValueOracleTests
     }
 
     private static bool IsNativeBashAvailable() =>
-        Path.DirectorySeparatorChar == '/' && IsAvailable("bash");
+        !OperatingSystem.IsWindows() && IsAvailable("bash");
 
     private static string Run(string executable, params string[] arguments)
         => RunCore(executable, workingDirectory: null, arguments);
