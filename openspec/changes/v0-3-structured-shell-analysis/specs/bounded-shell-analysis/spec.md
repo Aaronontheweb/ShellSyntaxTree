@@ -2,11 +2,15 @@
 
 ### Requirement: Decoded values retain resolver provenance
 The parser SHALL retain enough shell-specific lexical provenance to distinguish
-resolver-sensitive literal, expandable, and opaque fragments after escape and
-quote decoding. It SHALL NOT infer whether text expands solely from the
-decoded string. Literal fragments SHALL remain literal and eligible expandable
-fragments SHALL be transformed under the existing bounded rules. When every
-fragment, supported transformation, and required cwd or home fact is exact,
+resolver-sensitive literal, recognized-expansion, and opaque fragments after escape and
+quote decoding, including the operation-specific transformations each exact
+fragment permits. It SHALL NOT infer whether text expands solely from the
+decoded string or one aggregate literal/expandable bit. Lexical transformations
+SHALL apply only to eligible fragments. Consumer-level path interpretation
+SHALL receive explicit shell, argument-versus-redirect,
+native-versus-cmdlet, and PowerShell `Path`-versus-`LiteralPath` context.
+When every fragment, supported
+transformation, binding fact, and required cwd or home fact is exact,
 the parser SHALL compose the exact shell value and SHALL return the exact
 compatibility path result for a path position. It SHALL NOT return `DynamicSkip`
 solely because one value contains both literal and expandable fragments. An
@@ -60,6 +64,74 @@ retain their existing meanings.
 #### Scenario: Opaque fragment remains fail closed
 - **WHEN** an adjacent native argument contains a command substitution, subexpression, splat, or another opaque fragment
 - **THEN** the parser does not synthesize an exact path from the remaining decoded text
+
+#### Scenario: Runtime variables remain unknown without a proved value
+- **WHEN** Bash parses a special, positional, or argument-vector parameter such as `$?`, `$1`, or `"$@"` in a policy-relevant value
+- **WHEN** PowerShell parses a special, numeric, or Unicode-named variable such as `$?`, `$^`, `$$`, `$1`, or `$é`
+- **THEN** the front end retains the typed expansion identity and cardinality while the analyzed value is unknown
+- **THEN** glob or literal-path classification is not inferred from its decoded punctuation
+- **THEN** a boundary-sensitive expansion such as `"$@"` does not become one exact argument
+
+#### Scenario: Unterminated braced interpolation is unparseable
+- **WHEN** either shell parses a quoted value whose `${...}` interpolation never closes
+- **THEN** the whole parsed command is unparseable even when the outer quote closes
+- **THEN** the incomplete region is not reported as a literal or exact path
+
+#### Scenario: Escaped braced interpolation start remains literal
+- **WHEN** either shell parses its escaped-dollar spelling of quoted `${HOME`
+- **THEN** the shell value is the exact literal `${HOME`
+- **THEN** it remains parseable and resolves as a literal path when authored in a path position
+
+#### Scenario: PowerShell quoted tilde depends on consumer context
+- **WHEN** PowerShell parses a quoted `~` in a native file operand and in a cmdlet `Path` operand
+- **THEN** the native operand remains the literal filename `~`
+- **THEN** the cmdlet operand resolves through the configured home fact
+- **THEN** both results retain the same raw and decoded spelling without sharing resolver context
+
+#### Scenario: PowerShell unquoted native expansion remains eligible
+- **WHEN** PowerShell parses unquoted `~` or `*.txt` in a native file operand
+- **THEN** tilde remains eligible for native expansion
+- **THEN** the wildcard remains unknown without filesystem enumeration rather than becoming a quoted literal
+- **THEN** correcting quoted operands does not suppress expansion for unquoted operands
+
+#### Scenario: PowerShell provider semantics are cmdlet owned
+- **WHEN** PowerShell parses quoted `FileSystem::C:\logs\x` for a native executable and for a cmdlet path
+- **THEN** the native operand retains the provider-looking text literally
+- **THEN** the cmdlet path applies FileSystem provider semantics
+- **THEN** a non-FileSystem PSDrive in cmdlet path context is not reported as a filesystem path
+
+#### Scenario: Bash provider-looking text remains literal
+- **WHEN** Bash parses quoted or unquoted `filesystem::/safe` in a path position
+- **THEN** the shell value retains every character literally
+- **THEN** the compatibility path resolves under the configured cwd as `<cwd>/filesystem::/safe`
+- **THEN** no PowerShell provider prefix is stripped
+
+#### Scenario: PowerShell Path and LiteralPath differ
+- **WHEN** the same quoted wildcard is bound to `-Path`, `-LiteralPath`, and a native file operand
+- **THEN** `-Path` retains wildcard semantics
+- **THEN** `-LiteralPath` and the quoted native operand retain an exact literal value
+- **THEN** `-LiteralPath` still applies quoted tilde, provider-qualifier, and PSDrive semantics
+- **THEN** the parser does not enumerate the filesystem for any form
+
+#### Scenario: Adjacent redirect fragments form one target
+- **WHEN** either shell parses its escaped-dollar spelling of `> $HOME".txt"`
+- **THEN** the redirect target retains one ordered fragment sequence and the exact literal shell value `$HOME.txt`
+- **THEN** the suffix is not emitted as an unrelated argument
+- **THEN** redirect path interpretation receives its explicit shell-specific context
+- **THEN** a Bash redirect whose expansion cannot prove exactly one target fails closed rather than reusing ordinary argument cardinality rules
+
+#### Scenario: Bash redirect wildcard cardinality is quote-sensitive
+- **WHEN** Bash parses unquoted `> *.txt`
+- **THEN** the target is unknown without filesystem enumeration because expansion may produce zero, one, or multiple paths
+- **WHEN** Bash parses quoted `> "*.txt"`
+- **THEN** the target is the exact literal filename `*.txt`
+
+#### Scenario: PowerShell redirect is a Path-like consumer
+- **WHEN** PowerShell parses a quoted redirect target containing `~`, a wildcard, a FileSystem provider qualifier, or a PSDrive
+- **THEN** redirect binding applies those Path-like semantics after value formation
+- **THEN** a wildcard remains unknown without filesystem enumeration
+- **THEN** a PSDrive remains unknown without a proved drive-to-provider mapping
+- **THEN** quoted syntax does not turn either target into native-style literal text
 
 ### Requirement: Shell values use explicit proof domains
 The analysis SHALL classify a policy-relevant shell value as exact, finite,

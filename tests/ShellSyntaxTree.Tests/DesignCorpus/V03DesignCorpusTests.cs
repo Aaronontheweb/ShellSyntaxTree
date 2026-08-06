@@ -91,6 +91,14 @@ public class V03DesignCorpusTests
                     Assert.Equal(expected.IsPath, argument.IsPath);
                     Assert.Equal(expected.Resolved, argument.Resolved);
                 }
+
+                if (designCase.Current.CompatibilityClause is not null)
+                {
+                    AssertCompatibilityClause(
+                        designCase.Id,
+                        designCase.Current.CompatibilityClause,
+                        actual);
+                }
             }
         }
     }
@@ -125,6 +133,7 @@ public class V03DesignCorpusTests
             Assert.Contains(SecurityInvariant.PartialTreeDiagnosticOnly, desired.SecurityInvariants);
             Assert.Empty(desired.Commands);
             Assert.Empty(desired.Compatibility.Verbs);
+            Assert.Null(desired.CompatibilityClause);
         }
         else
         {
@@ -196,6 +205,101 @@ public class V03DesignCorpusTests
                 designCase.Id,
                 desired.Argument,
                 desired.Compatibility.Verbs.Count);
+        }
+
+        if (desired.CompatibilityClause is not null)
+        {
+            ValidateCompatibilityClauseExpectation(
+                designCase.Id,
+                desired.CompatibilityClause,
+                desired.Compatibility.Verbs.Count);
+        }
+    }
+
+    private static void AssertCompatibilityClause(
+        string caseId,
+        CompatibilityClauseExpectation expected,
+        ParsedCommand actual)
+    {
+        ValidateCompatibilityClauseExpectation(caseId, expected, actual.Clauses.Count);
+        var clause = Assert.IsType<Clause>(actual.Clauses[expected.ClauseIndex]);
+
+        if (expected.ArgumentCount is not null)
+        {
+            Assert.Equal(expected.ArgumentCount.Value, clause.Args.Count);
+        }
+
+        if (expected.RedirectCount is not null)
+        {
+            Assert.Equal(expected.RedirectCount.Value, clause.Redirects.Count);
+        }
+
+        if (expected.ElementCount is not null)
+        {
+            Assert.Equal(expected.ElementCount.Value, clause.Elements.Count);
+        }
+
+        if (expected.Redirect is not null)
+        {
+            var redirect = Assert.IsType<Redirect>(clause.Redirects[expected.Redirect.RedirectIndex]);
+            Assert.Equal(expected.Redirect.Direction, redirect.Direction);
+            Assert.Equal(expected.Redirect.Target, redirect.Target);
+            Assert.Equal(expected.Redirect.IsDynamicSkip, redirect.IsDynamicSkip);
+        }
+
+        if (expected.Element is not null)
+        {
+            var element = Assert.IsType<ClauseElement>(clause.Elements[expected.Element.ElementIndex]);
+            Assert.Equal(expected.Element.Raw, element.Raw);
+            Assert.Equal(expected.Element.Value, element.Value);
+            Assert.Equal(expected.Element.Role, element.Role);
+            Assert.Equal(expected.Element.SourceStart, element.SourceStart);
+            Assert.Equal(expected.Element.SourceLength, element.SourceLength);
+            Assert.Equal(
+                expected.Element.PrecedingVerbElementCount,
+                element.PrecedingVerbElementCount);
+            Assert.Equal(expected.Element.Kind, element.Kind);
+            Assert.Equal(expected.Element.IsFlag, element.IsFlag);
+            Assert.Equal(expected.Element.IsPath, element.IsPath);
+            Assert.Equal(expected.Element.Resolved, element.Resolved);
+        }
+    }
+
+    private static void ValidateCompatibilityClauseExpectation(
+        string caseId,
+        CompatibilityClauseExpectation expected,
+        int clauseCount)
+    {
+        Assert.InRange(expected.ClauseIndex, 0, clauseCount - 1);
+
+        if (expected.ArgumentCount is not null)
+        {
+            Assert.True(expected.ArgumentCount >= 0, $"{caseId}: argument count must be non-negative.");
+        }
+
+        if (expected.RedirectCount is not null)
+        {
+            Assert.True(expected.RedirectCount >= 0, $"{caseId}: redirect count must be non-negative.");
+        }
+
+        if (expected.ElementCount is not null)
+        {
+            Assert.True(expected.ElementCount >= 0, $"{caseId}: element count must be non-negative.");
+        }
+
+        if (expected.Redirect is not null)
+        {
+            Assert.NotNull(expected.RedirectCount);
+            Assert.InRange(expected.Redirect.RedirectIndex, 0, expected.RedirectCount.Value - 1);
+            Assert.False(string.IsNullOrWhiteSpace(expected.Redirect.Target));
+        }
+
+        if (expected.Element is not null)
+        {
+            Assert.NotNull(expected.ElementCount);
+            Assert.InRange(expected.Element.ElementIndex, 0, expected.ElementCount.Value - 1);
+            Assert.False(string.IsNullOrWhiteSpace(expected.Element.Raw));
+            Assert.False(string.IsNullOrWhiteSpace(expected.Element.Value));
         }
     }
 
@@ -301,6 +405,8 @@ public sealed record CurrentBehaviorExpectation
     public string? ReasonContains { get; init; }
 
     public ArgumentExpectation? Argument { get; init; }
+
+    public CompatibilityClauseExpectation? CompatibilityClause { get; init; }
 }
 
 public sealed record ArgumentExpectation
@@ -327,6 +433,8 @@ public sealed record DesiredDesignExpectation
     public IReadOnlyList<DesignCommandExpectation> Commands { get; init; } = [];
 
     public ArgumentExpectation? Argument { get; init; }
+
+    public CompatibilityClauseExpectation? CompatibilityClause { get; init; }
 
     public CompatibilityExpectation Compatibility { get; init; } = new();
 
@@ -385,6 +493,57 @@ public sealed record CompatibilityExpectation
     public IReadOnlyList<string> Verbs { get; init; } = [];
 
     public bool PreservesAuthoredDynamicValues { get; init; }
+}
+
+public sealed record CompatibilityClauseExpectation
+{
+    public int ClauseIndex { get; init; }
+
+    public int? ArgumentCount { get; init; }
+
+    public int? RedirectCount { get; init; }
+
+    public int? ElementCount { get; init; }
+
+    public CompatibilityRedirectExpectation? Redirect { get; init; }
+
+    public CompatibilityElementExpectation? Element { get; init; }
+}
+
+public sealed record CompatibilityRedirectExpectation
+{
+    public int RedirectIndex { get; init; }
+
+    public RedirectDirection Direction { get; init; }
+
+    public string Target { get; init; } = "";
+
+    public bool IsDynamicSkip { get; init; }
+}
+
+public sealed record CompatibilityElementExpectation
+{
+    public int ElementIndex { get; init; }
+
+    public string Raw { get; init; } = "";
+
+    public string Value { get; init; } = "";
+
+    public ClauseElementRole Role { get; init; }
+
+    public int? SourceStart { get; init; }
+
+    public int? SourceLength { get; init; }
+
+    public int PrecedingVerbElementCount { get; init; }
+
+    public ArgKind Kind { get; init; }
+
+    public bool IsFlag { get; init; }
+
+    public bool IsPath { get; init; }
+
+    public string? Resolved { get; init; }
 }
 
 public sealed record DesignRedirectExpectation

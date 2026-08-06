@@ -5,6 +5,15 @@
 authored simple command that may execute for a fully parseable result, including
 nested condition, iterator, branch, body, and substitution commands.
 
+Existing raw spelling, decoded values, source spans, and unaffected v0.2 leaf
+classifications SHALL remain compatible. A paired real-shell oracle MAY
+correct a v0.2 `Arg`, `Redirect`, or `ClauseElement` path or expansion
+classification that is false because lexical provenance or consumer/binding
+context was lost. This includes false exact paths, false `Glob` or `Tilde`
+claims, and avoidable `DynamicSkip` results. Every such correction SHALL be
+documented and corpus-pinned; compatibility does not require preserving a
+security defect.
+
 #### Scenario: Old consumer sees loop body command
 - **WHEN** Bash fully parses `for f in a b; do rm "$f"; done`
 - **THEN** the compatibility clauses include the authored `rm` command
@@ -19,6 +28,12 @@ nested condition, iterator, branch, body, and substitution commands.
 - **WHEN** a fully parseable simple command appears in syntax, command, and compatibility projections
 - **THEN** all three projections reference the identical in-memory `Clause` instance
 - **THEN** serialization is not required to preserve that reference identity
+
+#### Scenario: Oracle-proved false path or expansion claim is corrected
+- **WHEN** v0.2 resolves escaped literal syntax as expandable text, treats runtime punctuation as a glob, collapses `Path` and `LiteralPath`, or applies cmdlet path semantics to a native argument
+- **THEN** v0.3 preserves its raw spelling, decoded value, and source span
+- **THEN** the compatibility leaf reports the oracle-proved literal path or fails closed
+- **THEN** release notes identify the classification correction
 
 ### Requirement: Unparseable results are never authorization evidence
 When `ParsedCommand.IsUnparseable=true`, `Commands` and `Clauses` SHALL be

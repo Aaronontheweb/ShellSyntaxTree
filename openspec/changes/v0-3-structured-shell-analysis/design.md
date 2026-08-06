@@ -120,12 +120,27 @@ one the shell passes to the executable.
 
 Both shell front ends SHALL retain resolver-relevant value fragments through
 decoding. The internal representation is not public API, but it must preserve
-the ordered decoded text, exact source range when available, and one of these
-shell-owned dispositions for every fragment:
+the ordered decoded text, exact source range when available, one shell-owned
+disposition, and the exact set of lexical transformations eligible for every
+fragment:
 
-- `Literal`: quoting or escaping suppresses resolver transformation;
-- `Expandable`: the selected shell permits the relevant transformation;
-- `Opaque`: the parser cannot prove the produced value.
+- `Literal`: the fragment's produced text is exact without lexical expansion;
+- `Expansion`: the front end recognizes a typed shell expansion, even when its
+  runtime result is not proved;
+- `Opaque`: the front end recognizes a computed or unsupported region but
+  cannot model its produced value or boundary precisely.
+
+The disposition is not itself a universal expansion bit. Shell lexical
+transformations are operation-specific: variable interpolation, tilde
+expansion, and globbing do not share identical quote rules. Post-formation path
+semantics are a separate stage. In PowerShell, native-command arguments apply
+PowerShell's lexical quote rules, while cmdlet `-Path` binding interprets a
+quoted `~`, wildcard, provider qualifier, or PSDrive after quote removal;
+`-LiteralPath` deliberately differs again. Therefore the parser SHALL retain
+an operation-specific lexical capability map and SHALL pass an explicit
+resolver consumer/binding context. It SHALL NOT reconstruct either fact from
+decoded text, `IsSingleQuoted`, or whether the verb happens to look
+cmdlet-shaped.
 
 A representative internal shape is:
 
@@ -133,33 +148,165 @@ A representative internal shape is:
 internal enum ShellValueFragmentKind
 {
     Literal,
-    Expandable,
+    Expansion,
     Opaque,
 }
+
+[Flags]
+internal enum ShellLexicalTransform
+{
+    None = 0,
+    Variable = 1,
+    Tilde = 2,
+    Glob = 4,
+    FieldSplit = 8,
+}
+
+internal enum ShellExpansionKind
+{
+    Variable,
+    SpecialParameter,
+    PositionalParameter,
+    Tilde,
+    Glob,
+}
+
+internal enum ShellValueCardinality
+{
+    ExactlyOne,
+    ZeroOrOne,
+    ZeroOrMore,
+    Unknown,
+}
+
+internal enum ShellOpaqueCause
+{
+    None,
+    CommandSubstitution,
+    PowerShellSubexpression,
+    Splat,
+    Unsupported,
+}
+
+internal readonly record struct ShellExpansionReference(
+    ShellExpansionKind Kind,
+    string? Name);
 
 internal readonly record struct ShellValueFragment(
     string Value,
     ShellValueFragmentKind Kind,
+    ShellLexicalTransform AllowedTransforms,
+    ShellExpansionReference? Expansion,
+    ShellValueCardinality Cardinality,
+    ShellOpaqueCause OpaqueCause,
     int? SourceStart,
     int? SourceLength);
 
 internal readonly record struct ShellValue(
     string Decoded,
     IReadOnlyList<ShellValueFragment> Fragments);
+
+internal enum ShellResolutionConsumer
+{
+    BashArgument,
+    BashRedirect,
+    PowerShellNativeArgument,
+    PowerShellCmdletPath,
+    PowerShellCmdletLiteralPath,
+    PowerShellRedirect,
+}
 ```
 
 This mock is non-normative: an equivalent boundary map or compact segment
-representation is acceptable. A single aggregate `IsLiteral` flag is not
-acceptable because one authored word can contain both expandable and escaped
-regions. The resolver transforms only eligible `Expandable` regions and
-preserves `Literal` regions byte-for-byte. When every fragment, supported
-transformation, and the required cwd or home fact is exact, it must compose and
-resolve the exact result even when literal and expandable fragments are mixed;
+representation is acceptable. A single aggregate `IsLiteral` flag, a three-way
+kind without operation-specific capabilities and typed expansion metadata, or
+a resolver call without consumer/binding context is not acceptable. One
+authored word can contain both expansion and escaped regions, and one decoded
+PowerShell value can have
+different correct meanings for a native executable, `-Path`, and
+`-LiteralPath`. Lexical expansion transforms only eligible regions. Provider,
+PSDrive, wildcard-binding, and filesystem normalization rules then apply to the
+exact composed value only when the explicit consumer context permits them.
+When every fragment, supported transformation, binding fact, and required cwd
+or home fact is exact, the resolver must compose and resolve the exact result
+even when literal and expansion fragments are mixed;
 it cannot choose `DynamicSkip` merely because retaining provenance requires
-more work. `DynamicSkip` is reserved for an `Opaque` fragment, an incomplete
-boundary, an unknown required fact, or an unsupported transformation that
-prevents an exact path claim. The resolver never infers expansion solely from
-the decoded string.
+more work. `DynamicSkip` is reserved for a recognized expansion whose value or
+cardinality is unproved, an `Opaque` fragment, an incomplete boundary, an
+unknown required fact, or an unsupported transformation that prevents an exact
+path claim. The resolver never infers expansion solely from the decoded string.
+
+In the representative shape, `Literal` carries `AllowedTransforms=None`, no
+expansion reference, `ExactlyOne`, and `OpaqueCause=None`. `Expansion` carries
+at least one transform plus a typed reference; the bounded analyzer may still
+produce `Unknown` when no value proof exists. `Opaque` carries a non-`None`
+cause and retains any authored later-stage transform and cardinality facts that
+remain knowable. Thus `"$@"` records a special-parameter expansion with
+`ZeroOrMore` cardinality rather than losing the reason one exact argument
+cannot be claimed. The flags describe authored eligibility and shell ordering,
+not a license to recursively rescan produced text. Provider and PSDrive
+handling are intentionally absent from the flag set because they are
+post-formation consumer semantics. They are owned by PowerShell cmdlet path and
+redirect contexts; Bash arguments and redirects never strip a provider-looking
+prefix.
+
+PowerShell parameter binding SHALL retain at least `Path` versus `LiteralPath`
+internally rather than collapsing both to `treatAsPath=true`. Positional cmdlet
+paths use the verb table's explicit binding mode. `LiteralPath` suppresses
+wildcard interpretation but still applies quoted tilde, provider-qualifier,
+and PSDrive semantics; it is not an "all post-formation transforms off" mode.
+Native arguments never gain
+cmdlet provider or PSDrive semantics merely because their decoded text has the
+same shape. When the parser cannot prove the consumer or binding mode, it
+fails closed instead of selecting the more permissive interpretation.
+
+Runtime-variable recognition is part of the shell front end, not the resolver.
+Bash special and positional parameters, including the boundary-sensitive
+`"$@"`, and PowerShell special, numeric, scoped, braced, and Unicode-named
+variables must retain a typed expansion reference and cardinality. Unless the
+bounded analyzer has a proof, their analyzed value domain remains `Unknown`;
+the parser does not collapse the fragment into literal text or discard why it
+is unknown. A recognized interpolation start that the bounded resolver cannot
+evaluate is never silently reclassified as literal text. An unterminated
+braced interpolation is a syntax error for the whole parse, even when the
+outer quote closes cleanly.
+
+Fragment aggregation applies to redirect targets as well as ordinary
+arguments. Adjacent fragments after a redirect operator form the one target
+the shell consumes; the parser must not expose a resolved prefix as the
+redirect and leave the suffix as an unrelated argument. Bash and PowerShell
+redirects retain separate consumer contexts. In particular, Bash redirect-word
+expansion must prove exactly one target; it cannot reuse ordinary argument
+splitting or glob cardinality rules. Here-string data remains on the separate
+redirect-analysis path specified below.
+
+`PowerShellRedirect` is its own Path-like post-formation consumer. After value
+formation it applies tilde, wildcard, FileSystem provider, and PSDrive
+semantics even when the authored value was quoted. A wildcard target remains
+unknown without filesystem enumeration. A PSDrive target remains unknown
+without a proved drive-to-provider mapping. Neither case is reported as a
+static non-path target merely because the parser lacks the runtime fact.
+
+The redesign is grounded in live GNU Bash 5.2.21 and PowerShell 7.6.4
+observations on Linux:
+
+| Probe | Observed shell behavior | Contract consequence |
+|---|---|---|
+| Bash `cat "${HOME"` and PowerShell `Get-Content "${HOME"` | Bash reports an unmatched quote/interpolation boundary; the PowerShell parser reports two syntax errors | Unterminated braced interpolation makes the whole parse unparseable |
+| Each shell receives its escaped-dollar spelling of `${HOME` | Each receives the literal string `${HOME` without a parse error | An escaped interpolation start remains literal and complete |
+| PowerShell variables `$?`, `$1`, and `$é` | Each produces a runtime value | Their typed expansions remain `Unknown` without a bounded proof, never literal filenames |
+| Native `printf` receives quoted `~` and `FileSystem::/tmp` | It receives both strings byte-for-byte | Quoted native values do not gain cmdlet tilde or provider semantics |
+| Bash `printf` receives `filesystem::/safe`, quoted or unquoted | It receives the provider-looking string byte-for-byte in both forms | Bash never applies PowerShell provider semantics |
+| `Resolve-Path "~"` and `Get-Item "FileSystem::/tmp"` | They resolve to the home directory and `/tmp` | Cmdlet path binding applies after quote removal |
+| `Resolve-Path -Path "*.txt"`, `Test-Path -LiteralPath "*.txt"`, and native `printf "*.txt"` in a directory containing `a.txt` | `-Path` matches once; `-LiteralPath` is false; native `printf` receives `*.txt` | `Path`, `LiteralPath`, and native contexts remain distinct without filesystem enumeration by this library |
+| Native PowerShell receives unquoted and quoted `*.txt` in a directory containing `a.txt` | The unquoted form receives `a.txt`; the quoted form receives `*.txt` | Unquoted native wildcard cardinality is unknown without enumeration; quoting produces one exact literal value |
+| Each shell redirects to its escaped-dollar spelling of `$HOME".txt"` | Each creates exactly one file named `$HOME.txt` | Adjacent redirect fragments form one target |
+| Bash redirects unquoted and quoted `*.txt` in a directory with multiple `.txt` files | The unquoted form is an ambiguous redirect; the quoted form creates the literal file `*.txt` | `BashRedirect` requires one proved target and retains quote-sensitive glob eligibility |
+| PowerShell redirects quoted `~`, `*.txt`, `FileSystem::...`, and a FileSystem PSDrive path | Tilde, wildcard, provider, and drive semantics apply after quote removal | `PowerShellRedirect` is Path-like but remains separate from cmdlet and native argument contexts |
+
+Task 2.2 converts these probes into deterministic shell-oracle regressions on
+the implementation branch; the design corpus records their desired semantic
+shape before the v0.2 compatibility leaves can express it.
 
 Issue #69's shared native argument classifier consumes these proved fragments
 through explicit Bash and PowerShell adapters. It may own adjacency, decoded
@@ -328,8 +475,9 @@ corpus remains sanitized under the existing PII audit.
   structural parsers separate; extract only duplication demonstrated by both
   working slices.
 - **[Decoded values erase expansion provenance]** -> Retain ordered internal
-  literal, expandable, and opaque fragments; never let a resolver reconstruct
-  those facts from decoded text alone.
+  literal, typed-expansion, and opaque fragments with transform, cardinality,
+  and cause facts; never let a resolver reconstruct those facts from decoded
+  text alone.
 - **[Partial trees invite partial authorization]** -> Keep
   `IsUnparseable=true`, return empty `Commands` and `Clauses`, and keep any
   partial syntax diagnostic-only.
