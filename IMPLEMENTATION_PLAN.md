@@ -133,9 +133,24 @@ priorities.
       as the v0.3 roadmap and cross-link issue #71 control flow and issue #69
       shared native argument-fragment classification without merging their
       scopes.
-- [ ] Complete OpenSpec task group 1: lock the additive public type names,
-      compatibility projection, fixed analysis bounds, and supported-construct
-      matrix before production implementation.
+- [x] Add a versioned pre-implementation design corpus with paired Bash and
+      PowerShell representative, boundary, and adversarial cases. The validator
+      rejects schema drift, checks references and command ordering, confirms
+      every `current` expectation against the v0.2 parsers, and includes the
+      files in the PII audit. Corpus review established that command role must
+      be immediate while ancestry remains compositional, occurrence
+      completeness is independent of value precision, and PowerShell authored
+      parameter classification must remain distinct from effective values. The
+      paired 32/33-candidate boundary cases lock finite-versus-unknown behavior.
+- [x] Lock OpenSpec task-group decisions 1.1–1.5 and 1.8: exact public type
+      candidates and safe defaults, in-memory `Clause` identity, fixed 32/16/5
+      analysis limits, separate Bash and PowerShell grammar matrices, static
+      pattern-cover rules, divergent-cwd fallback, deferred forms, project
+      context, and the preimplementation consumer-guide migration contract.
+- [ ] Complete OpenSpec tasks 1.6–1.7 in the public-API implementation PR:
+      synchronize the accepted shared and PowerShell contracts into
+      `SPEC.md` / `SPEC.POWERSHELL.md` together with source and snapshot tests
+      so the repository authority never intentionally drifts from the assembly.
 - [ ] Implement [issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69)
       as the first behavior-preserving preparation after contract lock.
 - [ ] Add the structural and command-occurrence projections for the existing
@@ -143,6 +158,9 @@ priorities.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.
+- [ ] Preserve the existing Bash heredoc grammar, fix quoted-delimiter
+      adjacency, expose body/delimiter/expansion/completeness facts, and add a
+      separately tested Bash `<<<` here-string redirect slice.
 
 ---
 
@@ -167,9 +185,8 @@ priorities.
   composed helper.
 - Windows `cmd` parser.
 - Source-mapping (line/column on AST nodes) — only if an IDE consumer asks.
-- Heredoc body preservation and process substitution are separately gated
-  issue #72 tasks backed by production need; Bash function definitions remain
-  deferred until a consumer need surfaces.
+- Process substitution remains a separately gated issue #72 task; Bash
+  function definitions remain deferred until a consumer need surfaces.
 
 ## Parked
 

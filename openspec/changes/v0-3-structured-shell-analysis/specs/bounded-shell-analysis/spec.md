@@ -5,6 +5,11 @@ The analysis SHALL classify a policy-relevant shell value as exact, finite,
 bounded symbolic pattern, or unknown, and SHALL NOT present a weaker proof as a
 stronger domain.
 
+`Unknown` SHALL contain no values or pattern fields. `Exact` SHALL contain one
+value. `FiniteSet` SHALL contain 2–32 distinct values. `Pattern` SHALL contain
+no values and SHALL contain a non-empty pattern and covering directory. The
+parser SHALL NOT emit any other member combination.
+
 #### Scenario: One literal value
 - **WHEN** a loop binds a variable from the single literal `a.txt`
 - **THEN** the binding domain is exact with value `a.txt`
@@ -19,18 +24,55 @@ stronger domain.
 
 ### Requirement: Analysis is bounded and non-executing
 The parser SHALL NOT execute commands, enumerate filesystem matches, inspect
-runtime shell variables, or expand candidate combinations beyond a fixed
-documented bound. Any value exceeding the bound SHALL become unknown.
+runtime shell variables, or expand a value domain beyond 32 candidates. A
+domain of 32 candidates remains finite; a domain that would contain 33 or more
+becomes unknown rather than being truncated.
 
 #### Scenario: Glob is not enumerated
 - **WHEN** Bash parses `for f in /tmp/*.txt; do rm -- "$f"; done`
 - **THEN** the parser does not read `/tmp`
-- **THEN** it may expose a pattern with conservative covering directory `/tmp`
+- **THEN** it exposes a pattern with conservative covering directory `/tmp`
+
+#### Scenario: Dynamic glob root is unknown
+- **WHEN** Bash parses `for f in "$ROOT"/*.txt; do rm -- "$f"; done`
+- **THEN** the dynamic root prevents a static covering-directory proof
+- **THEN** the iterable value is unknown
 
 #### Scenario: Candidate cross product exceeds the limit
-- **WHEN** combining finite values would exceed the locked candidate cap
+- **WHEN** combining finite values would produce 33 candidates
 - **THEN** the resulting domain is unknown
 - **THEN** the parser does not truncate the set and call the truncated result complete
+
+#### Scenario: Candidate cross product reaches the limit
+- **WHEN** combining finite values produces exactly 32 candidates
+- **THEN** the resulting domain may remain finite and complete
+
+### Requirement: Structural analysis has fixed depth limits
+The parser SHALL support at most 16 nested executable containers and at most 5
+decoded command-string wrapper recursions. Structural depth starts at zero for
+the root and increments once when entering a foreach loop, condition loop,
+conditional, group, or command substitution. Blocks, conditional-branch
+records, command lists, pipelines, and simple-command leaves do not increment
+the depth independently. These bounds SHALL NOT be caller-configurable.
+Exceeding either bound SHALL make the whole result unparseable rather than
+returning an authorization projection for a subset.
+
+The limits SHALL be exposed as static get-only properties rather than public
+compile-time constants so downstream assemblies read the installed parser's
+contract instead of inlining stale values.
+
+#### Scenario: Structural nesting reaches the limit
+- **WHEN** a supported input enters exactly 16 nested executable containers
+- **THEN** the input remains structurally eligible for complete analysis
+
+#### Scenario: Structural nesting exceeds the limit
+- **WHEN** a seventeenth nested executable container is entered
+- **THEN** the result is unparseable
+- **THEN** command and compatibility projections are empty
+
+#### Scenario: Existing wrapper recursion limit remains fixed
+- **WHEN** a sixth decoded command-string wrapper would be entered
+- **THEN** the result is unparseable under the existing wrapper-depth rule
 
 ### Requirement: Variable substitution preserves argument-boundary uncertainty
 A loop binding SHALL affect an effective command value only when the selected
@@ -48,10 +90,11 @@ shell's quoting and expansion rules prove the resulting argument boundaries.
 - **WHEN** a PowerShell `foreach` variable may hold objects emitted by a pipeline
 - **THEN** its effective string or path value is unknown
 
-### Requirement: Executable semantics are reapplied after substitution
-ShellSyntaxTree SHALL preserve effective candidate values without claiming
-whether they are options, operands, subcommands, revisions, or paths for a
-particular executable. Consumers SHALL interpret every candidate through a
+### Requirement: Shell and executable semantics are reapplied after substitution
+ShellSyntaxTree SHALL preserve the authored shell classification together with
+effective candidate values without claiming whether native-command candidates
+are options, operands, subcommands, revisions, or paths. Consumers SHALL apply
+the shell's binding rules and interpret every native candidate through a
 complete executable-aware grammar before reusing authorization.
 
 #### Scenario: Finite value injects an rm option
@@ -64,6 +107,16 @@ complete executable-aware grammar before reusing authorization.
 - **THEN** the authored `--` remains visible before the effective candidate
 - **THEN** the consumer may account for it using rm semantics
 
+#### Scenario: PowerShell cmdlet parameter-like value
+- **WHEN** PowerShell parses `foreach ($value in '-Force') { Write-Output $value }`
+- **THEN** the authored variable argument remains a positional expression
+- **THEN** the effective string `-Force` is not retroactively classified as a cmdlet parameter token
+
+#### Scenario: PowerShell native option-like value
+- **WHEN** PowerShell parses `foreach ($value in '--force') { git clean $value }`
+- **THEN** the authored variable argument remains distinct from its effective value
+- **THEN** the consumer applies the native executable grammar to `--force`
+
 ### Requirement: Control-flow state joins conservatively
 Working-directory and supported variable state SHALL be propagated through
 sequential regions and joined across branches and loop exits. Disagreement
@@ -72,7 +125,11 @@ SHALL never be resolved by arbitrarily choosing one path.
 #### Scenario: Branch-dependent cwd
 - **WHEN** one branch changes cwd to `/a` and another changes cwd to `/b`
 - **THEN** a following relative path is not resolved solely under `/a` or solely under `/b`
-- **THEN** the cwd is unknown unless a bounded multi-state contract is explicitly supported
+- **THEN** the cwd is unknown because v0.3 does not publish divergent cwd alternatives
+
+#### Scenario: Identical branch cwd
+- **WHEN** every supported branch exits with the same exact cwd
+- **THEN** the joined cwd remains exact
 
 #### Scenario: Zero-iteration loop path
 - **WHEN** a loop may execute zero times and its body changes cwd

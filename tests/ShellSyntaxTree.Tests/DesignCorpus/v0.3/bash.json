@@ -1,0 +1,519 @@
+{
+  "shell": "Bash",
+  "cases": [
+    {
+      "id": "bash-for-literal-finite",
+      "concern": "Finite literal loop binding",
+      "input": "for f in a.txt b.txt; do rm -- \"$f\"; done",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "rm", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "rm",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "FiniteSet", "values": ["a.txt", "b.txt"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["rm"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "ShellSpecificOptionSemantics", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "bash-for-static-glob",
+      "concern": "Bounded glob without filesystem enumeration",
+      "input": "for f in /tmp/*.txt; do rm -- \"$f\"; done",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "rm", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "rm",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "Pattern", "pattern": "/tmp/*.txt", "coveringDirectory": "/tmp", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["rm"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "NoFilesystemEnumeration", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "bash-for-dynamic-glob-root",
+      "concern": "Dynamic glob covering directory",
+      "input": "for f in \"$DIR\"/*.txt; do rm -- \"$f\"; done",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "rm", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "rm",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["rm"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "NoFilesystemEnumeration"]
+      }
+    },
+    {
+      "id": "bash-for-command-substitution-iterator",
+      "concern": "Executable iterator with unknown produced values",
+      "input": "for f in $(find /tmp -type f); do rm -- \"$f\"; done",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "iterator", "kind": "Block", "parent": "loop", "slot": "Iterator" },
+          { "id": "find", "kind": "SimpleCommand", "parent": "iterator", "slot": "Statement", "commandIndex": 0 },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "rm", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "find", "immediateRole": "Iterator", "ancestry": ["root", "loop", "iterator"], "isComplete": true },
+          {
+            "authoredVerb": "rm",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["find", "rm"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "IteratorCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "bash-for-native-option-injection",
+      "concern": "Finite value can change native option parsing",
+      "input": "for f in -rf /tmp/x; do rm \"$f\"; done",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "rm", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "rm",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "FiniteSet", "values": ["-rf", "/tmp/x"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["rm"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["EveryFiniteCandidateEvaluated", "ShellSpecificOptionSemantics", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "bash-nested-for-cross-product",
+      "concern": "Bounded nested-loop value combination",
+      "input": "for d in a b; do for f in x y; do echo \"$d/$f\"; done; done",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "outer", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "d" },
+          { "id": "outerBody", "kind": "Block", "parent": "outer", "slot": "Body" },
+          { "id": "inner", "kind": "ForEach", "parent": "outerBody", "slot": "Statement", "binding": "f" },
+          { "id": "innerBody", "kind": "Block", "parent": "inner", "slot": "Body" },
+          { "id": "echo", "kind": "SimpleCommand", "parent": "innerBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "echo",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "outer", "outerBody", "inner", "innerBody"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$d/$f\"", "kind": "FiniteSet", "values": ["a/x", "a/y", "b/x", "b/y"], "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["echo"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated"]
+      }
+    },
+    {
+      "id": "bash-for-body-pipeline",
+      "concern": "Command roles compose with loop and pipeline ancestry",
+      "input": "for f in a b; do printf '%s\\n' \"$f\" | sort; done",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "pipe", "kind": "Pipeline", "parent": "body", "slot": "Statement" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 0 },
+          { "id": "sort", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 1 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "printf",
+            "immediateRole": "PipelineStage",
+            "ancestry": ["root", "loop", "body", "pipe"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "FiniteSet", "values": ["a", "b"], "isPolicySensitive": false }
+            ]
+          },
+          { "authoredVerb": "sort", "immediateRole": "PipelineStage", "ancestry": ["root", "loop", "body", "pipe"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["printf", "sort"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "NoSyntheticOperator"]
+      },
+      "notes": "Ancestry carries loop-body context while the immediate role is PipelineStage."
+    },
+    {
+      "id": "bash-malformed-for-missing-done",
+      "concern": "Incomplete delimiter safe-fail",
+      "input": "for f in a b; do rm -- \"$f\"",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Unsupported", "slot": "Root" }
+        ],
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "bash-contextual-for-argument",
+      "concern": "Control keyword outside command position",
+      "input": "echo for",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "echo", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "echo", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["echo"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ContextualKeywordNotControlFlow"]
+      }
+    },
+    {
+      "id": "bash-while-command-condition",
+      "concern": "Executable condition and loop body",
+      "input": "while curl https://example.invalid/ready; do rm /tmp/marker; done",
+      "current": { "isUnparseable": true, "reasonContains": "'while'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ConditionLoop", "parent": "root", "slot": "Statement" },
+          { "id": "condition", "kind": "Block", "parent": "loop", "slot": "Condition" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "condition", "slot": "Statement", "commandIndex": 0 },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "rm", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "curl", "immediateRole": "Condition", "ancestry": ["root", "loop", "condition"], "isComplete": true },
+          { "authoredVerb": "rm", "immediateRole": "LoopBody", "ancestry": ["root", "loop", "body"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["curl", "rm"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ConditionCommandsVisible"]
+      }
+    },
+    {
+      "id": "bash-if-branch-cwd-join",
+      "concern": "Divergent branch working directory",
+      "input": "if test -f marker; then cd /a; else cd /b; fi; cat file.txt",
+      "current": { "isUnparseable": true, "reasonContains": "'if'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "if", "kind": "Conditional", "parent": "root", "slot": "Statement" },
+          { "id": "condition", "kind": "Block", "parent": "if", "slot": "Condition" },
+          { "id": "test", "kind": "SimpleCommand", "parent": "condition", "slot": "Statement", "commandIndex": 0 },
+          { "id": "then", "kind": "Block", "parent": "if", "slot": "Then" },
+          { "id": "cdA", "kind": "SimpleCommand", "parent": "then", "slot": "Statement", "commandIndex": 1 },
+          { "id": "else", "kind": "Block", "parent": "if", "slot": "Else" },
+          { "id": "cdB", "kind": "SimpleCommand", "parent": "else", "slot": "Statement", "commandIndex": 2 },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 3 }
+        ],
+        "commands": [
+          { "authoredVerb": "test", "immediateRole": "Condition", "ancestry": ["root", "if", "condition"], "isComplete": true },
+          { "authoredVerb": "cd", "immediateRole": "Branch", "ancestry": ["root", "if", "then"], "isComplete": true },
+          { "authoredVerb": "cd", "immediateRole": "Branch", "ancestry": ["root", "if", "else"], "isComplete": true },
+          {
+            "authoredVerb": "cat",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "file.txt", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["test", "cd", "cd", "cat"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "ConditionCommandsVisible", "StateJoinConservative", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "bash-process-substitution-gated",
+      "concern": "Unsupported hidden executable regions",
+      "input": "diff <(git show HEAD) <(git show HEAD~1)",
+      "current": { "isUnparseable": true, "reasonContains": "process substitution" },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Unsupported", "slot": "Root" }
+        ],
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "Remain unparseable until both inner git commands can be surfaced and the produced descriptor value is modeled conservatively."
+    },
+    {
+      "id": "bash-static-fd-duplication",
+      "concern": "Static descriptor operation is not dynamic input",
+      "input": "dotnet test 2>&1",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "dotnet", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "dotnet",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "redirects": [
+              { "operation": "DescriptorDuplicate", "sourceDescriptor": 2, "targetDescriptor": 1, "isPathRelevant": false, "isComplete": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["dotnet"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StaticRedirectNotDynamic"]
+      }
+    },
+    {
+      "id": "bash-dynamic-fd-target",
+      "concern": "Computed descriptor target remains unknown",
+      "input": "command 2>&$FD",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "command", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "command",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "redirects": [
+              {
+                "operation": "DescriptorDuplicate",
+                "sourceDescriptor": 2,
+                "target": { "sourceElement": "&$FD", "kind": "Unknown", "isPolicySensitive": true },
+                "isPathRelevant": false,
+                "isComplete": false
+              }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["command"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "bash-for-candidate-cap-32",
+      "concern": "Finite candidate domain at the fixed cap",
+      "input": "for f in v01 v02 v03 v04 v05 v06 v07 v08 v09 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 v21 v22 v23 v24 v25 v26 v27 v28 v29 v30 v31 v32; do printf '%s\\n' \"$f\"; done",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "printf",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "FiniteSet", "values": ["v01", "v02", "v03", "v04", "v05", "v06", "v07", "v08", "v09", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "v32"], "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["printf"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated"]
+      }
+    },
+    {
+      "id": "bash-for-candidate-overflow-33",
+      "concern": "Candidate overflow collapses instead of truncating",
+      "input": "for f in v01 v02 v03 v04 v05 v06 v07 v08 v09 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 v21 v22 v23 v24 v25 v26 v27 v28 v29 v30 v31 v32 v33; do printf '%s\\n' \"$f\"; done",
+      "current": { "isUnparseable": true, "reasonContains": "'for'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "printf",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "Unknown", "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["printf"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "bash-heredoc-body-is-data",
+      "concern": "Literal heredoc data does not create hidden commands or unnecessary approval scope",
+      "input": "cat > output.txt <<'EOF'\nhello\nEOF\n",
+      "current": { "isUnparseable": true, "reasonContains": "missing delimiter" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "cat",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "redirects": [
+              {
+                "operation": "FileOutput",
+                "target": { "sourceElement": "output.txt", "kind": "Exact", "values": ["output.txt"], "isPolicySensitive": true },
+                "isPathRelevant": true,
+                "isComplete": true
+              },
+              {
+                "operation": "HereDocument",
+                "hereDocument": {
+                  "delimiterRaw": "'EOF'",
+                  "bodyRaw": "hello\n",
+                  "expansionMode": "Literal",
+                  "stripLeadingTabs": false,
+                  "isComplete": true
+                },
+                "isPathRelevant": false,
+                "isComplete": true
+              }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted", "StaticRedirectNotDynamic"]
+      },
+      "notes": "v0.3 fixes quoted-delimiter adjacency, preserves the literal body as data, and keeps the output path independently policy-relevant."
+    },
+    {
+      "id": "bash-here-string-literal-data",
+      "concern": "Static here-string data does not force a raw-command approval prompt",
+      "input": "cat <<< \"hello\"",
+      "current": { "isUnparseable": true, "reasonContains": "missing delimiter" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "cat",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "redirects": [
+              {
+                "operation": "HereString",
+                "target": { "sourceElement": "\"hello\"", "kind": "Exact", "values": ["hello\n"], "isPolicySensitive": false },
+                "isPathRelevant": false,
+                "isComplete": true
+              }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted", "StaticRedirectNotDynamic"]
+      },
+      "notes": "The exact value includes Bash's appended newline; an executable-aware consumer may ignore stdin data only when that data is not policy-sensitive for the receiver."
+    },
+    {
+      "id": "bash-here-string-dynamic-data",
+      "concern": "Unknown stdin data does not make an otherwise complete redirect structurally incomplete",
+      "input": "cat <<< \"$value\"",
+      "current": { "isUnparseable": true, "reasonContains": "missing delimiter" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "cat",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "redirects": [
+              {
+                "operation": "HereString",
+                "target": { "sourceElement": "\"$value\"", "kind": "Unknown", "isPolicySensitive": false },
+                "isPathRelevant": false,
+                "isComplete": true
+              }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted"]
+      },
+      "notes": "The unknown value is not automatically approval-sensitive for cat, but a consumer can classify the same stdin position as sensitive for an interpreter such as bash."
+    }
+  ]
+}

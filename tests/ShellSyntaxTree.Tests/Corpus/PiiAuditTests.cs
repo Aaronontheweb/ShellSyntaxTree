@@ -16,10 +16,9 @@ namespace ShellSyntaxTree.Tests.Corpus;
 
 /// <summary>
 /// PII audit gate per SPEC §14 / SPEC.POWERSHELL.md §14. Scans every JSON
-/// corpus entry under every <c>tests/ShellSyntaxTree.Tests/Corpus/&lt;shell&gt;/</c>
-/// directory for the forbidden patterns listed in the sanitization table.
-/// The audit reads from the build-output copy of the corpus (the same
-/// location the runner pulls from) so CI runs against the same bytes a
+/// entry under the executable corpus and the pre-implementation design corpus
+/// for the forbidden patterns listed in the sanitization table. The audit
+/// reads from the build-output copies so CI runs against the same bytes a
 /// developer's local <c>dotnet test</c> would.
 /// </summary>
 /// <remarks>
@@ -101,35 +100,29 @@ public class PiiAuditTests
     [Fact]
     public void Corpus_contains_no_pii_per_spec_section_14()
     {
-        var root = Path.Combine(AppContext.BaseDirectory, "Corpus");
-        if (!Directory.Exists(root))
-        {
-            // The audit is vacuous when there's no corpus to audit; the
-            // separate CorpusRunnerTests asserts the corpus is present.
-            return;
-        }
-
         var hits = new List<string>();
-        foreach (var shellDir in Directory.GetDirectories(root).OrderBy(d => d))
+        var roots = new[] { "Corpus", "DesignCorpus" };
+        foreach (var relativeRoot in roots)
         {
-            var shell = Path.GetFileName(shellDir);
-            foreach (var file in Directory.GetFiles(shellDir, "*.json").OrderBy(f => f))
+            var root = Path.Combine(AppContext.BaseDirectory, relativeRoot);
+            if (!Directory.Exists(root))
             {
-                var name = $"{shell}/{Path.GetFileName(file)}";
-                JsonDocument doc;
+                continue;
+            }
+
+            foreach (var file in Directory.GetFiles(
+                root, "*.json", SearchOption.AllDirectories).OrderBy(f => f))
+            {
+                var name = Path.GetRelativePath(AppContext.BaseDirectory, file)
+                    .Replace('\\', '/');
                 try
                 {
-                    doc = JsonDocument.Parse(File.ReadAllText(file));
+                    using var doc = JsonDocument.Parse(File.ReadAllText(file));
+                    Walk(doc.RootElement, name, fieldPath: string.Empty, hits);
                 }
                 catch (JsonException ex)
                 {
                     hits.Add($"{name}: failed to parse JSON for PII audit: {ex.Message}");
-                    continue;
-                }
-
-                using (doc)
-                {
-                    Walk(doc.RootElement, name, fieldPath: string.Empty, hits);
                 }
             }
         }

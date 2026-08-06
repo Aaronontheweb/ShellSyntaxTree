@@ -30,6 +30,13 @@ directory, routes each entry to the matching parser (`bash/` → `BashParser`,
 gate — it feeds every PowerShell corpus input to real `pwsh` and enforces
 the oracle matrix.
 
+`tests/ShellSyntaxTree.Tests/DesignCorpus/v0.3/` is a separate,
+pre-implementation contract corpus. Its focused validator rejects unknown JSON
+members, checks syntax/occurrence references and security invariants, and
+compares each recorded `current` result with the real v0.2 parser. Design cases
+move into the executable `Corpus/<shell>/` only when the corresponding v0.3 API
+and parser slice exists. The PII audit scans both corpus trees.
+
 ### PwshCorpusTool
 
 `tools/PwshCorpusTool` is the PowerShell corpus authoring aid

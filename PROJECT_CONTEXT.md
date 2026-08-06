@@ -66,7 +66,7 @@ zero-native-deps .NET parser sized to what security gates actually need.
 
 ## Scope Discipline
 
-### v0.2 (current prerelease line)
+### v0.2 (current stable line)
 
 - Bash and PowerShell 7 pipeline parsing ship behind the shared
   `IShellParser` seam. Windows `cmd` remains deferred.
@@ -75,7 +75,27 @@ zero-native-deps .NET parser sized to what security gates actually need.
   JSON entry parses to its expected AST, and the PowerShell corpus also passes
   the live `pwsh` oracle matrix.
 
-### Explicit non-goals
+### v0.3 (contract design)
+
+- Add a closed, strongly typed syntax-node hierarchy while retaining existing
+  `Clause` leaves.
+- Add a library-owned command-occurrence projection for security consumers so
+  every potentially executable iterator, condition, branch, substitution, and
+  body command is evaluated exactly once.
+- Add fixed, non-executing value and state analysis: at most 32 candidates, at
+  most 16 structural container levels, and the existing wrapper depth of 5.
+- Deliver Bash `for ... in` and PowerShell `foreach` first, then the locked
+  `while` and `if` subsets independently for each shell. Shared lowering and
+  analysis are extracted only after both front ends prove identical behavior.
+- Preserve existing Bash heredocs and add explicit body/expansion facts plus
+  Bash `<<<` here strings. Keep process substitution, background lists, Bash
+  `case`, PowerShell `switch`, arithmetic/C-style loops, and definitions
+  independently gated.
+- Treat `openspec/changes/v0-3-structured-shell-analysis/` and its paired design
+  corpus as the review authority until the accepted contract is synchronized
+  into `SPEC.md` and `SPEC.POWERSHELL.md` with the production API change.
+
+### v0.2 explicit non-goals
 
 - Command execution.
 - Variable expansion of any kind (we **mark** dynamic tokens, never resolve
@@ -92,12 +112,17 @@ zero-native-deps .NET parser sized to what security gates actually need.
   provenance for significant clause leaves, not a lossless concrete syntax
   tree.
 
+The v0.3 scope above deliberately changes only the listed control-flow and
+structural items. Execution, runtime variable expansion, full script parsing,
+and IDE-grade concrete syntax remain non-goals.
+
 ### Versioning
 
 - `0.1.0-alpha` — first publishable cut, Bash-only.
 - `0.1.x` — additive (more verb table entries, more corpus, bug fixes).
-- `0.2.0` — first PowerShell parser implementation; alpha and beta.1 shipped,
-  stable promotion pending downstream validation.
+- `0.2.0` — first PowerShell parser implementation; stable.
+- `0.3.0` — additive structured syntax, complete command occurrences, explicit
+  redirect semantics, and bounded control-flow analysis for both shells.
 - `1.0.0` — at least one external consumer beyond Netclaw ships against it
   without finding API gaps.
 
@@ -163,6 +188,7 @@ Per SPEC §17, all of the following must be true:
 | Library source | `src/ShellSyntaxTree/` |
 | Tests + corpus | `tests/ShellSyntaxTree.Tests/` |
 | Corpus entries | `tests/ShellSyntaxTree.Tests/Corpus/{bash,powershell}/*.json` |
+| v0.3 design corpus | `tests/ShellSyntaxTree.Tests/DesignCorpus/v0.3/{bash,powershell}.json` |
 | The contracts | `SPEC.md`, `SPEC.POWERSHELL.md` |
 | Consumer guide | `docs/CONSUMER_GUIDE.md` |
 | Active work plan | `IMPLEMENTATION_PLAN.md` |

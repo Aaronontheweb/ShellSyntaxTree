@@ -7,6 +7,16 @@ input, file output, append, descriptor duplicate, descriptor close,
 descriptor move, combined output, and any separately supported here-document
 or here-string form.
 
+The redirect source SHALL distinguish the shell-default stream, a numeric
+descriptor, and PowerShell's all-streams selector. `Unknown` SHALL be the zero
+source kind and operation, and invalid source-kind/descriptor combinations
+SHALL be incomplete.
+
+#### Scenario: PowerShell all-streams redirect
+- **WHEN** PowerShell parses `Get-ChildItem *> output.txt`
+- **THEN** the source is explicitly PowerShell all streams
+- **THEN** the target is a path-relevant file output rather than a guessed numeric descriptor
+
 #### Scenario: Static descriptor duplication
 - **WHEN** Bash parses `dotnet test 2>&1`
 - **THEN** the redirect operation is descriptor duplicate
@@ -74,8 +84,9 @@ facts. New facts SHALL NOT silently reinterpret a dynamic target as static.
 - **THEN** the v0.3 consumer can distinguish the operation without parsing that raw value
 
 ### Requirement: Heredoc bodies are data with explicit expansion facts
-When heredoc support is enabled, the redirect model SHALL preserve delimiter
-quoting, body source, expansion mode, and analysis completeness. It SHALL NOT
+v0.3 SHALL preserve the existing Bash `<<` and `<<-` grammar while adding
+delimiter spelling and span, body spelling and span, literal-versus-expanding
+mode, tab-stripping mode, and analysis completeness. It SHALL NOT
 classify the body itself as a child command merely because the receiving
 executable may interpret that data as code.
 
@@ -84,7 +95,42 @@ executable may interpret that data as code.
 - **THEN** the body is preserved as non-expanding authored data
 - **THEN** the parser does not execute or reinterpret the receiving command
 
+#### Scenario: Quoted delimiter adjacent to the operator
+- **WHEN** Bash parses `cat <<'EOF'` followed by a body and the `EOF` delimiter
+- **THEN** the quoted delimiter is recognized without requiring whitespace after `<<`
+- **THEN** the result is not reported as missing a delimiter
+
 #### Scenario: Executable substitution in an expanding body
 - **WHEN** a supported expanding heredoc body contains command substitution
 - **THEN** the inner command is exposed or the result is unparseable
 - **THEN** the body is not reported as completely static while executable content is hidden
+
+#### Scenario: Tab-stripping heredoc
+- **WHEN** Bash parses `<<-EOF` with tab-indented body and delimiter lines
+- **THEN** the redirect records that leading tabs are stripped
+- **THEN** authored body provenance remains available
+
+### Requirement: Bash here strings are explicit data redirects
+v0.3 SHALL parse Bash `<<< word` as a `HereString` redirect. Its operand SHALL
+use the normal shell value domain, SHALL NOT be path-relevant, and SHALL account
+for Bash's deterministic trailing newline when an exact effective data value is
+reported.
+
+PowerShell here-strings SHALL remain quoted value tokens under the existing
+PowerShell grammar and SHALL NOT be reported as redirect operations.
+
+#### Scenario: Literal Bash here string
+- **WHEN** Bash parses `cat <<< "hello"`
+- **THEN** the redirect operation is here string
+- **THEN** its exact effective data is `hello` followed by one newline
+- **THEN** the redirect is not path-relevant
+
+#### Scenario: Dynamic Bash here string
+- **WHEN** Bash parses `cat <<< "$value"`
+- **THEN** the redirect target remains unknown unless the value is proved
+- **THEN** the parser does not execute or inspect the runtime variable
+
+#### Scenario: PowerShell here string remains a value
+- **WHEN** PowerShell parses a literal here string passed to `Write-Output`
+- **THEN** the here string remains an authored PowerShell argument
+- **THEN** no `HereString` redirect operation is emitted

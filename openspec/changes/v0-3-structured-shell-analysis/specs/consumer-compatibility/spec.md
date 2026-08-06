@@ -15,15 +15,21 @@ nested condition, iterator, branch, body, and substitution commands.
 - **THEN** `Clause.Operator` represents only an actual authored operator relationship
 - **THEN** no synthetic `Sequence`, `AndIf`, `OrIf`, or `Pipe` relationship is invented
 
+#### Scenario: Projections share one Clause instance
+- **WHEN** a fully parseable simple command appears in syntax, command, and compatibility projections
+- **THEN** all three projections reference the identical in-memory `Clause` instance
+- **THEN** serialization is not required to preserve that reference identity
+
 ### Requirement: Unparseable results are never authorization evidence
-All syntax, occurrence, clause, value, and redirect facts SHALL be treated as
-partial diagnostic evidence when `ParsedCommand.IsUnparseable=true`. The
-consumer guide SHALL require prompt or deny before evaluating them for allow.
+When `ParsedCommand.IsUnparseable=true`, `Commands` and `Clauses` SHALL be
+empty. `Syntax` MAY contain partial diagnostic evidence, and the consumer guide
+SHALL require prompt or deny without using that tree for allow.
 
 #### Scenario: Partial body discovered before unsupported syntax
 - **WHEN** the parser discovers a command in a body but later encounters an unsupported executable region
 - **THEN** the result remains unparseable
-- **THEN** a consumer does not authorize from the discovered subset
+- **THEN** command and compatibility projections are empty
+- **THEN** a consumer does not authorize from the partial syntax tree
 
 ### Requirement: Security consumers authorize command occurrences
 The consumer guide SHALL direct v0.3 security consumers to evaluate every
@@ -55,6 +61,29 @@ position.
 - **WHEN** a consumer encounters a syntax, role, domain, or redirect kind it does not recognize
 - **THEN** it fails closed for authorization
 
+### Requirement: Non-path redirect data does not create implicit approval scope
+The consumer guide SHALL distinguish complete heredoc and here-string data from
+command occurrences and filesystem redirect targets. A consumer SHALL NOT
+prompt solely because complete non-path data uses heredoc or here-string shell
+syntax. It SHALL still apply executable-specific policy to determine whether
+stdin data affects authorization, and unknown data in such a sensitive position
+SHALL prompt or deny.
+
+#### Scenario: Literal data sent to a non-interpreting command
+- **WHEN** a complete literal heredoc or here string feeds a command whose stdin is not policy-sensitive
+- **THEN** the consumer evaluates the receiving command and any independent path redirects
+- **THEN** it need not create a separate command or path approval for the data body
+
+#### Scenario: Receiver interprets stdin as code
+- **WHEN** a command such as a shell interpreter receives unknown here-string data
+- **THEN** an executable-aware consumer treats that stdin position as policy-sensitive
+- **THEN** the unknown value prompts or denies rather than reusing a broader approval
+
+#### Scenario: Expanding heredoc executes a substitution
+- **WHEN** an expanding heredoc contains a supported command substitution
+- **THEN** the substitution is authorized as its own command occurrence
+- **THEN** the remaining body is still data rather than an invented child command
+
 ### Requirement: Proven candidates are interpreted individually
 For every exact or finite effective value, the consumer guide SHALL require
 the consumer to reapply executable-specific option and operand semantics. A
@@ -79,3 +108,15 @@ effects, and the period during which `Clauses` remains supported.
 - **WHEN** Netclaw migrates to the occurrence and explicit redirect APIs
 - **THEN** integration tests cover ordinary commands, static fd operations, bounded loops, and unknown-value fallback
 - **THEN** its temporary raw-prefix redirect workaround can be removed
+
+### Requirement: Persistence is consumer-versioned
+ShellSyntaxTree SHALL define an in-memory typed API but SHALL NOT claim a stable
+serialized wire format for polymorphic syntax nodes. The consumer guide SHALL
+document generated record equality, hashing, `ToString()`, and default
+serialization changes, and SHALL direct persistence consumers to versioned DTOs
+or explicit serializer configuration.
+
+#### Scenario: Consumer persists parser results
+- **WHEN** a consumer needs to store or transmit a v0.3 parser result
+- **THEN** it does not assume the closed record hierarchy is an implicit stable JSON union
+- **THEN** it owns an explicit versioned representation or serializer mapping
