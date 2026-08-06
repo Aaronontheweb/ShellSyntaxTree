@@ -15,7 +15,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Standalone_escapes_are_literal_in_both_shells()
     {
-        if (IsAvailable("bash"))
+        if (IsNativeBashAvailable())
         {
             var bash = Run("bash", "-c", "printf '<%s>\\n' \\$HOME");
             Assert.Equal("<$HOME>", bash);
@@ -36,7 +36,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Bash_escape_and_adjacent_quote_produce_one_literal_argument()
     {
-        if (!IsAvailable("bash"))
+        if (!IsNativeBashAvailable())
         {
             return;
         }
@@ -52,7 +52,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Static_mixed_quoting_and_within_token_escapes_are_literal()
     {
-        if (IsAvailable("bash"))
+        if (IsNativeBashAvailable())
         {
             var bash = Run(
                 "bash",
@@ -80,7 +80,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Literal_and_expandable_fragments_compose_in_both_shells()
     {
-        if (IsAvailable("bash"))
+        if (IsNativeBashAvailable())
         {
             var bash = Run(
                 "bash",
@@ -106,7 +106,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Runtime_parameter_forms_execute_in_both_shells()
     {
-        if (IsAvailable("bash"))
+        if (IsNativeBashAvailable())
         {
             var bash = Run(
                 "bash",
@@ -163,7 +163,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Incomplete_and_escaped_braced_interpolation_differ_in_both_shells()
     {
-        if (IsAvailable("bash"))
+        if (IsNativeBashAvailable())
         {
             var incomplete = RunUnchecked(
                 "bash",
@@ -202,7 +202,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Provider_looking_values_are_shell_and_consumer_specific()
     {
-        if (IsAvailable("bash"))
+        if (IsNativeBashAvailable())
         {
             var bash = Run(
                 "bash",
@@ -249,7 +249,7 @@ public class ShellValueOracleTests
         Directory.CreateDirectory(pwshDirectory);
         try
         {
-            if (IsAvailable("bash"))
+            if (IsNativeBashAvailable())
             {
                 RunInWorkingDirectory(
                     "bash",
@@ -298,7 +298,7 @@ public class ShellValueOracleTests
         Directory.CreateDirectory(pwshDirectory);
         try
         {
-            if (IsAvailable("bash"))
+            if (IsNativeBashAvailable())
             {
                 File.WriteAllText(Path.Combine(bashDirectory, "a.txt"), "a");
                 File.WriteAllText(Path.Combine(bashDirectory, "b.txt"), "b");
@@ -442,7 +442,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Bash_ansi_c_quoting_transforms_the_authored_value()
     {
-        if (!IsAvailable("bash"))
+        if (!IsNativeBashAvailable())
         {
             return;
         }
@@ -458,7 +458,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Bash_quoted_and_escaped_fd_spelling_redirects_to_literal_files()
     {
-        if (!IsAvailable("bash"))
+        if (!IsNativeBashAvailable())
         {
             return;
         }
@@ -531,7 +531,7 @@ public class ShellValueOracleTests
     [Fact]
     public void Dynamic_command_fragments_are_executable_identity()
     {
-        if (IsAvailable("bash"))
+        if (IsNativeBashAvailable())
         {
             var bash = Run(
                 "bash",
@@ -573,6 +573,9 @@ public class ShellValueOracleTests
             return false;
         }
     }
+
+    private static bool IsNativeBashAvailable() =>
+        Path.DirectorySeparatorChar == '/' && IsAvailable("bash");
 
     private static string Run(string executable, params string[] arguments)
         => RunCore(executable, workingDirectory: null, arguments);
