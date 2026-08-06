@@ -1,23 +1,24 @@
-# ShellSyntaxTree — PowerShell Specification (v0.2.0)
+# ShellSyntaxTree — PowerShell Specification (through v0.3)
 
-**Status:** Shipped in the v0.2.0 prerelease line; stable promotion pending
-downstream Netclaw validation.
+**Status:** v0.2.0 shipped; the accepted v0.3 contract adds bounded PowerShell
+`foreach`, `while`, and `if` structure plus shared command-occurrence and
+explicit redirect analysis.
 **Audience:** Whoever (human or agent) implements, consumes, or maintains the
 ShellSyntaxTree PowerShell parser.
 **Read `SPEC.md` (the bash and shared-contract specification) end-to-end
 first — this document specifies only what differs for PowerShell.**
 
-This document specifies the PowerShell parser shipping in ShellSyntaxTree
-v0.2.0: its grammar, tokenization, cmdlet/verb tables, alias resolution,
-resolver semantics, and corpus contract. PowerShell support reuses the
-shared `IShellParser` interface and the shared AST (`ParsedCommand` /
-`Clause` / `VerbChain` / `Arg` / `Redirect`) defined in `SPEC.md` §2–§3.
+This document specifies the PowerShell parser through ShellSyntaxTree v0.3:
+its grammar, tokenization, cmdlet/verb tables, alias resolution, resolver
+semantics, bounded control-flow analysis, and corpus contract. PowerShell
+reuses the shared public API defined in `SPEC.md` §2–§3.
 
 It is **not** a PowerShell interpreter. It does not execute, expand, or
 evaluate commands. It returns the same structured AST a consumer already
 walks for bash. The parsing scope is **Pipeline-aware** (§4): linear
-command pipelines parse; control flow, definitions, and other script-level
-constructs mark `IsUnparseable`.
+command pipelines parse; stable v0.3 also supports only the explicitly bounded
+`foreach`, `while`, and `if` subsets below. Other script-level constructs mark
+`IsUnparseable`.
 
 `SPEC.md` is the canonical home of the shared public API, AST, sanitization
 workflow, and consumer contract. Where this spec says "see `SPEC.md` §N" the
@@ -71,15 +72,25 @@ syntax (§5) are all PowerShell 7 semantics. The `pwsh` validation oracle
 - Command execution and variable expansion — the same non-goals as bash
   (`SPEC.md` §1). The library marks dynamic tokens; it never resolves them.
 
+### v0.3 extension
+
+Stable v0.3 adds structured projection for bounded `foreach`, `while`, and
+`if` statements; exposes iterator, condition, branch, and body commands
+exactly once; derives exact or finite string values only from proved literal
+iterables; and joins location and supported binding state conservatively.
+Pipeline-produced objects and unsupported expressions remain unknown without
+execution. `do`, `switch`, definitions, and arbitrary script evaluation stay
+outside the supported grammar.
+
 ---
 
 ## 2. Public API Surface
 
 The shared interface, AST records, and enums are defined in **`SPEC.md` §2**.
 The additive `Clause.Elements`, `ClauseElement`, and `ClauseElementRole`
-provenance surface applies identically to both parsers. PowerShell adds the
-following parser types to namespace `ShellSyntaxTree`; everything else is
-internal.
+provenance surface and the v0.3 syntax, occurrence, value-domain, and explicit
+redirect types apply identically to both parsers. PowerShell adds the following
+parser types to namespace `ShellSyntaxTree`; everything else is internal.
 
 ```csharp
 namespace ShellSyntaxTree;
@@ -301,7 +312,8 @@ quoted_string    := single_quoted | double_quoted
   creates **no scope and no working-directory boundary** (`$PWD` is runspace
   state, not a scoped variable). `Set-Location` attribution therefore
   **propagates through** `( ... )` rather than being isolated by it (§9). A
-  group containing control flow marks `IsUnparseable`.
+  group containing executable syntax outside the bounded v0.3 grammar marks
+  the whole result `IsUnparseable`.
 - `--%` is the stop-parsing token: the remainder of the **line** — to the
   next newline or end of input, including any `|`, `;`, `&&`, or `||`, which
   become literal text rather than operators — becomes one opaque
@@ -311,9 +323,65 @@ quoted_string    := single_quoted | double_quoted
 - Script blocks `{ ... }`, subexpressions `$( ... )`, array `@( ... )`, and
   hash `@{ ... }` literals are recognized as **opaque tokens** — the
   interior is not parsed; each becomes one `DynamicSkip` arg.
-- Control-flow keywords, definition keywords, block keywords, `param()`,
-  assignment statements, bare `[type]::member` calls, and bare arithmetic at
-  statement position fall outside the grammar → `IsUnparseable` (§11).
+- Under v0.2, control-flow keywords fall outside the grammar. Stable v0.3 owns
+  only the contextual statement forms below. Definition keywords, unsupported
+  block keywords, `param()`, assignment statements, bare `[type]::member`
+  calls, and bare arithmetic at statement position remain unparseable (§11).
+
+### v0.3 structured PowerShell grammar
+
+PowerShell retains a statement-versus-pipeline distinction. `foreach` is a
+language keyword only at statement position when followed by `(`;
+`Get-ChildItem | foreach { ... }` remains command/alias syntax and its ordinary
+script-block argument remains opaque.
+
+```text
+pwsh_script(stop)    := pwsh_statement (statement_sep pwsh_statement)*
+pwsh_statement       := pwsh_foreach
+                      | pwsh_while
+                      | pwsh_if
+                      | pwsh_pipeline
+
+pwsh_foreach         := "foreach" "(" variable "in" foreach_expression ")"
+                        script_block_body
+
+pwsh_while           := "while" "(" condition_pipeline ")"
+                        script_block_body
+
+pwsh_if              := "if" "(" condition_pipeline ")" script_block_body
+                        pwsh_elseif* pwsh_else?
+pwsh_elseif          := "elseif" "(" condition_pipeline ")" script_block_body
+pwsh_else            := "else" script_block_body
+
+foreach_expression   := literal_value
+                      | literal_array
+                      | pipeline_expression
+literal_array        := "@(" literal_value ("," literal_value)* ")"
+script_block_body    := "{" pwsh_script(stop = "}") "}"
+```
+
+Literal scalar and literal-array iterables may produce exact or finite string
+domains. A pipeline iterable exposes every producing command with role
+`Iterator`, but its object values remain `Unknown`; the parser does not predict
+PowerShell object-to-string conversion. The body is recursively parsed only
+after the structural grammar proves that the `ScriptBlock` token is the body
+of a recognized statement. An ordinary script-block argument remains one
+opaque `DynamicSkip` value and does not invent child execution.
+
+`condition_pipeline` is limited to a pipeline the existing parser can delimit
+completely. A subexpression, member invocation, script block, or other form
+that may execute outside complete command discovery makes the whole result
+unparseable. Missing delimiters and every unsupported executable region also
+produce empty `Commands` and `Clauses`; partial `Syntax` is diagnostic only.
+
+PowerShell scope and location state remain shell-specific. Grouping `( ... )`
+does not isolate location. Branch exits retain an exact cwd only when every
+supported alternative agrees; disagreement becomes `Unknown`. Loop exits
+include the zero-iteration state. The parser does not publish a finite cwd set.
+
+Stable v0.3 continues to defer `do`, `switch`, functions, definitions,
+class/type bodies, and arbitrary execution-bearing expressions outside the
+bounded forms above.
 
 ---
 
@@ -798,6 +866,48 @@ implementers and consumers should expect a higher prompt rate. Privileging
 more `$env:` names is a deliberate non-goal: the value at parse time need not
 match the value when the command runs.
 
+### v0.3 resolver provenance and consumer contexts
+
+The ordered v0.2 resolution steps describe compatibility results, but they do
+not permit v0.3 to reconstruct expansion from decoded text. The PowerShell
+front end retains each ordered literal, typed-expansion, or opaque fragment,
+its exact-or-null source span, allowed lexical transforms, expansion identity,
+cardinality, and opaque cause through decoding. Raw spelling, decoded logical
+values, and source spans keep their v0.2 meanings.
+
+Resolution receives one explicit consumer context:
+
+- native argument;
+- cmdlet `Path` binding;
+- cmdlet `LiteralPath` binding;
+- redirect target.
+
+Native arguments apply PowerShell lexical quote rules but never acquire
+cmdlet provider or PSDrive semantics merely because their decoded text looks
+provider-qualified. A quoted native `~`, `*.txt`, or
+`FileSystem::C:\logs\x` remains literal. An unquoted native wildcard remains
+unknown without filesystem enumeration.
+
+Cmdlet `Path` and redirect contexts apply tilde, wildcard, FileSystem
+provider, and PSDrive semantics after value formation even when quoted.
+`LiteralPath` suppresses wildcard interpretation but still applies quoted
+tilde, provider, and PSDrive semantics. An unproved PSDrive mapping or wildcard
+cardinality remains unknown. A drive-relative value such as `C:foo` is not an
+absolute filesystem path proof and fails closed.
+
+Escaped interpolation starts remain exact literals. Recognized special,
+numeric, scoped, braced, and Unicode-named variables retain typed expansion
+identity while their value stays unknown without a bounded proof. An
+unterminated `${...}` interpolation makes the entire result unparseable.
+Adjacent fragments after a redirect operator form one target; the suffix is
+never emitted as an unrelated argument.
+
+When every fragment, transformation, binding fact, cwd/home fact, and
+consumer fact is exact, mixed literal and expandable fragments compose to one
+exact compatibility result rather than becoming `DynamicSkip`. Any opaque or
+incompletely mapped region, unknown required fact, or unsupported transform
+fails closed. The resolver does not recursively rescan produced text.
+
 ### Redirect stream → `RedirectDirection` mapping
 
 `RedirectDirection` (`SPEC.md` §3) has five members; PowerShell has more
@@ -816,8 +926,13 @@ about which stream produced it:
 | `3>>`–`6>>`, `*>>` | `Append` (lossy) |
 | stream merge `N>&M` (`2>&1`, `3>&1`, ...) | `ErrOut` when `N` is `2`, else `Out`; `Target` carries `&M` verbatim with `IsDynamicSkip=true` |
 
-Lossless stream identity is deferred (§18); v0.2.0 consumers gate on the
-target path, not the originating stream.
+The table above remains the v0.2 `Redirect` compatibility mapping. v0.3 also
+populates `RedirectAnalysis`: `RedirectSourceKind.PowerShellAllStreams`
+preserves `*`, `Descriptor` preserves numeric streams, and `Operation`
+distinguishes file input/output/append from static descriptor duplication,
+close, and move. Static descriptor operations are not path-relevant. A
+variable, substitution, malformed suffix, or otherwise computed descriptor
+target remains unknown or incomplete rather than becoming a static exemption.
 
 ---
 
@@ -1144,13 +1259,15 @@ Clause 0: Operator=None, Verb=[Remove-Item],
           Args=[ {Raw="HKLM:\Software\X", Kind=Literal, IsPath=false} ]
 ```
 
-### Unparseable — a control-flow construct
+### Unparseable — an unsupported control-flow construct
 
-Input: `foreach ($f in $list) { Remove-Item $f }`
+Input: `switch -Wildcard ($value) { '*.txt' { Remove-Item $_ } }`
 
 ```
 IsUnparseable=true
-UnparseableReason="control-flow keyword 'foreach' is not supported in v0.2"
+UnparseableReason="PowerShell switch is unsupported in v0.3"
+Commands=[]
+Clauses=[]
 ```
 
 ---
@@ -1369,25 +1486,23 @@ v0.2.0 ships when **all** of these hold:
 
 ---
 
-## 18. Out of Scope (deferred from v0.2.0)
+## 18. Out of Scope
 
-- PowerShell script-level constructs — control flow, `function`/`class`/
-  `enum` definitions, `param()`/`begin`/`process`/`end` blocks, `trap`,
-  `DATA` (all `IsUnparseable`).
+- PowerShell control flow outside stable v0.3's bounded `foreach`, `while`,
+  and `if` subsets — including `do` and `switch`.
+- `function`/`filter`/`class`/`enum` definitions,
+  `param()`/`begin`/`process`/`end` blocks, `trap`, and `DATA`.
 - `.ps1` script-file parsing.
-- PowerShell expression evaluation, `$_` / `$PSItem` semantics, .NET method
-  calls.
+- General PowerShell expression evaluation, `$_` / `$PSItem` semantics, .NET
+  method calls, object-to-string prediction, and runtime pipeline evaluation.
 - Desired State Configuration (DSC).
 - A real `Push-Location` / `Pop-Location` directory-stack model (§9).
-- Lossless redirect-stream identity — PowerShell streams 3–6 / `*` map
-  lossily onto `RedirectDirection` (§8); growing the public enum is a
-  candidate v0.2.x item.
 - Per-element path extraction from a comma-separated array
   (`-Path a,b,c`) — v0.2.0 marks the whole token `DynamicSkip` (§8);
-  splitting it into per-element path args is a candidate v0.2.x item.
-- Extracting a shared lexer/parser core from the bash and PowerShell
-  implementations — deliberately deferred until two parsers exist so the
-  seam is designed from real duplication, not guessed.
+  splitting arbitrary parameter arrays remains independently gated.
+- A shared lexer, structural parser base class, or false shared expression
+  grammar. Only post-parse machinery proven identical in both shells is
+  extracted through explicit adapters.
 - Windows `cmd` parsing — still deferred (`SPEC.md` §18).
 
 ---
@@ -1395,8 +1510,8 @@ v0.2.0 ships when **all** of these hold:
 ## Appendix A: Consumer Contract
 
 The consumer contract is defined in **`SPEC.md` Appendix A** and is
-shell-neutral — a consumer walks a PowerShell `ParsedCommand` exactly as it
-walks a bash one. Two additions:
+shell-neutral. Security consumers enumerate every `CommandOccurrence` and
+evaluate every explicit redirect. PowerShell adds these identity rules:
 
 - When gating on verb identity, use the gate key
   `CanonicalVerb ?? (Tokens.Count > 0 ? Tokens[0] : null)` — the index is

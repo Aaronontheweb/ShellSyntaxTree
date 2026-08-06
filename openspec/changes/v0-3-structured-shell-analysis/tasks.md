@@ -5,8 +5,8 @@
 - [x] 1.3 Lock candidate-count, structural-nesting, and existing wrapper-recursion limits with boundary scenarios.
 - [x] 1.4 Review Appendix B, lock the v0.3 grammar separately for Bash and PowerShell, and park every deferred form explicitly.
 - [x] 1.5 Resolve the initial pattern and divergent-cwd exposure rules, updating the bounded-analysis specification.
-- [ ] 1.6 Synchronize the accepted public API and shared requirements into `SPEC.md`.
-- [ ] 1.7 Synchronize PowerShell grammar and analysis deltas into `SPEC.POWERSHELL.md`.
+- [x] 1.6 Synchronize the accepted public API and shared requirements into `SPEC.md`.
+- [x] 1.7 Synchronize PowerShell grammar and analysis deltas into `SPEC.POWERSHELL.md`.
 - [x] 1.8 Update `PROJECT_CONTEXT.md` and `IMPLEMENTATION_PLAN.md` with the accepted v0.3 scope and delivery slices.
 - [x] 1.9 Add a paired Bash and PowerShell design corpus that records current behavior, desired structure, command occurrences, bounded values, redirect facts, compatibility projections, and security invariants.
 - [ ] 1.10 Promote each design case into the executable corpus as its production parser slice lands.
@@ -22,9 +22,9 @@
 
 ## 3. Structural and Projection Skeleton
 
-- [ ] 3.1 Add the locked public syntax-node hierarchy and defaults to the public API snapshot.
-- [ ] 3.2 Add the locked command-occurrence, role, ancestry, completeness, and analysis records to the public API snapshot.
-- [ ] 3.3 Add `ParsedCommand.Syntax` and `ParsedCommand.Commands` while retaining all v0.2 members.
+- [x] 3.1 Add the locked public syntax-node hierarchy and defaults to the public API snapshot.
+- [x] 3.2 Add the locked command-occurrence, role, ancestry, completeness, and analysis records to the public API snapshot.
+- [x] 3.3 Add `ParsedCommand.Syntax` and `ParsedCommand.Commands` while retaining all v0.2 members.
 - [ ] 3.4 Build a library-owned traversal that emits each simple command occurrence exactly once in deterministic source order.
 - [ ] 3.5 Build the conservative `Clauses` compatibility flattener without inventing cross-structure compound operators.
 - [ ] 3.6 Adapt the existing Bash grammar to emit the structural model with no newly supported syntax.
@@ -34,7 +34,7 @@
 
 ## 4. Explicit Redirect Semantics
 
-- [ ] 4.1 Add the locked redirect operation and target-analysis types while retaining compatibility redirect members.
+- [x] 4.1 Add the locked redirect operation and target-analysis types while retaining compatibility redirect members.
 - [ ] 4.2 Classify Bash descriptor duplication, close, and move as static only for the complete literal descriptor grammar.
 - [ ] 4.3 Keep variable-driven and otherwise computed Bash descriptor targets unknown or incomplete.
 - [ ] 4.4 Lex and classify Bash `&>` and `&>>` independently from background-list operators.

@@ -703,9 +703,15 @@ adapters remain shell-specific.
 
 Every enum introduced in v0.3 reserves zero as `Unknown`, except existing v0.2
 enums whose zero values are already locked. Consumers fail closed on `Unknown`
-or an unrecognized numeric value. The closed base constructor prevents external
-syntax-node implementations; later library versions may add derived records,
-so authorization code still needs a default fail-closed type-switch arm.
+or an unrecognized numeric value. The source implementation pairs the shown
+`private protected` ordinary base constructor with an assembly-only abstract
+ownership member. Records synthesize a protected copy constructor, so the
+ordinary constructor alone would still permit a specially constructed external
+derived record. The non-public abstract member makes every external concrete
+implementation fail compilation without adding to the public contract; every
+library-owned sealed node implements it internally. Later library versions may
+add derived records, so authorization code still needs a default fail-closed
+type-switch arm.
 
 ### Command occurrence and bounded values
 
