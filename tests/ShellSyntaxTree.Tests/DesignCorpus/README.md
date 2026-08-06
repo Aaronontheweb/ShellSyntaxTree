@@ -36,3 +36,9 @@ publishing a truncated finite set. Supported heredocs and Bash here strings
 record data separately from executable substitutions and path-relevant
 redirects. Constructs deliberately deferred beyond stable v0.3 remain in the
 corpus as unparseable security boundaries.
+
+Resolver-provenance cases additionally pin selected current `Arg` fields. They
+record the v0.2 false path claim until its production slice lands, while the
+desired effective value records the literal shell value proved by the paired
+real-shell oracle. Those cases then move into the executable corpus instead of
+being treated as behavior that issue #69 must preserve.

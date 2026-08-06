@@ -109,6 +109,64 @@ consumption, error recovery, quoting, and expression boundaries that already
 differ between the two shells. Shared components are composed as explicit
 classifiers and analysis passes instead.
 
+### Preserve resolver-relevant fragments through decoding
+
+The v0.2 lexer-to-resolver contract is too weak for a security parser. A
+decoded `string` plus `IsSingleQuoted` cannot distinguish Bash `\$HOME` from
+`$HOME`, or PowerShell `` `$HOME `` from `$HOME`. Both pairs decode to the same
+text, but the first value in each pair is literal and the second expands. The
+current resolver consequently reports a different filesystem path from the
+one the shell passes to the executable.
+
+Both shell front ends SHALL retain resolver-relevant value fragments through
+decoding. The internal representation is not public API, but it must preserve
+the ordered decoded text, exact source range when available, and one of these
+shell-owned dispositions for every fragment:
+
+- `Literal`: quoting or escaping suppresses resolver transformation;
+- `Expandable`: the selected shell permits the relevant transformation;
+- `Opaque`: the parser cannot prove the produced value.
+
+A representative internal shape is:
+
+```csharp
+internal enum ShellValueFragmentKind
+{
+    Literal,
+    Expandable,
+    Opaque,
+}
+
+internal readonly record struct ShellValueFragment(
+    string Value,
+    ShellValueFragmentKind Kind,
+    int? SourceStart,
+    int? SourceLength);
+
+internal readonly record struct ShellValue(
+    string Decoded,
+    IReadOnlyList<ShellValueFragment> Fragments);
+```
+
+This mock is non-normative: an equivalent boundary map or compact segment
+representation is acceptable. A single aggregate `IsLiteral` flag is not
+acceptable because one authored word can contain both expandable and escaped
+regions. The resolver transforms only eligible `Expandable` regions and
+preserves `Literal` regions byte-for-byte. When every fragment, supported
+transformation, and the required cwd or home fact is exact, it must compose and
+resolve the exact result even when literal and expandable fragments are mixed;
+it cannot choose `DynamicSkip` merely because retaining provenance requires
+more work. `DynamicSkip` is reserved for an `Opaque` fragment, an incomplete
+boundary, an unknown required fact, or an unsupported transformation that
+prevents an exact path claim. The resolver never infers expansion solely from
+the decoded string.
+
+Issue #69's shared native argument classifier consumes these proved fragments
+through explicit Bash and PowerShell adapters. It may own adjacency, decoded
+concatenation, and source-span aggregation, but the adapters retain shell
+quoting and escaping semantics. This correction is internal and leaves the
+v0.2 public leaf records and the locked additive v0.3 public API unchanged.
+
 ### Represent simple commands with existing Clause leaves
 
 A simple-command syntax node wraps the same `Clause` value exposed through the
@@ -227,14 +285,16 @@ declared completely analyzable.
 The implementation order is:
 
 1. Lock public types, compatibility behavior, completeness, and fixed bounds.
-2. Extract issue #69 and other behavior-preserving shared helpers.
-3. Produce `Syntax`, `Commands`, and unchanged `Clauses` for existing grammar.
-4. Validate the new consumer path on existing Netclaw cases.
-5. Add Bash `for ... in` with literal values first.
-6. Add PowerShell `foreach` with literal arrays next.
-7. Extract shared occurrence/value/state machinery proven by both slices.
-8. Add bounded patterns and iterator/substitution command discovery.
-9. Add condition loops and branches in separately testable shell-specific
+2. Correct resolver-fragment provenance with paired real-shell oracles.
+3. Extract issue #69 and other shared helpers against the corrected behavior.
+4. Produce `Syntax`, `Commands`, and retained compatibility `Clauses` for
+   existing grammar, including the explicit oracle-proved resolver corrections.
+5. Validate the new consumer path on existing Netclaw cases.
+6. Add Bash `for ... in` with literal values first.
+7. Add PowerShell `foreach` with literal arrays next.
+8. Extract shared occurrence/value/state machinery proven by both slices.
+9. Add bounded patterns and iterator/substitution command discovery.
+10. Add condition loops and branches in separately testable shell-specific
    slices.
 
 This order prevents a complete Bash implementation from hardening a
@@ -267,6 +327,9 @@ corpus remains sanitized under the existing PII audit.
 - **[Shared abstractions erase language semantics]** -> Keep lexers and
   structural parsers separate; extract only duplication demonstrated by both
   working slices.
+- **[Decoded values erase expansion provenance]** -> Retain ordered internal
+  literal, expandable, and opaque fragments; never let a resolver reconstruct
+  those facts from decoded text alone.
 - **[Partial trees invite partial authorization]** -> Keep
   `IsUnparseable=true`, return empty `Commands` and `Clauses`, and keep any
   partial syntax diagnostic-only.
@@ -283,12 +346,17 @@ corpus remains sanitized under the existing PII audit.
 2. Accept the OpenSpec and synchronize the locked API and grammar into
    `SPEC.md`, `SPEC.POWERSHELL.md`, `PROJECT_CONTEXT.md`, and
    `IMPLEMENTATION_PLAN.md`.
-3. Ship the new structural and occurrence API in a 0.3.0 alpha while all
-   existing grammar produces byte-for-byte equivalent compatibility facts.
-4. Migrate Netclaw to `Commands` and explicit redirect facts before enabling
+3. Correct the internal resolver-fragment contract and promote each paired
+   design case into the executable corpus before extracting issue #69.
+4. Ship the new structural and occurrence API in a 0.3.0 alpha while existing
+   grammar preserves raw spelling, decoded logical values, source spans, and
+   unaffected compatibility facts. Paired shell-oracle corrections to false
+   path or `DynamicSkip` claims are explicit compatibility notes, not hidden
+   behavior-preserving changes.
+5. Migrate Netclaw to `Commands` and explicit redirect facts before enabling
    supported control flow for authorization reuse.
-5. Add Bash and PowerShell vertical slices behind corpus and integration gates.
-6. Promote 0.3.0 only after both shells, old-consumer fail-closed behavior, and
+6. Add Bash and PowerShell vertical slices behind corpus and integration gates.
+7. Promote 0.3.0 only after both shells, old-consumer fail-closed behavior, and
    the new Netclaw consumer path pass their acceptance matrices.
 
 Before stable 0.3.0, a flawed new surface can be revised with prerelease

@@ -22,6 +22,9 @@ fail-closed behavior for incomplete analysis.
 - Add conservative value and shell-state analysis that distinguishes exact,
   finite, bounded-symbolic, and unknown facts without executing commands or
   enumerating the filesystem.
+- Preserve resolver-relevant lexical fragments through decoding so escaped or
+  quoted literal syntax cannot be mistaken for expandable syntax with the same
+  decoded text.
 - Add explicit redirect operation and target facts so consumers do not infer
   descriptor duplication, close, move, combined output, or dynamic targets
   from raw strings and `DynamicSkip` alone.
@@ -72,6 +75,12 @@ shell parsers, corpus schemas, public API snapshots, the shared and
 PowerShell specifications, and `docs/CONSUMER_GUIDE.md`. Adding properties to
 public records also changes generated equality, hashing, `ToString()`, and
 default serialization and therefore requires explicit migration notes.
+
+The implementation also corrects a v0.2 security defect at an internal
+boundary: decoded token text currently loses whether resolver-sensitive bytes
+were literal or expandable. The correction fixes false path claims and
+avoidable `DynamicSkip` results while retaining the shipped public API, raw
+spelling, decoded logical values, and source spans.
 
 Netclaw is the validating consumer. Its 0.25.4 redirect workaround remains the
 short-term containment; a v0.3 integration must switch authorization traversal

@@ -1,5 +1,66 @@
 ## ADDED Requirements
 
+### Requirement: Decoded values retain resolver provenance
+The parser SHALL retain enough shell-specific lexical provenance to distinguish
+resolver-sensitive literal, expandable, and opaque fragments after escape and
+quote decoding. It SHALL NOT infer whether text expands solely from the
+decoded string. Literal fragments SHALL remain literal and eligible expandable
+fragments SHALL be transformed under the existing bounded rules. When every
+fragment, supported transformation, and required cwd or home fact is exact,
+the parser SHALL compose the exact shell value and SHALL return the exact
+compatibility path result for a path position. It SHALL NOT return `DynamicSkip`
+solely because one value contains both literal and expandable fragments. An
+opaque or incompletely mapped fragment, unknown required fact, or unsupported
+transformation SHALL produce an unknown or `DynamicSkip` fact rather than a
+false path.
+
+The provenance representation is internal and SHALL NOT change the v0.2 public
+leaf API. Raw spelling, decoded logical values, and exact-or-null source spans
+retain their existing meanings.
+
+#### Scenario: Bash escaped variable is a literal path component
+- **WHEN** Bash parses `cat \$HOME` with an exact working directory
+- **THEN** the shell value is the literal `$HOME`
+- **THEN** the compatibility argument is a literal path resolved as `<cwd>/$HOME`
+- **THEN** it is not `DynamicSkip` and is not resolved as the configured home directory
+
+#### Scenario: PowerShell escaped variable is a literal path component
+- **WHEN** PowerShell parses ``Get-Content `$HOME`` with an exact working directory
+- **THEN** the shell value is the literal `$HOME`
+- **THEN** the compatibility argument is a literal path resolved as `<cwd>/$HOME`
+- **THEN** it is not `DynamicSkip` and is not resolved as the configured home directory
+
+#### Scenario: Escaped prefix composes with an adjacent quoted suffix
+- **WHEN** either shell parses its escaped-dollar spelling of `curl --data=@$HOME".json" URL`
+- **THEN** the complete native argument retains exact raw and decoded provenance
+- **THEN** curl's compatibility file operand is the literal path `<cwd>/$HOME.json`
+- **THEN** it is not `DynamicSkip` and is not a path under the configured home directory
+
+#### Scenario: All-static mixed quoting remains exact
+- **WHEN** either shell parses `curl --data='@$HOME'".json" URL`
+- **THEN** both adjacent fragments retain literal provenance
+- **THEN** the compatibility file operand is the literal path `<cwd>/$HOME.json`
+- **THEN** it is not `DynamicSkip`
+
+#### Scenario: Escape provenance survives inside one quoted token
+- **WHEN** either shell parses its escaped-dollar spelling of a quoted `$HOME.txt` path
+- **THEN** the literal dollar and the rest of the token compose exactly
+- **THEN** the compatibility argument resolves as `<cwd>/$HOME.txt`, not under the configured home directory
+
+#### Scenario: Literal and expandable regions compose inside one token
+- **WHEN** either shell parses its spelling of a quoted literal `${HOME}` followed by an expandable `$HOME`
+- **THEN** the first region remains literal and the second uses the configured home fact
+- **THEN** the exact composed shell value is retained rather than becoming `DynamicSkip`
+
+#### Scenario: Expandable variable remains expandable
+- **WHEN** either shell parses an unescaped expandable `$HOME` in a supported path position
+- **THEN** the resolver may use the configured home-directory fact
+- **THEN** the escaped and expandable spellings do not collapse to the same provenance
+
+#### Scenario: Opaque fragment remains fail closed
+- **WHEN** an adjacent native argument contains a command substitution, subexpression, splat, or another opaque fragment
+- **THEN** the parser does not synthesize an exact path from the remaining decoded text
+
 ### Requirement: Shell values use explicit proof domains
 The analysis SHALL classify a policy-relevant shell value as exact, finite,
 bounded symbolic pattern, or unknown, and SHALL NOT present a weaker proof as a

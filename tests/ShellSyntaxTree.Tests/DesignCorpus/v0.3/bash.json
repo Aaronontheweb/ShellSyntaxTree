@@ -514,6 +514,205 @@
         "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted"]
       },
       "notes": "The unknown value is not automatically approval-sensitive for cat, but a consumer can classify the same stdin position as sensitive for an interpreter such as bash."
+    },
+    {
+      "id": "bash-escaped-home-literal-path",
+      "concern": "Escaped variable provenance survives word decoding",
+      "input": "cat \\$HOME",
+      "current": {
+        "isUnparseable": false,
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 0,
+          "raw": "\\$HOME",
+          "kind": "Tilde",
+          "isPath": true,
+          "resolved": "/home/test"
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "cat",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\\$HOME", "kind": "Exact", "values": ["$HOME"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 0,
+          "raw": "\\$HOME",
+          "kind": "Literal",
+          "isPath": true,
+          "resolved": "/work/$HOME"
+        },
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      },
+      "notes": "The real Bash argv value is the literal relative filename $HOME. The v0.2 parser incorrectly substitutes the configured home directory."
+    },
+    {
+      "id": "bash-escaped-home-adjacent-native-fragment",
+      "concern": "Escaped inline prefix composes with a quoted suffix",
+      "input": "curl --data=@\\$HOME\".json\" https://example.invalid/api",
+      "current": {
+        "isUnparseable": false,
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 1,
+          "raw": "@\\$HOME\".json\"",
+          "kind": "Tilde",
+          "isPath": true,
+          "resolved": "/home/test.json"
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "curl",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "--data=@\\$HOME\".json\"", "kind": "Exact", "values": ["--data=@$HOME.json"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 1,
+          "raw": "@\\$HOME\".json\"",
+          "kind": "Literal",
+          "isPath": true,
+          "resolved": "/work/$HOME.json"
+        },
+        "compatibility": { "verbs": ["curl"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "Bash passes one native argument containing a literal $HOME.json file reference; the current resolver reports /home/test.json instead."
+    },
+    {
+      "id": "bash-static-mixed-quote-native-fragment",
+      "concern": "All-static mixed quoting resolves without DynamicSkip",
+      "input": "curl --data='@$HOME'\".json\" https://example.invalid/api",
+      "current": {
+        "isUnparseable": false,
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 1,
+          "raw": "'@$HOME'\".json\"",
+          "kind": "DynamicSkip",
+          "isPath": false
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "curl",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "--data='@$HOME'\".json\"", "kind": "Exact", "values": ["--data=@$HOME.json"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 1,
+          "raw": "'@$HOME'\".json\"",
+          "kind": "Literal",
+          "isPath": true,
+          "resolved": "/work/$HOME.json"
+        },
+        "compatibility": { "verbs": ["curl"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "Both fragments are static. The existing DynamicSkip expectation in executable corpus case 166 is an approval-fatigue workaround for lost provenance, not the desired v0.3 result."
+    },
+    {
+      "id": "bash-double-quoted-escaped-home-path",
+      "concern": "Escape provenance survives within one double-quoted token",
+      "input": "cat \"\\$HOME.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 0,
+          "raw": "\"\\$HOME.txt\"",
+          "kind": "Tilde",
+          "isPath": true,
+          "resolved": "/home/test.txt"
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "cat",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"\\$HOME.txt\"", "kind": "Exact", "values": ["$HOME.txt"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 0,
+          "raw": "\"\\$HOME.txt\"",
+          "kind": "Literal",
+          "isPath": true,
+          "resolved": "/work/$HOME.txt"
+        },
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      }
+    },
+    {
+      "id": "bash-double-quoted-literal-expandable-composition",
+      "concern": "Literal and expandable regions compose within one token",
+      "input": "echo \"\\${HOME}-$HOME\"",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "echo", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "echo",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"\\${HOME}-$HOME\"", "kind": "Exact", "values": ["${HOME}-/home/test"], "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["echo"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      }
     }
   ]
 }

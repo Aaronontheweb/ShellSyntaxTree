@@ -485,6 +485,205 @@
         "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted", "ShellSpecificOptionSemantics"]
       },
       "notes": "PowerShell's literal here string does not interpolate the dollar expression and does not produce a RedirectAnalysis entry."
+    },
+    {
+      "id": "pwsh-escaped-home-literal-path",
+      "concern": "Backtick-escaped variable provenance survives word decoding",
+      "input": "Get-Content `$HOME",
+      "current": {
+        "isUnparseable": false,
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 0,
+          "raw": "`$HOME",
+          "kind": "Tilde",
+          "isPath": true,
+          "resolved": "C:/Users/user"
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Get-Content",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "`$HOME", "kind": "Exact", "values": ["$HOME"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 0,
+          "raw": "`$HOME",
+          "kind": "Literal",
+          "isPath": true,
+          "resolved": "C:/work/$HOME"
+        },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      },
+      "notes": "The real PowerShell argv value is the literal relative filename $HOME. The v0.2 parser incorrectly substitutes the configured home directory."
+    },
+    {
+      "id": "pwsh-escaped-home-adjacent-native-fragment",
+      "concern": "Backtick-escaped inline prefix composes with a quoted suffix",
+      "input": "curl --data=@`$HOME\".json\" https://example.invalid/api",
+      "current": {
+        "isUnparseable": false,
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 1,
+          "raw": "@`$HOME\".json\"",
+          "kind": "Tilde",
+          "isPath": true,
+          "resolved": "C:/Users/user.json"
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "curl",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "--data=@`$HOME\".json\"", "kind": "Exact", "values": ["--data=@$HOME.json"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 1,
+          "raw": "@`$HOME\".json\"",
+          "kind": "Literal",
+          "isPath": true,
+          "resolved": "C:/work/$HOME.json"
+        },
+        "compatibility": { "verbs": ["curl"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "PowerShell passes one native argument containing a literal $HOME.json file reference; the current resolver reports C:/Users/user.json instead."
+    },
+    {
+      "id": "pwsh-static-mixed-quote-native-fragment",
+      "concern": "All-static mixed quoting resolves without DynamicSkip",
+      "input": "curl --data='@$HOME'\".json\" https://example.invalid/api",
+      "current": {
+        "isUnparseable": false,
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 1,
+          "raw": "'@$HOME'\".json\"",
+          "kind": "DynamicSkip",
+          "isPath": false
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "curl",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "--data='@$HOME'\".json\"", "kind": "Exact", "values": ["--data=@$HOME.json"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 1,
+          "raw": "'@$HOME'\".json\"",
+          "kind": "Literal",
+          "isPath": true,
+          "resolved": "C:/work/$HOME.json"
+        },
+        "compatibility": { "verbs": ["curl"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "Both fragments are static. The existing DynamicSkip expectation in executable corpus case 280 is an approval-fatigue workaround for lost provenance, not the desired v0.3 result."
+    },
+    {
+      "id": "pwsh-double-quoted-escaped-home-path",
+      "concern": "Backtick escape provenance survives within one double-quoted token",
+      "input": "Get-Content \"`$HOME.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 0,
+          "raw": "\"`$HOME.txt\"",
+          "kind": "Tilde",
+          "isPath": true,
+          "resolved": "C:/Users/user.txt"
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Get-Content",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"`$HOME.txt\"", "kind": "Exact", "values": ["$HOME.txt"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": {
+          "clauseIndex": 0,
+          "argumentIndex": 0,
+          "raw": "\"`$HOME.txt\"",
+          "kind": "Literal",
+          "isPath": true,
+          "resolved": "C:/work/$HOME.txt"
+        },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      }
+    },
+    {
+      "id": "pwsh-double-quoted-literal-expandable-composition",
+      "concern": "Literal and expandable regions compose within one token",
+      "input": "Write-Output \"`${HOME}-$HOME\"",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Write-Output",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"`${HOME}-$HOME\"", "kind": "Exact", "values": ["${HOME}-C:/Users/user"], "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      }
     }
   ]
 }

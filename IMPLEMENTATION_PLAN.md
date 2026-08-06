@@ -151,8 +151,20 @@ priorities.
       synchronize the accepted shared and PowerShell contracts into
       `SPEC.md` / `SPEC.POWERSHELL.md` together with source and snapshot tests
       so the repository authority never intentionally drifts from the assembly.
+- [ ] Correct the lexer-to-resolver provenance boundary before issue #69.
+      Paired Bash and PowerShell shell-oracle cases must distinguish escaped
+      literal resolver syntax from expandable syntax even when both decode to
+      the same string, including standalone, adjacent-token, all-static
+      mixed-quote, within-token escape, and literal-plus-expandable cases.
+      Preserve ordered literal / expandable / opaque fragments internally;
+      require exact composition when every fragment and resolver fact is
+      exact, do not change the v0.2 public API, and never infer expansion from
+      decoded text.
 - [ ] Implement [issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69)
-      as the first behavior-preserving preparation after contract lock.
+      against the corrected fragment contract. Preserve raw, decoded, and span
+      facts plus unaffected classifications; explicitly document only
+      shell-oracle-proved compatibility corrections to false path claims and
+      avoidable `DynamicSkip` results.
 - [ ] Add the structural and command-occurrence projections for the existing
       grammar before enabling any control-flow construct.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
