@@ -16,8 +16,9 @@ of whether the command is top-level or nested.
 - **THEN** its possible effective values are represented by analysis facts rather than three duplicated occurrences
 
 ### Requirement: Occurrences identify structural execution roles
-Each command occurrence SHALL identify the structural role by which it may
-execute and SHALL retain enough ancestry for diagnostics and UI grouping.
+Each command occurrence SHALL identify its immediate structural execution role
+and SHALL retain compositional ancestry for analysis, diagnostics, and UI
+grouping.
 
 #### Scenario: While condition and body roles
 - **WHEN** Bash parses `while curl URL; do sleep 1; done`
@@ -28,6 +29,11 @@ execute and SHALL retain enough ancestry for diagnostics and UI grouping.
 - **WHEN** PowerShell parses `foreach ($f in Get-ChildItem C:\input) { Remove-Item $f }`
 - **THEN** `Get-ChildItem` is identified as an iterator occurrence
 - **THEN** `Remove-Item` is identified as a loop-body occurrence
+
+#### Scenario: Pipeline stage nested in a loop body
+- **WHEN** Bash parses `for f in a b; do printf '%s\n' "$f" | sort; done`
+- **THEN** `printf` and `sort` have the immediate role pipeline stage
+- **THEN** their ancestry also identifies the enclosing loop body
 
 ### Requirement: Iterator and substitution commands remain visible
 The parser SHALL include every inner command from a supported executable
@@ -57,6 +63,11 @@ be sufficient authorization evidence.
 - **WHEN** Bash parses `echo ready` in a supported loop body
 - **THEN** the occurrence is structurally complete
 - **THEN** completeness does not imply that `echo` is authorized
+
+#### Scenario: Complete occurrence with unknown value
+- **WHEN** PowerShell parses `foreach ($item in Get-ChildItem) { Write-Output $item }`
+- **THEN** the `Write-Output` occurrence may be structurally complete
+- **THEN** its effective `$item` value remains unknown because pipeline objects are not evaluated
 
 ### Requirement: Source order is deterministic
 The occurrence collection SHALL be ordered by authored command occurrence,

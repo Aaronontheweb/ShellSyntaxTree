@@ -48,10 +48,11 @@ shell's quoting and expansion rules prove the resulting argument boundaries.
 - **WHEN** a PowerShell `foreach` variable may hold objects emitted by a pipeline
 - **THEN** its effective string or path value is unknown
 
-### Requirement: Executable semantics are reapplied after substitution
-ShellSyntaxTree SHALL preserve effective candidate values without claiming
-whether they are options, operands, subcommands, revisions, or paths for a
-particular executable. Consumers SHALL interpret every candidate through a
+### Requirement: Shell and executable semantics are reapplied after substitution
+ShellSyntaxTree SHALL preserve the authored shell classification together with
+effective candidate values without claiming whether native-command candidates
+are options, operands, subcommands, revisions, or paths. Consumers SHALL apply
+the shell's binding rules and interpret every native candidate through a
 complete executable-aware grammar before reusing authorization.
 
 #### Scenario: Finite value injects an rm option
@@ -63,6 +64,16 @@ complete executable-aware grammar before reusing authorization.
 - **WHEN** Bash parses `for f in -rf /tmp/x; do rm -- "$f"; done`
 - **THEN** the authored `--` remains visible before the effective candidate
 - **THEN** the consumer may account for it using rm semantics
+
+#### Scenario: PowerShell cmdlet parameter-like value
+- **WHEN** PowerShell parses `foreach ($value in '-Force') { Write-Output $value }`
+- **THEN** the authored variable argument remains a positional expression
+- **THEN** the effective string `-Force` is not retroactively classified as a cmdlet parameter token
+
+#### Scenario: PowerShell native option-like value
+- **WHEN** PowerShell parses `foreach ($value in '--force') { git clean $value }`
+- **THEN** the authored variable argument remains distinct from its effective value
+- **THEN** the consumer applies the native executable grammar to `--force`
 
 ### Requirement: Control-flow state joins conservatively
 Working-directory and supported variable state SHALL be propagated through

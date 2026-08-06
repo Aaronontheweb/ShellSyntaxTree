@@ -123,15 +123,22 @@ than inventing offsets into escaped or encoded outer text.
 
 `Commands` contains one entry per authored simple command that may execute,
 not one entry per predicted runtime iteration. Each occurrence carries its
-`Clause`, structural role, ancestry suitable for diagnostics, and an explicit
-completeness fact. Roles include at least ordinary, pipeline stage, condition,
-iterator, loop body, branch, and substitution; the final names are locked with
-the public API review.
+`Clause`, immediate structural role, compositional ancestry suitable for
+analysis and diagnostics, and an explicit completeness fact. Immediate roles
+include at least ordinary, pipeline stage, condition, iterator, loop body,
+branch, and substitution; ancestry frames retain every outer role, such as a
+pipeline stage nested inside a loop body. The final names are locked with the
+public API review.
 
 Condition and iterator commands are never omitted. Mutually exclusive branch
 commands all appear because the collection is a may-execute set. Runtime loop
 counts do not duplicate occurrences; bounded variable domains describe the
 possible effective values at the occurrence.
+
+Completeness and value precision are independent. A structurally complete
+occurrence may conservatively contain an `Unknown` value domain when the
+command and its ancestry are fully discovered but a runtime value cannot be
+proved.
 
 If any executable region cannot be discovered completely, the containing
 `ParsedCommand` remains `IsUnparseable=true`. Partial syntax and occurrences
@@ -171,10 +178,13 @@ shell rules prove the resulting argument boundary. Unquoted Bash expansion,
 PowerShell object-valued pipelines, indirect expansion, mutation, and
 cross-product explosion remain unknown until separately specified.
 
-Effective values are shell facts, not executable semantics. A consumer must
-re-run its executable-aware option grammar for every exact or finite candidate;
-for example, a loop value beginning with `-` may inject an option even if the
-authored `$variable` token was not option-shaped.
+Effective values are shell facts, not executable semantics. The analysis must
+preserve both the authored shell classification and each proved effective
+value. PowerShell does not retroactively turn a string value such as `-Force`
+into a cmdlet parameter token, while the same value passed to a native
+executable may participate in that executable's option grammar. A consumer
+must therefore apply the relevant shell binding rules and re-run its complete
+executable-aware grammar for every exact or finite candidate.
 
 ### Join state rather than selecting a path
 
@@ -393,7 +403,7 @@ remain shell-specific regardless of the eventual public choice.
 public sealed record CommandOccurrence
 {
     public Clause Clause { get; init; } = new();
-    public CommandOccurrenceRole Role { get; init; }
+    public CommandOccurrenceRole ImmediateRole { get; init; }
     public IReadOnlyList<CommandAncestryFrame> Ancestry { get; init; } = [];
     public IReadOnlyList<EffectiveArgument> EffectiveArguments { get; init; } = [];
     public ShellValueDomain WorkingDirectory { get; init; } = ShellValueDomain.Unknown;
@@ -444,6 +454,8 @@ the compatibility leaf and provides a place for one authored token to have
 multiple possible effective values. Contract review must still account for
 redirect operands, inline option bindings, shell expansions that create more
 than one argument, and occurrences that do not have an exact outer source span.
+An `Unknown` value at one of those coordinates does not by itself make the
+occurrence structurally incomplete.
 
 ### Explicit redirect facts
 

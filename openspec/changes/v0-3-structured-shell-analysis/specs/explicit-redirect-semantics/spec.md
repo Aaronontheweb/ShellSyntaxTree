@@ -84,6 +84,11 @@ executable may interpret that data as code.
 - **THEN** the body is preserved as non-expanding authored data
 - **THEN** the parser does not execute or reinterpret the receiving command
 
+#### Scenario: Quoted delimiter adjacent to the operator
+- **WHEN** Bash parses `cat <<'EOF'` followed by a body and the `EOF` delimiter
+- **THEN** the quoted delimiter is recognized without requiring whitespace after `<<`
+- **THEN** the result is not reported as missing a delimiter
+
 #### Scenario: Executable substitution in an expanding body
 - **WHEN** a supported expanding heredoc body contains command substitution
 - **THEN** the inner command is exposed or the result is unparseable

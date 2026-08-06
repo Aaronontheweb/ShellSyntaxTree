@@ -1,0 +1,410 @@
+{
+  "shell": "PowerShell",
+  "cases": [
+    {
+      "id": "pwsh-foreach-literal-array",
+      "concern": "Finite literal foreach binding",
+      "input": "foreach ($f in @('a.txt', 'b.txt')) { Remove-Item -LiteralPath $f }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Remove-Item",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$f", "kind": "FiniteSet", "values": ["a.txt", "b.txt"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-pipeline-iterator",
+      "concern": "Iterator command produces unknown PowerShell objects",
+      "input": "foreach ($f in Get-ChildItem C:\\input) { Remove-Item -LiteralPath $f }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "iterator", "kind": "Block", "parent": "loop", "slot": "Iterator" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "iterator", "slot": "Statement", "commandIndex": 0 },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Get-ChildItem", "immediateRole": "Iterator", "ancestry": ["root", "loop", "iterator"], "isComplete": true },
+          {
+            "authoredVerb": "Remove-Item",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$f", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Get-ChildItem", "Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "IteratorCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "The iterator emits filesystem objects, not proved literal strings."
+    },
+    {
+      "id": "pwsh-foreach-cmdlet-parameter-like-value",
+      "concern": "Expanded cmdlet value is not a syntactic parameter token",
+      "input": "foreach ($f in @('-Force', 'a.txt')) { Remove-Item $f }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Remove-Item",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$f", "kind": "FiniteSet", "values": ["-Force", "a.txt"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["EveryFiniteCandidateEvaluated", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "PowerShell parameter binding is syntax-aware; this differs from passing a leading-hyphen value to a native executable."
+    },
+    {
+      "id": "pwsh-foreach-native-option-like-value",
+      "concern": "Finite value can affect native option parsing",
+      "input": "foreach ($f in @('-n', 'file.txt')) { tool $f }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "tool", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "tool",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$f", "kind": "FiniteSet", "values": ["-n", "file.txt"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["tool"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["EveryFiniteCandidateEvaluated", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-nested-foreach",
+      "concern": "Nested finite domains and structural ancestry",
+      "input": "foreach ($d in @('a', 'b')) { foreach ($f in @('x', 'y')) { Write-Output \"$d/$f\" } }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "outer", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "d" },
+          { "id": "outerBody", "kind": "Block", "parent": "outer", "slot": "Body" },
+          { "id": "inner", "kind": "ForEach", "parent": "outerBody", "slot": "Statement", "binding": "f" },
+          { "id": "innerBody", "kind": "Block", "parent": "inner", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "innerBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Write-Output",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "outer", "outerBody", "inner", "innerBody"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$d/$f\"", "kind": "FiniteSet", "values": ["a/x", "a/y", "b/x", "b/y"], "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-body-pipeline",
+      "concern": "Pipeline roles inside foreach ancestry",
+      "input": "foreach ($f in @('a', 'b')) { Write-Output $f | Sort-Object }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "pipe", "kind": "Pipeline", "parent": "body", "slot": "Statement" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 0 },
+          { "id": "sort", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 1 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Write-Output",
+            "immediateRole": "PipelineStage",
+            "ancestry": ["root", "loop", "body", "pipe"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$f", "kind": "FiniteSet", "values": ["a", "b"], "isPolicySensitive": false }
+            ]
+          },
+          { "authoredVerb": "Sort-Object", "immediateRole": "PipelineStage", "ancestry": ["root", "loop", "body", "pipe"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Write-Output", "Sort-Object"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "pwsh-pipeline-foreach-alias",
+      "concern": "Contextual foreach alias is not a foreach statement",
+      "input": "Get-ChildItem | foreach { Remove-Item $_ }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "pipe", "kind": "Pipeline", "parent": "root", "slot": "Statement" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 0 },
+          { "id": "foreachAlias", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 1 },
+          { "id": "scriptBlock", "kind": "OpaqueArgument", "parent": "foreachAlias", "slot": "Argument" }
+        ],
+        "commands": [
+          { "authoredVerb": "Get-ChildItem", "immediateRole": "PipelineStage", "ancestry": ["root", "pipe"], "isComplete": true },
+          {
+            "authoredVerb": "foreach",
+            "canonicalVerb": "ForEach-Object",
+            "immediateRole": "PipelineStage",
+            "ancestry": ["root", "pipe"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "{ Remove-Item $_ }", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Get-ChildItem", "foreach"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["ContextualKeywordNotControlFlow", "OpaqueDataNotExecuted", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "ShellSyntaxTree does not assume that a ForEach-Object script-block argument executes as an independently authorized shell command."
+    },
+    {
+      "id": "pwsh-malformed-foreach-missing-body",
+      "concern": "Missing statement body safe-fail",
+      "input": "foreach ($f in 1, 2) Remove-Item $f",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Unsupported", "slot": "Root" }
+        ],
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-while-command-condition",
+      "concern": "PowerShell condition command visibility",
+      "input": "while (Test-Path marker.txt) { Remove-Item marker.txt }",
+      "current": { "isUnparseable": true, "reasonContains": "'while'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ConditionLoop", "parent": "root", "slot": "Statement" },
+          { "id": "condition", "kind": "Block", "parent": "loop", "slot": "Condition" },
+          { "id": "test", "kind": "SimpleCommand", "parent": "condition", "slot": "Statement", "commandIndex": 0 },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Test-Path", "immediateRole": "Condition", "ancestry": ["root", "loop", "condition"], "isComplete": true },
+          { "authoredVerb": "Remove-Item", "immediateRole": "LoopBody", "ancestry": ["root", "loop", "body"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Test-Path", "Remove-Item"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ConditionCommandsVisible"]
+      }
+    },
+    {
+      "id": "pwsh-if-location-join",
+      "concern": "Divergent PowerShell location state",
+      "input": "if (Test-Path marker.txt) { Set-Location C:\\a } else { Set-Location C:\\b }; Get-ChildItem file.txt",
+      "current": { "isUnparseable": true, "reasonContains": "'if'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "if", "kind": "Conditional", "parent": "root", "slot": "Statement" },
+          { "id": "condition", "kind": "Block", "parent": "if", "slot": "Condition" },
+          { "id": "test", "kind": "SimpleCommand", "parent": "condition", "slot": "Statement", "commandIndex": 0 },
+          { "id": "then", "kind": "Block", "parent": "if", "slot": "Then" },
+          { "id": "setA", "kind": "SimpleCommand", "parent": "then", "slot": "Statement", "commandIndex": 1 },
+          { "id": "else", "kind": "Block", "parent": "if", "slot": "Else" },
+          { "id": "setB", "kind": "SimpleCommand", "parent": "else", "slot": "Statement", "commandIndex": 2 },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 3 }
+        ],
+        "commands": [
+          { "authoredVerb": "Test-Path", "immediateRole": "Condition", "ancestry": ["root", "if", "condition"], "isComplete": true },
+          { "authoredVerb": "Set-Location", "immediateRole": "Branch", "ancestry": ["root", "if", "then"], "isComplete": true },
+          { "authoredVerb": "Set-Location", "immediateRole": "Branch", "ancestry": ["root", "if", "else"], "isComplete": true },
+          {
+            "authoredVerb": "Get-ChildItem",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "file.txt", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Test-Path", "Set-Location", "Set-Location", "Get-ChildItem"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "ConditionCommandsVisible", "StateJoinConservative", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-ordinary-scriptblock-argument",
+      "concern": "Executable-specific script-block data remains opaque",
+      "input": "Invoke-Command { Remove-Item secret.txt }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "invoke", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "scriptBlock", "kind": "OpaqueArgument", "parent": "invoke", "slot": "Argument" }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Invoke-Command",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "{ Remove-Item secret.txt }", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Invoke-Command"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["OpaqueDataNotExecuted", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-dynamic-command-identity",
+      "concern": "Dynamic invocation in a bounded loop body",
+      "input": "foreach ($f in @('a', 'b')) { & $exe $f }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "dynamic", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "$exe",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": false,
+            "effectiveValues": [
+              { "sourceElement": "$f", "kind": "FiniteSet", "values": ["a", "b"], "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["$exe"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-static-stream-merge",
+      "concern": "Static PowerShell stream merge",
+      "input": "Get-ChildItem 2>&1",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Get-ChildItem",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "redirects": [
+              { "operation": "DescriptorDuplicate", "sourceDescriptor": 2, "targetDescriptor": 1, "isPathRelevant": false, "isComplete": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Get-ChildItem"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StaticRedirectNotDynamic"]
+      }
+    },
+    {
+      "id": "pwsh-contextual-foreach-argument",
+      "concern": "Control keyword used as ordinary argument",
+      "input": "Write-Output foreach",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ContextualKeywordNotControlFlow"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-location-zero-iteration-join",
+      "concern": "Loop exit includes zero-iteration location state",
+      "input": "foreach ($d in @('C:\\a', 'C:\\b')) { Set-Location $d }; Get-ChildItem file.txt",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "d" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "set", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "Set-Location",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$d", "kind": "FiniteSet", "values": ["C:\\a", "C:\\b"], "isPolicySensitive": true }
+            ]
+          },
+          {
+            "authoredVerb": "Get-ChildItem",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "file.txt", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Set-Location", "Get-ChildItem"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "StateJoinConservative", "UnknownPolicyValueFailsClosed"]
+      }
+    }
+  ]
+}

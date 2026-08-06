@@ -8,6 +8,8 @@
 - [ ] 1.6 Synchronize the accepted public API and shared requirements into `SPEC.md`.
 - [ ] 1.7 Synchronize PowerShell grammar and analysis deltas into `SPEC.POWERSHELL.md`.
 - [ ] 1.8 Update `PROJECT_CONTEXT.md` and `IMPLEMENTATION_PLAN.md` with the accepted v0.3 scope and delivery slices.
+- [x] 1.9 Add a paired Bash and PowerShell design corpus that records current behavior, desired structure, command occurrences, bounded values, redirect facts, compatibility projections, and security invariants.
+- [ ] 1.10 Promote each design case into the executable corpus as its production parser slice lands.
 
 ## 2. Behavior-Preserving Shared Preparation
 
@@ -90,7 +92,7 @@
 
 ## 10. Separately Gated Syntax Concerns
 
-- [ ] 10.1 Specify heredoc delimiter quoting, expansion mode, body provenance, substitutions, and completeness before enabling heredoc bodies.
+- [ ] 10.1 Specify heredoc delimiter adjacency and quoting, expansion mode, body provenance, substitutions, and completeness before enabling heredoc bodies.
 - [ ] 10.2 Specify process-substitution command discovery and the unknown produced descriptor/path value before enabling it.
 - [ ] 10.3 Specify background-list concurrency, ordering, and shell-state boundaries before enabling single `&`.
 - [ ] 10.4 Specify C-style loop and arithmetic hidden-execution behavior before enabling either construct.
