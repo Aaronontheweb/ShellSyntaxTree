@@ -1,0 +1,14 @@
+{
+  "name": "Escaped PowerShell interpolation start remains literal",
+  "input": "Get-Content \"`${HOME\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Get-Content"],
+      "args": [{ "raw": "\"`${HOME\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/${HOME" }],
+      "redirects": []
+    }]
+  },
+  "notes": "The backtick escapes the dollar, so the open brace remains exact literal data."
+}

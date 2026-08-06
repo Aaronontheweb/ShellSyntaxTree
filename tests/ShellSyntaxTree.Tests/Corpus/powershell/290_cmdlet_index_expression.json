@@ -1,0 +1,17 @@
+{
+  "name": "Cmdlet index expression fails closed",
+  "input": "Get-Content -LiteralPath $HOME[0]",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Get-Content"],
+      "args": [
+        { "raw": "-LiteralPath", "kind": "Literal", "isPath": false, "isFlag": true },
+        { "raw": "$HOME[0]", "kind": "DynamicSkip", "isPath": false }
+      ],
+      "redirects": []
+    }]
+  },
+  "notes": "PowerShell binds this as an IndexExpressionAst, not HOME plus literal suffix text."
+}

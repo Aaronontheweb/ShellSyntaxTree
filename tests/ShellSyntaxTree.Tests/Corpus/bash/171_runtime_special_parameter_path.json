@@ -1,0 +1,14 @@
+{
+  "name": "Runtime special parameter path fails closed",
+  "input": "cat \"$?\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "\"$?\"", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__" }],
+      "redirects": []
+    }]
+  },
+  "notes": "The parser retains the special-parameter identity but cannot prove its runtime value."
+}

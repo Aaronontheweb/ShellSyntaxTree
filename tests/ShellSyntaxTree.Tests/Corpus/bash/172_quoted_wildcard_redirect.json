@@ -1,0 +1,14 @@
+{
+  "name": "Quoted wildcard redirect is one literal target",
+  "input": "echo ok > \"*.txt\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["echo", "ok"],
+      "args": [],
+      "redirects": [{ "direction": "Out", "target": "/work/*.txt", "isDynamicSkip": false }]
+    }]
+  },
+  "notes": "Quote provenance suppresses Bash pathname expansion for the redirect word."
+}

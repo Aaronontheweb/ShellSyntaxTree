@@ -175,6 +175,34 @@ internal static class PwshCommandParser
                 continue;
             }
 
+            if (filtered.Count > 0
+                && IsNativeArgumentFragment(filtered[filtered.Count - 1])
+                && IsNativeArgumentFragment(t)
+                && IsAdjacent(filtered[filtered.Count - 1], t))
+            {
+                var previous = filtered[filtered.Count - 1];
+                var previousValue = previous.ResolverValue
+                    ?? ShellValue.Literal(previous.Value, previous.SourceStart, previous.SourceLength);
+                var currentValue = t.ResolverValue
+                    ?? ShellValue.Opaque(
+                        t.Value,
+                        ShellOpaqueCause.Unsupported,
+                        t.SourceStart,
+                        t.SourceLength);
+                filtered[filtered.Count - 1] = new PwshToken(
+                    PwshTokenKind.Word,
+                    previous.Value + t.Value,
+                    null,
+                    previous.SourceStart,
+                    t.SourceStart + t.SourceLength - previous.SourceStart,
+                    null)
+                {
+                    HasInterpolation = previous.HasInterpolation || t.HasInterpolation,
+                    ResolverValue = ShellValue.Concat(new[] { previousValue, currentValue }),
+                };
+                continue;
+            }
+
             filtered.Add(t);
         }
 
@@ -727,6 +755,8 @@ internal static class PwshCommandParser
 
         public bool IsDynamic { get; init; }
 
+        public bool BindingSemanticsProven { get; init; }
+
         /// <summary>Body indices that are verb-chain tokens (skipped as args).</summary>
         public HashSet<int> VerbPositions { get; init; }
     }
@@ -754,6 +784,7 @@ internal static class PwshCommandParser
         var isVariableWord = head.Kind == PwshTokenKind.Word
             && head.Value.Length > 0 && head.Value[0] == '$';
         if (isVariableWord || head.HasInterpolation
+            || head.ResolverValue?.HasOpaqueFragment == true
             || head.Kind is PwshTokenKind.ScriptBlock or PwshTokenKind.Subexpression
                 or PwshTokenKind.Splat)
         {
@@ -785,6 +816,8 @@ internal static class PwshCommandParser
             {
                 Kind = PwshCommandKind.Cmdlet,
                 VerbTokens = new List<string> { word },
+                BindingSemanticsProven = PwshVerbs.FileVerbs.Contains(word)
+                    || PwshAliases.IsKnownCanonical(word),
                 VerbPositions = verbPositions,
             };
         }
@@ -797,6 +830,7 @@ internal static class PwshCommandParser
                 Kind = PwshCommandKind.Alias,
                 VerbTokens = new List<string> { word },
                 CanonicalVerb = alias,
+                BindingSemanticsProven = true,
                 VerbPositions = verbPositions,
             };
         }
@@ -807,6 +841,7 @@ internal static class PwshCommandParser
             {
                 Kind = PwshCommandKind.PwshInvocation,
                 VerbTokens = new List<string> { word },
+                BindingSemanticsProven = true,
                 VerbPositions = verbPositions,
             };
         }
@@ -907,6 +942,7 @@ internal static class PwshCommandParser
         var precedingVerbTokenCount = 0;
         string? pendingValueParam = null;          // cmdlet/alias §6.5 value-binding
         string? pendingNativeFlag = null;          // native flag-with-value
+        var pendingAmbiguousBinding = false;
         var cmdletStyle = verb.Kind is PwshCommandKind.Cmdlet or PwshCommandKind.Alias
             or PwshCommandKind.PwshInvocation;
         var canonical = verb.CanonicalVerb ?? (verb.VerbTokens.Count > 0 ? verb.VerbTokens[0] : null);
@@ -946,6 +982,7 @@ internal static class PwshCommandParser
 
                 pendingValueParam = null;
                 pendingNativeFlag = null;
+                pendingAmbiguousBinding = false;
                 var consumed = BuildRedirect(
                     body,
                     i,
@@ -972,6 +1009,7 @@ internal static class PwshCommandParser
             {
                 pendingValueParam = null;
                 pendingNativeFlag = null;
+                pendingAmbiguousBinding = false;
 
                 var raw = t.Value;
                 var bindingSeparator = FirstBindingSeparator(raw);
@@ -996,8 +1034,108 @@ internal static class PwshCommandParser
                     var colon = raw.IndexOf(':');
                     var paramName = colon > 0 ? raw.Substring(0, colon) : raw;
                     var colonValue = colon > 0 ? raw.Substring(colon + 1) : null;
+                    var binding = PwshBindingTables.Resolve(canonical, paramName);
 
-                    args.Add(new Arg { Raw = paramName, Kind = ArgKind.Literal, IsPath = false });
+                    if (colonValue is not null
+                        && colonValue.Length == 0
+                        && i + 1 < body.Count
+                        && IsAdjacent(t, body[i + 1])
+                        && IsNativeArgumentFragment(body[i + 1]))
+                    {
+                        var valueEnd = i + 1;
+                        var valueBuilder = new StringBuilder();
+                        var resolverValues = new List<ShellValue>();
+                        var previous = t;
+                        while (valueEnd < body.Count
+                            && IsAdjacent(previous, body[valueEnd])
+                            && IsNativeArgumentFragment(body[valueEnd]))
+                        {
+                            var fragment = body[valueEnd];
+                            valueBuilder.Append(fragment.Value);
+                            resolverValues.Add(fragment.ResolverValue
+                                ?? ShellValue.Opaque(
+                                    fragment.Value,
+                                    ShellOpaqueCause.Unsupported,
+                                    fragment.SourceStart,
+                                    fragment.SourceLength));
+                            previous = fragment;
+                            valueEnd++;
+                        }
+
+                        var lastValueToken = body[valueEnd - 1];
+                        var logicalValue = valueBuilder.ToString();
+                        var resolverValue = ShellValue.Concat(resolverValues);
+                        var canonicalParameter = binding.CanonicalName ?? paramName;
+                        var valueIsPath = PwshPerVerbRules.ParameterValueIsPath(
+                            canonical,
+                            canonicalParameter);
+                        var inlineConsumer = string.Equals(
+                            canonicalParameter,
+                            "-LiteralPath",
+                            StringComparison.OrdinalIgnoreCase)
+                            ? ShellResolutionConsumer.PowerShellCmdletLiteralPath
+                            : ShellResolutionConsumer.PowerShellCmdletPath;
+                        var rawInlineValue = source.Substring(
+                            body[i + 1].SourceStart,
+                            lastValueToken.SourceStart + lastValueToken.SourceLength
+                            - body[i + 1].SourceStart);
+                        args.Add(new Arg
+                        {
+                            Raw = paramName,
+                            Kind = ArgKind.Literal,
+                            IsPath = false,
+                        });
+
+                        Arg valueArgument;
+                        if (binding.IsAmbiguous
+                            || resolverValue.HasOpaqueFragment
+                            || (valueIsPath && !verb.BindingSemanticsProven))
+                        {
+                            valueArgument = new Arg
+                            {
+                                Raw = rawInlineValue,
+                                Kind = ArgKind.DynamicSkip,
+                                IsPath = false,
+                            };
+                        }
+                        else
+                        {
+                            var (kind, resolved, isPath) = PwshResolver.Resolve(
+                                resolverValue,
+                                valueIsPath,
+                                options,
+                                workingDirectoryUnknown,
+                                inlineConsumer);
+                            valueArgument = new Arg
+                            {
+                                Raw = rawInlineValue,
+                                Kind = kind,
+                                Resolved = resolved,
+                                IsPath = isPath,
+                            };
+                        }
+
+                        args.Add(valueArgument);
+                        elements.Add(CreateCombinedElement(
+                            source,
+                            t,
+                            lastValueToken,
+                            paramName + ":" + logicalValue,
+                            precedingVerbTokenCount,
+                            valueArgument.Kind,
+                            isFlag: true,
+                            valueArgument.IsPath,
+                            valueArgument.Resolved));
+                        i = valueEnd - 1;
+                        continue;
+                    }
+
+                    args.Add(new Arg
+                    {
+                        Raw = paramName,
+                        Kind = binding.IsAmbiguous ? ArgKind.DynamicSkip : ArgKind.Literal,
+                        IsPath = false,
+                    });
 
                     if (colonValue is not null && paramName.IndexOf('=') >= 0)
                     {
@@ -1016,12 +1154,44 @@ internal static class PwshCommandParser
                     else if (colonValue is not null)
                     {
                         // Colon form always binds (§6.5.3 rule 1).
-                        var valueIsPath = PwshPerVerbRules.ParameterValueIsPath(canonical, paramName);
-                        args.Add(ResolveValue(colonValue, valueIsPath, options, workingDirectoryUnknown, false));
+                        var canonicalParameter = binding.CanonicalName ?? paramName;
+                        var valueIsPath = PwshPerVerbRules.ParameterValueIsPath(
+                            canonical,
+                            canonicalParameter);
+                        var inlineConsumer = string.Equals(
+                            canonicalParameter,
+                            "-LiteralPath",
+                            StringComparison.OrdinalIgnoreCase)
+                            ? ShellResolutionConsumer.PowerShellCmdletLiteralPath
+                            : ShellResolutionConsumer.PowerShellCmdletPath;
+                        args.Add(binding.IsAmbiguous
+                            ? new Arg
+                            {
+                                Raw = colonValue,
+                                Kind = ArgKind.DynamicSkip,
+                                IsPath = false,
+                            }
+                            : ResolveValueToken(
+                                colonValue,
+                                colonValue,
+                                valueIsPath,
+                                options,
+                                workingDirectoryUnknown,
+                                false,
+                                t,
+                                inlineConsumer,
+                                verb.BindingSemanticsProven));
                     }
-                    else if (PwshBindingTables.ResolveBinding(canonical, paramName) == PwshBinding.Value)
+                    else
                     {
-                        pendingValueParam = paramName;
+                        if (binding.IsAmbiguous)
+                        {
+                            pendingAmbiguousBinding = true;
+                        }
+                        else if (binding.Binding == PwshBinding.Value)
+                        {
+                            pendingValueParam = binding.CanonicalName ?? paramName;
+                        }
                     }
                 }
                 else
@@ -1035,19 +1205,12 @@ internal static class PwshCommandParser
                             raw, out var adjacentFlagPart, out var adjacentValuePrefix)
                         && i + 1 < body.Count
                         && IsAdjacent(t, body[i + 1])
-                        && body[i + 1].Kind is PwshTokenKind.QuotedString
-                            or PwshTokenKind.ScriptBlock
-                            or PwshTokenKind.Subexpression
-                            or PwshTokenKind.Splat)
+                        && IsNativeArgumentFragment(body[i + 1]))
                     {
                         var valueStart = i + 1;
                         var valueEnd = valueStart;
                         var valueBuilder = new StringBuilder(adjacentValuePrefix);
                         var hasOpaqueFragment = false;
-                        var allFragmentsSingleQuoted = adjacentValuePrefix.Length == 0;
-                        var hasSingleQuotedFragment = false;
-                        var hasNonSingleQuotedFragment = adjacentValuePrefix.Length > 0;
-                        var hasSensitiveLiteralFragment = false;
                         var previousFragment = t;
                         while (valueEnd < body.Count
                             && IsAdjacent(previousFragment, body[valueEnd])
@@ -1057,21 +1220,26 @@ internal static class PwshCommandParser
                             valueBuilder.Append(fragment.Value);
                             hasOpaqueFragment |= fragment.Kind != PwshTokenKind.Word
                                 && fragment.Kind != PwshTokenKind.QuotedString;
-                            hasSingleQuotedFragment |= fragment.Kind == PwshTokenKind.QuotedString
-                                && fragment.IsSingleQuoted;
-                            hasNonSingleQuotedFragment |= fragment.Kind != PwshTokenKind.QuotedString
-                                || !fragment.IsSingleQuoted;
-                            hasSensitiveLiteralFragment |= fragment.Kind == PwshTokenKind.QuotedString
-                                && fragment.IsSingleQuoted
-                                && NativeFlagSyntax.ContainsResolverSensitiveLiteralSyntax(fragment.Value);
-                            allFragmentsSingleQuoted &= fragment.Kind == PwshTokenKind.QuotedString
-                                && fragment.IsSingleQuoted;
                             previousFragment = fragment;
                             valueEnd++;
                         }
 
                         var lastValueToken = body[valueEnd - 1];
                         var adjacentValue = valueBuilder.ToString();
+                        var prefixResolverValue = GetResolverValue(t, adjacentValuePrefix);
+                        var resolverFragments = new List<ShellValue> { prefixResolverValue };
+                        for (var fragmentIndex = valueStart; fragmentIndex < valueEnd; fragmentIndex++)
+                        {
+                            var fragmentToken = body[fragmentIndex];
+                            resolverFragments.Add(fragmentToken.ResolverValue
+                                ?? ShellValue.Opaque(
+                                    fragmentToken.Value,
+                                    ShellOpaqueCause.Unsupported,
+                                    fragmentToken.SourceStart,
+                                    fragmentToken.SourceLength));
+                        }
+
+                        var adjacentResolverValue = ShellValue.Concat(resolverFragments);
                         var equalsOffset = SourceSlice(source, t).IndexOf('=');
                         var adjacentRawStart = t.SourceStart + equalsOffset + 1;
                         var adjacentRaw = source.Substring(
@@ -1087,9 +1255,8 @@ internal static class PwshCommandParser
 
                         Arg valueArg;
                         if (hasOpaqueFragment
-                            || (hasSingleQuotedFragment
-                                && hasNonSingleQuotedFragment
-                                && hasSensitiveLiteralFragment)
+                            || adjacentResolverValue.HasOpaqueFragmentOtherThan(
+                                ShellOpaqueCause.PowerShellExpressionSuffix)
                             || BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
                                 verbKey, adjacentFlagPart))
                         {
@@ -1108,13 +1275,23 @@ internal static class PwshCommandParser
                                 adjacentFlagPart,
                                 adjacentValue,
                                 out adjacentValueForResolution);
-                            valueArg = ResolveValueToken(
-                                adjacentRaw,
+                            var effectiveResolverValue = GetResolverValue(
+                                adjacentResolverValue,
                                 adjacentValueForResolution,
+                                preserveLiteralPrefixBoundary: true);
+                            var (kind, resolved, isPath) = PwshResolver.Resolve(
+                                effectiveResolverValue,
                                 adjacentValueIsPath,
                                 options,
                                 workingDirectoryUnknown,
-                                allFragmentsSingleQuoted);
+                                ShellResolutionConsumer.PowerShellNativeArgument);
+                            valueArg = new Arg
+                            {
+                                Raw = adjacentRaw,
+                                Kind = kind,
+                                Resolved = resolved,
+                                IsPath = isPath,
+                            };
                         }
 
                         args.Add(valueArg);
@@ -1157,7 +1334,8 @@ internal static class PwshCommandParser
                                 valueIsPath,
                                 options,
                                 workingDirectoryUnknown,
-                                false));
+                                false,
+                                t));
                         }
                     }
                     else
@@ -1211,10 +1389,13 @@ internal static class PwshCommandParser
                     isPath: false,
                     resolved: null));
 
-                if (pendingValueParam is not null || pendingNativeFlag is not null)
+                if (pendingValueParam is not null
+                    || pendingNativeFlag is not null
+                    || pendingAmbiguousBinding)
                 {
                     pendingValueParam = null;
                     pendingNativeFlag = null;
+                    pendingAmbiguousBinding = false;
                 }
                 else
                 {
@@ -1230,10 +1411,26 @@ internal static class PwshCommandParser
 
             var valueForResolution = t.Value;
             var valueIsOpaqueCommand = false;
+            var consumer = ShellResolutionConsumer.PowerShellNativeArgument;
+            var consumerSemanticsProven = true;
+            var bindingIsAmbiguous = false;
             bool treatAsPath;
-            if (pendingValueParam is not null)
+            if (pendingAmbiguousBinding)
+            {
+                treatAsPath = false;
+                bindingIsAmbiguous = true;
+                pendingAmbiguousBinding = false;
+            }
+            else if (pendingValueParam is not null)
             {
                 treatAsPath = PwshPerVerbRules.ParameterValueIsPath(canonical, pendingValueParam);
+                consumer = string.Equals(
+                    pendingValueParam,
+                    "-LiteralPath",
+                    StringComparison.OrdinalIgnoreCase)
+                    ? ShellResolutionConsumer.PowerShellCmdletLiteralPath
+                    : ShellResolutionConsumer.PowerShellCmdletPath;
+                consumerSemanticsProven = verb.BindingSemanticsProven;
                 pendingValueParam = null;
             }
             else if (pendingNativeFlag is not null)
@@ -1254,10 +1451,16 @@ internal static class PwshCommandParser
                 treatAsPath = cmdletStyle
                     ? PwshPerVerbRules.IsPositionalPathArg(canonical, isFileVerb, positionalIndex, t.Value)
                     : BashPerVerbRules.IsPositionalPathArg(nativeVerbChain, positionalIndex, t.Value);
+                if (cmdletStyle && treatAsPath)
+                {
+                    consumer = ShellResolutionConsumer.PowerShellCmdletPath;
+                    consumerSemanticsProven = verb.BindingSemanticsProven;
+                }
+
                 positionalIndex++;
             }
 
-            var resolvedArg = valueIsOpaqueCommand
+            var resolvedArg = valueIsOpaqueCommand || bindingIsAmbiguous
                 ? new Arg { Raw = rawValue, Kind = ArgKind.DynamicSkip, IsPath = false }
                 : ResolveValueToken(
                     rawValue,
@@ -1265,7 +1468,10 @@ internal static class PwshCommandParser
                     treatAsPath,
                     options,
                     workingDirectoryUnknown,
-                    isLiteralBytes);
+                    isLiteralBytes,
+                    t,
+                    consumer,
+                    consumerSemanticsProven);
             args.Add(resolvedArg);
             elements.Add(CreateElement(
                 source,
@@ -1283,25 +1489,75 @@ internal static class PwshCommandParser
 
     private static Arg ResolveValueToken(
         string raw, string logicalValue, bool treatAsPath,
-        PwshParserOptions options, bool workingDirectoryUnknown, bool isLiteralBytes)
+        PwshParserOptions options, bool workingDirectoryUnknown, bool isLiteralBytes,
+        PwshToken? token = null,
+        ShellResolutionConsumer consumer = ShellResolutionConsumer.PowerShellNativeArgument,
+        bool consumerSemanticsProven = true)
     {
-        // §8 comma-array: an unquoted top-level comma in a path slot marks
-        // the whole token DynamicSkip — the v0.2.0 parser neither splits nor
-        // resolves a comma-joined array path.
-        if (treatAsPath && !isLiteralBytes && PwshResolver.LooksLikeCommaArray(logicalValue))
+        if (treatAsPath && !consumerSemanticsProven)
         {
             return new Arg { Raw = raw, Kind = ArgKind.DynamicSkip, IsPath = false };
         }
 
+        var resolverValue = token is null
+            ? ShellValue.Literal(logicalValue)
+            : GetResolverValue(
+                token.Value,
+                logicalValue,
+                preserveLiteralPrefixBoundary:
+                    consumer == ShellResolutionConsumer.PowerShellNativeArgument);
         var (kind, resolved, isPath) = PwshResolver.Resolve(
-            logicalValue, treatAsPath, options, workingDirectoryUnknown, isLiteralBytes);
+            resolverValue,
+            treatAsPath,
+            options,
+            workingDirectoryUnknown,
+            consumer);
         return new Arg { Raw = raw, Resolved = resolved, Kind = kind, IsPath = isPath };
     }
 
     private static Arg ResolveValue(
         string logicalValue, bool treatAsPath,
         PwshParserOptions options, bool workingDirectoryUnknown, bool isLiteralBytes)
-        => ResolveValueToken(logicalValue, logicalValue, treatAsPath, options, workingDirectoryUnknown, isLiteralBytes);
+        => ResolveValueToken(
+            logicalValue,
+            logicalValue,
+            treatAsPath,
+            options,
+            workingDirectoryUnknown,
+            isLiteralBytes);
+
+    private static ShellValue GetResolverValue(
+        PwshToken token,
+        string logicalValue,
+        bool preserveLiteralPrefixBoundary = false)
+    {
+        var value = token.ResolverValue
+            ?? ShellValue.Literal(token.Value, token.SourceStart, token.SourceLength);
+        return GetResolverValue(value, logicalValue, preserveLiteralPrefixBoundary);
+    }
+
+    private static ShellValue GetResolverValue(
+        ShellValue value,
+        string logicalValue,
+        bool preserveLiteralPrefixBoundary = false)
+    {
+        if (string.Equals(value.Decoded, logicalValue, StringComparison.Ordinal))
+        {
+            return value;
+        }
+
+        var prefixLength = value.Decoded.Length - logicalValue.Length;
+        if (prefixLength >= 0
+            && value.Decoded.EndsWith(logicalValue, StringComparison.Ordinal))
+        {
+            return value.Slice(
+                prefixLength,
+                logicalValue.Length,
+                preserveLiteralPrefixBoundary);
+        }
+
+        return ShellValue.Opaque(logicalValue, ShellOpaqueCause.Unsupported);
+    }
 
     // ---------------------------------------------------------------- redirects
 
@@ -1371,8 +1627,7 @@ internal static class PwshCommandParser
         }
 
         // $null is the discard sink — not a file (§8).
-        if (target.Kind == PwshTokenKind.Word
-            && string.Equals(target.Value, "$null", StringComparison.OrdinalIgnoreCase))
+        if (IsPowerShellNullSink(target))
         {
             redirects.Add(new Redirect
             {
@@ -1394,8 +1649,13 @@ internal static class PwshCommandParser
 
         var isLiteralBytes = target.Kind == PwshTokenKind.QuotedString && target.IsSingleQuoted;
         var raw = SourceSlice(source, target);
+        var resolverValue = GetResolverValue(target, target.Value);
         var (kind, resolved, isPath) = PwshResolver.Resolve(
-            target.Value, treatAsPath: true, options, workingDirectoryUnknown, isLiteralBytes);
+            resolverValue,
+            treatAsPath: true,
+            options,
+            workingDirectoryUnknown,
+            ShellResolutionConsumer.PowerShellRedirect);
 
         redirects.Add(new Redirect
         {
@@ -1415,6 +1675,25 @@ internal static class PwshCommandParser
         return 2;
     }
 
+    private static bool IsPowerShellNullSink(PwshToken token)
+    {
+        if (token.Kind != PwshTokenKind.Word
+            || token.ResolverValue is null
+            || token.ResolverValue.Fragments.Count != 1)
+        {
+            return false;
+        }
+
+        var fragment = token.ResolverValue.Fragments[0];
+        return fragment.Kind == ShellValueFragmentKind.Expansion
+            && fragment.Expansion is not null
+            && fragment.Expansion.Value.Kind == ShellExpansionKind.Variable
+            && string.Equals(
+                fragment.Expansion.Value.Name,
+                "null",
+                StringComparison.OrdinalIgnoreCase);
+    }
+
     private static ClauseElement CreateElement(
         string source,
         PwshToken token,
@@ -1425,18 +1704,18 @@ internal static class PwshCommandParser
         bool isPath,
         string? resolved,
         string? value = null) => new()
-    {
-        Raw = SourceSlice(source, token),
-        Value = value ?? token.Value,
-        Role = role,
-        SourceStart = token.SourceStart,
-        SourceLength = token.SourceLength,
-        PrecedingVerbElementCount = precedingVerbTokenCount,
-        Kind = kind,
-        IsFlag = isFlag,
-        IsPath = isPath,
-        Resolved = resolved,
-    };
+        {
+            Raw = SourceSlice(source, token),
+            Value = value ?? token.Value,
+            Role = role,
+            SourceStart = token.SourceStart,
+            SourceLength = token.SourceLength,
+            PrecedingVerbElementCount = precedingVerbTokenCount,
+            Kind = kind,
+            IsFlag = isFlag,
+            IsPath = isPath,
+            Resolved = resolved,
+        };
 
     private static ClauseElement CreateCombinedElement(
         string source,

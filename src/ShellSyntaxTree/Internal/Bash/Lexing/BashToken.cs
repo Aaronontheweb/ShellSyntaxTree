@@ -3,6 +3,8 @@
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
+using ShellSyntaxTree.Internal.Resolving;
+
 namespace ShellSyntaxTree.Internal.Bash.Lexing;
 
 /// <summary>
@@ -48,6 +50,12 @@ internal readonly record struct BashToken(
     /// substitution per SPEC §8 step 3).
     /// </summary>
     public bool IsSingleQuoted { get; init; }
+
+    /// <summary>
+    /// Resolver-relevant decoded fragments. Null only for token kinds that
+    /// never carry an argument value.
+    /// </summary>
+    public ShellValue? ResolverValue { get; init; }
 
     /// <summary>
     /// True when this <see cref="BashTokenKind.Whitespace"/> token contains

@@ -18,6 +18,12 @@ internal enum PwshBinding
     Value,
 }
 
+internal readonly record struct PwshBindingResult(
+    PwshBinding Binding,
+    string? CanonicalName,
+    bool IsKnown,
+    bool IsAmbiguous);
+
 /// <summary>
 /// The static parameter-binding tables from SPEC.POWERSHELL.md §6.5.2. The
 /// parser has no compiled cmdlet metadata, so it decides whether a
@@ -87,45 +93,62 @@ internal static class PwshBindingTables
     /// table match → unambiguous prefix match → unknown defaults to switch.
     /// </summary>
     internal static PwshBinding ResolveBinding(string? canonicalVerb, string paramName)
+        => Resolve(canonicalVerb, paramName).Binding;
+
+    internal static PwshBindingResult Resolve(string? canonicalVerb, string paramName)
     {
         if (string.IsNullOrEmpty(paramName))
         {
-            return PwshBinding.Switch;
+            return new PwshBindingResult(PwshBinding.Switch, null, false, false);
         }
 
         // 1. (verb, name) override row.
         if (!string.IsNullOrEmpty(canonicalVerb)
             && Overrides.TryGetValue((canonicalVerb!, paramName), out var overridden))
         {
-            return overridden;
+            return new PwshBindingResult(overridden, paramName, true, false);
         }
 
         // 2. Exact table match.
         if (ValueParameters.Contains(paramName))
         {
-            return PwshBinding.Value;
+            return new PwshBindingResult(PwshBinding.Value, paramName, true, false);
         }
 
         if (SwitchParameters.Contains(paramName))
         {
-            return PwshBinding.Switch;
+            return new PwshBindingResult(PwshBinding.Switch, paramName, true, false);
         }
 
         // 3. Unambiguous prefix match. PowerShell prefix matching: the token
         // must prefix exactly one entry across both tables; two or more is
         // ambiguous and treated as unknown.
-        var valueHits = CountPrefixMatches(ValueParameters, paramName);
-        var switchHits = CountPrefixMatches(SwitchParameters, paramName);
+        var valueHits = FindPrefixMatches(ValueParameters, paramName);
+        var switchHits = FindPrefixMatches(SwitchParameters, paramName);
         if (valueHits + switchHits == 1)
         {
-            return valueHits == 1 ? PwshBinding.Value : PwshBinding.Switch;
+            return valueHits == 1
+                ? new PwshBindingResult(
+                    PwshBinding.Value,
+                    FindPrefixMatch(ValueParameters, paramName),
+                    true,
+                    false)
+                : new PwshBindingResult(
+                    PwshBinding.Switch,
+                    FindPrefixMatch(SwitchParameters, paramName),
+                    true,
+                    false);
         }
 
         // 4. Unknown (or ambiguous) → switch. §6.5.3 rule 4.
-        return PwshBinding.Switch;
+        return new PwshBindingResult(
+            PwshBinding.Switch,
+            null,
+            false,
+            valueHits + switchHits > 1);
     }
 
-    private static int CountPrefixMatches(HashSet<string> table, string prefix)
+    private static int FindPrefixMatches(HashSet<string> table, string prefix)
     {
         var count = 0;
         foreach (var entry in table)
@@ -138,6 +161,20 @@ internal static class PwshBindingTables
         }
 
         return count;
+    }
+
+    private static string? FindPrefixMatch(HashSet<string> table, string prefix)
+    {
+        foreach (var entry in table)
+        {
+            if (entry.Length > prefix.Length
+                && entry.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return entry;
+            }
+        }
+
+        return null;
     }
 
     private sealed class VerbNameComparer : IEqualityComparer<(string Verb, string Name)>

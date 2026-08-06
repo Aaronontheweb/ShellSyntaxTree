@@ -1,0 +1,18 @@
+{
+  "name": "Native inline member-looking spelling is literal suffix text",
+  "input": "curl --output=$HOME.Length https://example.invalid/api",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["curl"],
+      "args": [
+        { "raw": "--output", "kind": "Literal", "isPath": false, "isFlag": true },
+        { "raw": "$HOME.Length", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user.Length" },
+        { "raw": "https://example.invalid/api", "kind": "Literal", "isPath": false }
+      ],
+      "redirects": []
+    }]
+  },
+  "notes": "The same authored fragment has native rather than cmdlet binding semantics."
+}

@@ -1,0 +1,14 @@
+{
+  "name": "Unquoted wildcard redirect fails closed",
+  "input": "echo ok > *.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["echo", "ok"],
+      "args": [],
+      "redirects": [{ "direction": "Out", "target": "*.txt", "isDynamicSkip": true }]
+    }]
+  },
+  "notes": "Without filesystem enumeration the parser cannot prove Bash produces exactly one redirect target."
+}

@@ -58,7 +58,7 @@ public class V03DesignCorpusTests
     }
 
     [Fact]
-    public void Current_expectations_match_the_v0_2_parsers()
+    public void Compatibility_projection_matches_current_or_promoted_expectations()
     {
         foreach (var file in LoadFiles())
         {
@@ -66,13 +66,17 @@ public class V03DesignCorpusTests
             foreach (var designCase in file.Cases)
             {
                 var actual = parser.Parse(designCase.Input);
+                var expectedIsUnparseable = designCase.CompatibilityProjectionLanded
+                    ? designCase.Desired.IsUnparseable
+                    : designCase.Current.IsUnparseable;
                 Assert.True(
-                    actual.IsUnparseable == designCase.Current.IsUnparseable,
-                    $"{designCase.Id}: current IsUnparseable expected "
-                    + $"{designCase.Current.IsUnparseable}, actual {actual.IsUnparseable}. "
+                    actual.IsUnparseable == expectedIsUnparseable,
+                    $"{designCase.Id}: IsUnparseable expected "
+                    + $"{expectedIsUnparseable}, actual {actual.IsUnparseable}. "
                     + $"Reason: {actual.UnparseableReason}");
 
-                if (designCase.Current.ReasonContains is not null)
+                if (!designCase.CompatibilityProjectionLanded
+                    && designCase.Current.ReasonContains is not null)
                 {
                     Assert.Contains(
                         designCase.Current.ReasonContains,
@@ -80,9 +84,12 @@ public class V03DesignCorpusTests
                         StringComparison.OrdinalIgnoreCase);
                 }
 
-                if (designCase.Current.Argument is not null)
+                var expectedArgument = designCase.CompatibilityProjectionLanded
+                    ? designCase.Desired.Argument
+                    : designCase.Current.Argument;
+                if (expectedArgument is not null)
                 {
-                    var expected = designCase.Current.Argument;
+                    var expected = expectedArgument;
                     ValidateArgumentExpectation(designCase.Id, expected, actual.Clauses.Count);
                     var clause = Assert.IsType<Clause>(actual.Clauses[expected.ClauseIndex]);
                     var argument = Assert.IsType<Arg>(clause.Args[expected.ArgumentIndex]);
@@ -92,11 +99,14 @@ public class V03DesignCorpusTests
                     Assert.Equal(expected.Resolved, argument.Resolved);
                 }
 
-                if (designCase.Current.CompatibilityClause is not null)
+                var expectedClause = designCase.CompatibilityProjectionLanded
+                    ? designCase.Desired.CompatibilityClause
+                    : designCase.Current.CompatibilityClause;
+                if (expectedClause is not null)
                 {
                     AssertCompatibilityClause(
                         designCase.Id,
-                        designCase.Current.CompatibilityClause,
+                        expectedClause,
                         actual);
                 }
             }
@@ -390,6 +400,8 @@ public sealed record V03DesignCase
     public string Concern { get; init; } = "";
 
     public string Input { get; init; } = "";
+
+    public bool CompatibilityProjectionLanded { get; init; }
 
     public CurrentBehaviorExpectation Current { get; init; } = new();
 

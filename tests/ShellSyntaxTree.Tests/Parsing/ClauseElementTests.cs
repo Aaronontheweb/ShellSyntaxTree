@@ -305,7 +305,7 @@ public class ClauseElementTests
     }
 
     [Fact]
-    public void Resolver_sensitive_mixed_quoting_safe_fails()
+    public void All_static_mixed_quoting_resolves_without_reinterpreting_literal_fragments()
     {
         const string source = "curl --data='@$HOME'\".json\" https://example.invalid/api";
         foreach (var (shell, parser) in Parsers())
@@ -315,9 +315,11 @@ public class ClauseElementTests
                 clause.Elements,
                 element => element.Value == "--data=@$HOME.json");
 
-            Assert.Equal(ArgKind.DynamicSkip, option.Kind);
-            Assert.False(option.IsPath, shell);
-            Assert.Null(option.Resolved);
+            Assert.Equal(ArgKind.Literal, option.Kind);
+            Assert.True(option.IsPath, shell);
+            Assert.Equal(
+                shell == "bash" ? "/work/$HOME.json" : "C:/work/$HOME.json",
+                option.Resolved);
         }
 
         const string transformedSource =
@@ -329,9 +331,11 @@ public class ClauseElementTests
                 clause.Elements,
                 element => element.Value == "--data=@~/secret.json");
 
-            Assert.Equal(ArgKind.DynamicSkip, option.Kind);
-            Assert.False(option.IsPath, shell);
-            Assert.Null(option.Resolved);
+            Assert.Equal(ArgKind.Literal, option.Kind);
+            Assert.True(option.IsPath, shell);
+            Assert.Equal(
+                shell == "bash" ? "/work/~/secret.json" : "C:/work/~/secret.json",
+                option.Resolved);
         }
     }
 

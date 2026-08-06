@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 using System.Linq;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
+using ShellSyntaxTree.Internal.Resolving;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests.Lexing;
@@ -75,6 +76,31 @@ public class PwshLexerTests
     {
         var t = Assert.Single(Significant(input));
         Assert.True(t.HasInterpolation);
+    }
+
+    [Theory]
+    [InlineData("\"$?\"", "SpecialParameter", "?")]
+    [InlineData("\"$1\"", "Variable", "1")]
+    [InlineData("\"$é\"", "Variable", "é")]
+    [InlineData("\"$global:scoped\"", "Variable", "global:scoped")]
+    [InlineData("\"${braced-name}\"", "Variable", "braced-name")]
+    public void Runtime_variable_provenance_retains_typed_identity(
+        string input,
+        string expectedKind,
+        string expectedName)
+    {
+        var token = Assert.Single(Significant(input));
+        Assert.NotNull(token.ResolverValue);
+        var expansion = Assert.Single(
+            token.ResolverValue.Fragments,
+            fragment => fragment.Kind == ShellValueFragmentKind.Expansion);
+
+        Assert.NotNull(expansion.Expansion);
+        Assert.Equal(expectedKind, expansion.Expansion.Value.Kind.ToString());
+        Assert.Equal(expectedName, expansion.Expansion.Value.Name);
+        Assert.Equal(
+            ShellValueCardinality.ExactlyOne.ToString(),
+            expansion.Cardinality.ToString());
     }
 
     [Theory]

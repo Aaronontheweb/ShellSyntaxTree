@@ -517,6 +517,7 @@
     },
     {
       "id": "bash-escaped-home-literal-path",
+      "compatibilityProjectionLanded": true,
       "concern": "Escaped variable provenance survives word decoding",
       "input": "cat \\$HOME",
       "current": {
@@ -561,6 +562,7 @@
     },
     {
       "id": "bash-escaped-home-adjacent-native-fragment",
+      "compatibilityProjectionLanded": true,
       "concern": "Escaped inline prefix composes with a quoted suffix",
       "input": "curl --data=@\\$HOME\".json\" https://example.invalid/api",
       "current": {
@@ -605,6 +607,7 @@
     },
     {
       "id": "bash-static-mixed-quote-native-fragment",
+      "compatibilityProjectionLanded": true,
       "concern": "All-static mixed quoting resolves without DynamicSkip",
       "input": "curl --data='@$HOME'\".json\" https://example.invalid/api",
       "current": {
@@ -648,6 +651,7 @@
     },
     {
       "id": "bash-double-quoted-escaped-home-path",
+      "compatibilityProjectionLanded": true,
       "concern": "Escape provenance survives within one double-quoted token",
       "input": "cat \"\\$HOME.txt\"",
       "current": {
@@ -691,6 +695,7 @@
     },
     {
       "id": "bash-double-quoted-literal-expandable-composition",
+      "compatibilityProjectionLanded": true,
       "concern": "Literal and expandable regions compose within one token",
       "input": "echo \"\\${HOME}-$HOME\"",
       "current": { "isUnparseable": false },
@@ -716,6 +721,7 @@
     },
     {
       "id": "bash-runtime-special-parameter-path",
+      "compatibilityProjectionLanded": true,
       "concern": "Runtime special parameter punctuation cannot become a glob path",
       "input": "cat \"$?\"",
       "current": {
@@ -742,6 +748,7 @@
     },
     {
       "id": "bash-runtime-positional-parameter-path",
+      "compatibilityProjectionLanded": true,
       "concern": "Runtime positional parameters cannot become literal paths",
       "input": "cat \"$1\"",
       "current": {
@@ -768,6 +775,7 @@
     },
     {
       "id": "bash-runtime-argument-vector-boundary",
+      "compatibilityProjectionLanded": true,
       "concern": "Quoted dollar-at can produce zero or multiple arguments",
       "input": "cat \"$@\"",
       "current": {
@@ -794,6 +802,7 @@
     },
     {
       "id": "bash-unterminated-braced-interpolation",
+      "compatibilityProjectionLanded": true,
       "concern": "An outer closing quote does not complete an open braced interpolation",
       "input": "cat \"${HOME\"",
       "current": { "isUnparseable": false },
@@ -806,6 +815,7 @@
     },
     {
       "id": "bash-adjacent-redirect-target-fragments",
+      "compatibilityProjectionLanded": true,
       "concern": "Adjacent escaped and quoted redirect fragments form one target",
       "input": "echo ok > \\$HOME\".txt\"",
       "current": {
@@ -876,6 +886,7 @@
     },
     {
       "id": "bash-provider-looking-unquoted-path",
+      "compatibilityProjectionLanded": true,
       "concern": "Bash does not interpret an unquoted PowerShell provider-looking prefix",
       "input": "cat filesystem::/safe",
       "current": {
@@ -902,6 +913,7 @@
     },
     {
       "id": "bash-provider-looking-quoted-path",
+      "compatibilityProjectionLanded": true,
       "concern": "Quoting does not introduce PowerShell provider semantics into Bash",
       "input": "cat \"filesystem::/safe\"",
       "current": {
@@ -927,6 +939,7 @@
     },
     {
       "id": "bash-escaped-open-brace-literal-path",
+      "compatibilityProjectionLanded": true,
       "concern": "An escaped interpolation start remains literal rather than incomplete",
       "input": "cat \"\\${HOME\"",
       "current": {
@@ -952,6 +965,7 @@
     },
     {
       "id": "bash-unquoted-wildcard-redirect",
+      "compatibilityProjectionLanded": true,
       "concern": "Unquoted redirect wildcard cannot prove exactly one target",
       "input": "echo ok > *.txt",
       "current": {
@@ -1018,6 +1032,7 @@
     },
     {
       "id": "bash-quoted-wildcard-redirect",
+      "compatibilityProjectionLanded": true,
       "concern": "Quoted redirect wildcard is one literal target",
       "input": "echo ok > \"*.txt\"",
       "current": {

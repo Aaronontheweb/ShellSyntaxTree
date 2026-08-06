@@ -1,0 +1,14 @@
+{
+  "name": "Quoted fd-shaped redirect target is a file",
+  "input": "echo ok > \"&1\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["echo", "ok"],
+      "args": [],
+      "redirects": [{ "direction": "Out", "target": "/work/&1", "isDynamicSkip": false }]
+    }]
+  },
+  "notes": "Only the complete unquoted raw descriptor grammar denotes duplication; quoted &1 is a literal filename."
+}

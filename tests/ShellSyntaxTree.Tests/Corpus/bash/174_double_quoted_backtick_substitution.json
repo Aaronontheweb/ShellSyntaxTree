@@ -1,0 +1,14 @@
+{
+  "name": "Backtick substitution inside double quotes remains opaque",
+  "input": "cat \"`printf /etc/passwd`\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "\"`printf /etc/passwd`\"", "kind": "DynamicSkip", "isPath": false }],
+      "redirects": []
+    }]
+  },
+  "notes": "Bash executes the backtick region before forming the quoted argument, so the parser cannot claim an exact path."
+}

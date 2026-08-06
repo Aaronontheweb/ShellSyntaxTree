@@ -1,0 +1,14 @@
+{
+  "name": "Runtime PowerShell scoped variable fails closed",
+  "input": "Get-Content \"$global:scoped\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["Get-Content"],
+      "args": [{ "raw": "\"$global:scoped\"", "kind": "DynamicSkip", "isPath": false }],
+      "redirects": []
+    }]
+  },
+  "notes": "Scoped variable identity is retained while its runtime filesystem value remains unknown."
+}

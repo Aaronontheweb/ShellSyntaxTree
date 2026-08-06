@@ -1,0 +1,10 @@
+{
+  "name": "Opaque Bash command identity fails closed",
+  "input": "r$(printf m) -rf /tmp/x",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "dynamic Bash command identity",
+    "clauses": []
+  },
+  "notes": "Adjacent aggregation must not erase a command substitution from the executable identity."
+}

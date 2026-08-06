@@ -1,0 +1,14 @@
+{
+  "name": "Runtime multidigit positional parameter fails closed",
+  "input": "cat \"${10}\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "\"${10}\"", "kind": "DynamicSkip", "isPath": false }],
+      "redirects": []
+    }]
+  },
+  "notes": "The lexer retains ${10} as one positional-parameter expansion whose runtime value is unknown."
+}

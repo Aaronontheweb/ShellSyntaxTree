@@ -1,0 +1,14 @@
+{
+  "name": "Empty quoted prefix blocks tilde expansion",
+  "input": "cat \"\"~",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [{
+      "operator": "None",
+      "verb": ["cat"],
+      "args": [{ "raw": "\"\"~", "kind": "Literal", "isPath": true, "resolved": "/work/~" }],
+      "redirects": []
+    }]
+  },
+  "notes": "A zero-length quoted fragment is still a semantic word boundary and suppresses leading-tilde expansion."
+}
