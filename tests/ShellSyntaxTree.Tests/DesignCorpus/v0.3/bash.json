@@ -713,6 +713,375 @@
         "compatibility": { "verbs": ["echo"], "preservesAuthoredDynamicValues": false },
         "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
       }
+    },
+    {
+      "id": "bash-runtime-special-parameter-path",
+      "concern": "Runtime special parameter punctuation cannot become a glob path",
+      "input": "cat \"$?\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$?\"", "kind": "Glob", "isPath": true }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "cat",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"$?\"", "kind": "Unknown", "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$?\"", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "The released parser mistakes runtime $? punctuation for a quoted glob."
+    },
+    {
+      "id": "bash-runtime-positional-parameter-path",
+      "concern": "Runtime positional parameters cannot become literal paths",
+      "input": "cat \"$1\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$1\"", "kind": "Literal", "isPath": true, "resolved": "/work/$1" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "cat",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"$1\"", "kind": "Unknown", "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$1\"", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "The positional value depends on the runtime invocation and cannot be treated as the filename $1."
+    },
+    {
+      "id": "bash-runtime-argument-vector-boundary",
+      "concern": "Quoted dollar-at can produce zero or multiple arguments",
+      "input": "cat \"$@\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$@\"", "kind": "Literal", "isPath": true, "resolved": "/work/$@" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "cat",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"$@\"", "kind": "Unknown", "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$@\"", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "Quoted $@ has runtime-dependent cardinality, so one authored token cannot be claimed as one exact path."
+    },
+    {
+      "id": "bash-unterminated-braced-interpolation",
+      "concern": "An outer closing quote does not complete an open braced interpolation",
+      "input": "cat \"${HOME\"",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [{ "id": "root", "kind": "Unsupported", "slot": "Root" }],
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "Real Bash rejects this syntax; no exact or compatibility path may be exposed."
+    },
+    {
+      "id": "bash-adjacent-redirect-target-fragments",
+      "concern": "Adjacent escaped and quoted redirect fragments form one target",
+      "input": "echo ok > \\$HOME\".txt\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\".txt\"", "kind": "Literal", "isPath": true, "resolved": "/work/.txt" },
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 4,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "/home/test", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \\$HOME",
+            "value": "$HOME",
+            "role": "Redirect",
+            "sourceStart": 8,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 2,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/home/test"
+          }
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "echo", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "echo",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "redirects": [{
+            "operation": "FileOutput",
+            "target": { "sourceElement": "\\$HOME\".txt\"", "kind": "Exact", "values": ["$HOME.txt"], "isPolicySensitive": true },
+            "isPathRelevant": true,
+            "isComplete": true
+          }]
+        }],
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 0,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "/work/$HOME.txt", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \\$HOME\".txt\"",
+            "value": "$HOME.txt",
+            "role": "Redirect",
+            "sourceStart": 8,
+            "sourceLength": 14,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/$HOME.txt"
+          }
+        },
+        "compatibility": { "verbs": ["echo"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "StaticRedirectNotDynamic"]
+      },
+      "notes": "The released parser resolves the $HOME prefix as the redirect and emits the quoted suffix as an unrelated argument."
+    },
+    {
+      "id": "bash-provider-looking-unquoted-path",
+      "concern": "Bash does not interpret an unquoted PowerShell provider-looking prefix",
+      "input": "cat filesystem::/safe",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "filesystem::/safe", "kind": "Literal", "isPath": true, "resolved": "/safe" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "cat",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "filesystem::/safe", "kind": "Exact", "values": ["filesystem::/safe"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "filesystem::/safe", "kind": "Literal", "isPath": true, "resolved": "/work/filesystem::/safe" },
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "The shared v0.2 resolver incorrectly strips a PowerShell provider prefix from Bash argv."
+    },
+    {
+      "id": "bash-provider-looking-quoted-path",
+      "concern": "Quoting does not introduce PowerShell provider semantics into Bash",
+      "input": "cat \"filesystem::/safe\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"filesystem::/safe\"", "kind": "Literal", "isPath": true, "resolved": "/safe" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "cat",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"filesystem::/safe\"", "kind": "Exact", "values": ["filesystem::/safe"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"filesystem::/safe\"", "kind": "Literal", "isPath": true, "resolved": "/work/filesystem::/safe" },
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "bash-escaped-open-brace-literal-path",
+      "concern": "An escaped interpolation start remains literal rather than incomplete",
+      "input": "cat \"\\${HOME\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"\\${HOME\"", "kind": "DynamicSkip", "isPath": false }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "cat",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"\\${HOME\"", "kind": "Exact", "values": ["${HOME"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"\\${HOME\"", "kind": "Literal", "isPath": true, "resolved": "/work/${HOME" },
+        "compatibility": { "verbs": ["cat"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      }
+    },
+    {
+      "id": "bash-unquoted-wildcard-redirect",
+      "concern": "Unquoted redirect wildcard cannot prove exactly one target",
+      "input": "echo ok > *.txt",
+      "current": {
+        "isUnparseable": false,
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 0,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "*.txt", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> *.txt",
+            "value": "*.txt",
+            "role": "Redirect",
+            "sourceStart": 8,
+            "sourceLength": 7,
+            "precedingVerbElementCount": 2,
+            "kind": "Glob",
+            "isFlag": false,
+            "isPath": true
+          }
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "echo", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "echo",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "redirects": [{
+            "operation": "FileOutput",
+            "target": { "sourceElement": "*.txt", "kind": "Unknown", "isPolicySensitive": true },
+            "isPathRelevant": true,
+            "isComplete": true
+          }]
+        }],
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 0,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "*.txt", "isDynamicSkip": true },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> *.txt",
+            "value": "*.txt",
+            "role": "Redirect",
+            "sourceStart": 8,
+            "sourceLength": 7,
+            "precedingVerbElementCount": 2,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        },
+        "compatibility": { "verbs": ["echo"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "NoFilesystemEnumeration", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "bash-quoted-wildcard-redirect",
+      "concern": "Quoted redirect wildcard is one literal target",
+      "input": "echo ok > \"*.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 0,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "\"*.txt\"", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"*.txt\"",
+            "value": "*.txt",
+            "role": "Redirect",
+            "sourceStart": 8,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 2,
+            "kind": "Glob",
+            "isFlag": false,
+            "isPath": true
+          }
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "echo", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "echo",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "redirects": [{
+            "operation": "FileOutput",
+            "target": { "sourceElement": "\"*.txt\"", "kind": "Exact", "values": ["*.txt"], "isPolicySensitive": true },
+            "isPathRelevant": true,
+            "isComplete": true
+          }]
+        }],
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 0,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "/work/*.txt", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"*.txt\"",
+            "value": "*.txt",
+            "role": "Redirect",
+            "sourceStart": 8,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/*.txt"
+          }
+        },
+        "compatibility": { "verbs": ["echo"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "NoFilesystemEnumeration", "ShellSpecificOptionSemantics"]
+      }
     }
   ]
 }

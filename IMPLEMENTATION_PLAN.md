@@ -156,15 +156,35 @@ priorities.
       literal resolver syntax from expandable syntax even when both decode to
       the same string, including standalone, adjacent-token, all-static
       mixed-quote, within-token escape, and literal-plus-expandable cases.
-      Preserve ordered literal / expandable / opaque fragments internally;
-      require exact composition when every fragment and resolver fact is
-      exact, do not change the v0.2 public API, and never infer expansion from
-      decoded text.
+      Preserve ordered literal / typed-expansion / opaque fragments plus
+      operation-specific transform eligibility, expansion identity,
+      cardinality, and opaque cause internally; require explicit
+      Bash-argument, Bash-redirect, PowerShell-native, cmdlet-Path,
+      cmdlet-LiteralPath, and PowerShell-redirect resolver contexts, and
+      aggregate adjacent fragments for complete
+      argument and redirect targets. Runtime special, positional, numeric, and
+      Unicode variables retain typed expansion identity and cardinality while
+      remaining unknown without a proved value; incomplete braced
+      interpolation is unparseable. Exact composition is required when
+      every fragment, binding fact, and resolver fact is exact. Do not change
+      the v0.2 public API or infer expansion from decoded text. The first
+      implementation was halted before commit after adversarial review proved
+      that one universal expandable bit misclassified quoted PowerShell native
+      and cmdlet paths, missed valid variable forms, accepted incomplete
+      interpolation, and split adjacent redirect targets.
+      Bash provider-looking text remains literal; only PowerShell cmdlet path
+      and redirect contexts apply provider or PSDrive semantics, overriding
+      the obsolete shared resolver rule when the canonical specifications are
+      synchronized.
+      PowerShell redirects remain a separate Path-like context that applies
+      tilde, wildcard, provider, and PSDrive semantics after quote removal;
+      unknown wildcard cardinality or drive mappings fail closed without
+      enumeration. Bash redirects instead require exactly one proved target.
 - [ ] Implement [issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69)
       against the corrected fragment contract. Preserve raw, decoded, and span
       facts plus unaffected classifications; explicitly document only
-      shell-oracle-proved compatibility corrections to false path claims and
-      avoidable `DynamicSkip` results.
+      shell-oracle-proved compatibility corrections to false exact, `Glob`,
+      `Tilde`, provider, or path claims and avoidable `DynamicSkip` results.
 - [ ] Add the structural and command-occurrence projections for the existing
       grammar before enabling any control-flow construct.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two

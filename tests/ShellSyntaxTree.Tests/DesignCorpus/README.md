@@ -37,8 +37,20 @@ record data separately from executable substitutions and path-relevant
 redirects. Constructs deliberately deferred beyond stable v0.3 remain in the
 corpus as unparseable security boundaries.
 
-Resolver-provenance cases additionally pin selected current `Arg` fields. They
-record the v0.2 false path claim until its production slice lands, while the
-desired effective value records the literal shell value proved by the paired
-real-shell oracle. Those cases then move into the executable corpus instead of
-being treated as behavior that issue #69 must preserve.
+Resolver-provenance cases additionally pin selected current and desired v0.2
+compatibility leaves. Besides `Arg`, a case may assert clause argument,
+redirect, and element counts plus one complete `Redirect` and `ClauseElement`
+shape. This records the v0.2 false path claim until its production slice lands
+and proves that a corrected redirect does not leave a suffix argument behind.
+The desired effective value records the literal shell value proved by the
+paired real-shell oracle. Those cases then move into the executable corpus
+instead of being treated as behavior that issue #69 must preserve.
+
+The provenance matrix deliberately separates shell value formation from path
+consumer semantics. PowerShell cases use identical quoted values across native
+file operands, cmdlet `Path`, and cmdlet `LiteralPath` positions to prove that
+tilde, wildcard, provider, and PSDrive behavior cannot be recovered from the
+decoded string alone. Runtime-variable cases remain `Unknown`; incomplete
+braced interpolation makes the whole parse unparseable. Paired redirect cases
+require adjacent fragments to become one redirect target rather than a target
+prefix plus an unrelated argument.

@@ -684,6 +684,815 @@
         "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": false },
         "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
       }
+    },
+    {
+      "id": "pwsh-runtime-question-parameter-path",
+      "concern": "Runtime status punctuation cannot become a glob path",
+      "input": "Get-Content \"$?\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$?\"", "kind": "Glob", "isPath": true }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"$?\"", "kind": "Unknown", "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$?\"", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "The released parser mistakes runtime $? punctuation for a quoted glob."
+    },
+    {
+      "id": "pwsh-runtime-caret-parameter-path",
+      "concern": "Runtime first-token state cannot become a literal path",
+      "input": "Get-Content \"$^\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$^\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/$^" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"$^\"", "kind": "Unknown", "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$^\"", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-runtime-dollar-parameter-path",
+      "concern": "Runtime last-token state cannot become a literal path",
+      "input": "Get-Content \"$$\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$$\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/$$" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"$$\"", "kind": "Unknown", "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$$\"", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-runtime-numeric-variable-path",
+      "concern": "Numeric variable names remain runtime-produced",
+      "input": "Get-Content \"$1\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$1\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/$1" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"$1\"", "kind": "Unknown", "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$1\"", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-runtime-unicode-variable-path",
+      "concern": "Unicode variable names remain runtime-produced",
+      "input": "Get-Content \"$é\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$é\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/$é" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"$é\"", "kind": "Unknown", "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$é\"", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-unterminated-braced-interpolation",
+      "concern": "An outer closing quote does not complete an open braced interpolation",
+      "input": "Get-Content \"${HOME\"",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [{ "id": "root", "kind": "Unsupported", "slot": "Root" }],
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "Real PowerShell reports parser errors; no exact or compatibility path may be exposed."
+    },
+    {
+      "id": "pwsh-cmdlet-quoted-tilde-path",
+      "concern": "Cmdlet path binding interprets quoted tilde after value formation",
+      "input": "Get-Content \"~\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"~\"", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"~\"", "kind": "Exact", "values": ["~"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"~\"", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user" },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-native-quoted-tilde-path",
+      "concern": "Quoted tilde remains literal for a native file operand",
+      "input": "curl --output \"~\" https://example.invalid",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"~\"", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "curl",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"~\"", "kind": "Exact", "values": ["~"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"~\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/~" },
+        "compatibility": { "verbs": ["curl"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "The shell value is identical to the cmdlet case, but the native consumer context suppresses tilde expansion because it was quoted."
+    },
+    {
+      "id": "pwsh-cmdlet-filesystem-provider-path",
+      "concern": "Cmdlet path binding applies the FileSystem provider qualifier",
+      "input": "Get-Content \"FileSystem::C:\\logs\\x.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"FileSystem::C:\\logs\\x.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/logs/x.txt" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"FileSystem::C:\\logs\\x.txt\"", "kind": "Exact", "values": ["FileSystem::C:\\logs\\x.txt"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"FileSystem::C:\\logs\\x.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/logs/x.txt" },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-native-provider-looking-path",
+      "concern": "Native arguments do not inherit cmdlet provider semantics",
+      "input": "curl --output \"FileSystem::report.txt\" https://example.invalid",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"FileSystem::report.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/report.txt" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "curl",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"FileSystem::report.txt\"", "kind": "Exact", "values": ["FileSystem::report.txt"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"FileSystem::report.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/FileSystem::report.txt" },
+        "compatibility": { "verbs": ["curl"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "The released resolver strips FileSystem:: even though curl receives those characters literally."
+    },
+    {
+      "id": "pwsh-cmdlet-nonfilesystem-psdrive",
+      "concern": "A non-FileSystem PSDrive is not reported as a filesystem path",
+      "input": "Get-Content \"Env:\\PATH\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"Env:\\PATH\"", "kind": "Literal", "isPath": false }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"Env:\\PATH\"", "kind": "Exact", "values": ["Env:\\PATH"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"Env:\\PATH\"", "kind": "Literal", "isPath": false },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-cmdlet-path-quoted-wildcard",
+      "concern": "Cmdlet Path binding retains wildcard semantics after quote removal",
+      "input": "Get-Content -Path \"*.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"*.txt\"", "kind": "Glob", "isPath": true }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"*.txt\"", "kind": "Exact", "values": ["*.txt"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"*.txt\"", "kind": "Glob", "isPath": true },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "NoFilesystemEnumeration", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-cmdlet-literalpath-quoted-wildcard",
+      "concern": "Cmdlet LiteralPath binding suppresses wildcard semantics",
+      "input": "Get-Content -LiteralPath \"*.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"*.txt\"", "kind": "Glob", "isPath": true }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"*.txt\"", "kind": "Exact", "values": ["*.txt"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"*.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/*.txt" },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "NoFilesystemEnumeration", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "The released parser collapses -Path and -LiteralPath into the same glob classification."
+    },
+    {
+      "id": "pwsh-native-quoted-wildcard-path",
+      "concern": "Quoted wildcard remains literal for a native file operand",
+      "input": "curl --output \"*.txt\" https://example.invalid",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"*.txt\"", "kind": "Glob", "isPath": true }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "curl",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"*.txt\"", "kind": "Exact", "values": ["*.txt"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"*.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/*.txt" },
+        "compatibility": { "verbs": ["curl"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "NoFilesystemEnumeration", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-adjacent-redirect-target-fragments",
+      "concern": "Adjacent escaped and quoted redirect fragments form one target",
+      "input": "Write-Output ok > `$HOME\".txt\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\".txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/.txt" },
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 2,
+          "redirectCount": 1,
+          "elementCount": 4,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "C:/Users/user", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> `$HOME",
+            "value": "$HOME",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          }
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Write-Output",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "redirects": [{
+            "operation": "FileOutput",
+            "target": { "sourceElement": "`$HOME\".txt\"", "kind": "Exact", "values": ["$HOME.txt"], "isPolicySensitive": true },
+            "isPathRelevant": true,
+            "isComplete": true
+          }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "ok", "kind": "Literal", "isPath": false },
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "C:/work/$HOME.txt", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> `$HOME\".txt\"",
+            "value": "$HOME.txt",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 14,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/$HOME.txt"
+          }
+        },
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved", "StaticRedirectNotDynamic"]
+      },
+      "notes": "The released parser resolves the $HOME prefix as the redirect and emits the quoted suffix as an unrelated argument."
+    },
+    {
+      "id": "pwsh-native-unquoted-tilde-path",
+      "concern": "Unquoted tilde remains eligible for native expansion",
+      "input": "curl --output ~ https://example.invalid",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "~", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "curl",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "~", "kind": "Exact", "values": ["C:/Users/user"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "~", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user" },
+        "compatibility": { "verbs": ["curl"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-native-unquoted-wildcard-path",
+      "concern": "Unquoted native wildcard remains dynamic without enumeration",
+      "input": "curl --output *.txt https://example.invalid",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "*.txt", "kind": "Glob", "isPath": true }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "curl", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "curl",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "*.txt", "kind": "Unknown", "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "*.txt", "kind": "Glob", "isPath": true },
+        "compatibility": { "verbs": ["curl"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "NoFilesystemEnumeration", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-cmdlet-literalpath-quoted-tilde",
+      "concern": "LiteralPath still applies quoted tilde semantics",
+      "input": "Get-Content -LiteralPath \"~\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"~\"", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"~\"", "kind": "Exact", "values": ["~"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"~\"", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user" },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-cmdlet-literalpath-provider",
+      "concern": "LiteralPath still applies a FileSystem provider qualifier",
+      "input": "Get-Content -LiteralPath \"FileSystem::C:\\logs\\x.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"FileSystem::C:\\logs\\x.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/logs/x.txt" }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"FileSystem::C:\\logs\\x.txt\"", "kind": "Exact", "values": ["FileSystem::C:\\logs\\x.txt"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 1, "raw": "\"FileSystem::C:\\logs\\x.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/logs/x.txt" },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-escaped-open-brace-literal-path",
+      "concern": "An escaped interpolation start remains literal rather than incomplete",
+      "input": "Get-Content \"`${HOME\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"`${HOME\"", "kind": "DynamicSkip", "isPath": false }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Get-Content",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "effectiveValues": [{ "sourceElement": "\"`${HOME\"", "kind": "Exact", "values": ["${HOME"], "isPolicySensitive": true }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"`${HOME\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/${HOME" },
+        "compatibility": { "verbs": ["Get-Content"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      }
+    },
+    {
+      "id": "pwsh-redirect-quoted-tilde",
+      "concern": "PowerShell redirect applies tilde semantics after quote removal",
+      "input": "Write-Output ok > \"~\"",
+      "current": {
+        "isUnparseable": false,
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "C:/Users/user", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"~\"",
+            "value": "~",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 1,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          }
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Write-Output",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "redirects": [{
+            "operation": "FileOutput",
+            "target": { "sourceElement": "\"~\"", "kind": "Exact", "values": ["C:/Users/user"], "isPolicySensitive": true },
+            "isPathRelevant": true,
+            "isComplete": true
+          }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "ok", "kind": "Literal", "isPath": false },
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "C:/Users/user", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"~\"",
+            "value": "~",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 1,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          }
+        },
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-redirect-quoted-wildcard",
+      "concern": "PowerShell redirect wildcard remains unknown even when quoted",
+      "input": "Write-Output ok > \"*.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "\"*.txt\"", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"*.txt\"",
+            "value": "*.txt",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 1,
+            "kind": "Glob",
+            "isFlag": false,
+            "isPath": true
+          }
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Write-Output",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "redirects": [{
+            "operation": "FileOutput",
+            "target": { "sourceElement": "\"*.txt\"", "kind": "Unknown", "isPolicySensitive": true },
+            "isPathRelevant": true,
+            "isComplete": true
+          }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "ok", "kind": "Literal", "isPath": false },
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "\"*.txt\"", "isDynamicSkip": true },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"*.txt\"",
+            "value": "*.txt",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        },
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "NoFilesystemEnumeration", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-redirect-filesystem-provider",
+      "concern": "PowerShell redirect applies a FileSystem provider qualifier",
+      "input": "Write-Output ok > \"FileSystem::C:\\logs\\x.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "C:/logs/x.txt", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"FileSystem::C:\\logs\\x.txt\"",
+            "value": "FileSystem::C:\\logs\\x.txt",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 29,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/logs/x.txt"
+          }
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Write-Output",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "redirects": [{
+            "operation": "FileOutput",
+            "target": { "sourceElement": "\"FileSystem::C:\\logs\\x.txt\"", "kind": "Exact", "values": ["C:/logs/x.txt"], "isPolicySensitive": true },
+            "isPathRelevant": true,
+            "isComplete": true
+          }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "ok", "kind": "Literal", "isPath": false },
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "C:/logs/x.txt", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"FileSystem::C:\\logs\\x.txt\"",
+            "value": "FileSystem::C:\\logs\\x.txt",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 29,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/logs/x.txt"
+          }
+        },
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-redirect-unknown-psdrive",
+      "concern": "PowerShell redirect cannot guess an unproved PSDrive provider mapping",
+      "input": "Write-Output ok > \"ZZ:\\drive.txt\"",
+      "current": {
+        "isUnparseable": false,
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "\"ZZ:\\drive.txt\"", "isDynamicSkip": false },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"ZZ:\\drive.txt\"",
+            "value": "ZZ:\\drive.txt",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 17,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Write-Output",
+          "immediateRole": "Ordinary",
+          "ancestry": ["root"],
+          "isComplete": true,
+          "redirects": [{
+            "operation": "FileOutput",
+            "target": { "sourceElement": "\"ZZ:\\drive.txt\"", "kind": "Unknown", "isPolicySensitive": true },
+            "isPathRelevant": true,
+            "isComplete": true
+          }]
+        }],
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "ok", "kind": "Literal", "isPath": false },
+        "compatibilityClause": {
+          "clauseIndex": 0,
+          "argumentCount": 1,
+          "redirectCount": 1,
+          "elementCount": 3,
+          "redirect": { "redirectIndex": 0, "direction": "Out", "target": "\"ZZ:\\drive.txt\"", "isDynamicSkip": true },
+          "element": {
+            "elementIndex": 2,
+            "raw": "> \"ZZ:\\drive.txt\"",
+            "value": "ZZ:\\drive.txt",
+            "role": "Redirect",
+            "sourceStart": 16,
+            "sourceLength": 17,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        },
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "ShellSpecificOptionSemantics"]
+      }
     }
   ]
 }
