@@ -165,7 +165,7 @@ internal static class BashResolver
                 // Drop the leading `~` and join the rest (which starts with
                 // '/' or '\') to home.
                 var rest = working.Substring(2); // skip "~/" or "~\\"
-                working = JoinPath(home, rest);
+                working = ShellPathNormalization.Join(home, rest);
             }
 
             hadTilde = true;
@@ -446,7 +446,7 @@ internal static class BashResolver
 
         // Lazy fallback. SPEC §2 / §8: defaults to UserProfile. May be the
         // empty string in pathological environments — callers tolerate that
-        // because JoinPath / Path.GetFullPath fall back accordingly.
+        // because downstream path joining and normalization handle it.
         return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
     }
 
@@ -601,32 +601,6 @@ internal static class BashResolver
         (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 
     /// <summary>
-    /// Combine a base directory with a relative or rooted sub-path using
-    /// bash semantics — forward slashes everywhere, regardless of host OS.
-    /// Strips a single leading separator from the sub-path so the combine
-    /// doesn't treat the sub-path as rooted.
-    /// </summary>
-    private static string JoinPath(string baseDir, string sub)
-    {
-        if (string.IsNullOrEmpty(sub))
-        {
-            return baseDir;
-        }
-
-        // Sub-paths may be rooted (e.g. `~/rest` produces `/rest` after
-        // tilde expansion) — strip exactly one leading separator before
-        // combining so we don't lose baseDir.
-        var s = sub;
-        if (s.Length > 0 && (s[0] == '/' || s[0] == '\\'))
-        {
-            s = s.Substring(1);
-        }
-
-        // Always forward-slash, always bash semantics.
-        return baseDir.TrimEnd('/', '\\') + "/" + s.Replace('\\', '/');
-    }
-
-    /// <summary>
     /// Resolve <paramref name="token"/> to an absolute path against the
     /// supplied options. Returns null on resolution failure (SPEC §8 step 6).
     /// Always produces bash-style (forward-slash, no drive letter)
@@ -647,7 +621,7 @@ internal static class BashResolver
             string combined;
             if (IsRootedPath(token))
             {
-                combined = NormalizeToForwardSlashes(token);
+                combined = ShellPathNormalization.NormalizeSeparators(token);
             }
             else if (workingDirectoryUnknown)
             {
@@ -667,7 +641,7 @@ internal static class BashResolver
                     // rather than guess.
                     return null;
                 }
-                combined = JoinPath(wd, token);
+                combined = ShellPathNormalization.Join(wd, token);
             }
 
             return NormalizePath(combined);
@@ -684,22 +658,6 @@ internal static class BashResolver
         {
             return null;
         }
-    }
-
-    /// <summary>
-    /// Normalize backslashes to forward slashes; preserve bash semantics
-    /// for `\\server\share` UNC paths by collapsing the leading `\\` to a
-    /// single `//`. (UNC paths are rare in bash but the heuristic preserves
-    /// them in a recognizable form for consumers.)
-    /// </summary>
-    private static string NormalizeToForwardSlashes(string token)
-    {
-        if (token.Length >= 2 && token[0] == '\\' && token[1] == '\\')
-        {
-            // UNC: \\server\share -> //server/share
-            return "//" + token.Substring(2).Replace('\\', '/');
-        }
-        return token.Replace('\\', '/');
     }
 
     /// <summary>

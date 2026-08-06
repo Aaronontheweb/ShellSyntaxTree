@@ -78,7 +78,9 @@ internal static class PwshResolver
             }
 
             var home = GetHomeDirectory(options);
-            working = working.Length == 1 ? home : JoinPath(home, working.Substring(2));
+            working = working.Length == 1
+                ? home
+                : ShellPathNormalization.Join(home, working.Substring(2));
             hadHomeish = true;
         }
 
@@ -548,22 +550,6 @@ internal static class PwshResolver
     private static bool IsAsciiLetter(char c) =>
         (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
 
-    private static string JoinPath(string baseDir, string sub)
-    {
-        if (string.IsNullOrEmpty(sub))
-        {
-            return baseDir;
-        }
-
-        var s = sub;
-        if (s.Length > 0 && (s[0] == '/' || s[0] == '\\'))
-        {
-            s = s.Substring(1);
-        }
-
-        return baseDir.TrimEnd('/', '\\') + "/" + s.Replace('\\', '/');
-    }
-
     /// <summary>
     /// Resolve <paramref name="token"/> to a normalized absolute path.
     /// Returns null on failure (SPEC.POWERSHELL.md §8). Drive-qualified
@@ -583,7 +569,7 @@ internal static class PwshResolver
             string combined;
             if (IsRootedPath(token))
             {
-                combined = NormalizeToForwardSlashes(token);
+                combined = ShellPathNormalization.NormalizeSeparators(token);
             }
             else if (workingDirectoryUnknown)
             {
@@ -597,7 +583,7 @@ internal static class PwshResolver
                     return null;
                 }
 
-                combined = JoinPath(wd, token);
+                combined = ShellPathNormalization.Join(wd, token);
             }
 
             return NormalizePath(combined);
@@ -614,16 +600,6 @@ internal static class PwshResolver
         {
             return null;
         }
-    }
-
-    private static string NormalizeToForwardSlashes(string token)
-    {
-        if (token.Length >= 2 && token[0] == '\\' && token[1] == '\\')
-        {
-            return "//" + token.Substring(2).Replace('\\', '/');
-        }
-
-        return token.Replace('\\', '/');
     }
 
     private static string NormalizePath(string path)
