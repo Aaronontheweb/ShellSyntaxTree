@@ -79,6 +79,18 @@ public class V03DesignCorpusTests
                         actual.UnparseableReason ?? string.Empty,
                         StringComparison.OrdinalIgnoreCase);
                 }
+
+                if (designCase.Current.Argument is not null)
+                {
+                    var expected = designCase.Current.Argument;
+                    ValidateArgumentExpectation(designCase.Id, expected, actual.Clauses.Count);
+                    var clause = Assert.IsType<Clause>(actual.Clauses[expected.ClauseIndex]);
+                    var argument = Assert.IsType<Arg>(clause.Args[expected.ArgumentIndex]);
+                    Assert.Equal(expected.Raw, argument.Raw);
+                    Assert.Equal(expected.Kind, argument.Kind);
+                    Assert.Equal(expected.IsPath, argument.IsPath);
+                    Assert.Equal(expected.Resolved, argument.Resolved);
+                }
             }
         }
     }
@@ -177,6 +189,27 @@ public class V03DesignCorpusTests
         Assert.Equal(
             desired.Commands.Select(command => command.AuthoredVerb),
             desired.Compatibility.Verbs);
+
+        if (desired.Argument is not null)
+        {
+            ValidateArgumentExpectation(
+                designCase.Id,
+                desired.Argument,
+                desired.Compatibility.Verbs.Count);
+        }
+    }
+
+    private static void ValidateArgumentExpectation(
+        string caseId, ArgumentExpectation argument, int clauseCount)
+    {
+        Assert.InRange(argument.ClauseIndex, 0, clauseCount - 1);
+        Assert.True(argument.ArgumentIndex >= 0, $"{caseId}: argument index must be non-negative.");
+        Assert.False(string.IsNullOrWhiteSpace(argument.Raw));
+        if (argument.Resolved is not null)
+        {
+            Assert.True(argument.IsPath, $"{caseId}: a resolved argument must be path-relevant.");
+            Assert.NotEqual(ArgKind.DynamicSkip, argument.Kind);
+        }
     }
 
     private static void ValidateValue(
@@ -266,6 +299,23 @@ public sealed record CurrentBehaviorExpectation
     public bool IsUnparseable { get; init; }
 
     public string? ReasonContains { get; init; }
+
+    public ArgumentExpectation? Argument { get; init; }
+}
+
+public sealed record ArgumentExpectation
+{
+    public int ClauseIndex { get; init; }
+
+    public int ArgumentIndex { get; init; }
+
+    public string Raw { get; init; } = "";
+
+    public ArgKind Kind { get; init; }
+
+    public bool IsPath { get; init; }
+
+    public string? Resolved { get; init; }
 }
 
 public sealed record DesiredDesignExpectation
@@ -275,6 +325,8 @@ public sealed record DesiredDesignExpectation
     public IReadOnlyList<DesignSyntaxExpectation> Syntax { get; init; } = [];
 
     public IReadOnlyList<DesignCommandExpectation> Commands { get; init; } = [];
+
+    public ArgumentExpectation? Argument { get; init; }
 
     public CompatibilityExpectation Compatibility { get; init; } = new();
 
@@ -453,4 +505,5 @@ public enum SecurityInvariant
     ContextualKeywordNotControlFlow,
     ShellSpecificOptionSemantics,
     StaticRedirectNotDynamic,
+    LiteralExpansionProvenancePreserved,
 }

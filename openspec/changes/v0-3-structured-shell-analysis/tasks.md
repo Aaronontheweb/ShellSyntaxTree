@@ -11,12 +11,14 @@
 - [x] 1.9 Add a paired Bash and PowerShell design corpus that records current behavior, desired structure, command occurrences, bounded values, redirect facts, compatibility projections, and security invariants.
 - [ ] 1.10 Promote each design case into the executable corpus as its production parser slice lands.
 
-## 2. Behavior-Preserving Shared Preparation
+## 2. Resolver Provenance Correction and Shared Preparation
 
-- [ ] 2.1 Implement issue #69's shell-neutral native argument-fragment classifier with explicit Bash and PowerShell adapters.
-- [ ] 2.2 Prove all existing raw, decoded, span, path, and `DynamicSkip` results remain unchanged in both corpora.
-- [ ] 2.3 Audit duplicated Bash and PowerShell path-normalization helpers and extract only rules with identical shell semantics.
-- [ ] 2.4 Run Release build, full tests, and header verification for the behavior-preserving refactor.
+- [ ] 2.1 Implement shell-specific lexical fragment provenance that distinguishes literal, expandable, and opaque resolver input without changing the public API.
+- [ ] 2.2 Add paired Bash and PowerShell shell-oracle regressions for standalone escapes, adjacent escaped values, all-static mixed quoting, within-token escapes, and genuine literal-plus-expandable values; require exact compatibility path results when every fragment and required resolver fact is exact, otherwise fail closed.
+- [ ] 2.3 Implement issue #69's shell-neutral native argument-fragment classifier with explicit Bash and PowerShell adapters that preserve the new provenance.
+- [ ] 2.4 Prove raw spelling, decoded logical values, source spans, and unaffected classifications remain unchanged; document each oracle-proved path or `DynamicSkip` compatibility correction.
+- [ ] 2.5 Audit duplicated Bash and PowerShell path-normalization helpers and extract only rules with identical shell semantics.
+- [ ] 2.6 Run Release build, full tests, header verification, and the adversarial security corpus for the completed preparation.
 
 ## 3. Structural and Projection Skeleton
 
