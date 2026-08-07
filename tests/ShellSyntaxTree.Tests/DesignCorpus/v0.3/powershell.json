@@ -2495,7 +2495,7 @@
       "concern": "A leading param declaration keeps the complete argument-completer region atomic until declaration grammar lands",
       "input": "Register-ArgumentCompleter -CommandName tool -ScriptBlock { param($commandName) Write-Output $commandName }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
-      "current": { "isUnparseable": false },
+      "current": { "isUnparseable": true },
       "desired": {
         "isUnparseable": true,
         "syntax": [

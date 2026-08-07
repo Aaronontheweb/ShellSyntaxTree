@@ -9,6 +9,7 @@ using System.Runtime.CompilerServices;
 using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
 using ShellSyntaxTree.Internal.Resolving;
+using ShellSyntaxTree.Internal.Pwsh.Verbs;
 
 namespace ShellSyntaxTree.Internal.Pwsh.Parsing;
 
@@ -549,18 +550,212 @@ internal static partial class PwshCommandParser
                 UpdateAttribution(built.Clauses[0], _options, _attribution);
             }
 
+            if (!TryParseCommandExecutionRegions(
+                    clause,
+                    out var executionRegions,
+                    out error))
+            {
+                return false;
+            }
+
             var first = segmentTokens[0];
             var last = segmentTokens[segmentTokens.Count - 1];
             var simple = new SimpleCommandSyntax
             {
                 Clause = clause,
                 Substitutions = substitutions,
+                ExecutionRegions = executionRegions,
                 SourceStart = first.SourceStart,
                 SourceLength = last.SourceStart + last.SourceLength - first.SourceStart,
             };
             RegisterFacts(simple, segmentTokens);
             command = simple;
             return true;
+        }
+
+        private bool TryParseCommandExecutionRegions(
+            Clause clause,
+            out IReadOnlyList<ExecutionRegionSyntax> executionRegions,
+            out string? error)
+        {
+            var binding = PwshExecutionRegionBindingCatalog.Bind(
+                clause,
+                commandIdentityProven: false);
+            if (binding.Status == PwshExecutionRegionBindingStatus.NotApplicable)
+            {
+                executionRegions = Array.Empty<ExecutionRegionSyntax>();
+                error = null;
+                return true;
+            }
+
+            if (_structuralDepth + _groupDepth + 1 >
+                ShellAnalysisLimits.MaxStructuralNesting)
+            {
+                executionRegions = Array.Empty<ExecutionRegionSyntax>();
+                error = "PowerShell structural nesting depth exceeded (>16)";
+                return false;
+            }
+
+            var parsed = new List<ExecutionRegionSyntax>(binding.Bindings.Count);
+            error = null;
+            for (var index = 0; index < binding.Bindings.Count; index++)
+            {
+                var blockBinding = binding.Bindings[index];
+                if (blockBinding.HostClauseElementIndex < 0
+                    || blockBinding.HostClauseElementIndex >= clause.Elements.Count
+                    || !TryCreateScriptBlockToken(
+                        clause.Elements[blockBinding.HostClauseElementIndex],
+                        out var token)
+                    || !TryParseScriptBlockBody(token, out var body, out error))
+                {
+                    executionRegions = Array.Empty<ExecutionRegionSyntax>();
+                    error ??= "PowerShell script-block binding could not be mapped exactly";
+                    return false;
+                }
+
+                parsed.Add(new ExecutionRegionSyntax
+                {
+                    Origin = ExecutionRegionOrigin.CommandArgument,
+                    HostClauseElementIndex = blockBinding.HostClauseElementIndex,
+                    Phase = blockBinding.Phase,
+                    Timing = blockBinding.Timing,
+                    Cardinality = blockBinding.Cardinality,
+                    Body = body,
+                    SourceStart = token.SourceStart,
+                    SourceLength = token.SourceLength,
+                });
+            }
+
+            executionRegions = parsed;
+            error = null;
+            return true;
+        }
+
+        private static bool TryCreateScriptBlockToken(
+            ClauseElement element,
+            out PwshToken token)
+        {
+            token = default;
+            if (element.SourceStart is null || element.SourceLength is null)
+            {
+                return false;
+            }
+
+            var open = element.Raw.IndexOf('{');
+            var close = element.Raw.LastIndexOf('}');
+            if (open < 0 || close <= open)
+            {
+                return false;
+            }
+
+            var length = close - open + 1;
+            token = new PwshToken(
+                PwshTokenKind.ScriptBlock,
+                element.Raw.Substring(open, length),
+                null,
+                element.SourceStart.Value + open,
+                length,
+                null);
+            return true;
+        }
+
+        private bool TryParseScriptBlockBody(
+            PwshToken token,
+            out ShellBlockSyntax body,
+            out string? error)
+        {
+            if (token.SourceLength < 2)
+            {
+                body = new ShellBlockSyntax();
+                error = "PowerShell script-block token was not completely delimited";
+                return false;
+            }
+
+            var sourceStart = token.SourceStart + 1;
+            var sourceLength = token.SourceLength - 2;
+            var source = _source.Substring(sourceStart, sourceLength);
+            var relativeTokens = PwshLexer.Tokenize(source);
+            foreach (var relativeToken in relativeTokens)
+            {
+                if (relativeToken.Kind == PwshTokenKind.UnparseableSentinel)
+                {
+                    body = new ShellBlockSyntax();
+                    error = relativeToken.UnparseableReason;
+                    return false;
+                }
+            }
+
+            var significant = FilterSignificant(relativeTokens);
+            if (TryDetectAnomaly(significant, out error))
+            {
+                body = new ShellBlockSyntax();
+                return false;
+            }
+
+            if (significant.Count > 0 && IsUnsupportedSubstitutionBody(source, significant))
+            {
+                foreach (var expressionToken in significant)
+                {
+                    if (HasPowerShellSubexpression(expressionToken)
+                        || expressionToken.Kind is PwshTokenKind.Subexpression
+                            or PwshTokenKind.ScriptBlock
+                            or PwshTokenKind.Splat
+                        || expressionToken.IsStatementSeparator
+                        || expressionToken.Kind == PwshTokenKind.Operator)
+                    {
+                        body = new ShellBlockSyntax();
+                        error = "unsupported execution-bearing PowerShell script-block expression";
+                        return false;
+                    }
+                }
+
+                body = new ShellBlockSyntax
+                {
+                    SourceStart = sourceStart,
+                    SourceLength = sourceLength,
+                };
+                error = null;
+                return true;
+            }
+
+            var coordinator = new StructuralCoordinator(
+                _source,
+                ShiftTokens(significant, sourceStart),
+                _options,
+                _recursionDepth,
+                _structuralDepth + _groupDepth + 1,
+                _markWrapped,
+                _attribution,
+                sourceStart,
+                sourceLength,
+                CompoundOperator.None,
+                insideCommandSubstitution: false);
+            if (!coordinator.TryParse(out body, out error))
+            {
+                return false;
+            }
+
+            MergeFacts(coordinator);
+            return true;
+        }
+
+        private static bool HasPowerShellSubexpression(PwshToken token)
+        {
+            if (token.ResolverValue is null)
+            {
+                return false;
+            }
+
+            foreach (var fragment in token.ResolverValue.Fragments)
+            {
+                if (fragment.Kind == ShellValueFragmentKind.Opaque
+                    && fragment.OpaqueCause == ShellOpaqueCause.PowerShellSubexpression)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool IsForEachCommandArgument(

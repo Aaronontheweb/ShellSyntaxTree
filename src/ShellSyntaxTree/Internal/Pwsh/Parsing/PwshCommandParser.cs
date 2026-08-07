@@ -413,7 +413,7 @@ internal static partial class PwshCommandParser
             }
 
             var v = tokens[j].Value;
-            return v is "=" or "+=" or "-=" or "*=" or "/=" or "%=";
+            return v is "=" or "+=" or "-=" or "*=" or "/=" or "%=" or "??=";
         }
 
         return false;

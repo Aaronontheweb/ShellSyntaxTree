@@ -799,6 +799,8 @@ internal sealed class PwshForEachValueAnalyzer
         new(ClauseReferenceComparer.Instance);
     private bool _isComplete = true;
     private int _remainingLoopAnalysisTransitions = MaxLoopAnalysisTransitions;
+    private long _executionRegionEffectCount;
+    private long _nonRegionStateMutationCount;
 
     private PwshForEachValueAnalyzer(
         PwshParserOptions options,
@@ -861,8 +863,14 @@ internal sealed class PwshForEachValueAnalyzer
             GroupSyntax group => AnalyzeGroup(group, input),
             ForEachSyntax forEach => AnalyzeForEach(forEach, input),
             CommandSubstitutionSyntax substitution => AnalyzeSubstitution(substitution, input),
-            _ => PwshFlowResult.Both(input.Invalidate(unknownCwd: true)),
+            _ => AnalyzeUnsupportedNode(input),
         };
+
+    private PwshFlowResult AnalyzeUnsupportedNode(AnalysisContext input)
+    {
+        _nonRegionStateMutationCount++;
+        return PwshFlowResult.Both(input.Invalidate(unknownCwd: true));
+    }
 
     private PwshFlowResult AnalyzeBlock(ShellBlockSyntax block, AnalysisContext input)
     {
@@ -899,7 +907,8 @@ internal sealed class PwshForEachValueAnalyzer
         var effective = CreateEffectiveArguments(
             source.ValueProvenance,
             current,
-            includeUnresolved: isForEachIncomplete);
+            includeUnresolved: isForEachIncomplete ||
+                current.CommandResolutionInvalidated);
         var mayPromote = current.CanPromote &&
             source.HasCompleteValueProvenance &&
             simple.Substitutions.Count == 0 &&
@@ -916,27 +925,31 @@ internal sealed class PwshForEachValueAnalyzer
         var location = AnalyzeSetLocation(simple, current);
         if (location is not null)
         {
+            _nonRegionStateMutationCount++;
             if (PwshPersistentStateMutation.TryGetEffect(
                     simple.Clause,
                     effective,
                     out var locationEffectUnknownCwd))
             {
                 var flow = location.Value;
-                return new PwshFlowResult(
+                return ApplyExecutionRegionEffect(simple, new PwshFlowResult(
                     flow.OnSuccess is AnalysisContext success
                         ? success.Invalidate(locationEffectUnknownCwd)
                         : null,
                     flow.OnFailure is AnalysisContext failure
                         ? failure.Invalidate(locationEffectUnknownCwd)
-                        : null);
+                        : null));
             }
 
-            return location.Value;
+            return ApplyExecutionRegionEffect(simple, location.Value);
         }
 
         if (simple.Clause.Verb.IsDynamic)
         {
-            return PwshFlowResult.Both(current.Invalidate(unknownCwd: true));
+            _nonRegionStateMutationCount++;
+            return ApplyExecutionRegionEffect(
+                simple,
+                PwshFlowResult.Both(current.Invalidate(unknownCwd: true)));
         }
 
         if (PwshPersistentStateMutation.TryGetEffect(
@@ -944,10 +957,32 @@ internal sealed class PwshForEachValueAnalyzer
                 effective,
                 out var unknownCwd))
         {
-            return PwshFlowResult.Both(current.Invalidate(unknownCwd));
+            _nonRegionStateMutationCount++;
+            return ApplyExecutionRegionEffect(
+                simple,
+                PwshFlowResult.Both(current.Invalidate(unknownCwd)));
         }
 
-        return PwshFlowResult.Both(current);
+        return ApplyExecutionRegionEffect(simple, PwshFlowResult.Both(current));
+    }
+
+    private PwshFlowResult ApplyExecutionRegionEffect(
+        SimpleCommandSyntax simple,
+        PwshFlowResult flow)
+    {
+        if (simple.ExecutionRegions.Count == 0)
+        {
+            return flow;
+        }
+
+        _executionRegionEffectCount++;
+        return new PwshFlowResult(
+            flow.OnSuccess is AnalysisContext success
+                ? success.Invalidate(unknownCwd: true)
+                : null,
+            flow.OnFailure is AnalysisContext failure
+                ? failure.Invalidate(unknownCwd: true)
+                : null);
     }
 
     private void RecordFacts(
@@ -1044,22 +1079,34 @@ internal sealed class PwshForEachValueAnalyzer
 
     private PwshFlowResult AnalyzePipeline(PipelineSyntax pipeline, AnalysisContext input)
     {
+        var stageInput = input;
         foreach (var stage in pipeline.Stages)
         {
-            var stageFlow = AnalyzeNode(stage, input);
+            var executionRegionEffectsBefore = _executionRegionEffectCount;
+            var nonRegionMutationsBefore = _nonRegionStateMutationCount;
+            var stageFlow = AnalyzeNode(stage, stageInput);
             if (stageFlow.JoinedState is not AnalysisContext stageExit)
             {
                 return new PwshFlowResult(null, null);
             }
 
-            if (!input.StateEquals(stageExit))
+            if (!stageInput.StateEquals(stageExit))
             {
-                _isComplete = false;
-                return new PwshFlowResult(null, null);
+                var regionCausedTransition =
+                    _executionRegionEffectCount > executionRegionEffectsBefore;
+                var unrelatedMutationCausedTransition =
+                    _nonRegionStateMutationCount > nonRegionMutationsBefore;
+                if (!regionCausedTransition || unrelatedMutationCausedTransition)
+                {
+                    _isComplete = false;
+                    return new PwshFlowResult(null, null);
+                }
+
+                stageInput = stageInput.Invalidate(unknownCwd: true);
             }
         }
 
-        return PwshFlowResult.Both(input);
+        return PwshFlowResult.Both(stageInput);
     }
 
     private PwshFlowResult AnalyzeGroup(GroupSyntax group, AnalysisContext input)
@@ -1069,11 +1116,15 @@ internal sealed class PwshForEachValueAnalyzer
             return AnalyzeBlock(group.Body, input);
         }
 
+        var executionRegionEffectCount = _executionRegionEffectCount;
+        var nonRegionStateMutationCount = _nonRegionStateMutationCount;
         AnalyzeBlock(
             group.Body,
             input.WithoutBindings().Invalidate(
                 unknownCwd: false,
                 invalidateCommandResolution: false));
+        _executionRegionEffectCount = executionRegionEffectCount;
+        _nonRegionStateMutationCount = nonRegionStateMutationCount;
         return PwshFlowResult.Both(input);
     }
 
@@ -1086,6 +1137,7 @@ internal sealed class PwshForEachValueAnalyzer
 
     private PwshFlowResult AnalyzeForEach(ForEachSyntax forEach, AnalysisContext input)
     {
+        _nonRegionStateMutationCount++;
         var plan = _planFactory(forEach);
         if (plan is null)
         {
@@ -1446,6 +1498,16 @@ internal sealed class PwshForEachValueAnalyzer
                 facts);
         }
 
+        var executionRegions = new ExecutionRegionSyntax[simple.ExecutionRegions.Count];
+        for (var index = 0; index < executionRegions.Length; index++)
+        {
+            var region = simple.ExecutionRegions[index];
+            executionRegions[index] = region with
+            {
+                Body = RewriteBlock(region.Body, facts),
+            };
+        }
+
         var source = GetFacts(simple);
         var clause = RewriteCwdCompatibility(
             simple.Clause,
@@ -1465,6 +1527,7 @@ internal sealed class PwshForEachValueAnalyzer
         {
             Clause = clause,
             Substitutions = substitutions,
+            ExecutionRegions = executionRegions,
         };
     }
 
