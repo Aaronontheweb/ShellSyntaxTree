@@ -1,0 +1,41 @@
+{
+  "name": "V03 foreach isolated exact scalar",
+  "input": "foreach ($f in 'a.txt') { Remove-Item -LiteralPath $f }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["Remove-Item"],
+        "args": [
+          { "raw": "-LiteralPath", "kind": "Literal", "isPath": false },
+          { "raw": "$f", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 55 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 55 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 25, "sourceLength": 29 }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": ["a.txt"]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "The explicit constrained-host contract permits one exact loop binding proof."
+}

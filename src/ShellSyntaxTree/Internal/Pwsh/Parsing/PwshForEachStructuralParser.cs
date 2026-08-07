@@ -53,6 +53,14 @@ internal static partial class PwshCommandParser
             }
 
             var bindingToken = _tokens[_position++];
+            if (_options.InitialStateMode ==
+                    PwshInitialStateMode.IsolatedNonInteractiveNoProfile &&
+                !PwshForEachValueAnalysis.IsEligibleBindingName(bindingName))
+            {
+                error = "PowerShell foreach binding collides with a reserved or stateful built-in variable";
+                return false;
+            }
+
             if (_position == _tokens.Count ||
                 _tokens[_position].Kind != PwshTokenKind.Word ||
                 !string.Equals(
@@ -74,6 +82,7 @@ internal static partial class PwshCommandParser
             }
 
             var iterableTokens = CopyTokens(iterableStart, closePosition);
+            var isLiteralIterable = IsLiteralForEachExpression(iterableTokens);
             var firstIterable = iterableTokens[0];
             var lastIterable = iterableTokens[iterableTokens.Count - 1];
             var iterableSourceStart = firstIterable.SourceStart;
@@ -110,7 +119,7 @@ internal static partial class PwshCommandParser
                 return false;
             }
 
-            command = new ForEachSyntax
+            var forEach = new ForEachSyntax
             {
                 Binding = new LoopBindingSyntax
                 {
@@ -136,6 +145,13 @@ internal static partial class PwshCommandParser
                 SourceLength = bodyToken.SourceStart + bodyToken.SourceLength -
                     start.SourceStart,
             };
+            _forEachPlans.Add(
+                forEach,
+                PwshForEachValueAnalysis.CapturePlan(
+                    bindingName,
+                    iterableTokens,
+                    isLiteralIterable));
+            command = forEach;
             error = null;
             return true;
         }
@@ -267,7 +283,13 @@ internal static partial class PwshCommandParser
                 sourceLength,
                 CompoundOperator.None,
                 insideCommandSubstitution: false);
-            return coordinator.TryParse(out iterator, out error);
+            if (!coordinator.TryParse(out iterator, out error))
+            {
+                return false;
+            }
+
+            MergeFacts(coordinator);
+            return true;
         }
 
         private bool TryParseForEachBody(
@@ -318,7 +340,13 @@ internal static partial class PwshCommandParser
                 sourceLength,
                 CompoundOperator.None,
                 insideCommandSubstitution: false);
-            return coordinator.TryParse(out body, out error);
+            if (!coordinator.TryParse(out body, out error))
+            {
+                return false;
+            }
+
+            MergeFacts(coordinator);
+            return true;
         }
 
         private static bool TryReadSimpleLoopBinding(PwshToken token, out string name)

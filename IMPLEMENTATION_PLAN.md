@@ -319,10 +319,18 @@ priorities.
       `PwshInitialStateMode` API and safe-default contract are now locked;
       `-NoProfile -NonInteractive` alone is explicitly insufficient without a
       controlled startup, inherited environment, and module baseline. Design
-      cases select the mode individually and pin default `Unknown`. Tasks
-      7.3-7.4 must consume the contract rather than inferring isolation. Expand the
+      cases select the mode individually and pin default `Unknown`. The first
+      value-analysis pass now consumes that contract, retains parser-owned
+      argument provenance, proves quoted scalar and literal-array domains,
+      retains ordered duplicate visits separately from public set summaries,
+      guards a pinned documented preference inventory plus fresh-host built-ins
+      with a live PowerShell oracle, composes case-insensitive distinct nested
+      bindings, and leaves pipeline
+      objects, null, overflow, wrappers, redirects, same-name overwrites, and
+      post-loop state conservative. Task 7.4 must add ordered persistent scope
+      and location transfers without restoring parser-frame bindings. Expand the
       design corpus for cardinality, mutation, separators, wrappers, redirects,
-      and transition caps before tasks 7.3-7.7. The simple-command slice is
+      and transition caps before tasks 7.4-7.7. The simple-command slice is
       delivered for ordinary, adjacent, quoted, here-string, redirect, standalone,
       call-operator, dynamic-identity, and host-wrapper positions, with
       current-scope state propagation and bounded expression rejection pinned

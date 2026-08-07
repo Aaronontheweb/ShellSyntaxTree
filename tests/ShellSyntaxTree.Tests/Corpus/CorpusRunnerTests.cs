@@ -33,8 +33,12 @@ public class CorpusRunnerTests
         Assert.NotNull(entry);
         Assert.False(string.IsNullOrEmpty(entry.Name), $"Corpus entry {fileName} has no name.");
         Assert.NotNull(entry.Expected);
+        if (shell != "powershell")
+        {
+            Assert.Null(entry.PowerShellInitialStateMode);
+        }
 
-        var actual = CreateParser(shell).Parse(entry.Input);
+        var actual = CreateParser(shell, entry.PowerShellInitialStateMode).Parse(entry.Input);
         AstAssert.Equal(entry.Expected!, actual, $"{shell}/{fileName}");
         AssertClauseElementInvariants(actual, $"{shell}/{fileName}");
         AssertAuthoredTokenCoverage(shell, actual, $"{shell}/{fileName}");
@@ -536,22 +540,25 @@ public class CorpusRunnerTests
     /// have stable expected values across hosts (Linux CI, Windows CI, dev
     /// machines).
     /// </summary>
-    internal static IShellParser CreateParser(string shell) => shell switch
-    {
-        "bash" => new BashParser(new BashParserOptions
+    internal static IShellParser CreateParser(
+        string shell,
+        PwshInitialStateMode? powerShellInitialStateMode = null) => shell switch
         {
-            HomeDirectory = "/home/test",
-            WorkingDirectory = "/work",
-            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
-        }),
-        "powershell" => new PwshParser(new PwshParserOptions
-        {
-            HomeDirectory = "C:/Users/user",
-            WorkingDirectory = "C:/work",
-        }),
-        _ => throw new InvalidOperationException(
-            $"No parser is registered for corpus shell directory '{shell}'."),
-    };
+            "bash" => new BashParser(new BashParserOptions
+            {
+                HomeDirectory = "/home/test",
+                WorkingDirectory = "/work",
+                InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
+            }),
+            "powershell" => new PwshParser(new PwshParserOptions
+            {
+                HomeDirectory = "C:/Users/user",
+                WorkingDirectory = "C:/work",
+                InitialStateMode = powerShellInitialStateMode ?? PwshInitialStateMode.Unknown,
+            }),
+            _ => throw new InvalidOperationException(
+                $"No parser is registered for corpus shell directory '{shell}'."),
+        };
 
     public static IEnumerable<object[]> CorpusEntries()
     {
@@ -606,6 +613,8 @@ public sealed record CorpusEntry
     public string Name { get; init; } = "";
 
     public string Input { get; init; } = "";
+
+    public PwshInitialStateMode? PowerShellInitialStateMode { get; init; }
 
     public ExpectedParsedCommand? Expected { get; init; }
 

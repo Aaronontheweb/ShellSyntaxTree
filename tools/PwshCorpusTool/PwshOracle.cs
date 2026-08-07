@@ -80,8 +80,8 @@ $counts = foreach ($s in @($inputs)) {
         }
         finally
         {
-            TryDelete(scriptPath);
-            TryDelete(inputPath);
+            _ = TryDelete(scriptPath);
+            _ = TryDelete(inputPath);
         }
     }
 
@@ -94,6 +94,25 @@ $counts = foreach ($s in @($inputs)) {
     {
         if (!TryRunPwsh(
                 "-NoProfile -NoLogo -Command \"Get-Alias | ForEach-Object Name\"", 60000, out var stdout))
+        {
+            return null;
+        }
+
+        return stdout.Split(
+            new[] { '\r', '\n' },
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    /// <summary>
+    /// The names of every variable a fresh no-profile <c>pwsh</c> process
+    /// defines. Returns null when <c>pwsh</c> is absent.
+    /// </summary>
+    public static IReadOnlyList<string>? GetVariableNames()
+    {
+        if (!TryRunPwsh(
+                "-NoProfile -NoLogo -NonInteractive -Command \"Get-Variable | ForEach-Object Name\"",
+                60000,
+                out var stdout))
         {
             return null;
         }
@@ -135,7 +154,7 @@ $counts = foreach ($s in @($inputs)) {
 
             if (!process.WaitForExit(timeoutMs))
             {
-                KillQuietly(process);
+                _ = TryKill(process);
                 return false;
             }
 
@@ -148,19 +167,20 @@ $counts = foreach ($s in @($inputs)) {
         }
     }
 
-    private static void KillQuietly(Process process)
+    private static bool TryKill(Process process)
     {
         try
         {
             process.Kill(entireProcessTree: true);
+            return true;
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
-            // The child already exited, or could not be killed — best effort.
+            return false;
         }
     }
 
-    private static void TryDelete(string path)
+    private static bool TryDelete(string path)
     {
         try
         {
@@ -168,10 +188,12 @@ $counts = foreach ($s in @($inputs)) {
             {
                 File.Delete(path);
             }
+
+            return true;
         }
         catch (IOException)
         {
-            // Best-effort temp cleanup.
+            return false;
         }
     }
 }

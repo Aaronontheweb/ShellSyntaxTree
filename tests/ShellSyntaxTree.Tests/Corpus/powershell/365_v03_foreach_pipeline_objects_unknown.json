@@ -1,0 +1,59 @@
+{
+  "name": "V03 foreach pipeline objects unknown",
+  "input": "foreach ($f in Get-ChildItem C:\\input) { Write-Output $f }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["Get-ChildItem"],
+        "args": [
+          { "raw": "C:\\input", "kind": "Literal", "isPath": true, "resolved": "C:/input" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": ["Write-Output"],
+        "args": [
+          { "raw": "$f", "kind": "EnvVar", "isPath": false }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Iterator",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 58 },
+          { "ancestorKind": "ForEach", "region": "Iterator", "childIndex": null, "sourceStart": 0, "sourceLength": 58 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 15, "sourceLength": 22 }
+        ],
+        "effectiveArguments": []
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 58 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 58 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 40, "sourceLength": 17 }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Unknown",
+              "values": []
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Pipeline output remains an object domain and is never guessed into strings."
+}

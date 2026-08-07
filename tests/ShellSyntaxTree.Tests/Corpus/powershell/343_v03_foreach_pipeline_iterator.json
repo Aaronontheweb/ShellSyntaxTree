@@ -177,7 +177,17 @@
             "sourceLength": 29
           }
         ],
-        "effectiveArguments": [],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Unknown",
           "values": [],

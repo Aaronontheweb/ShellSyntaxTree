@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
 using ShellSyntaxTree.Internal.Resolving;
@@ -40,13 +41,16 @@ internal static partial class PwshCommandParser
         }
 
         var incompleteForEachClauses = CollectIncompleteForEachClauses(syntax);
-        if (!ShellSyntaxProjection.TryProject(
+        if (!PwshForEachValueAnalyzer.TryAnalyze(
                 syntax,
-                simple => new CommandOccurrenceFacts
-                {
-                    IsComplete = IsStructurallyComplete(simple) &&
-                        !ContainsReference(incompleteForEachClauses, simple.Clause),
-                },
+                options,
+                coordinator.GetFacts,
+                coordinator.GetForEachPlan,
+                incompleteForEachClauses,
+                out var analyzedFacts) ||
+            !ShellSyntaxProjection.TryProject(
+                syntax,
+                analyzedFacts,
                 out var projection))
         {
             return StructuralFailure(
@@ -90,6 +94,10 @@ internal static partial class PwshCommandParser
         private readonly int _sourceLength;
         private readonly CompoundOperator _firstCompatibilityOperator;
         private readonly bool _insideCommandSubstitution;
+        private readonly Dictionary<Clause, CommandOccurrenceFacts> _facts =
+            new(ClauseReferenceComparer.Instance);
+        private readonly Dictionary<ForEachSyntax, PwshForEachAnalysisPlan> _forEachPlans =
+            new(ForEachReferenceComparer.Instance);
         private int _position;
         private int _groupDepth;
 
@@ -118,6 +126,17 @@ internal static partial class PwshCommandParser
             _firstCompatibilityOperator = firstCompatibilityOperator;
             _insideCommandSubstitution = insideCommandSubstitution;
         }
+
+        internal CommandOccurrenceFacts GetFacts(SimpleCommandSyntax simple) =>
+            _facts.TryGetValue(simple.Clause, out var facts)
+                ? facts
+                : new CommandOccurrenceFacts
+                {
+                    IsComplete = IsStructurallyComplete(simple),
+                };
+
+        internal PwshForEachAnalysisPlan? GetForEachPlan(ForEachSyntax forEach) =>
+            _forEachPlans.TryGetValue(forEach, out var plan) ? plan : null;
 
         internal bool TryParse(out ShellBlockSyntax syntax, out string? error)
         {
@@ -520,13 +539,15 @@ internal static partial class PwshCommandParser
 
             var first = segmentTokens[0];
             var last = segmentTokens[segmentTokens.Count - 1];
-            command = new SimpleCommandSyntax
+            var simple = new SimpleCommandSyntax
             {
                 Clause = clause,
                 Substitutions = substitutions,
                 SourceStart = first.SourceStart,
                 SourceLength = last.SourceStart + last.SourceLength - first.SourceStart,
             };
+            RegisterFacts(simple, segmentTokens);
+            command = simple;
             return true;
         }
 
@@ -1274,7 +1295,13 @@ internal static partial class PwshCommandParser
                 sourceLength,
                 firstCompatibilityOperator,
                 insideCommandSubstitution: true);
-            return coordinator.TryParse(out body, out error);
+            if (!coordinator.TryParse(out body, out error))
+            {
+                return false;
+            }
+
+            MergeFacts(coordinator);
+            return true;
         }
     }
 
@@ -1415,6 +1442,113 @@ internal static partial class PwshCommandParser
         }
 
         return false;
+    }
+
+    private sealed partial class StructuralCoordinator
+    {
+        private void RegisterFacts(
+            SimpleCommandSyntax simple,
+            IReadOnlyList<PwshToken> sourceTokens)
+        {
+            var provenance = new List<ShellValueElementProvenance>();
+            var hasCompleteProvenance = true;
+            for (var elementIndex = 0;
+                 elementIndex < simple.Clause.Elements.Count;
+                 elementIndex++)
+            {
+                var element = simple.Clause.Elements[elementIndex];
+                if (element.Role != ClauseElementRole.Argument)
+                {
+                    continue;
+                }
+
+                if (!TryGetElementValue(element, sourceTokens, out var value))
+                {
+                    hasCompleteProvenance = false;
+                    continue;
+                }
+
+                provenance.Add(new ShellValueElementProvenance(elementIndex, value));
+            }
+
+            _facts.Add(simple.Clause, new CommandOccurrenceFacts
+            {
+                ValueProvenance = provenance.ToArray(),
+                HasCompleteValueProvenance = hasCompleteProvenance,
+                IsComplete = IsStructurallyComplete(simple),
+            });
+        }
+
+        private static bool TryGetElementValue(
+            ClauseElement element,
+            IReadOnlyList<PwshToken> sourceTokens,
+            out ShellValue value)
+        {
+            value = ShellValue.Literal(string.Empty);
+            if (element.SourceStart is null || element.SourceLength is null)
+            {
+                return false;
+            }
+
+            var elementStart = element.SourceStart.Value;
+            var elementEnd = elementStart + element.SourceLength.Value;
+            var values = new List<ShellValue>();
+            var coveredStart = -1;
+            var coveredEnd = -1;
+            foreach (var token in sourceTokens)
+            {
+                var tokenEnd = token.SourceStart + token.SourceLength;
+                if (token.SourceStart < elementStart || tokenEnd > elementEnd)
+                {
+                    continue;
+                }
+
+                coveredStart = coveredStart < 0 ? token.SourceStart : coveredStart;
+                coveredEnd = tokenEnd;
+                values.Add(token.ResolverValue ??
+                    ShellValue.Literal(token.Value, token.SourceStart, token.SourceLength));
+            }
+
+            if (values.Count == 0 || coveredStart != elementStart || coveredEnd != elementEnd)
+            {
+                return false;
+            }
+
+            value = values.Count == 1 ? values[0] : ShellValue.Concat(values);
+            return true;
+        }
+
+        private void MergeFacts(StructuralCoordinator nested)
+        {
+            foreach (var pair in nested._facts)
+            {
+                _facts.Add(pair.Key, pair.Value);
+            }
+
+            foreach (var pair in nested._forEachPlans)
+            {
+                _forEachPlans.Add(pair.Key, pair.Value);
+            }
+        }
+
+        private sealed class ClauseReferenceComparer : IEqualityComparer<Clause>
+        {
+            internal static ClauseReferenceComparer Instance { get; } = new();
+
+            public bool Equals(Clause? x, Clause? y) => ReferenceEquals(x, y);
+
+            public int GetHashCode(Clause obj) => RuntimeHelpers.GetHashCode(obj);
+        }
+
+        private sealed class ForEachReferenceComparer : IEqualityComparer<ForEachSyntax>
+        {
+            internal static ForEachReferenceComparer Instance { get; } = new();
+
+            public bool Equals(ForEachSyntax? x, ForEachSyntax? y) =>
+                ReferenceEquals(x, y);
+
+            public int GetHashCode(ForEachSyntax obj) => RuntimeHelpers.GetHashCode(obj);
+        }
     }
 
     private static IReadOnlyList<PwshToken> ShiftTokens(

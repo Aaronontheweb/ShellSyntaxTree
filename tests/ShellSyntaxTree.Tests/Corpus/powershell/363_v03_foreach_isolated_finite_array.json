@@ -1,0 +1,40 @@
+{
+  "name": "V03 foreach isolated finite array",
+  "input": "foreach ($f in @('a.txt', 'b.txt', 'a.txt')) { Write-Output $F }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["Write-Output"],
+        "args": [
+          { "raw": "$F", "kind": "EnvVar", "isPath": false }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 64 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 64 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 46, "sourceLength": 17 }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "FiniteSet",
+              "values": ["a.txt", "b.txt"]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "PowerShell variable lookup is case-insensitive and the public finite domain removes duplicates."
+}

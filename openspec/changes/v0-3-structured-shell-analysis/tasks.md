@@ -133,7 +133,18 @@
   and module baseline, current-runspace sharing, child-host noninheritance,
   mutation invalidation, and ambient typed/read-only binding hazards in the
   canonical specs and case-specific design corpus.
-- [ ] 7.3 Derive exact and finite string domains without treating pipeline objects as literal strings.
+- [x] 7.3 Derive exact and finite string domains without treating pipeline objects as literal strings.
+  - The PowerShell-specific value pass consumes lexer provenance, composes
+    case-insensitive distinct active bindings, publishes bounded literal
+    scalar/array domains only under the explicit isolated-runspace contract,
+    and collapses object, null, unsupported, and over-cap values to Unknown.
+    The internal plan retains ordered duplicate visits and an exact authored
+    count separately from its public set summary; unknown object iterables are
+    zero-or-more. Reserved or stateful built-in binding collisions fail
+    atomically; a pinned documented preference inventory covers lazy names and a
+    live PowerShell 7.x oracle guards the fresh-host inventory. Decoded
+    child hosts, current-runspace wrappers, redirect values, same-name nested
+    overwrites, and post-loop state remain conservative for tasks 7.4-7.6.
 - [ ] 7.4 Propagate PowerShell scope and location state according to the locked statement semantics.
 - [ ] 7.5 Cover aliases, cmdlets, native commands, nested loops, pipelines, script blocks, and wrapper boundaries.
 - [ ] 7.6 Add adversarial cases for object-valued iterables, mutation, dynamic invocation, splatting, and cap overflow.

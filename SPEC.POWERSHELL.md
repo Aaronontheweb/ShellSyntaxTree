@@ -431,11 +431,16 @@ profiles, startup scripts, or uncontrolled ambient variables, aliases,
 functions, and modules.
 
 Even under that assertion, only ordinary unscoped binding names that do not
-case-insensitively collide with PowerShell's automatic, constant, or read-only
-variables are eligible. Scoped/provider bindings such as `$global:x`,
-`$script:x`, `$private:x`, and `$env:X` fail the loop region closed. A typed,
-validated, constant, or read-only ambient binding therefore cannot coerce,
-reject, or otherwise alter a value the analyzer presents as an exact string.
+case-insensitively collide with PowerShell's automatic, constant, read-only,
+typed, validated, preference, or configuration variables are eligible.
+Scoped/provider bindings such as `$global:x`, `$script:x`, `$private:x`, and
+`$env:X` fail the loop region closed. A built-in or ambient binding therefore
+cannot coerce, reject, or otherwise alter a value the analyzer presents as an
+exact string, or change host behavior as a side effect of loop assignment.
+The supported preference-variable inventory is pinned to PowerShell's
+`about_Preference_Variables` reference rather than inferred only from variables
+materialized by a fresh host; lazy and configuration-dependent names remain
+ineligible even when `Get-Variable` does not initially enumerate them.
 
 Parenthesized groups, `$()`, and static `Invoke-Expression` execute in the
 current runspace and share supported binding, command-resolution, and location

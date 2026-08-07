@@ -440,8 +440,13 @@ read-only, or scoped; aliases, functions, and modules can independently change
 command identity. Syntax alone cannot erase any of those facts.
 
 The positive binding grammar therefore accepts only ordinary unscoped names
-that do not case-insensitively collide with automatic, constant, or read-only
-variables known to the supported runtime. Current-runspace groups, `$()`, and
+that do not case-insensitively collide with automatic, constant, read-only,
+typed, validated, preference, or configuration variables known to the
+supported runtime. Built-in preference variables are excluded because
+assignment can coerce or reject authored strings or alter host behavior. The
+reviewed documented inventory is pinned independently from the live fresh-host
+oracle so lazy and configuration-dependent preferences cannot escape the gate.
+Current-runspace groups, `$()`, and
 static `Invoke-Expression` share supported binding, command-resolution, and cwd
 state. A decoded child `pwsh` host starts at `Unknown` unless its own invocation
 independently proves the complete constrained-host contract. Recognized
