@@ -637,6 +637,78 @@ public class ShellValueOracleTests
         Assert.Equal(new[] { "<ab>", "<>", "<a>", "<a>" }, Lines(output));
     }
 
+    [Fact]
+    public void Bash_for_in_runtime_oracle_matches_multiline_control_and_nested_data_flow()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "root=$(mktemp -d); trap 'rm -rf \"$root\"' EXIT; " +
+            "count=0; for f in; do count=1; done; printf 'empty=<%s>\\n' \"$count\"; " +
+            "for f in a b\ndo\nprintf '%s\\n' \"$f\" > \"$root/$f.out\"\n" +
+            "printf 'pipe=<%s>\\n' \"$f\" | tr '[:lower:]' '[:upper:]'\ndone; " +
+            "cat \"$root/a.out\" \"$root/b.out\"; " +
+            "for d in x y; do for f in 1 2; do printf 'nested=<%s%s>\\n' \"$d\" \"$f\"; done; done");
+
+        Assert.Equal(
+            new[]
+            {
+                "empty=<0>",
+                "PIPE=<A>",
+                "PIPE=<B>",
+                "a",
+                "b",
+                "nested=<x1>",
+                "nested=<x2>",
+                "nested=<y1>",
+                "nested=<y2>",
+            },
+            Lines(output));
+    }
+
+    [Fact]
+    public void Bash_for_in_runtime_oracle_matches_scope_expansion_and_option_values()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "unset f; secret=value; " +
+            "for f in 'a b'; do printf 'split=<%s>\\n' $f; done; " +
+            "for f in -rf safe; do printf 'argv=<%s>\\n' \"$f\"; done; " +
+            "for f in secret; do printf 'indirect=<%s>\\n' \"${!f}\"; " +
+            "printf 'substitution=<%s>\\n' \"$(printf '%s' \"$f\")\"; " +
+            "bash --noprofile --norc -c 'printf \"child=<%s>\\n\" \"$f\"'; " +
+            "printf 'parent=<%s>\\n' \"$f\"; done");
+
+        Assert.Equal(
+            new[]
+            {
+                "split=<a>",
+                "split=<b>",
+                "argv=<-rf>",
+                "argv=<safe>",
+                "indirect=<value>",
+                "substitution=<secret>",
+                "child=<>",
+                "parent=<secret>",
+            },
+            Lines(output));
+    }
+
     [Theory]
     [InlineData("for")]
     [InlineData("in")]

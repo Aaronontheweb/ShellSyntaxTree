@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in indirect expansion rejected",
+  "input": "for f in name; do echo \"${!f}\"; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "complex parameter expansion is not supported in v0.3"
+  },
+  "notes": "Indirect expansion can select ambient variable state, so the bounded loop analyzer rejects the entire executable region rather than guessing an effective value."
+}

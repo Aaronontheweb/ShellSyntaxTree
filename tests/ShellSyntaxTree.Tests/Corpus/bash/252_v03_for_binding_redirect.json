@@ -1,0 +1,44 @@
+{
+  "name": "v0.3 Bash loop binding in redirect target",
+  "input": "for f in a b; do printf '%s' \"$f\" > \"$f.out\"; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["printf"],
+        "args": [
+          { "raw": "'%s'", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": false },
+          { "raw": "\"$f\"", "kind": "EnvVar", "isPath": false, "resolved": "__NULL__", "isFlag": false }
+        ],
+        "redirects": [
+          { "direction": "Out", "target": "\"$f.out\"", "isDynamicSkip": true }
+        ]
+      }
+    ],
+    "syntax": [
+      { "kind": "Block", "parentIndex": null, "region": "Unknown", "childIndex": null, "sourceStart": 0, "sourceLength": 50, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "ForEach", "parentIndex": 0, "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 50, "clauseIndex": null, "groupKind": null, "listOperator": null, "bindingName": "f", "bindingRaw": "f", "bindingSourceStart": 4, "bindingSourceLength": 1, "iterableRaw": "a b", "iterableSourceStart": 9, "iterableSourceLength": 3 },
+      { "kind": "Block", "parentIndex": 1, "region": "Iterator", "childIndex": null, "sourceStart": 9, "sourceLength": 3, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "Block", "parentIndex": 1, "region": "LoopBody", "childIndex": null, "sourceStart": 16, "sourceLength": 30, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "SimpleCommand", "parentIndex": 3, "region": "Statement", "childIndex": 0, "sourceStart": 17, "sourceLength": 27, "clauseIndex": 0, "groupKind": null, "listOperator": null }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": false,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 50 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 50 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 16, "sourceLength": 30 }
+        ],
+        "effectiveArguments": [
+          { "clauseElementIndex": 2, "value": { "kind": "FiniteSet", "values": ["a", "b"], "pattern": null, "coveringDirectory": null } }
+        ],
+        "workingDirectory": { "kind": "Exact", "values": ["/work"], "pattern": null, "coveringDirectory": null }
+      }
+    ]
+  },
+  "notes": "The argument binding is finite, but the compatibility redirect remains dynamic and the occurrence incomplete until explicit redirect analysis can publish occurrence-specific redirect values."
+}

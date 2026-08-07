@@ -295,9 +295,14 @@ priorities.
       operands, recursive exact `command` / `builtin` dispatch, physical-path
       compatibility sanitation, and post-loop binding mutation are pinned by
       unit tests, native Bash oracles, the design corpus, and executable corpus.
-      All unmodeled mutations, dynamic dispatch, and control transfers remain
-      fail closed. Next add the Netclaw approval matrix before calling the Bash
-      consumer integration complete.
+      The coverage matrix now also pins empty and multiline loops, mixed
+      separators, pipelines, nested loops, wrapper scope, static and
+      binding-derived redirects, substitutions, option-shaped and unquoted
+      values, indirect and parameter-operator rejection, and every candidate
+      and transition cap. All unmodeled mutations, dynamic dispatch, control
+      transfers, and occurrence-specific redirect values remain fail closed.
+      Next add the Netclaw approval matrix before calling the Bash consumer
+      integration complete.
 - [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
       Netclaw approval-matrix cases. The simple-command slice is delivered for
       ordinary, adjacent, quoted, here-string, redirect, standalone,
