@@ -1,0 +1,10 @@
+{
+  "name": "V03 foreach quoted environment mutation gated",
+  "input": "foreach ($x in 1) { Set-Item \u0022Env:PATH\u0022 C:\\tools }; tool",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell foreach state mutation or dynamic invocation is not supported in this structural slice"
+  },
+  "notes": "A quoted environment provider write can change later command resolution.",
+  "oracleExpectation": "OutOfScope"
+}

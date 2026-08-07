@@ -1,0 +1,10 @@
+{
+  "name": "V03 foreach body mutation gated",
+  "input": "foreach ($x in 1) { Set-Variable x 2 }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell foreach state mutation or dynamic invocation is not supported in this structural slice"
+  },
+  "notes": "Body mutation fails closed until PowerShell abstract state is modeled.",
+  "oracleExpectation": "OutOfScope"
+}

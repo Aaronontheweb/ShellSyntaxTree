@@ -127,6 +127,17 @@ without treating the script block as one opaque argument.
 - **THEN** the iterable preserves the two literal array elements
 - **THEN** the body contains one simple command for `Remove-Item`
 
+#### Scenario: Foreach remains contextual in a pipeline command slot
+- **WHEN** PowerShell parses `Write-Output x | foreach ($_)`
+- **THEN** `foreach` remains an ordinary command or alias pipeline stage
+- **THEN** no loop node is invented
+- **THEN** the parenthesized argument remains opaque
+
+#### Scenario: Foreach requires a statement boundary
+- **WHEN** PowerShell parses a `foreach` statement adjacent to another command
+- **THEN** `;` or newline may terminate the statement
+- **THEN** `|`, `&&`, and `||` do not admit the `foreach` statement as a pipeline element
+
 ### Requirement: Shared loop structure does not erase shell grammar
 `ForEachSyntax` SHALL preserve the normalized binding name, the authored
 binding source, the raw iterable source fragment, commands discovered in the

@@ -360,15 +360,25 @@ quoted_string    := single_quoted | double_quoted
 
 PowerShell retains a statement-versus-pipeline distinction. `foreach` is a
 language keyword only at statement position when followed by `(`;
-`Get-ChildItem | foreach { ... }` remains command/alias syntax and its ordinary
-script-block argument remains opaque.
+`Get-ChildItem | foreach { ... }` and
+`Write-Output x | foreach ($_)` remain command/alias syntax. An ordinary
+script-block or bounded non-executing parenthesized argument remains opaque; it
+is not reinterpreted as a loop body. `&&` and `||` join pipelines, not
+control-flow statements, so
+they cannot precede or follow `foreach`; `;` and newline remain legal statement
+terminators.
 
 ```text
-pwsh_script(stop)    := pwsh_statement (statement_sep pwsh_statement)*
+pwsh_script(stop)    := pwsh_statement (statement_terminator pwsh_statement)*
 pwsh_statement       := pwsh_foreach
                       | pwsh_while
                       | pwsh_if
-                      | pwsh_pipeline
+                      | pwsh_and_or
+
+statement_terminator := ";" | NEWLINE
+pwsh_and_or           := pwsh_pipeline
+                        (("&&" | "||") pwsh_pipeline)*
+pwsh_pipeline         := pipeline_element ("|" pipeline_element)*
 
 pwsh_foreach         := "foreach" "(" variable "in" foreach_expression ")"
                         script_block_body

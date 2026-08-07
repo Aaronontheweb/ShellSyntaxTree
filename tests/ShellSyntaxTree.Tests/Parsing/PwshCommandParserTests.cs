@@ -1000,7 +1000,6 @@ public class PwshCommandParserTests
     // ---------------------------------------------------------------- anomalies
 
     [Theory]
-    [InlineData("foreach ($f in $list) { $f }")]
     [InlineData("if ($true) { Get-Date }")]
     [InlineData("while ($true) { Get-Date }")]
     [InlineData("function Foo { }")]

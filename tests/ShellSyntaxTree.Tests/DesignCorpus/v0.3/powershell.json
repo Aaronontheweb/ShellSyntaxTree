@@ -215,6 +215,7 @@
     },
     {
       "id": "pwsh-foreach-literal-array",
+      "compatibilityProjectionLanded": true,
       "concern": "Finite literal foreach binding",
       "input": "foreach ($f in @('a.txt', 'b.txt')) { Remove-Item -LiteralPath $f }",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -242,6 +243,7 @@
     },
     {
       "id": "pwsh-foreach-pipeline-iterator",
+      "compatibilityProjectionLanded": true,
       "concern": "Iterator command produces unknown PowerShell objects",
       "input": "foreach ($f in Get-ChildItem C:\\input) { Remove-Item -LiteralPath $f }",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -273,6 +275,7 @@
     },
     {
       "id": "pwsh-foreach-subexpression-iterator",
+      "compatibilityProjectionLanded": true,
       "concern": "Subexpression iterator preserves nearest substitution role and outer iterator ancestry",
       "input": "foreach ($f in $(Get-ChildItem C:\\input)) { Remove-Item -LiteralPath $f }",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -306,6 +309,7 @@
     },
     {
       "id": "pwsh-foreach-cmdlet-parameter-like-value",
+      "compatibilityProjectionLanded": true,
       "concern": "Expanded cmdlet value is not a syntactic parameter token",
       "input": "foreach ($f in @('-Force', 'a.txt')) { Remove-Item $f }",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -334,6 +338,7 @@
     },
     {
       "id": "pwsh-foreach-native-option-like-value",
+      "compatibilityProjectionLanded": true,
       "concern": "Finite value can affect native option parsing",
       "input": "foreach ($f in @('-n', 'file.txt')) { tool $f }",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -361,6 +366,7 @@
     },
     {
       "id": "pwsh-nested-foreach",
+      "compatibilityProjectionLanded": true,
       "concern": "Nested finite domains and structural ancestry",
       "input": "foreach ($d in @('a', 'b')) { foreach ($f in @('x', 'y')) { Write-Output \"$d/$f\" } }",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -390,6 +396,7 @@
     },
     {
       "id": "pwsh-foreach-body-pipeline",
+      "compatibilityProjectionLanded": true,
       "concern": "Pipeline roles inside foreach ancestry",
       "input": "foreach ($f in @('a', 'b')) { Write-Output $f | Sort-Object }",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -451,6 +458,7 @@
     },
     {
       "id": "pwsh-malformed-foreach-missing-body",
+      "compatibilityProjectionLanded": true,
       "concern": "Missing statement body safe-fail",
       "input": "foreach ($f in 1, 2) Remove-Item $f",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -549,7 +557,7 @@
       "id": "pwsh-foreach-dynamic-command-identity",
       "concern": "Dynamic invocation in a bounded loop body",
       "input": "foreach ($f in @('a', 'b')) { & $exe $f }",
-      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "current": { "isUnparseable": true, "reasonContains": "dynamic invocation" },
       "desired": {
         "syntax": [
           { "id": "root", "kind": "Block", "slot": "Root" },
@@ -574,6 +582,7 @@
     },
     {
       "id": "pwsh-foreach-candidate-cap-32",
+      "compatibilityProjectionLanded": true,
       "concern": "Finite candidate domain at the fixed cap",
       "input": "foreach ($f in @('v01','v02','v03','v04','v05','v06','v07','v08','v09','v10','v11','v12','v13','v14','v15','v16','v17','v18','v19','v20','v21','v22','v23','v24','v25','v26','v27','v28','v29','v30','v31','v32')) { Write-Output $f }",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -601,6 +610,7 @@
     },
     {
       "id": "pwsh-foreach-candidate-overflow-33",
+      "compatibilityProjectionLanded": true,
       "concern": "Candidate overflow collapses instead of truncating",
       "input": "foreach ($f in @('v01','v02','v03','v04','v05','v06','v07','v08','v09','v10','v11','v12','v13','v14','v15','v16','v17','v18','v19','v20','v21','v22','v23','v24','v25','v26','v27','v28','v29','v30','v31','v32','v33')) { Write-Output $f }",
       "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
@@ -669,10 +679,10 @@
       }
     },
     {
-      "id": "pwsh-foreach-location-zero-iteration-join",
-      "concern": "Loop exit includes zero-iteration location state",
+      "id": "pwsh-foreach-location-failure-aware-join",
+      "concern": "Loop exit joins failure and divergent successful location state",
       "input": "foreach ($d in @('C:\\a', 'C:\\b')) { Set-Location $d }; Get-ChildItem file.txt",
-      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "current": { "isUnparseable": true, "reasonContains": "state mutation" },
       "desired": {
         "syntax": [
           { "id": "root", "kind": "Block", "slot": "Root" },
@@ -703,7 +713,8 @@
         ],
         "compatibility": { "verbs": ["Set-Location", "Get-ChildItem"], "preservesAuthoredDynamicValues": true },
         "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "StateJoinConservative", "UnknownPolicyValueFailsClosed"]
-      }
+      },
+      "notes": "The static array is nonempty. Post-loop cwd is Unknown because either Set-Location can fail and the two successful targets disagree, not because a zero-iteration path exists."
     },
     {
       "id": "pwsh-literal-here-string-is-value",

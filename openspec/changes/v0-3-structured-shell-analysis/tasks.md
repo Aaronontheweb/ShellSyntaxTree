@@ -117,8 +117,17 @@
 
 ## 7. PowerShell Foreach Vertical Slice
 
-- [ ] 7.1 Parse PowerShell `foreach` with literal scalar and array iterables into the locked structural nodes.
-- [ ] 7.2 Emit iterator and loop-body occurrences plus conservative compatibility clauses.
+- [x] 7.1 Parse PowerShell `foreach` with literal scalar and array iterables into the locked structural nodes.
+  - Direct tests pin exact spans, nested structure, decoded-wrapper nullable
+    spans, contextual alias collisions, statement boundaries, malformed forms,
+    and the shared structural-depth cap.
+- [x] 7.2 Emit iterator and loop-body occurrences plus conservative compatibility clauses.
+  - Iterator pipelines and direct `$()` are recursively visible with authored
+    roles and ancestry. Every loop-body occurrence remains incomplete until
+    tasks 7.3 and 7.4 prove binding values and runspace state; recognized
+    iterator/body state or command-resolution mutation and dynamic invocation
+    fail atomically. Current-scope continuations after a loop remain incomplete;
+    isolated child-host loops do not taint their outer continuation.
 - [ ] 7.3 Derive exact and finite string domains without treating pipeline objects as literal strings.
 - [ ] 7.4 Propagate PowerShell scope and location state according to the locked statement semantics.
 - [ ] 7.5 Cover aliases, cmdlets, native commands, nested loops, pipelines, script blocks, and wrapper boundaries.

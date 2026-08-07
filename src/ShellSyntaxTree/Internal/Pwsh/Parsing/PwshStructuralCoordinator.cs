@@ -39,11 +39,13 @@ internal static partial class PwshCommandParser
             return StructuralFailure(source, error, syntax);
         }
 
+        var incompleteForEachClauses = CollectIncompleteForEachClauses(syntax);
         if (!ShellSyntaxProjection.TryProject(
                 syntax,
                 simple => new CommandOccurrenceFacts
                 {
-                    IsComplete = IsStructurallyComplete(simple),
+                    IsComplete = IsStructurallyComplete(simple) &&
+                        !ContainsReference(incompleteForEachClauses, simple.Clause),
                 },
                 out var projection))
         {
@@ -75,7 +77,7 @@ internal static partial class PwshCommandParser
             UnparseableReason = reason,
         };
 
-    private sealed class StructuralCoordinator
+    private sealed partial class StructuralCoordinator
     {
         private readonly string _source;
         private readonly IReadOnlyList<PwshToken> _tokens;
@@ -194,6 +196,13 @@ internal static partial class PwshCommandParser
                     return false;
                 }
 
+                if (items[items.Count - 1].Command is ForEachSyntax &&
+                    listOperator is CompoundOperator.AndIf or CompoundOperator.OrIf)
+                {
+                    error = "a PowerShell foreach statement cannot participate in an && or || chain";
+                    return false;
+                }
+
                 SkipNewlines();
                 if (_position == _tokens.Count)
                 {
@@ -247,6 +256,12 @@ internal static partial class PwshCommandParser
             command = null;
             if (!TryParseCommand(firstCompatibilityOperator, out var first, out error))
             {
+                return false;
+            }
+
+            if (first is ForEachSyntax && IsOperator("|"))
+            {
+                error = "a PowerShell foreach statement cannot produce a pipeline stage";
                 return false;
             }
 
@@ -309,6 +324,11 @@ internal static partial class PwshCommandParser
                 return TryParseGroup(compatibilityOperator, out command, out error);
             }
 
+            if (compatibilityOperator != CompoundOperator.Pipe && IsForEachStart())
+            {
+                return TryParseForEach(compatibilityOperator, out command, out error);
+            }
+
             if (IsOperator(")") || IsListOperator(_tokens[_position]) || IsOperator("|"))
             {
                 error = $"unexpected operator at position {_tokens[_position].SourceStart}";
@@ -339,7 +359,10 @@ internal static partial class PwshCommandParser
                 }
 
                 if (token.Kind == PwshTokenKind.Operator && token.OperatorText == "(" &&
-                    StartsWithInvokeExpression(CopyTokens(start, _position)))
+                    (StartsWithInvokeExpression(CopyTokens(start, _position)) ||
+                     IsForEachCommandArgument(
+                         CopyTokens(start, _position),
+                         compatibilityOperator)))
                 {
                     expressionDepth = 1;
                     _position++;
@@ -366,6 +389,8 @@ internal static partial class PwshCommandParser
                 error = $"expected a command at position {_tokens[_position].SourceStart}";
                 return false;
             }
+
+            CollapseSafeForEachCommandArgument(segmentTokens, compatibilityOperator);
 
             if (_insideCommandSubstitution)
             {
@@ -502,6 +527,84 @@ internal static partial class PwshCommandParser
                 SourceLength = last.SourceStart + last.SourceLength - first.SourceStart,
             };
             return true;
+        }
+
+        private static bool IsForEachCommandArgument(
+            IReadOnlyList<PwshToken> prefix,
+            CompoundOperator compatibilityOperator)
+        {
+            if (prefix.Count == 1 && compatibilityOperator == CompoundOperator.Pipe)
+            {
+                return prefix[0].Kind == PwshTokenKind.Word &&
+                    string.Equals(
+                        prefix[0].Value,
+                        "foreach",
+                        StringComparison.OrdinalIgnoreCase);
+            }
+
+            return prefix.Count == 2 &&
+                prefix[0].Kind == PwshTokenKind.Operator &&
+                prefix[0].OperatorText == "&" &&
+                prefix[1].Kind == PwshTokenKind.Word &&
+                string.Equals(
+                    prefix[1].Value,
+                    "foreach",
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void CollapseSafeForEachCommandArgument(
+            List<PwshToken> tokens,
+            CompoundOperator compatibilityOperator)
+        {
+            var openIndex = compatibilityOperator == CompoundOperator.Pipe ? 1 : 2;
+            if (tokens.Count != openIndex + 3 ||
+                !IsForEachCommandArgument(tokens.GetRange(0, openIndex), compatibilityOperator) ||
+                tokens[openIndex].Kind != PwshTokenKind.Operator ||
+                tokens[openIndex].OperatorText != "(" ||
+                !IsSafeOpaqueForEachCommandArgument(tokens[openIndex + 1]) ||
+                tokens[openIndex + 2].Kind != PwshTokenKind.Operator ||
+                tokens[openIndex + 2].OperatorText != ")")
+            {
+                return;
+            }
+
+            var open = tokens[openIndex];
+            var close = tokens[openIndex + 2];
+            var length = close.SourceStart + close.SourceLength - open.SourceStart;
+            var raw = _source.Substring(open.SourceStart, length);
+            tokens.RemoveRange(openIndex, 3);
+            tokens.Insert(
+                openIndex,
+                new PwshToken(
+                    PwshTokenKind.Word,
+                    raw,
+                    null,
+                    open.SourceStart,
+                    length,
+                    null)
+                {
+                    ResolverValue = ShellValue.Opaque(
+                        raw,
+                        ShellOpaqueCause.Unsupported,
+                        open.SourceStart,
+                        length),
+                });
+        }
+
+        private static bool IsSafeOpaqueForEachCommandArgument(PwshToken token)
+        {
+            if (token.Kind == PwshTokenKind.QuotedString)
+            {
+                return !token.HasInterpolation;
+            }
+
+            if (token.Kind != PwshTokenKind.Word)
+            {
+                return false;
+            }
+
+            return token.Value.StartsWith("$", StringComparison.Ordinal) ||
+                IsNumericExpressionWord(token.Value);
         }
 
         private bool TryParseGroup(
@@ -1172,6 +1275,145 @@ internal static partial class PwshCommandParser
                 insideCommandSubstitution: true);
             return coordinator.TryParse(out body, out error);
         }
+    }
+
+    private static IReadOnlyList<Clause> CollectIncompleteForEachClauses(
+        ShellSyntaxNode syntax)
+    {
+        var clauses = new List<Clause>();
+        CollectIncompleteForEachClauses(syntax, isStateIncomplete: false, clauses);
+        return clauses;
+    }
+
+    private static bool CollectIncompleteForEachClauses(
+        ShellSyntaxNode syntax,
+        bool isStateIncomplete,
+        List<Clause> clauses)
+    {
+        switch (syntax)
+        {
+            case SimpleCommandSyntax simple:
+                foreach (var substitution in simple.Substitutions)
+                {
+                    isStateIncomplete = CollectIncompleteForEachClauses(
+                        substitution,
+                        isStateIncomplete,
+                        clauses);
+                }
+
+                if (isStateIncomplete)
+                {
+                    clauses.Add(simple.Clause);
+                }
+
+                return isStateIncomplete;
+            case ShellBlockSyntax block:
+                foreach (var statement in block.Statements)
+                {
+                    isStateIncomplete = CollectIncompleteForEachClauses(
+                        statement,
+                        isStateIncomplete,
+                        clauses);
+                }
+
+                return isStateIncomplete;
+            case CommandListSyntax list:
+                foreach (var item in list.Items)
+                {
+                    isStateIncomplete = CollectIncompleteForEachClauses(
+                        item.Command,
+                        isStateIncomplete,
+                        clauses);
+                }
+
+                return isStateIncomplete;
+            case PipelineSyntax pipeline:
+                foreach (var stage in pipeline.Stages)
+                {
+                    isStateIncomplete = CollectIncompleteForEachClauses(
+                        stage,
+                        isStateIncomplete,
+                        clauses);
+                }
+
+                return isStateIncomplete;
+            case GroupSyntax group:
+                var groupState = CollectIncompleteForEachClauses(
+                    group.Body,
+                    isStateIncomplete,
+                    clauses);
+                return group.GroupKind == ShellGroupKind.IsolatedScope
+                    ? isStateIncomplete
+                    : groupState;
+            case ForEachSyntax forEach:
+                CollectIncompleteForEachClauses(
+                    forEach.IteratorCommands,
+                    isStateIncomplete,
+                    clauses);
+                CollectIncompleteForEachClauses(
+                    forEach.Body,
+                    isStateIncomplete: true,
+                    clauses);
+                return true;
+            case ConditionLoopSyntax loop:
+                CollectIncompleteForEachClauses(
+                    loop.Condition,
+                    isStateIncomplete,
+                    clauses);
+                CollectIncompleteForEachClauses(
+                    loop.Body,
+                    isStateIncomplete: true,
+                    clauses);
+                return true;
+            case ConditionalSyntax conditional:
+                var branchState = isStateIncomplete;
+                foreach (var branch in conditional.Branches)
+                {
+                    branchState |= CollectIncompleteForEachClauses(
+                        branch,
+                        isStateIncomplete,
+                        clauses);
+                }
+
+                if (conditional.Else is not null)
+                {
+                    branchState |= CollectIncompleteForEachClauses(
+                        conditional.Else,
+                        isStateIncomplete,
+                        clauses);
+                }
+
+                return branchState;
+            case ConditionalBranchSyntax branch:
+                var conditionState = CollectIncompleteForEachClauses(
+                    branch.Condition,
+                    isStateIncomplete,
+                    clauses);
+                return CollectIncompleteForEachClauses(
+                    branch.Body,
+                    conditionState,
+                    clauses);
+            case CommandSubstitutionSyntax substitution:
+                return CollectIncompleteForEachClauses(
+                    substitution.Body,
+                    isStateIncomplete,
+                    clauses);
+            default:
+                return isStateIncomplete;
+        }
+    }
+
+    private static bool ContainsReference(IReadOnlyList<Clause> clauses, Clause target)
+    {
+        foreach (var clause in clauses)
+        {
+            if (ReferenceEquals(clause, target))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static IReadOnlyList<PwshToken> ShiftTokens(
