@@ -11,6 +11,31 @@ using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
+internal enum BashIterationCardinality
+{
+    Never,
+    OneOrMore,
+    ZeroOrMore,
+}
+
+internal sealed record BashLoopWord(
+    ShellValue? Value,
+    bool HasUnmodeledBraceExpansion);
+
+internal sealed record BashForInAnalysisPlan(
+    string BindingName,
+    IReadOnlyList<BashLoopWord> Words);
+
+internal sealed record BashForInAnalysisPlanReference(
+    ForEachSyntax Syntax,
+    BashForInAnalysisPlan Plan);
+
+internal sealed record BashIterationPlan(
+    IReadOnlyList<ShellValueDomain> OrderedCandidates,
+    BashIterationCardinality Cardinality,
+    bool RequiresFixedPoint,
+    ShellValueDomain Summary);
+
 /// <summary>
 /// Preserves bounded loop-variable proofs while the Bash structural parser
 /// still owns lexer provenance. Compatibility leaves deliberately retain
@@ -21,81 +46,257 @@ internal sealed class BashLoopBindingContext
 {
     private readonly List<BindingFrame> _bindings = new();
 
-    internal int Count => _bindings.Count;
-
-    internal bool Contains(string name) => FindExactBinding(name) is not null;
-
-    internal void Push(string name, ShellValueDomain domain) =>
-        _bindings.Add(new BindingFrame(name, domain));
-
-    internal void Pop()
+    internal BashLoopBindingContext WithBinding(
+        string name,
+        ShellValueDomain domain)
     {
-        if (_bindings.Count > 0)
+        var clone = Clone();
+        for (var index = clone._bindings.Count - 1; index >= 0; index--)
         {
-            _bindings.RemoveAt(_bindings.Count - 1);
+            if (string.Equals(clone._bindings[index].Name, name, StringComparison.Ordinal))
+            {
+                clone._bindings.RemoveAt(index);
+            }
         }
+
+        clone._bindings.Add(new BindingFrame(name, domain));
+        return clone;
     }
 
-    internal BashLoopBindingContext Clone()
+    private BashLoopBindingContext Clone()
     {
         var clone = new BashLoopBindingContext();
         clone._bindings.AddRange(_bindings);
         return clone;
     }
 
-    internal ShellValueDomain AnalyzeIterable(
-        IReadOnlyList<BashToken> words,
+    internal BashLoopBindingContext WithoutBindings() => new();
+
+    internal bool StateEquals(BashLoopBindingContext other)
+    {
+        if (_bindings.Count != other._bindings.Count)
+        {
+            return false;
+        }
+
+        foreach (var binding in _bindings)
+        {
+            var otherBinding = other.FindExactBinding(binding.Name);
+            if (otherBinding is null || !DomainEquals(binding.Domain, otherBinding.Domain))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    internal static BashLoopBindingContext JoinState(
+        BashLoopBindingContext left,
+        BashLoopBindingContext right)
+    {
+        var joined = new BashLoopBindingContext();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var binding in left._bindings)
+        {
+            names.Add(binding.Name);
+        }
+
+        foreach (var binding in right._bindings)
+        {
+            names.Add(binding.Name);
+        }
+
+        foreach (var name in names)
+        {
+            var leftBinding = left.FindExactBinding(name);
+            var rightBinding = right.FindExactBinding(name);
+            joined._bindings.Add(new BindingFrame(
+                name,
+                leftBinding is null || rightBinding is null
+                    ? ShellValueDomain.Unknown
+                    : JoinDomains(leftBinding.Domain, rightBinding.Domain)));
+        }
+
+        return joined;
+    }
+
+    internal static BashLoopBindingContext WidenState(
+        BashLoopBindingContext left,
+        BashLoopBindingContext right)
+    {
+        var widened = new BashLoopBindingContext();
+        var names = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var binding in left._bindings)
+        {
+            names.Add(binding.Name);
+        }
+
+        foreach (var binding in right._bindings)
+        {
+            names.Add(binding.Name);
+        }
+
+        foreach (var name in names)
+        {
+            var leftBinding = left.FindExactBinding(name);
+            var rightBinding = right.FindExactBinding(name);
+            widened._bindings.Add(new BindingFrame(
+                name,
+                leftBinding is not null &&
+                rightBinding is not null &&
+                DomainEquals(leftBinding.Domain, rightBinding.Domain)
+                    ? leftBinding.Domain
+                    : ShellValueDomain.Unknown));
+        }
+
+        return widened;
+    }
+
+    internal static bool ReferencesBinding(ShellValue value, string bindingName)
+    {
+        foreach (var fragment in value.Fragments)
+        {
+            if (fragment.Kind == ShellValueFragmentKind.Expansion &&
+                fragment.Expansion is ShellExpansionReference expansion &&
+                expansion.Kind == ShellExpansionKind.Variable &&
+                string.Equals(expansion.Name, bindingName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    internal BashIterationPlan AnalyzeIterationPlan(
+        IReadOnlyList<BashLoopWord> words,
         BashParserOptions options,
         bool workingDirectoryUnknown)
     {
         if (words.Count == 0)
         {
-            return ShellValueDomain.Unknown;
+            return new BashIterationPlan(
+                Array.Empty<ShellValueDomain>(),
+                BashIterationCardinality.Never,
+                RequiresFixedPoint: false,
+                ShellValueDomain.Unknown);
         }
 
-        if (words.Count == 1 &&
-            words[0].ResolverValue is not null &&
-            TryBuildStaticPattern(
-                words[0].ResolverValue!,
-                options,
-                workingDirectoryUnknown,
-                out var pattern))
-        {
-            return pattern;
-        }
-
-        var values = new List<string>(words.Count);
+        var ordered = new List<ShellValueDomain>(words.Count);
+        var summary = new List<string>(words.Count);
         var distinct = new HashSet<string>(StringComparer.Ordinal);
         foreach (var word in words)
         {
-            if (word.ResolverValue is null || HasUnmodeledBraceExpansion(word))
+            if (word.Value is null || word.HasUnmodeledBraceExpansion)
             {
-                return ShellValueDomain.Unknown;
+                return FixedPointPlan(
+                    BashIterationCardinality.ZeroOrMore,
+                    ShellValueDomain.Unknown);
             }
 
-            ShellValueDomain wordDomain;
-            if (IsEntirelyLiteral(word.ResolverValue))
+            if (TryBuildStaticPattern(
+                    word.Value,
+                    options,
+                    workingDirectoryUnknown,
+                    out var pattern))
             {
-                wordDomain = new ShellValueDomain
+                return FixedPointPlan(BashIterationCardinality.ZeroOrMore, pattern);
+            }
+
+            ShellValueDomain domain;
+            if (IsEntirelyLiteral(word.Value))
+            {
+                domain = new ShellValueDomain
                 {
                     Kind = ShellValueDomainKind.Exact,
-                    Values = new[] { word.ResolverValue.Decoded },
+                    Values = new[] { word.Value.Decoded },
                 };
             }
-            else if (!TryAnalyzeEffectiveValue(word.ResolverValue, out wordDomain) ||
-                     wordDomain.Kind is not (
-                         ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
+            else if (!TryAnalyzeEffectiveValue(word.Value, out domain) ||
+                     domain.Kind != ShellValueDomainKind.Exact)
             {
-                return ShellValueDomain.Unknown;
+                return FixedPointPlan(
+                    BashIterationCardinality.ZeroOrMore,
+                    domain);
             }
 
-            foreach (var candidate in wordDomain.Values)
+            ordered.Add(domain);
+            var candidate = domain.Values[0];
+            if (distinct.Add(candidate))
             {
-                if (!distinct.Add(candidate))
-                {
-                    continue;
-                }
+                summary.Add(candidate);
+            }
 
+            if (ordered.Count > ShellAnalysisLimits.MaxValueCandidates)
+            {
+                return FixedPointPlan(
+                    BashIterationCardinality.OneOrMore,
+                    ShellValueDomain.Unknown);
+            }
+        }
+
+        return new BashIterationPlan(
+            ordered.ToArray(),
+            BashIterationCardinality.OneOrMore,
+            RequiresFixedPoint: false,
+            CreateFiniteDomain(summary));
+    }
+
+    internal static BashForInAnalysisPlan CapturePlan(
+        string bindingName,
+        IReadOnlyList<BashToken> words)
+    {
+        var captured = new BashLoopWord[words.Count];
+        for (var index = 0; index < captured.Length; index++)
+        {
+            captured[index] = new BashLoopWord(
+                words[index].ResolverValue,
+                HasUnmodeledBraceExpansion(words[index]));
+        }
+
+        return new BashForInAnalysisPlan(bindingName, captured);
+    }
+
+    private static BashIterationPlan FixedPointPlan(
+        BashIterationCardinality cardinality,
+        ShellValueDomain summary) => new(
+            Array.Empty<ShellValueDomain>(),
+            cardinality,
+            RequiresFixedPoint: true,
+            summary);
+
+    internal static ShellValueDomain JoinDomains(
+        ShellValueDomain left,
+        ShellValueDomain right)
+    {
+        if (DomainEquals(left, right))
+        {
+            return left;
+        }
+
+        if (left.Kind is not (
+                ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet) ||
+            right.Kind is not (
+                ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
+        {
+            return ShellValueDomain.Unknown;
+        }
+
+        var values = new List<string>(left.Values.Count + right.Values.Count);
+        var distinct = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var candidate in left.Values)
+        {
+            if (distinct.Add(candidate))
+            {
+                values.Add(candidate);
+            }
+        }
+
+        foreach (var candidate in right.Values)
+        {
+            if (distinct.Add(candidate))
+            {
                 if (distinct.Count > ShellAnalysisLimits.MaxValueCandidates)
                 {
                     return ShellValueDomain.Unknown;
@@ -106,6 +307,32 @@ internal sealed class BashLoopBindingContext
         }
 
         return CreateFiniteDomain(values);
+    }
+
+    private static bool DomainEquals(
+        ShellValueDomain left,
+        ShellValueDomain right)
+    {
+        if (left.Kind != right.Kind ||
+            !string.Equals(left.Pattern, right.Pattern, StringComparison.Ordinal) ||
+            !string.Equals(
+                left.CoveringDirectory,
+                right.CoveringDirectory,
+                StringComparison.Ordinal) ||
+            left.Values.Count != right.Values.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Values.Count; index++)
+        {
+            if (!string.Equals(left.Values[index], right.Values[index], StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     internal bool TryAnalyzeEffectiveValue(

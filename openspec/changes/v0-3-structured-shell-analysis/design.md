@@ -453,10 +453,11 @@ proved syntax tree, not by exposing the compatibility parser's mutable
 parse-order cwd attribution. Parse order is not execution-state order for
 pipelines or conditional lists, and one symbolic loop-body parse cannot prove
 the cwd of later iterations. The compatibility attribution path remains a
-v0.2 leaf-construction detail. Until the abstract pass lands, loop cwd mutation
-fails closed, recognized shell-state mutation before or inside a loop fails
-closed, nested reuse of an active Bash binding name fails closed, and
-occurrence `WorkingDirectory` stays `Unknown`.
+v0.2 leaf-construction detail. The ordered-binding pass may retain exact cwd
+for reached nonmutating loop occurrences. Loop cwd mutation, recognized shell-
+state mutation before or inside a loop, and nested active-name reuse continue
+to fail closed until complete effective-argv transfers and repeated mutable
+state are modeled.
 
 Bash command substitution executes in an isolated subshell state. State changes
 affect later commands inside that substitution but never the containing command
@@ -491,6 +492,11 @@ of publishing incomplete continuation facts. Recognition includes statically
 wrapped builtin forms such as `builtin break` and `command exit`. `eval`,
 `source` / `.`, and execution-bearing `trap` also fail the whole region closed
 unless every executable region and state transfer is discovered.
+
+The analyzer also has a parse-wide budget of 4096 loop-body transitions.
+Concrete nested products and fixed-point visits consume the same budget; an
+overflow fails the complete parse atomically so an adversarial input cannot
+force an unbounded cross-product or receive a partial security projection.
 
 The internal loop plan is distinct from the public value-domain summary. It
 retains an executable word plan parameterized by the incoming analyzer binding

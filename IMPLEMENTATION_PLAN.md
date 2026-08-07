@@ -291,11 +291,15 @@ priorities.
       flow partitions, failure-aware `cd`, conservative `lastpipe` / `pipefail`,
       ordered duplicate-preserving loop plans, inherited but isolated
       decoded-wrapper state, and dynamic fail-closed compatibility attribution
-      whenever cwd joins to Unknown. Keep OpenSpec task 6.5 open, then add the
-      remaining loop cases and Netclaw approval matrix after implementation.
-      The non-loop state engine is now implemented for lists, pipelines,
-      substitutions, subshells, and decoded wrappers; loop iteration state and
-      removal of the temporary mutation rejection remain next. An adversarial
+      whenever cwd joins to Unknown. The analyzer now owns persistent loop
+      bindings, ordered and empty iteration, occurrence-fact joins, unreachable
+      flow partitions, substitution inheritance, and explicit decoded-wrapper
+      remapping of loop plans and argument provenance. Unknown-cardinality
+      loops use bounded fixed-point widening, and a 4096-transition global
+      budget fails nested cross-products atomically. Static bodies retain an
+      exact incoming cwd when no transfer can change it. Keep OpenSpec task 6.5
+      open for full effective-argv transfer and removal of the temporary loop
+      mutation rejection, then add the Netclaw approval matrix. An adversarial
       pre-implementation review halted the first loop-state draft: parser-time
       binding frames could not model zero-iteration persistence, correlated
       nested iterables, special Bash variables, or candidate-derived `cd`
@@ -307,7 +311,7 @@ priorities.
       cwd-changing loop body. Corpus-pin `HOME`, `RANDOM`, `LINENO`, `PATH`,
       `CDPATH`, `IFS`, 32/33 ordered visits, zero iterations, nested
       correlation, wrapped transfers, wrapper mapping, substitutions, and
-      pipelines in the same vertical slice.
+      pipelines across these two analyzer slices.
 - [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
       Netclaw approval-matrix cases. The simple-command slice is delivered for
       ordinary, adjacent, quoted, here-string, redirect, standalone,

@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree;
 
@@ -26,8 +27,19 @@ internal sealed class CommandOccurrenceFacts
     internal IReadOnlyList<CwdPathDependency> CwdPathDependencies { get; init; } =
         Array.Empty<CwdPathDependency>();
 
+    internal IReadOnlyList<ShellValueElementProvenance> ValueProvenance { get; init; } =
+        Array.Empty<ShellValueElementProvenance>();
+
     internal bool IsComplete { get; init; }
 }
+
+/// <summary>
+/// Retains the complete shell-owned value fragments for one authored clause
+/// element so execution-state analysis can re-evaluate it per visit.
+/// </summary>
+internal readonly record struct ShellValueElementProvenance(
+    int ClauseElementIndex,
+    ShellValue Value);
 
 /// <summary>
 /// Retains resolver-owned path provenance and its exact compatibility

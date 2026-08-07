@@ -204,7 +204,7 @@ public class BashForInStructuralTests
             "a",
             "b");
         Assert.All(result.Commands, command =>
-            Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind));
+            AssertDomain(command.WorkingDirectory, ShellValueDomainKind.Exact, "/work"));
     }
 
     [Fact]
@@ -292,6 +292,140 @@ public class BashForInStructuralTests
     }
 
     [Fact]
+    public void Ordered_duplicate_iterations_join_body_facts_and_preserve_final_binding()
+    {
+        var result = Parse(
+            "for f in a b a; do printf '%s' \"$f\"; done; echo \"$f\"");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        AssertDomain(
+            Assert.Single(result.Commands[0].EffectiveArguments).Value,
+            ShellValueDomainKind.FiniteSet,
+            "a",
+            "b");
+        AssertDomain(
+            Assert.Single(result.Commands[1].EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "a");
+    }
+
+    [Fact]
+    public void Empty_loop_preserves_the_incoming_binding_value()
+    {
+        var result = Parse(
+            "for f in seed; do :; done; for f in; do :; done; echo \"$f\"");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(
+            Assert.Single(result.Commands[2].EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "seed");
+    }
+
+    [Fact]
+    public void Sequential_same_name_loop_replaces_the_prior_binding()
+    {
+        var result = Parse(
+            "for f in first; do :; done; for f in second; do :; done; echo \"$f\"");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(
+            Assert.Single(result.Commands[2].EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "second");
+    }
+
+    [Fact]
+    public void Empty_loop_failure_continuation_is_unreachable_and_conservative()
+    {
+        var result = Parse(
+            "for f in; do false; done || cat relative.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        var unreachable = result.Commands[1];
+        Assert.Equal(ShellValueDomainKind.Unknown, unreachable.WorkingDirectory.Kind);
+        var relative = Assert.Single(unreachable.Clause.Args, argument =>
+            argument.Raw == "relative.txt");
+        Assert.Null(relative.Resolved);
+    }
+
+    [Fact]
+    public void Empty_loop_success_continuation_keeps_exact_state()
+    {
+        var result = Parse(
+            "for f in; do false; done && cat relative.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        var reached = result.Commands[1];
+        AssertDomain(reached.WorkingDirectory, ShellValueDomainKind.Exact, "/work");
+        var relative = Assert.Single(reached.Clause.Args, argument =>
+            argument.Raw == "relative.txt");
+        Assert.Equal("/work/relative.txt", relative.Resolved);
+    }
+
+    [Fact]
+    public void Thirty_two_visits_preserve_the_last_value_after_the_loop()
+    {
+        var values = Enumerable.Range(1, ShellAnalysisLimits.MaxValueCandidates)
+            .Select(index => $"v{index:00}")
+            .ToArray();
+        var result = Parse(
+            $"for f in {string.Join(" ", values)}; do :; done; echo \"$f\"");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(
+            Assert.Single(result.Commands[1].EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "v32");
+    }
+
+    [Fact]
+    public void Thirty_three_duplicate_visits_widen_instead_of_deduplicating_the_plan()
+    {
+        var values = Enumerable.Repeat("same", ShellAnalysisLimits.MaxValueCandidates + 1);
+        var result = Parse(
+            $"for f in {string.Join(" ", values)}; do echo \"$f\"; done; printf '%s' \"$f\"");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.All(result.Commands, command => Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind));
+    }
+
+    [Fact]
+    public void Zero_or_more_fixed_point_widens_recursive_binding_growth()
+    {
+        var result = Parse(
+            "for f in seed; do :; done; " +
+            "for d in \"$UNKNOWN\"; do for f in \"${f}x\"; do :; done; done; " +
+            "echo \"$f\"");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(result.Commands[2].EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Nested_concrete_loop_product_exceeding_analysis_budget_fails_atomically()
+    {
+        var values = string.Join(
+            " ",
+            Enumerable.Range(1, ShellAnalysisLimits.MaxValueCandidates));
+        var result = Parse(
+            $"for a in {values}; do for b in {values}; do " +
+            $"for c in {values}; do :; done; done; done");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("exceeded limits", result.UnparseableReason!);
+    }
+
+    [Fact]
     public void Pipelines_compose_with_loop_ancestry_without_synthetic_operators()
     {
         var result = Parse("for f in a b; do printf '%s' \"$f\" | sort; done");
@@ -319,14 +453,21 @@ public class BashForInStructuralTests
     [InlineData("for f in a b; do trap 'f=x' DEBUG; echo \"$f\"; done")]
     [InlineData("for f in a; do command unset f; echo \"$f\"; done")]
     [InlineData("for f in a; do builtin unset f; echo \"$f\"; done")]
-    public void Binding_mutation_fails_the_whole_parse(string source)
+    [InlineData("for f in a; do break; done")]
+    [InlineData("for f in a; do continue; done")]
+    [InlineData("for f in a; do return; done")]
+    [InlineData("for f in a; do exit 0; done")]
+    [InlineData("for f in a; do exec echo replaced; done")]
+    [InlineData("for f in a; do command exit 0; done")]
+    [InlineData("for f in a; do builtin break; done")]
+    public void Unsupported_loop_state_transfer_fails_the_whole_parse(string source)
     {
         var result = Parse(source);
 
         Assert.True(result.IsUnparseable);
         Assert.Empty(result.Commands);
         Assert.Empty(result.Clauses);
-        Assert.Contains("mutation", result.UnparseableReason!);
+        Assert.Contains("mutation or control transfer", result.UnparseableReason!);
     }
 
     [Theory]
@@ -446,6 +587,22 @@ public class BashForInStructuralTests
             ShellValueDomainKind.FiniteSet,
             "a",
             "b");
+    }
+
+    [Fact]
+    public void Static_bash_c_remaps_nested_loop_plans_and_value_provenance()
+    {
+        var result = Parse(
+            "bash -c 'for d in a b; do for f in x y; do echo \"$d/$f/$d\"; done; done'");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(
+            Assert.Single(Assert.Single(result.Commands).EffectiveArguments).Value,
+            ShellValueDomainKind.FiniteSet,
+            "a/x/a",
+            "a/y/a",
+            "b/x/b",
+            "b/y/b");
     }
 
     [Fact]

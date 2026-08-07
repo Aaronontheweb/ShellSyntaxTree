@@ -493,9 +493,15 @@ internal static partial class BashCommandParser
         Clause Clause,
         IReadOnlyList<CwdPathDependency> Dependencies);
 
+    private readonly record struct ShellValueProvenanceSet(
+        Clause Clause,
+        IReadOnlyList<ShellValueElementProvenance> Provenance);
+
     private readonly record struct BashParseResult(
         ParsedCommand Command,
-        IReadOnlyList<CwdPathDependencySet> CwdPathDependencySets);
+        IReadOnlyList<CwdPathDependencySet> CwdPathDependencySets,
+        IReadOnlyList<ShellValueProvenanceSet> ValueProvenanceSets,
+        IReadOnlyList<BashForInAnalysisPlanReference> ForInPlans);
 
     private static ClauseResult ParseClauseSegment(
         Segment segment, string source, BashParserOptions options, bool workingDirectoryUnknown)

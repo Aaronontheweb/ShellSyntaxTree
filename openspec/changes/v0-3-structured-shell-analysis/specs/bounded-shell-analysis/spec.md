@@ -362,6 +362,11 @@ partition merely to publish exact continuation facts.
 - **THEN** the internal iteration cardinality is `Never`
 - **THEN** the following `pwd` retains the exact incoming cwd
 
+#### Scenario: Reached nonmutating loop body retains incoming cwd
+- **WHEN** isolated-mode Bash parses a supported loop whose body cannot change cwd
+- **THEN** each reached body occurrence retains the exact incoming cwd
+- **THEN** a structurally present but unreachable body or continuation still receives conservative cwd facts
+
 #### Scenario: Duplicate iteration values retain order
 - **WHEN** isolated-mode Bash parses `for f in a b a; do :; done; printf '%s' "$f"`
 - **THEN** the internal iteration plan retains `a`, `b`, `a` in that order
@@ -371,6 +376,11 @@ partition merely to publish exact continuation facts.
 - **WHEN** an isolated-mode Bash loop authors the same literal candidate 33 times
 - **THEN** the internal plan exceeds the concrete-iteration cap
 - **THEN** it uses bounded fixed-point analysis instead of treating one distinct public value as one visit
+
+#### Scenario: Nested loop analysis stays resource bounded
+- **WHEN** nested concrete loops require more than 4096 total body transitions
+- **THEN** the complete parse is unparseable
+- **THEN** no partial occurrence or compatibility projection is published
 
 #### Scenario: Loop-derived cd option is rebound from effective argv
 - **WHEN** isolated-mode Bash analyzes `for f in -P /tmp; do cd "$f"; done`
