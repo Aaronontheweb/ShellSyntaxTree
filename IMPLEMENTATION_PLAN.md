@@ -240,9 +240,15 @@ priorities.
       `Clause` identity; unsupported wrapper tails and depth overflow fail
       closed. Redirect-bearing leaves remain incomplete until the explicit
       redirect-analysis slice lands.
-- [ ] Adapt the existing PowerShell grammar to emit the structural and
+- [x] Adapt the existing PowerShell grammar to emit the structural and
       command-occurrence projections before enabling any control-flow
-      construct.
+      construct. The PowerShell-specific recursive coordinator preserves
+      statement/pipeline precedence, current-scope parenthesized groups,
+      isolated child-host wrappers, current-scope `Invoke-Expression`, exact
+      direct spans, nullable decoded spans, compatibility operators, and
+      shared leaf identity. It rejects hostile structural depth before descent
+      and leaves redirects, dynamic identities, unproved host command strings,
+      and undiscovered executable expressions incomplete.
 - [ ] Deliver paired Bash and PowerShell `$()` substitution slices for all
       locked executable value positions, including ordering, ancestry,
       shell-specific cwd propagation, literal/escaped boundaries, dynamic
@@ -266,6 +272,9 @@ priorities.
 
 - Seed corpus entries from sanitized real-world dogfood logs (SPEC §14
   workflow) — both shells.
+- Synchronize PowerShell corpus manifest entries 282–309 before using the
+  generator as an all-corpus rewrite; until then, targeted manifest changes
+  must preserve the checked-in hand-authored tail.
 - Expand verb / cmdlet / alias tables as the corpus surfaces real commands.
 - Performance sanity check (~1 ms typical) with a tiny BenchmarkDotNet
   harness — only if anything in the daemon hot path complains.

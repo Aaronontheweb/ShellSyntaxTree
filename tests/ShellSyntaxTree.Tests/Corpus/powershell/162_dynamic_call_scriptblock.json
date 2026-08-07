@@ -2,18 +2,9 @@
   "name": "Dynamic call scriptblock",
   "input": "\u0026 { Get-Date }",
   "expected": {
-    "isUnparseable": false,
-    "clauses": [
-      {
-        "operator": "None",
-        "verb": [
-          "{ Get-Date }"
-        ],
-        "isDynamic": true,
-        "args": [],
-        "redirects": []
-      }
-    ]
+    "isUnparseable": true,
+    "unparseableReasonContains": "call-operator script blocks are not supported in v0.3"
   },
-  "notes": "The call operator on a script block \u2014 dynamic command."
+  "notes": "The call operator executes a script block. Stable v0.3 fails closed until its body and scope are modeled.",
+  "oracleExpectation": "OutOfScope"
 }
