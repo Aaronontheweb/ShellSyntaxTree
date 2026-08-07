@@ -514,7 +514,8 @@ internal static class BashCommandParser
             if (filtered.Count > 0
                 && IsNativeArgumentFragment(filtered[filtered.Count - 1])
                 && IsNativeArgumentFragment(t)
-                && IsAdjacent(filtered[filtered.Count - 1], t))
+                && IsAdjacent(filtered[filtered.Count - 1], t)
+                && !IsInlineNativeArgumentPrefix(filtered[filtered.Count - 1]))
             {
                 var previous = filtered[filtered.Count - 1];
                 var previousValue = previous.ResolverValue
@@ -1200,48 +1201,19 @@ internal static class BashCommandParser
                         // `--data="@request file"` / `--data=$(generate)`.
                         if (NativeFlagSyntax.TrySplitEqualsPrefix(
                                 t.Value, out var adjacentFlagPart, out var adjacentValuePrefix)
-                            && i + 1 < segmentTokens.Count
-                            && IsAdjacent(t, segmentTokens[i + 1])
-                            && segmentTokens[i + 1].Kind is BashTokenKind.QuotedString
-                                or BashTokenKind.OpaqueSubstitution)
+                            && NativeArgumentFragmentClassifier.TryClassify(
+                                source,
+                                t.SourceStart,
+                                t.SourceStart + t.SourceLength,
+                                t.SourceStart + sourceRaw.IndexOf('=') + 1,
+                                adjacentFlagPart + "=",
+                                GetResolverValue(t, adjacentValuePrefix),
+                                segmentTokens,
+                                i + 1,
+                                new BashNativeArgumentFragmentAdapter(),
+                                out var fragmentClassification))
                         {
-                            var valueStart = i + 1;
-                            var valueEnd = valueStart;
-                            var valueBuilder = new StringBuilder(adjacentValuePrefix);
-                            var hasOpaqueFragment = false;
-                            var allFragmentsSingleQuoted = adjacentValuePrefix.Length == 0;
-                            var hasSingleQuotedFragment = false;
-                            var hasNonSingleQuotedFragment = adjacentValuePrefix.Length > 0;
-                            var hasSensitiveLiteralFragment = false;
-                            var previousFragment = t;
-                            while (valueEnd < segmentTokens.Count
-                                && IsAdjacent(previousFragment, segmentTokens[valueEnd])
-                                && IsNativeArgumentFragment(segmentTokens[valueEnd]))
-                            {
-                                var fragment = segmentTokens[valueEnd];
-                                valueBuilder.Append(fragment.Value);
-                                hasOpaqueFragment |= fragment.Kind == BashTokenKind.OpaqueSubstitution;
-                                hasSingleQuotedFragment |= fragment.Kind == BashTokenKind.QuotedString
-                                    && fragment.IsSingleQuoted;
-                                hasNonSingleQuotedFragment |= fragment.Kind != BashTokenKind.QuotedString
-                                    || !fragment.IsSingleQuoted;
-                                hasSensitiveLiteralFragment |= fragment.Kind == BashTokenKind.QuotedString
-                                    && fragment.IsSingleQuoted
-                                    && NativeFlagSyntax.ContainsResolverSensitiveLiteralSyntax(fragment.Value);
-                                allFragmentsSingleQuoted &= fragment.Kind == BashTokenKind.QuotedString
-                                    && fragment.IsSingleQuoted;
-                                previousFragment = fragment;
-                                valueEnd++;
-                            }
-
-                            var lastValueToken = segmentTokens[valueEnd - 1];
-                            var adjacentValue = valueBuilder.ToString();
-                            var equalsOffset = SourceSlice(source, t).IndexOf('=');
-                            var adjacentRawStart = t.SourceStart + equalsOffset + 1;
-                            var adjacentRaw = source.Substring(
-                                adjacentRawStart,
-                                lastValueToken.SourceStart + lastValueToken.SourceLength
-                                - adjacentRawStart);
+                            var adjacentValue = fragmentClassification.DecodedValue;
                             argList.Add(new Arg
                             {
                                 Raw = adjacentFlagPart,
@@ -1251,17 +1223,14 @@ internal static class BashCommandParser
                             });
 
                             Arg valueArg;
-                            if (hasOpaqueFragment
-                                || (hasSingleQuotedFragment
-                                    && hasNonSingleQuotedFragment
-                                    && hasSensitiveLiteralFragment)
+                            if (fragmentClassification.HasOpaqueFragment
                                 || (verbKeyForFlagValuePaths is not null
                                     && BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
                                         verbKeyForFlagValuePaths, adjacentFlagPart)))
                             {
                                 valueArg = new Arg
                                 {
-                                    Raw = adjacentRaw,
+                                    Raw = fragmentClassification.ValueRaw,
                                     Kind = ArgKind.DynamicSkip,
                                     IsPath = false,
                                 };
@@ -1276,7 +1245,7 @@ internal static class BashCommandParser
                                         adjacentValue,
                                         out adjacentValueForResolution);
                                 var adjacentResolverValue = GetResolverValue(
-                                    t,
+                                    fragmentClassification.ResolverValue,
                                     adjacentValueForResolution);
                                 var (adjacentKind, adjacentResolved, adjacentIsPath) = BashResolver.Resolve(
                                     adjacentResolverValue,
@@ -1286,7 +1255,7 @@ internal static class BashCommandParser
                                     ShellResolutionConsumer.BashArgument);
                                 valueArg = new Arg
                                 {
-                                    Raw = adjacentRaw,
+                                    Raw = fragmentClassification.ValueRaw,
                                     Resolved = adjacentResolved,
                                     Kind = adjacentKind,
                                     IsPath = adjacentIsPath,
@@ -1295,16 +1264,13 @@ internal static class BashCommandParser
 
                             argList.Add(valueArg);
                             elementList.Add(CreateCombinedElement(
-                                source,
-                                t,
-                                lastValueToken,
-                                adjacentFlagPart + "=" + adjacentValue,
+                                fragmentClassification,
                                 precedingVerbTokenCount,
                                 valueArg.Kind,
                                 isFlag: true,
                                 valueArg.IsPath,
                                 valueArg.Resolved));
-                            i = valueEnd;
+                            i = fragmentClassification.NextTokenIndex;
                             continue;
                         }
 
@@ -1695,34 +1661,6 @@ internal static class BashCommandParser
             Resolved = resolved,
         };
 
-    private static ClauseElement CreateCombinedElement(
-        string source,
-        BashToken first,
-        BashToken last,
-        string value,
-        int precedingVerbTokenCount,
-        ArgKind kind,
-        bool isFlag,
-        bool isPath,
-        string? resolved)
-    {
-        var sourceStart = first.SourceStart;
-        var sourceEnd = last.SourceStart + last.SourceLength;
-        return new ClauseElement
-        {
-            Raw = source.Substring(sourceStart, sourceEnd - sourceStart),
-            Value = value,
-            Role = ClauseElementRole.Argument,
-            SourceStart = sourceStart,
-            SourceLength = sourceEnd - sourceStart,
-            PrecedingVerbElementCount = precedingVerbTokenCount,
-            Kind = kind,
-            IsFlag = isFlag,
-            IsPath = isPath,
-            Resolved = resolved,
-        };
-    }
-
     private static ClauseElement CreateRedirectElement(
         string source,
         BashToken redirectOperator,
@@ -1753,6 +1691,11 @@ internal static class BashCommandParser
     {
         var value = token.ResolverValue
             ?? ShellValue.Literal(token.Value, token.SourceStart, token.SourceLength);
+        return GetResolverValue(value, logicalValue);
+    }
+
+    private static ShellValue GetResolverValue(ShellValue value, string logicalValue)
+    {
         if (string.Equals(value.Decoded, logicalValue, StringComparison.Ordinal))
         {
             return value;
@@ -1767,6 +1710,26 @@ internal static class BashCommandParser
 
         return ShellValue.Opaque(logicalValue, ShellOpaqueCause.Unsupported);
     }
+
+    private static ClauseElement CreateCombinedElement(
+        NativeArgumentFragmentClassification classification,
+        int precedingVerbTokenCount,
+        ArgKind kind,
+        bool isFlag,
+        bool isPath,
+        string? resolved) => new()
+        {
+            Raw = classification.Raw,
+            Value = classification.DecodedArgument,
+            Role = ClauseElementRole.Argument,
+            SourceStart = classification.SourceStart,
+            SourceLength = classification.SourceLength,
+            PrecedingVerbElementCount = precedingVerbTokenCount,
+            Kind = kind,
+            IsFlag = isFlag,
+            IsPath = isPath,
+            Resolved = resolved,
+        };
 
     private static bool TrySplitInlineFlag(
         BashToken token, out string flagPart, out string valuePart)
@@ -1798,6 +1761,10 @@ internal static class BashCommandParser
         token.Kind is BashTokenKind.Word
             or BashTokenKind.QuotedString
             or BashTokenKind.OpaqueSubstitution;
+
+    private static bool IsInlineNativeArgumentPrefix(BashToken token) =>
+        token.Kind == BashTokenKind.Word
+        && NativeFlagSyntax.TrySplitEqualsPrefix(token.Value, out _, out _);
 
     private static bool IsFdDupTarget(string value)
     {

@@ -194,11 +194,19 @@ priorities.
       Executable corpus cases preserve the corrected v0.2 compatibility
       projection; unknown facts remain `DynamicSkip` or unparseable, while
       completely proved mixed fragments resolve exactly.
-- [ ] Implement [issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69)
-      against the corrected fragment contract. Preserve raw, decoded, and span
-      facts plus unaffected classifications; explicitly document only
-      shell-oracle-proved compatibility corrections to false exact, `Glob`,
-      `Tilde`, provider, or path claims and avoidable `DynamicSkip` results.
+- [x] Implement [issue #69](https://github.com/Aaronontheweb/ShellSyntaxTree/issues/69)
+      against the corrected fragment contract. One shell-neutral classifier
+      now aggregates the complete raw span, decoded value, next-token index,
+      and ordered `ShellValue` provenance supplied by explicit Bash and
+      PowerShell adapters. It distinguishes literal-only, typed expansion,
+      and opaque/computed runs without rescanning decoded text; missing lexer
+      provenance fails closed as `Opaque` in both adapters. Direct adapter
+      tests pin spans, maximal consumption, expansion identity, opaque cause,
+      and fallback behavior. The full Bash and PowerShell corpora prove the
+      extraction leaves raw, decoded, span, path, and `DynamicSkip` results
+      unchanged. It introduces no new compatibility correction; the
+      shell-oracle-proved corrections remain the ones documented in the
+      preceding provenance item.
 - [ ] Add the structural and command-occurrence projections for the existing
       grammar before enabling any control-flow construct.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two

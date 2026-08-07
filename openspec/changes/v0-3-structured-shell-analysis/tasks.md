@@ -15,8 +15,8 @@
 
 - [x] 2.1 Implement shell-specific lexical fragment provenance that distinguishes literal, typed recognized-expansion, and opaque resolver input; retains transform eligibility, expansion identity, cardinality, and opaque cause; aggregates complete argument and redirect-target fragment runs; and passes explicit Bash-argument, Bash-redirect, PowerShell-native, cmdlet-Path, cmdlet-LiteralPath, and PowerShell-redirect resolver context without changing the public API.
 - [x] 2.2 Add paired Bash and PowerShell shell-oracle regressions for standalone escapes, adjacent escaped values, all-static mixed quoting, within-token escapes, genuine literal-plus-expandable values, adjacent and wildcard redirect targets, runtime special/positional/numeric/Unicode variables, incomplete and escaped-literal braced interpolation, Bash provider-looking literals, and PowerShell native-versus-cmdlet, Path-versus-LiteralPath, and redirect-context divergence; require exact compatibility path results when every fragment, binding fact, and required resolver fact is exact, otherwise fail closed.
-- [ ] 2.3 Implement issue #69's shell-neutral native argument-fragment classifier with explicit Bash and PowerShell adapters that preserve the new provenance.
-- [ ] 2.4 Prove raw spelling, decoded logical values, source spans, and unaffected classifications remain unchanged; document each oracle-proved false exact, `Glob`, `Tilde`, provider, path, or avoidable `DynamicSkip` compatibility correction.
+- [x] 2.3 Implement issue #69's shell-neutral native argument-fragment classifier with explicit Bash and PowerShell adapters that preserve the new provenance.
+- [x] 2.4 Prove raw spelling, decoded logical values, source spans, and unaffected classifications remain unchanged; document each oracle-proved false exact, `Glob`, `Tilde`, provider, path, or avoidable `DynamicSkip` compatibility correction.
 - [ ] 2.5 Audit duplicated Bash and PowerShell path-normalization helpers and extract only rules with identical shell semantics.
 - [ ] 2.6 Run Release build, full tests, header verification, and the adversarial security corpus for the completed preparation.
 

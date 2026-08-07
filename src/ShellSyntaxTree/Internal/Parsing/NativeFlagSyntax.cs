@@ -75,25 +75,4 @@ internal static class NativeFlagSyntax
         return true;
     }
 
-    /// <summary>
-    /// Characters whose meaning changes when a shell fragment is literal
-    /// rather than expandable. Mixed-fragment values containing these must
-    /// safe-fail unless fragment-level provenance is retained.
-    /// </summary>
-    internal static bool ContainsResolverSensitiveLiteralSyntax(string value)
-    {
-        var transformedValue = value.Length > 0 && value[0] == '@'
-            ? value.Substring(1)
-            : value;
-        return value.IndexOf('$') >= 0
-            || value.IndexOf('*') >= 0
-            || value.IndexOf('?') >= 0
-            || value.IndexOf('[') >= 0
-            || transformedValue.StartsWith("~", System.StringComparison.Ordinal)
-            || transformedValue.StartsWith(
-                "filesystem::", System.StringComparison.OrdinalIgnoreCase)
-            || transformedValue.StartsWith(
-                "Microsoft.PowerShell.Core\\FileSystem::",
-                System.StringComparison.OrdinalIgnoreCase);
-    }
 }
