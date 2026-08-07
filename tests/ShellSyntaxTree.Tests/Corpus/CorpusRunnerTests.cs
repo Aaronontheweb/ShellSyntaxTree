@@ -300,6 +300,7 @@ public class CorpusRunnerTests
         var pwshTokens = PwshLexer.Tokenize(parsed.Source);
         var pwshDirectSegments = DirectPwshSegments(parsed, pwshTokens);
         var standaloneSubstitutions = StandaloneSubstitutionRegions(parsed.Syntax);
+        var directExecutionRegions = DirectExecutionRegions(parsed.Syntax);
         var pwshSegment = 0;
         var pwshRedirectTargetPending = false;
         foreach (var token in pwshTokens)
@@ -319,6 +320,10 @@ public class CorpusRunnerTests
                      || isRedirectOperator
                      || isRedirectTarget) &&
                     !IsPwshForEachStructuralToken(parsed.Syntax, token) &&
+                    !IsDirectExecutionRegionToken(
+                        parsed.Source,
+                        token,
+                        directExecutionRegions) &&
                     !standaloneSubstitutions.Any(region =>
                         region.Start <= token.SourceStart &&
                         region.Start + region.Length >=
@@ -574,6 +579,107 @@ public class CorpusRunnerTests
     }
 
     private readonly record struct SourceRegion(int Start, int Length);
+
+    private static IReadOnlyList<DirectExecutionRegionSource> DirectExecutionRegions(
+        ShellSyntaxNode syntax)
+    {
+        var regions = new List<DirectExecutionRegionSource>();
+        CollectDirectExecutionRegions(syntax, regions);
+        return regions;
+    }
+
+    private static void CollectDirectExecutionRegions(
+        ShellSyntaxNode node,
+        ICollection<DirectExecutionRegionSource> regions)
+    {
+        switch (node)
+        {
+            case ExecutionRegionSyntax region:
+                if ((region.Origin is ExecutionRegionOrigin.DirectCall or
+                        ExecutionRegionOrigin.DotSource) &&
+                    region.SourceStart.HasValue && region.SourceLength.HasValue)
+                {
+                    regions.Add(new DirectExecutionRegionSource(
+                        region.SourceStart.Value,
+                        region.SourceLength.Value,
+                        region.Origin));
+                }
+
+                CollectDirectExecutionRegions(region.Body, regions);
+                break;
+            case SimpleCommandSyntax simple:
+                foreach (var substitution in simple.Substitutions)
+                {
+                    CollectDirectExecutionRegions(substitution, regions);
+                }
+
+                foreach (var region in simple.ExecutionRegions)
+                {
+                    CollectDirectExecutionRegions(region, regions);
+                }
+
+                break;
+            case CommandSubstitutionSyntax substitution:
+                CollectDirectExecutionRegions(substitution.Body, regions);
+                break;
+            case ShellBlockSyntax block:
+                foreach (var statement in block.Statements)
+                {
+                    CollectDirectExecutionRegions(statement, regions);
+                }
+
+                break;
+            case PipelineSyntax pipeline:
+                foreach (var stage in pipeline.Stages)
+                {
+                    CollectDirectExecutionRegions(stage, regions);
+                }
+
+                break;
+            case CommandListSyntax list:
+                foreach (var item in list.Items)
+                {
+                    CollectDirectExecutionRegions(item.Command, regions);
+                }
+
+                break;
+            case GroupSyntax group:
+                CollectDirectExecutionRegions(group.Body, regions);
+                break;
+        }
+    }
+
+    private static bool IsDirectExecutionRegionToken(
+        string source,
+        PwshToken token,
+        IReadOnlyList<DirectExecutionRegionSource> regions)
+    {
+        var tokenEnd = token.SourceStart + token.SourceLength;
+        foreach (var region in regions)
+        {
+            if (token.SourceStart >= region.Start &&
+                tokenEnd <= region.Start + region.Length)
+            {
+                return true;
+            }
+
+            if (region.Origin == ExecutionRegionOrigin.DotSource &&
+                token.Kind == PwshTokenKind.Word && token.Value == "." &&
+                tokenEnd <= region.Start &&
+                source.Substring(tokenEnd, region.Start - tokenEnd)
+                    .All(char.IsWhiteSpace))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private readonly record struct DirectExecutionRegionSource(
+        int Start,
+        int Length,
+        ExecutionRegionOrigin Origin);
 
     private static HashSet<int> DirectBashSegments(
         ParsedCommand parsed, IReadOnlyList<BashToken> tokens)

@@ -380,8 +380,15 @@ priorities.
       unproved identities, and unknown receivers retain unknown/incomplete
       facts. Module-qualified identities are catalogued, but the parser keeps
       rejecting those forms atomically until the region-emission slice can
-      expose every body command. Continue in small slices with direct `&` / `.` and synchronous
-      current-runspace callbacks; child process/runspace jobs and parallel
+      expose every body command. The first direct-operator sub-slice now handles
+      currently supported command interiors in typed synchronous `& {}` and
+      `. {}` regions without synthetic host commands. It isolates ordinary
+      direct-call binding and command-resolution exit mutation, invalidates
+      explicitly escaping scope/provider mutation, carries shared location
+      outcomes, and keeps block arguments and leading `param()` declarations
+      atomic. Ordinary assignment state transfer remains an atomic task 7.5b
+      follow-up; task 7.5b is not complete. Continue with synchronous current-runspace callbacks;
+      child process/runspace jobs and parallel
       blocks; deferred breakpoint/event/completion actions; then unknown
       receiver and nested/adversarial matrices. Preserve script blocks proved
       to be data as opaque values, expose ambiguous bodies with incomplete

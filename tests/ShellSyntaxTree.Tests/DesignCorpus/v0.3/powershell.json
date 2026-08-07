@@ -128,6 +128,7 @@
     {
       "id": "pwsh-call-operator-script-block-region",
       "concern": "Direct call-operator script block exposes its body without a synthetic host command",
+      "compatibilityProjectionLanded": true,
       "input": "& { Remove-Item target.txt }",
       "current": { "isUnparseable": true },
       "desired": {
@@ -2169,6 +2170,7 @@
     {
       "id": "pwsh-dot-source-script-block-region",
       "concern": "Direct dot-source script block exposes a current-scope body without a synthetic host command",
+      "compatibilityProjectionLanded": true,
       "input": ". { Get-Location }",
       "current": { "isUnparseable": true },
       "desired": {

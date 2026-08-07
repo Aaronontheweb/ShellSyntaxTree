@@ -2,9 +2,107 @@
   "name": "Dynamic call scriptblock",
   "input": "\u0026 { Get-Date }",
   "expected": {
-    "isUnparseable": true,
-    "unparseableReasonContains": "call-operator script blocks are not supported in v0.3"
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 14,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ExecutionRegion",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 2,
+        "sourceLength": 12,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "executionOrigin": "DirectCall",
+        "hostClauseElementIndex": null,
+        "executionPhase": "Main",
+        "executionTiming": "Synchronous",
+        "executionCardinality": "Once"
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 3,
+        "sourceLength": 10,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 2,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 4,
+        "sourceLength": 8,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "ExecutionRegion",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 14
+          },
+          {
+            "ancestorKind": "ExecutionRegion",
+            "region": "ExecutionRegion",
+            "childIndex": 0,
+            "sourceStart": 2,
+            "sourceLength": 12
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 3,
+            "sourceLength": 10
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
   },
-  "notes": "The call operator executes a script block. Stable v0.3 fails closed until its body and scope are modeled.",
-  "oracleExpectation": "OutOfScope"
+  "notes": "The direct call operator is a typed synchronous child-scope region and exposes its body without a synthetic host clause."
 }
