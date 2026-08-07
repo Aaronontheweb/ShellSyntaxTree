@@ -150,7 +150,7 @@
       "id": "bash-command-substitution-isolated-cwd",
       "concern": "Bash substitution state is sequential inside and isolated outside",
       "compatibilityProjectionLanded": true,
-      "input": "printf '%s' \"$(cd /tmp; pwd)\"; cat relative.txt",
+      "input": "printf '%s' \"$(cd /tmp && pwd)\"; cat relative.txt",
       "current": { "isUnparseable": false },
       "desired": {
         "syntax": [
@@ -172,6 +172,262 @@
         "compatibility": { "verbs": ["cd", "pwd", "printf", "cat"], "preservesAuthoredDynamicValues": true },
         "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "NoSyntheticOperator"]
       }
+    },
+    {
+      "id": "bash-cd-sequence-failure-join",
+      "concern": "Ungated cd failure keeps the incoming cwd reachable",
+      "compatibilityProjectionLanded": true,
+      "input": "cd /maybe; pwd",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "cd", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 0 },
+          { "id": "pwd", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "cd", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/work" } },
+          { "authoredVerb": "pwd", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Unknown" } }
+        ],
+        "compatibility": { "verbs": ["cd", "pwd"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "The exact /maybe state is reachable only on cd success; semicolon continuation also includes the unchanged failure state."
+    },
+    {
+      "id": "bash-joined-cwd-compatibility-fails-closed",
+      "concern": "Joined cwd clears false path resolution but preserves the dynamic attribution signal",
+      "compatibilityProjectionLanded": false,
+      "input": "cd /maybe; cat relative.txt",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 1, "argumentIndex": 0, "raw": "relative.txt", "kind": "Literal", "isPath": true, "resolved": "/maybe/relative.txt" },
+        "compatibilityClause": {
+          "clauseIndex": 1,
+          "argumentCount": 2,
+          "elementCount": 2,
+          "element": {
+            "elementIndex": 1,
+            "raw": "relative.txt",
+            "value": "relative.txt",
+            "role": "Argument",
+            "sourceStart": 15,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/maybe/relative.txt"
+          }
+        }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "cd", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 0 },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "cd", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/work" } },
+          { "authoredVerb": "cat", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Unknown" } }
+        ],
+        "argument": { "clauseIndex": 1, "argumentIndex": 0, "raw": "relative.txt", "kind": "Literal", "isPath": true },
+        "compatibilityClause": {
+          "clauseIndex": 1,
+          "argumentCount": 2,
+          "elementCount": 2,
+          "element": {
+            "elementIndex": 1,
+            "raw": "relative.txt",
+            "value": "relative.txt",
+            "role": "Argument",
+            "sourceStart": 15,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true
+          },
+          "cwdAttribution": { "argumentIndex": 1, "raw": "<dynamic-cwd>", "kind": "DynamicSkip", "isPath": false }
+        },
+        "compatibility": { "verbs": ["cd", "cat"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "The v0.3 projection removes both false exact resolutions while retaining the established dynamic cwd sentinel for v0.2 consumers."
+    },
+    {
+      "id": "bash-lastpipe-state-join",
+      "concern": "The last Bash pipeline stage may or may not share parent state",
+      "compatibilityProjectionLanded": true,
+      "input": "printf x | cd /tmp; pwd",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "pipeline", "kind": "Pipeline", "parent": "list", "slot": "Statement" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "pipeline", "slot": "Stage", "commandIndex": 0 },
+          { "id": "cd", "kind": "SimpleCommand", "parent": "pipeline", "slot": "Stage", "commandIndex": 1 },
+          { "id": "pwd", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 2 }
+        ],
+        "commands": [
+          { "authoredVerb": "printf", "immediateRole": "PipelineStage", "ancestry": ["root", "list", "pipeline"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/work" } },
+          { "authoredVerb": "cd", "immediateRole": "PipelineStage", "ancestry": ["root", "list", "pipeline"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/work" } },
+          { "authoredVerb": "pwd", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Unknown" } }
+        ],
+        "compatibility": { "verbs": ["printf", "cd", "pwd"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "NoSyntheticOperator"]
+      },
+      "notes": "Without locked execution options, lastpipe makes parent-scope leakage conditional and therefore unknown."
+    },
+    {
+      "id": "bash-decoded-wrapper-inherits-cwd",
+      "concern": "Decoded bash -c inherits invocation cwd and isolates inner changes",
+      "compatibilityProjectionLanded": true,
+      "input": "cd /outer && bash -c 'cd /inner && pwd' && pwd",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "outerCd", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 0 },
+          { "id": "wrapper", "kind": "Group", "parent": "list", "slot": "Statement" },
+          { "id": "wrapperBody", "kind": "Block", "parent": "wrapper", "slot": "Body" },
+          { "id": "innerList", "kind": "CommandList", "parent": "wrapperBody", "slot": "Statement" },
+          { "id": "innerCd", "kind": "SimpleCommand", "parent": "innerList", "slot": "Statement", "commandIndex": 1 },
+          { "id": "innerPwd", "kind": "SimpleCommand", "parent": "innerList", "slot": "Statement", "commandIndex": 2 },
+          { "id": "outerPwd", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 3 }
+        ],
+        "commands": [
+          { "authoredVerb": "cd", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/work" } },
+          { "authoredVerb": "cd", "immediateRole": "Ordinary", "ancestry": ["root", "list", "wrapper", "wrapperBody", "innerList"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/outer" } },
+          { "authoredVerb": "pwd", "immediateRole": "Ordinary", "ancestry": ["root", "list", "wrapper", "wrapperBody", "innerList"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/inner" } },
+          { "authoredVerb": "pwd", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/outer" } }
+        ],
+        "compatibility": { "verbs": ["cd", "cd", "pwd", "pwd"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "NoSyntheticOperator"]
+      },
+      "notes": "The wrapper uses invocation state for v0.3 facts while its exit restores the outer state."
+    },
+    {
+      "id": "bash-for-empty-iterable-preserves-cwd",
+      "concern": "A proved empty loop has no state transition",
+      "compatibilityProjectionLanded": false,
+      "input": "for f in; do cd /tmp; done; pwd",
+      "current": { "isUnparseable": true, "reasonContains": "mutation" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "loop", "kind": "ForEach", "parent": "list", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "cd", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 },
+          { "id": "pwd", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "cd", "immediateRole": "LoopBody", "ancestry": ["root", "list", "loop", "body"], "isComplete": true, "workingDirectory": { "kind": "Unknown" } },
+          { "authoredVerb": "pwd", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/work" } }
+        ],
+        "compatibility": { "verbs": ["cd", "pwd"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative"]
+      },
+      "notes": "The authored body remains structurally visible, but the Never iteration plan contributes no cwd mutation to the following command."
+    },
+    {
+      "id": "bash-for-duplicate-order-controls-final-binding",
+      "concern": "Internal iteration order preserves duplicates independently of the public finite set",
+      "compatibilityProjectionLanded": true,
+      "input": "for f in a b a; do :; done; printf '%s' \"$f\"",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "loop", "kind": "ForEach", "parent": "list", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "noop", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": ":", "immediateRole": "LoopBody", "ancestry": ["root", "list", "loop", "body"], "isComplete": true },
+          {
+            "authoredVerb": "printf",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root", "list"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "Exact", "values": ["a"], "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": [":", "printf"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "LiteralExpansionProvenancePreserved"]
+      },
+      "notes": "The public loop-body value domain may deduplicate to {a,b}; the private iteration plan still ends in a."
+    },
+    {
+      "id": "bash-decoded-wrapper-does-not-inherit-loop-binding",
+      "concern": "A decoded child process does not receive an unexported loop binding",
+      "compatibilityProjectionLanded": true,
+      "input": "for f in a; do bash -c 'printf \"%s\" \"$f\"'; done",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "wrapper", "kind": "Group", "parent": "body", "slot": "Statement" },
+          { "id": "wrapperBody", "kind": "Block", "parent": "wrapper", "slot": "Body" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "wrapperBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "printf",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body", "wrapper", "wrapperBody"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "Unknown", "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["printf"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "Unlike a parenthesized subshell, bash -c receives only proved exported variables; the outer loop binding is not substituted into the child."
+    },
+    {
+      "id": "bash-parenthesized-subshell-inherits-loop-binding",
+      "concern": "A parenthesized subshell inherits shell bindings while isolating exit state",
+      "compatibilityProjectionLanded": true,
+      "input": "for f in a; do (printf \"%s\" \"$f\"); done",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "subshell", "kind": "Group", "parent": "body", "slot": "Statement" },
+          { "id": "subshellBody", "kind": "Block", "parent": "subshell", "slot": "Body" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "subshellBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          {
+            "authoredVerb": "printf",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body", "subshell", "subshellBody"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$f\"", "kind": "Exact", "values": ["a"], "isPolicySensitive": false }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["printf"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      },
+      "notes": "The subshell receives the loop binding but none of its later mutations can escape back to the loop body."
     },
     {
       "id": "bash-for-literal-finite",

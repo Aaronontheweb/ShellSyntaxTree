@@ -422,6 +422,15 @@ scope-isolated groups do not leak state. Branches join their possible exit
 states; loops include the zero-iteration path unless shell semantics prove at
 least one iteration.
 
+For Bash, one internal flow result carries separate reachable success and
+failure states. A simple command records its occurrence facts from the joined
+input, then applies shell-specific state transfer to each exit partition.
+`&&` consumes only success, `||` consumes only failure, and `;` / newline
+consume their join. This distinction remains internal: the public cwd domain
+stays `Exact` or `Unknown`. In particular, literal `cd /x` produces `/x` only
+on its success exit and retains the incoming cwd on failure; `cd /x; next`
+therefore cannot make `next` exact unless both possibilities agree.
+
 Implementation must run this as a structure-aware abstract-state pass over the
 proved syntax tree, not by exposing the compatibility parser's mutable
 parse-order cwd attribution. Parse order is not execution-state order for
@@ -440,10 +449,60 @@ subexpression, then the containing command and outer continuation. An unknown
 PowerShell location mutation therefore makes those later working-directory
 facts unknown; the analyzer never falls back to the pre-subexpression cwd.
 
+A decoded `bash -c` / `sh -c` wrapper enters with the abstract cwd of the
+invocation occurrence. It does not inherit unexported loop bindings; exported
+variable state is used only when the analyzer can prove the corresponding
+export semantics, and is otherwise unknown. Inner sequential changes are
+visible to later inner occurrences but do not leak on wrapper exit. This v0.3
+occurrence rule corrects the old compatibility attribution shortcut without
+requiring v0.2 leaves to invent a new exact path.
+
+Exact and finite Bash `for ... in` domains are analyzed in authored iteration
+order within the 32-candidate cap. Each iteration consumes the joined reachable
+state from the preceding iteration, and the loop exit joins every reachable
+normal exit with the zero-iteration path when zero iterations remain possible.
+Pattern and unknown domains use a bounded fixed point with widening to
+`Unknown`; they are never treated as one representative iteration. Until
+`break`, `continue`, `return`, `exit`, and `exec` have explicit transfer
+semantics, a supported loop region containing one of them fails closed instead
+of publishing incomplete continuation facts. Recognition includes statically
+wrapped builtin forms such as `builtin break` and `command exit`. `eval`,
+`source` / `.`, and execution-bearing `trap` also fail the whole region closed
+unless every executable region and state transfer is discovered.
+
+The internal loop plan is distinct from the public value-domain summary. It
+retains ordered per-word candidates including duplicates and a cardinality of
+`Never`, `OneOrMore`, or `ZeroOrMore`. Thus `a b a` has a final exact binding of
+`a`, while an explicit empty iterable has no body transition at all. All
+reachable visits to one authored body occurrence join their input facts. If an
+ordered iteration sequence exceeds the candidate budget, the analyzer uses a
+bounded fixed point and widening; it does not select the last retained distinct
+candidate as the post-loop binding.
+
+Bash pipeline stages enter from the same pipeline input state. Ordinary stage
+state does not leak, but the analyzer cannot assume the last stage is isolated
+because `lastpipe` is shell-option and job-control dependent. If the last stage
+can mutate supported parent state and execution options are not proved, the
+pipeline exit joins the isolated and current-scope possibilities; disagreement
+becomes `Unknown`. `pipefail` is modeled independently because it can change
+whether a leaked state belongs to the success or failure exit partition. When
+either option is unproved, both partitions conservatively include every
+option-dependent reachable outcome.
+
 The first implementation may collapse any differing cwd states to `Unknown`
 rather than publish a finite cwd set. Selecting one branch's directory is
 never allowed. A later additive version may expose bounded cwd alternatives if
 the consumer contract demonstrates a need.
+
+Compatibility leaves are produced after analysis. If a relative `Arg` or
+`ClauseElement` depended on a cwd that is not exact at that occurrence, its raw
+spelling, path relevance, and source coordinates remain, but `Resolved` is
+cleared. Any false exact synthetic cwd-attribution argument is replaced by the
+existing `Raw="<dynamic-cwd>"`, `Kind=DynamicSkip`, `Resolved=null`,
+`IsCwdAttribution=true` marker. The projection never omits that fail-closed
+signal merely because no exact cwd can be published. This is a security
+correction allowed by the compatibility contract, not an invitation to rewrite
+authored operands with analyzed loop values.
 
 ### Model redirect operation and target independently
 
@@ -572,8 +631,9 @@ into the release specifications before production types are added.
    identical `Clause` instance. This is an in-memory parser-result guarantee,
    not a serialization reference-preservation guarantee.
 4. The initial `Pattern` domain is limited to a Bash path-shaped glob with no
-   dynamic root, substitution, indirect expansion, or unresolved parent
-   traversal. Its `CoveringDirectory` is the exact static directory prefix,
+   dynamic root, substitution, indirect expansion, parent-traversal segment,
+   or glob-bearing dot-prefixed segment that can match `..` when
+   `globskipdots` is disabled. Its `CoveringDirectory` is the exact static directory prefix,
    resolved against an exact cwd when relative. The parser never enumerates the
    filesystem. Bash unmatched-glob settings can change whether the loop has
    zero iterations or yields the literal pattern, but neither outcome escapes
@@ -1308,6 +1368,22 @@ internal sealed record BashForInNode(
     BashBlockNode Body,
     SourceRange Range) : BashNode(Range);
 
+internal readonly record struct BashFlowResult(
+    BashAbstractState? OnSuccess,
+    BashAbstractState? OnFailure);
+
+internal enum BashIterationCardinality
+{
+    Never,
+    OneOrMore,
+    ZeroOrMore,
+}
+
+internal sealed record BashIterationPlan(
+    IReadOnlyList<ShellValueDomain> OrderedWordCandidates,
+    BashIterationCardinality Cardinality,
+    bool RequiresFixedPoint);
+
 internal abstract record PwshNode(SourceRange Range);
 internal sealed record PwshForEachNode(
     PwshBinding Binding,
@@ -1315,6 +1391,12 @@ internal sealed record PwshForEachNode(
     PwshBlockNode Body,
     SourceRange Range) : PwshNode(Range);
 ```
+
+Analysis metadata remains attached to the internal authored nodes until the
+syntax, occurrence, and compatibility projections are produced together. An
+implementation may instead use ordered side tables aligned by occurrence
+index, but SHALL NOT key record-valued public nodes with default value equality:
+two textually identical authored commands are still distinct occurrences.
 
 The proposed data flow is:
 

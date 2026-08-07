@@ -73,6 +73,10 @@
 - [x] 6.3 Derive exact and finite literal binding domains within the locked candidate cap.
 - [x] 6.4 Substitute a bounded binding only where Bash quoting proves argument boundaries.
 - [ ] 6.5 Propagate and conservatively join cwd and supported binding state across zero-or-more loop execution.
+  - [x] 6.5a Lock outcome-partitioned Bash flow, failure-aware `cd`,
+    conservative `lastpipe` / `pipefail`, ordered iteration plans,
+    decoded-wrapper inheritance, and dynamic fail-closed compatibility
+    sanitization before implementing the state pass.
   - The first static-value slice deliberately leaves occurrence cwd Unknown
     and rejects loop shell-state mutation, nested active-binding reuse, or
     loops reached after recognized prior shell-state mutation. A separate

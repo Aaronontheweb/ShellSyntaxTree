@@ -278,6 +278,16 @@ public class V03DesignCorpusTests
             Assert.Equal(expected.Element.IsPath, element.IsPath);
             Assert.Equal(expected.Element.Resolved, element.Resolved);
         }
+
+        if (expected.CwdAttribution is not null)
+        {
+            var attribution = Assert.IsType<Arg>(clause.Args[expected.CwdAttribution.ArgumentIndex]);
+            Assert.Equal(expected.CwdAttribution.Raw, attribution.Raw);
+            Assert.Equal(expected.CwdAttribution.Kind, attribution.Kind);
+            Assert.Equal(expected.CwdAttribution.IsPath, attribution.IsPath);
+            Assert.Equal(expected.CwdAttribution.Resolved, attribution.Resolved);
+            Assert.True(attribution.IsCwdAttribution);
+        }
     }
 
     private static void ValidateCompatibilityClauseExpectation(
@@ -315,6 +325,19 @@ public class V03DesignCorpusTests
             Assert.InRange(expected.Element.ElementIndex, 0, expected.ElementCount.Value - 1);
             Assert.False(string.IsNullOrWhiteSpace(expected.Element.Raw));
             Assert.False(string.IsNullOrWhiteSpace(expected.Element.Value));
+        }
+
+        if (expected.CwdAttribution is not null)
+        {
+            Assert.NotNull(expected.ArgumentCount);
+            Assert.InRange(
+                expected.CwdAttribution.ArgumentIndex,
+                0,
+                expected.ArgumentCount.Value - 1);
+            Assert.False(string.IsNullOrWhiteSpace(expected.CwdAttribution.Raw));
+            Assert.Equal(ArgKind.DynamicSkip, expected.CwdAttribution.Kind);
+            Assert.False(expected.CwdAttribution.IsPath);
+            Assert.Null(expected.CwdAttribution.Resolved);
         }
     }
 
@@ -548,6 +571,21 @@ public sealed record CompatibilityClauseExpectation
     public CompatibilityRedirectExpectation? Redirect { get; init; }
 
     public CompatibilityElementExpectation? Element { get; init; }
+
+    public CompatibilityCwdAttributionExpectation? CwdAttribution { get; init; }
+}
+
+public sealed record CompatibilityCwdAttributionExpectation
+{
+    public int ArgumentIndex { get; init; }
+
+    public string Raw { get; init; } = "";
+
+    public ArgKind Kind { get; init; }
+
+    public bool IsPath { get; init; }
+
+    public string? Resolved { get; init; }
 }
 
 public sealed record CompatibilityRedirectExpectation
@@ -638,6 +676,7 @@ public enum DesignSyntaxKind
     ConditionLoop,
     Conditional,
     CommandSubstitution,
+    Group,
     SimpleCommand,
     OpaqueArgument,
     Unsupported,

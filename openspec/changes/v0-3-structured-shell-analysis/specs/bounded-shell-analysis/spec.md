@@ -255,6 +255,12 @@ Working-directory and supported variable state SHALL be propagated through
 sequential regions and joined across branches and loop exits. Disagreement
 SHALL never be resolved by arbitrarily choosing one path.
 
+The Bash analyzer SHALL internally partition reachable exit state by command
+success and failure. `&&` SHALL continue from the success partition, `||`
+SHALL continue from the failure partition, and `;` or a newline SHALL continue
+from their conservative join. Unreachable partitions are internal analysis
+facts and SHALL NOT require a public API addition.
+
 Bash command substitution SHALL isolate its working-directory and variable
 state from the containing command while retaining sequential state inside the
 substitution. PowerShell `$()` SHALL evaluate in the current runspace scope;
@@ -262,6 +268,19 @@ its sequential location changes SHALL affect later commands inside the
 subexpression, the containing command, and the following outer continuation.
 An unknown mutation SHALL propagate as unknown wherever that shell's scope
 rules make it observable.
+
+Exact and finite Bash `for ... in` domains SHALL be analyzed in authored
+iteration order, including duplicates, within the candidate cap. The analyzer
+SHALL retain independent internal cardinality of `Never`, `OneOrMore`, or
+`ZeroOrMore`; the public finite-set summary SHALL NOT be used as an ordered
+iteration plan. Pattern, unknown, and over-budget domains SHALL use a bounded
+conservative fixed point and SHALL NOT be represented by one arbitrarily
+selected iteration. Every reachable visit to one authored occurrence SHALL
+join its input facts. A transfer such as `break`, `continue`, `return`, `exit`,
+or `exec`, including statically wrapped builtin forms, SHALL make the containing
+region unparseable until the analyzer implements that transfer explicitly.
+`eval`, `source` / `.`, and execution-bearing `trap` SHALL likewise fail closed
+unless all executable regions and transfers are discovered.
 
 #### Scenario: Branch-dependent cwd
 - **WHEN** one branch changes cwd to `/a` and another changes cwd to `/b`
@@ -272,18 +291,51 @@ rules make it observable.
 - **WHEN** every supported branch exits with the same exact cwd
 - **THEN** the joined cwd remains exact
 
+#### Scenario: Ungated cd failure keeps the prior cwd possible
+- **WHEN** Bash parses `cd /maybe; pwd`
+- **THEN** the `cd` occurrence uses the incoming cwd
+- **THEN** the `pwd` cwd is unknown because `cd` may fail and `;` still continues
+- **THEN** the analyzer does not publish `/maybe` as the sole cwd
+
 #### Scenario: Zero-iteration loop path
 - **WHEN** a loop may execute zero times and its body changes cwd
 - **THEN** the post-loop state includes the pre-loop possibility
+
+#### Scenario: Proved empty loop does not mutate state
+- **WHEN** Bash parses `for f in; do cd /tmp; done; pwd`
+- **THEN** the internal iteration cardinality is `Never`
+- **THEN** the following `pwd` retains the exact incoming cwd
+
+#### Scenario: Duplicate iteration values retain order
+- **WHEN** Bash parses `for f in a b a; do :; done; printf '%s' "$f"`
+- **THEN** the internal iteration plan retains `a`, `b`, `a` in that order
+- **THEN** the following use of `f` has exact effective value `a`
 
 #### Scenario: Isolated shell scope
 - **WHEN** a supported subshell or scope-isolated group changes cwd
 - **THEN** that cwd does not leak into the enclosing continuation
 
 #### Scenario: Bash substitution cwd is isolated
-- **WHEN** Bash parses `printf '%s' "$(cd /tmp; pwd)"; cat relative.txt`
+- **WHEN** Bash parses `printf '%s' "$(cd /tmp && pwd)"; cat relative.txt`
 - **THEN** `pwd` uses `/tmp` inside the substitution
 - **THEN** `printf` and `cat` retain the exact outer cwd
+
+#### Scenario: Bash last pipeline stage may share parent state
+- **WHEN** a Bash pipeline ends in a cwd or variable-state mutator and parser options do not prove `lastpipe` behavior
+- **THEN** every stage occurrence uses the pipeline input state
+- **THEN** following parent-scope state is unknown when the last stage could run in either a subshell or the current shell
+- **THEN** unproved `pipefail` behavior conservatively partitions every reachable option-dependent result by success and failure
+
+#### Scenario: Decoded Bash wrapper inherits cwd and isolates exit state
+- **WHEN** Bash parses `cd /outer && bash -c 'cd /inner && pwd' && pwd`
+- **THEN** the decoded wrapper enters with exact cwd `/outer`
+- **THEN** its inner `pwd` uses `/inner`
+- **THEN** the following outer `pwd` uses `/outer`
+
+#### Scenario: Decoded Bash wrapper does not inherit an unexported loop binding
+- **WHEN** Bash parses `for f in a; do bash -c 'printf "%s" "$f"'; done`
+- **THEN** the decoded child receives no exact effective `f` from the outer loop binding
+- **THEN** a parenthesized subshell remains distinct because it inherits shell bindings while isolating exit state
 
 #### Scenario: PowerShell subexpression cwd propagates
 - **WHEN** PowerShell parses `Write-Output $(Set-Location /tmp; Get-Location); Get-Item relative.txt`
