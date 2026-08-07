@@ -147,10 +147,12 @@ priorities.
       analysis limits, separate Bash and PowerShell grammar matrices, static
       pattern-cover rules, divergent-cwd fallback, deferred forms, project
       context, and the preimplementation consumer-guide migration contract.
-- [ ] Complete OpenSpec tasks 1.6–1.7 in the public-API implementation PR:
-      synchronize the accepted shared and PowerShell contracts into
-      `SPEC.md` / `SPEC.POWERSHELL.md` together with source and snapshot tests
-      so the repository authority never intentionally drifts from the assembly.
+- [x] Synchronize the accepted shared and PowerShell v0.3 contracts into
+      `SPEC.md` / `SPEC.POWERSHELL.md` in the public-API implementation change.
+      The canonical specs now lock the additive types and defaults, closed
+      record hierarchy, separate Bash and PowerShell grammars, occurrence and
+      compatibility projections, bounded values/state, explicit redirects,
+      resolver contexts, fail-closed consumer contract, and persistence caveat.
 - [x] Correct the lexer-to-resolver provenance boundary before issue #69.
       Paired Bash and PowerShell shell-oracle cases must distinguish escaped
       literal resolver syntax from expandable syntax even when both decode to
@@ -214,14 +216,31 @@ priorities.
       their shell-specific implementations. Direct boundary tests pin the
       extracted helpers, while the complete resolver and corpus suites prove
       the refactor leaves both compatibility projections unchanged.
+- [x] Add the inert v0.3 public API skeleton: the closed syntax-node family,
+      command occurrences and ancestry, value domains and fixed limits,
+      explicit redirect records, plus additive `ParsedCommand.Syntax` and
+      `Commands`. Public snapshot tests pin every member, enum order, default,
+      and assembly-only closure mechanism. Until the projection passes land,
+      `Syntax` is an empty block and `Commands` is empty, so early use remains
+      fail-closed while v0.2 `Clauses` behavior is unchanged.
 - [ ] Add the structural and command-occurrence projections for the existing
       grammar before enabling any control-flow construct.
+- [ ] Deliver paired Bash and PowerShell `$()` substitution slices for all
+      locked executable value positions, including ordering, ancestry,
+      shell-specific cwd propagation, literal/escaped boundaries, dynamic
+      identities, fail-closed negatives, executable corpus, and Netclaw cases.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.
 - [ ] Preserve the existing Bash heredoc grammar, fix quoted-delimiter
       adjacency, expose body/delimiter/expansion/completeness facts, and add a
       separately tested Bash `<<<` here-string redirect slice.
+- [ ] Near the end of v0.3 delivery, expand the Web sample with curated complex
+      Bash and PowerShell inputs and deterministic Mermaid views of syntax,
+      occurrences, compatibility clauses, ancestry, redirects, and fail-closed
+      outcomes. Keep visualization downstream of the canonical projection so
+      it cannot become a second command-discovery implementation; snapshot the
+      rendering, escape arbitrary shell labels, and emit no raw HTML.
 
 ---
 

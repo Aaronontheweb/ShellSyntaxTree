@@ -43,9 +43,10 @@ public sealed record VerbChain
     /// True when the clause's command name is a dynamic token the parser
     /// cannot statically identify — a variable (<c>&amp; $exe</c>), an
     /// interpolated name (<c>&amp; "tool-$name"</c>), a subexpression
-    /// (<c>&amp; (Get-Thing)</c>), or a script block
-    /// (<c>&amp; { ... }</c>) at verb position. <see cref="Tokens"/> still
-    /// carries the verbatim token; <see cref="CanonicalVerb"/> is null.
+    /// (<c>&amp; $(Get-Thing)</c>), or another supported value expression at
+    /// verb position. <see cref="Tokens"/> still carries the verbatim token;
+    /// <see cref="CanonicalVerb"/> is null. An unsupported executable
+    /// identity expression makes the whole result unparseable instead.
     ///
     /// A consumer MUST treat a clause with <c>IsDynamic=true</c> as "the
     /// command being run is unknown" and route to safe-fail. Always false

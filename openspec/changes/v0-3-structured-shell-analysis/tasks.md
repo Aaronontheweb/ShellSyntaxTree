@@ -5,8 +5,8 @@
 - [x] 1.3 Lock candidate-count, structural-nesting, and existing wrapper-recursion limits with boundary scenarios.
 - [x] 1.4 Review Appendix B, lock the v0.3 grammar separately for Bash and PowerShell, and park every deferred form explicitly.
 - [x] 1.5 Resolve the initial pattern and divergent-cwd exposure rules, updating the bounded-analysis specification.
-- [ ] 1.6 Synchronize the accepted public API and shared requirements into `SPEC.md`.
-- [ ] 1.7 Synchronize PowerShell grammar and analysis deltas into `SPEC.POWERSHELL.md`.
+- [x] 1.6 Synchronize the accepted public API and shared requirements into `SPEC.md`.
+- [x] 1.7 Synchronize PowerShell grammar and analysis deltas into `SPEC.POWERSHELL.md`.
 - [x] 1.8 Update `PROJECT_CONTEXT.md` and `IMPLEMENTATION_PLAN.md` with the accepted v0.3 scope and delivery slices.
 - [x] 1.9 Add a paired Bash and PowerShell design corpus that records current behavior, desired structure, command occurrences, bounded values, redirect facts, compatibility projections, and security invariants.
 - [ ] 1.10 Promote each design case into the executable corpus as its production parser slice lands.
@@ -22,19 +22,23 @@
 
 ## 3. Structural and Projection Skeleton
 
-- [ ] 3.1 Add the locked public syntax-node hierarchy and defaults to the public API snapshot.
-- [ ] 3.2 Add the locked command-occurrence, role, ancestry, completeness, and analysis records to the public API snapshot.
-- [ ] 3.3 Add `ParsedCommand.Syntax` and `ParsedCommand.Commands` while retaining all v0.2 members.
+- [x] 3.1 Add the locked public syntax-node hierarchy and defaults to the public API snapshot.
+- [x] 3.2 Add the locked command-occurrence, role, ancestry, completeness, and analysis records to the public API snapshot.
+- [x] 3.3 Add `ParsedCommand.Syntax` and `ParsedCommand.Commands` while retaining all v0.2 members.
 - [ ] 3.4 Build a library-owned traversal that emits each simple command occurrence exactly once in deterministic source order.
 - [ ] 3.5 Build the conservative `Clauses` compatibility flattener without inventing cross-structure compound operators.
 - [ ] 3.6 Adapt the existing Bash grammar to emit the structural model with no newly supported syntax.
 - [ ] 3.7 Adapt the existing PowerShell grammar to emit the structural model with no newly supported syntax.
 - [ ] 3.8 Add tests proving existing parser inputs retain their v0.2 leaf and compatibility results.
 - [ ] 3.9 Add corpus expectations for syntax shape, occurrences, roles, and completeness for existing constructs.
+- [ ] 3.10 Implement Bash `$()` discovery in supported argument words, redirect values, iterables, and expanding heredoc bodies; retain literal/escaped spellings and fail closed on command-name substitutions, legacy backticks, or incomplete interiors.
+- [ ] 3.11 Implement PowerShell `$()` discovery in supported words, redirect values, foreach expressions, call-operator dynamic identities, standalone expression statements, double-quoted strings, and expandable here-strings; never invent invocation from standalone output, retain literal/escaped spellings, and fail closed on trailing command-style arguments, call-operator script blocks, or unsupported execution-bearing `@()` / `@{}` forms.
+- [ ] 3.12 Pin substitution parentage, authored sibling indices, innermost-first ordering, Bash-isolated versus PowerShell-current-scope state, unknown-state propagation, nesting/depth limits, and incomplete dynamic identities in direct tests.
+- [ ] 3.13 Promote ordinary, multiple, nested, iterator, redirect, quoted, escaped, stateful, malformed, and hidden-execution substitution cases into both executable corpora and the Netclaw approval matrix.
 
 ## 4. Explicit Redirect Semantics
 
-- [ ] 4.1 Add the locked redirect operation and target-analysis types while retaining compatibility redirect members.
+- [x] 4.1 Add the locked redirect operation and target-analysis types while retaining compatibility redirect members.
 - [ ] 4.2 Classify Bash descriptor duplication, close, and move as static only for the complete literal descriptor grammar.
 - [ ] 4.3 Keep variable-driven and otherwise computed Bash descriptor targets unknown or incomplete.
 - [ ] 4.4 Lex and classify Bash `&>` and `&>>` independently from background-list operators.
@@ -114,4 +118,5 @@
 - [ ] 11.5 Validate the public API field-for-field against the synchronized shared and PowerShell specifications.
 - [ ] 11.6 Validate Netclaw's ordinary-command, redirect, bounded-loop, and unknown-value approval matrices against the prerelease package.
 - [ ] 11.7 Update release notes and remove Netclaw's temporary descriptor workaround only after explicit redirect integration is live.
-- [ ] 11.8 Promote stable 0.3.0 only after Linux and Windows CI, package publication, and downstream acceptance succeed.
+- [ ] 11.8 Expand the Web sample with curated complex Bash and PowerShell inputs and snapshot-tested deterministic Mermaid diagrams produced only from canonical syntax, occurrence, and compatibility projections; cover ancestry, redirects, and fail-closed results, escape arbitrary shell labels safely, and emit no raw HTML.
+- [ ] 11.9 Promote stable 0.3.0 only after Linux and Windows CI, package publication, and downstream acceptance succeed.

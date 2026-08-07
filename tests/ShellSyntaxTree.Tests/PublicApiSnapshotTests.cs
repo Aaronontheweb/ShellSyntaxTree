@@ -230,12 +230,35 @@ public class PublicApiSnapshotTests
         AssertIsRecord(t);
 
         AssertInitProperty(t, "Source", typeof(string));
+        AssertInitProperty(t, "Syntax", typeof(ShellBlockSyntax));
+        AssertInitProperty(t, "Commands", typeof(IReadOnlyList<CommandOccurrence>));
         AssertInitProperty(t, "Clauses", typeof(IReadOnlyList<Clause>));
         AssertInitProperty(t, "IsUnparseable", typeof(bool));
         AssertInitProperty(t, "UnparseableReason", typeof(string), nullable: true);
 
+        var declaredProps = DeclaredInstanceProps(t)
+            .Where(p => p.Name != "EqualityContract")
+            .Select(p => p.Name)
+            .OrderBy(n => n)
+            .ToArray();
+        Assert.Equal(
+            new[]
+            {
+                "Clauses",
+                "Commands",
+                "IsUnparseable",
+                "Source",
+                "Syntax",
+                "UnparseableReason",
+            },
+            declaredProps);
+
         var instance = new ParsedCommand();
         Assert.Equal("", instance.Source);
+        Assert.NotNull(instance.Syntax);
+        Assert.Equal(ShellSyntaxKind.Block, instance.Syntax.Kind);
+        Assert.Empty(instance.Syntax.Statements);
+        Assert.Empty(instance.Commands);
         Assert.Empty(instance.Clauses);
         Assert.False(instance.IsUnparseable);
         Assert.Null(instance.UnparseableReason);
@@ -473,14 +496,45 @@ public class PublicApiSnapshotTests
             nameof(Clause),
             nameof(ClauseElement),
             nameof(ClauseElementRole),
+            nameof(CommandAncestryFrame),
+            nameof(CommandAncestryRegion),
+            nameof(CommandListItemSyntax),
+            nameof(CommandListSyntax),
+            nameof(CommandOccurrence),
+            nameof(CommandOccurrenceRole),
+            nameof(CommandSubstitutionSyntax),
             nameof(CompoundOperator),
+            nameof(ConditionalBranchSyntax),
+            nameof(ConditionalSyntax),
+            nameof(ConditionLoopKind),
+            nameof(ConditionLoopSyntax),
+            nameof(EffectiveArgument),
+            nameof(ForEachSyntax),
+            nameof(GroupSyntax),
+            nameof(HereDocumentAnalysis),
+            nameof(HereDocumentExpansionMode),
             nameof(IShellParser),
+            nameof(LoopBindingSyntax),
             nameof(ParsedCommand),
+            nameof(PipelineSyntax),
             nameof(PwshParser),
             nameof(PwshParserOptions),
             nameof(Redirect),
+            nameof(RedirectAnalysis),
             nameof(RedirectDirection),
+            nameof(RedirectOperation),
+            nameof(RedirectSource),
+            nameof(RedirectSourceKind),
+            nameof(ShellAnalysisLimits),
+            nameof(ShellBlockSyntax),
+            nameof(ShellGroupKind),
             nameof(ShellParserOptions),
+            nameof(ShellSourceFragment),
+            nameof(ShellSyntaxKind),
+            nameof(ShellSyntaxNode),
+            nameof(ShellValueDomain),
+            nameof(ShellValueDomainKind),
+            nameof(SimpleCommandSyntax),
             nameof(VerbChain),
         }.OrderBy(n => n).ToArray();
 

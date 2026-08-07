@@ -320,6 +320,14 @@ A simple-command syntax node wraps the same `Clause` value exposed through the
 occurrence and compatibility projections. Existing `VerbChain`, `Arg`,
 `Redirect`, and `ClauseElement` facts are not replaced.
 
+Executable command substitutions evaluated for the simple command's authored
+words and redirects, including an expanding heredoc body, are owned by that
+`SimpleCommandSyntax` through an authored-order `Substitutions` collection.
+This is necessary because the unchanged `Clause` leaf records the
+opaque/dynamic value but cannot retain a nested executable tree. A substitution
+nested inside an inner command belongs to that inner simple command; it is not
+promoted to a sibling or stored in a side table.
+
 New structural nodes preserve their complete source range when it can be mapped
 exactly. Expanded wrapper content retains the current nullable-span rule rather
 than inventing offsets into escaped or encoded outer text.
@@ -357,6 +365,20 @@ simple command occurrence in source order, including nested iterator,
 condition, branch, body, and substitution commands. It does not invent
 compound operators across structural boundaries. Existing `Clause.Operator`
 values are retained only for actual authored relationships.
+
+Projection order is deterministic. Disjoint executable regions follow authored
+source order. An enclosed substitution precedes its containing simple command,
+and nested substitutions are emitted innermost first. When wrapper decoding
+makes outer source spans unavailable, containing structural collection order
+is the tie-breaker. The occurrence and compatibility projections use the same
+order.
+
+Sibling substitution ancestry frames use `Region=Substitution` and the
+authored zero-based index from the structural collection that owns each
+`CommandSubstitutionSyntax`. This is `SimpleCommandSyntax.Substitutions` for an
+embedded command value and the iterator-command collection for a direct
+iterator substitution. It remains deterministic when decoded wrapper content
+has no outer source span.
 
 The compatibility clauses preserve authored arguments. They do not substitute
 loop variables into `Arg` and therefore retain dynamic markers that make
@@ -399,6 +421,14 @@ through the structure. Sequential lists propagate state. Subshell or
 scope-isolated groups do not leak state. Branches join their possible exit
 states; loops include the zero-iteration path unless shell semantics prove at
 least one iteration.
+
+Bash command substitution executes in an isolated subshell state. State changes
+affect later commands inside that substitution but never the containing command
+or following outer commands. PowerShell `$()` evaluates in the current runspace
+scope. Its sequential location changes affect later commands inside the
+subexpression, then the containing command and outer continuation. An unknown
+PowerShell location mutation therefore makes those later working-directory
+facts unknown; the analyzer never falls back to the pre-subexpression cwd.
 
 The first implementation may collapse any differing cwd states to `Unknown`
 rather than publish a finite cwd set. Selecting one branch's directory is
@@ -602,6 +632,7 @@ public sealed record SimpleCommandSyntax : ShellSyntaxNode
 {
     public override ShellSyntaxKind Kind => ShellSyntaxKind.SimpleCommand;
     public Clause Clause { get; init; } = new();
+    public IReadOnlyList<CommandSubstitutionSyntax> Substitutions { get; init; } = [];
 }
 
 public sealed record PipelineSyntax : ShellSyntaxNode
@@ -703,9 +734,15 @@ adapters remain shell-specific.
 
 Every enum introduced in v0.3 reserves zero as `Unknown`, except existing v0.2
 enums whose zero values are already locked. Consumers fail closed on `Unknown`
-or an unrecognized numeric value. The closed base constructor prevents external
-syntax-node implementations; later library versions may add derived records,
-so authorization code still needs a default fail-closed type-switch arm.
+or an unrecognized numeric value. The source implementation pairs the shown
+`private protected` ordinary base constructor with an assembly-only abstract
+ownership member. Records synthesize a protected copy constructor, so the
+ordinary constructor alone would still permit a specially constructed external
+derived record. The non-public abstract member makes every external concrete
+implementation fail compilation without adding to the public contract; every
+library-owned sealed node implements it internally. Later library versions may
+add derived records, so authorization code still needs a default fail-closed
+type-switch arm.
 
 ### Command occurrence and bounded values
 
@@ -793,6 +830,10 @@ public static class ShellAnalysisLimits
 not the `SimpleCommandSyntax` leaf itself. `ChildIndex` disambiguates repeated
 regions such as a pipeline stage or conditional branch. `ImmediateRole`
 describes the nearest execution relation; ancestry retains outer relations.
+An embedded substitution adds a substitution ancestry frame while its
+containing simple-command leaf remains excluded. Iterator or other outer
+frames are therefore preserved outside that substitution frame. Its
+`ChildIndex` is the authored index within the owning structural collection.
 
 The contract uses a source-authored element coordinate rather than attaching
 derived values directly to `Arg`. This prevents a loop iteration from mutating
@@ -1038,7 +1079,8 @@ existing lexer values and spans.
 | `for name in words; do ...; done` | Supported |
 | `while` / `until` command lists | Supported |
 | `if` / `elif` / `else` command lists | Supported |
-| Completely delimited command substitution in a supported iterable | Inner commands visible; produced value `Unknown` |
+| Completely delimited `$()` substitution in a supported word, redirect value, iterable, or expanding heredoc body | Inner commands visible; produced value `Unknown` |
+| Legacy backtick command substitution | Whole result unparseable until its distinct escape and nesting rules are modeled |
 | Static path-shaped glob in a supported iterable | `Pattern` only under the locked covering-directory rule |
 | Existing `<<` / `<<-` heredocs | Supported; preserve delimiter, body, expansion mode, and completeness without treating body data as commands |
 | Bash `<<<` here strings | Supported with explicit here-string redirect facts |
@@ -1103,6 +1145,13 @@ whole-stream top-level split; it does not replace verb extraction, native
 argument classification, redirects, resolver behavior, provenance, or wrapper
 recursion inside a simple-command leaf.
 
+After the existing leaf is built, the Bash front end recursively parses each
+completely delimited `$()` retained in an executable value position and attaches
+the resulting `CommandSubstitutionSyntax` to the containing simple command (or
+the foreach iterator region). Single-quoted or escaped `$()` text remains
+literal. An unsupported inner region, a backtick substitution, or a failed
+boundary makes the whole result unparseable.
+
 All `Expect*` failures return one outer unparseable result. They do not skip to
 `done` and return a partial tree that could be mistaken for authorization
 evidence.
@@ -1135,6 +1184,8 @@ pwsh_else            := "else" script_block_body
 foreach_expression   := literal_value
                       | literal_array
                       | pipeline_expression
+                      | supported_subexpression
+supported_subexpression := "$(" pwsh_script(stop = ")") ")"
 literal_array        := "@(" literal_value ("," literal_value)* ")"
 script_block_body    := "{" pwsh_script(stop = "}") "}"
 ```
@@ -1204,12 +1255,29 @@ complete command discovery makes the whole result unparseable.
 | PowerShell construct | Stable v0.3 status |
 |---|---|
 | Existing simple commands, pipelines, statement separators, grouping, and static wrapper / `Invoke-Expression` recursion | Supported and structurally projected |
+| Completely delimited `$()` in a supported word, call-operator dynamic identity, redirect, foreach expression, double-quoted string, or expandable here-string | Inner commands visible; produced value `Unknown`; current-scope state propagates |
+| Standalone `$()` expression statement | Inner commands visible; no outer invocation is invented |
+| `& $(...)` dynamic invocation | Inner commands visible, followed by one incomplete dynamic outer occurrence |
+| `& { ... }` script-block invocation | Whole result unparseable until body, scope, and state propagation are modeled |
+| Single-quoted, literal-here-string, or backtick-escaped `$()` text | Literal/opaque data; no invented substitution occurrence |
+| Execution-bearing `@()` / `@{}` outside a completely modeled foreach literal expression | Whole result unparseable until complete command discovery is modeled |
 | `foreach ($name in expression) { ... }` for literal scalar, literal array, or fully delimited pipeline iterables | Supported |
 | `while (condition_pipeline) { ... }` | Supported |
 | `if` / `elseif` / `else` with fully delimited condition pipelines | Supported |
 | Pipeline-produced iterator objects | Iterator commands visible; produced values `Unknown` |
 | `ForEach-Object` / `foreach` alias script blocks and ordinary script-block arguments | Existing opaque argument; no invented child execution |
 | `do`, `switch`, functions, definitions, class/type bodies, or execution-bearing expressions outside the locked subset | Deferred; whole result unparseable when execution may be hidden |
+
+PowerShell `$()` is a value-producing subexpression, not an invocation.
+Standalone `$()` lowers directly to `CommandSubstitutionSyntax` and exposes
+only its inner commands. Only a call-operator form such as `& $(...)` also
+lowers an outer dynamic simple command, after the substitution. A standalone
+subexpression followed by command-style arguments is unparseable. Bash command
+word formation deliberately differs; a substitution in Bash command-name
+position makes the whole result unparseable after diagnostic discovery rather
+than changing the PowerShell-specific `VerbChain.IsDynamic` contract.
+Call-operator script-block invocation remains unparseable; an ordinary
+script-block argument remains non-executing opaque data.
 
 ### Candidate internal nodes and lowering pipeline
 
@@ -1269,7 +1337,8 @@ lattice. Executable-aware interpretation still occurs only in the consumer.
 |---|---|---|
 | Missing Bash `do` or `done` | Parse failure with the offending range | `IsUnparseable=true`; `Commands` and `Clauses` empty |
 | Bash keyword used as an argument | Existing simple-command leaf | No false control-flow node |
-| Unsupported Bash substitution in an iterable | Inner commands surfaced only if completely parsed | Otherwise the entire result is unparseable |
+| Unsupported Bash substitution in any executable value position | Inner commands surfaced only if completely parsed | Otherwise the entire result is unparseable |
+| Supported PowerShell `$()` value | Inner commands surfaced before its consumer; current-scope state applied | Produced value remains unknown |
 | PowerShell `foreach` at statement position followed by `(` | `PwshForEachNode` | Iterator and body occurrences exposed |
 | PowerShell `foreach` in a pipeline command slot | Existing pipeline/simple-command path | Alias or command semantics preserved |
 | PowerShell statement body `ScriptBlock` | Interior recursively parsed with adjusted spans | Every body command exposed |

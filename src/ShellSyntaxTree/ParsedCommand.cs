@@ -17,16 +17,30 @@ public sealed record ParsedCommand
     public string Source { get; init; } = "";
 
     /// <summary>
-    /// Top-level clauses, split on compound operators
-    /// (<c>&amp;&amp;</c>, <c>||</c>, <c>;</c>, <c>|</c>). For a simple
-    /// command, exactly one clause with Operator=None.
+    /// Canonical authored nested structure. Direct-source nodes have exact
+    /// source ranges; decoded wrapper nodes use unavailable ranges unless an
+    /// exact outer mapping exists.
+    /// </summary>
+    public ShellBlockSyntax Syntax { get; init; } = new();
+
+    /// <summary>
+    /// Canonical authorization projection containing every authored simple
+    /// command that may execute exactly once in deterministic source order.
+    /// </summary>
+    public IReadOnlyList<CommandOccurrence> Commands { get; init; } =
+        Array.Empty<CommandOccurrence>();
+
+    /// <summary>
+    /// Conservative v0.2 compatibility projection. Existing simple-command
+    /// behavior remains available; v0.3 security consumers use
+    /// <see cref="Commands"/>.
     /// </summary>
     public IReadOnlyList<Clause> Clauses { get; init; } = Array.Empty<Clause>();
 
     /// <summary>
-    /// True when the parser could not produce a clean AST (unbalanced
-    /// quotes, unparseable construct). When true, Clauses MAY be partial
-    /// or empty. Consumers should route to safe-fail.
+    /// True when the parser could not account for every executable region.
+    /// When true, <see cref="Commands"/> and <see cref="Clauses"/> are empty;
+    /// <see cref="Syntax"/> may contain partial diagnostic evidence only.
     /// </summary>
     public bool IsUnparseable { get; init; }
 

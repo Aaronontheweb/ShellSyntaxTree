@@ -2,6 +2,171 @@
   "shell": "Bash",
   "cases": [
     {
+      "id": "bash-simple-command-substitution",
+      "concern": "Substitution is attached to its containing simple command",
+      "input": "rm \"$(find /tmp)\"",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "\"$(find /tmp)\"", "kind": "DynamicSkip", "isPath": false }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "rm", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 1 },
+          { "id": "sub", "kind": "CommandSubstitution", "parent": "rm", "slot": "Substitution" },
+          { "id": "subBody", "kind": "Block", "parent": "sub", "slot": "Body" },
+          { "id": "find", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "find", "immediateRole": "Substitution", "ancestry": ["root", "sub", "subBody"], "isComplete": true },
+          {
+            "authoredVerb": "rm",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "\"$(find /tmp)\"", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": { "clauseIndex": 1, "argumentIndex": 0, "raw": "\"$(find /tmp)\"", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["find", "rm"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "bash-multiple-command-substitutions",
+      "concern": "Sibling substitutions preserve authored order before their consumer",
+      "input": "printf '%s %s' \"$(first)\" \"$(second)\"",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 2 },
+          { "id": "firstSub", "kind": "CommandSubstitution", "parent": "printf", "slot": "Substitution" },
+          { "id": "firstBody", "kind": "Block", "parent": "firstSub", "slot": "Body" },
+          { "id": "first", "kind": "SimpleCommand", "parent": "firstBody", "slot": "Statement", "commandIndex": 0 },
+          { "id": "secondSub", "kind": "CommandSubstitution", "parent": "printf", "slot": "Substitution" },
+          { "id": "secondBody", "kind": "Block", "parent": "secondSub", "slot": "Body" },
+          { "id": "second", "kind": "SimpleCommand", "parent": "secondBody", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "first", "immediateRole": "Substitution", "ancestry": ["root", "firstSub", "firstBody"], "isComplete": true },
+          { "authoredVerb": "second", "immediateRole": "Substitution", "ancestry": ["root", "secondSub", "secondBody"], "isComplete": true },
+          { "authoredVerb": "printf", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["first", "second", "printf"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "bash-nested-command-substitutions",
+      "concern": "Nested substitutions retain parentage and project innermost first",
+      "input": "printf '%s' \"$(echo \"$(whoami)\")\"",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 2 },
+          { "id": "outerSub", "kind": "CommandSubstitution", "parent": "printf", "slot": "Substitution" },
+          { "id": "outerBody", "kind": "Block", "parent": "outerSub", "slot": "Body" },
+          { "id": "echo", "kind": "SimpleCommand", "parent": "outerBody", "slot": "Statement", "commandIndex": 1 },
+          { "id": "innerSub", "kind": "CommandSubstitution", "parent": "echo", "slot": "Substitution" },
+          { "id": "innerBody", "kind": "Block", "parent": "innerSub", "slot": "Body" },
+          { "id": "whoami", "kind": "SimpleCommand", "parent": "innerBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "whoami", "immediateRole": "Substitution", "ancestry": ["root", "outerSub", "outerBody", "innerSub", "innerBody"], "isComplete": true },
+          { "authoredVerb": "echo", "immediateRole": "Substitution", "ancestry": ["root", "outerSub", "outerBody"], "isComplete": true },
+          { "authoredVerb": "printf", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["whoami", "echo", "printf"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "bash-literal-substitution-spellings",
+      "concern": "Quoted and escaped substitution-looking text does not execute",
+      "input": "printf '%s %s' '$(whoami)' \"\\$(id)\"",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "printf", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["printf"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      }
+    },
+    {
+      "id": "bash-backtick-substitution-gated",
+      "concern": "Legacy backtick execution remains fail closed until escape semantics are modeled",
+      "input": "echo `whoami`",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "`whoami`", "kind": "DynamicSkip", "isPath": false }
+      },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Argument" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "bash-command-name-substitution-gated",
+      "concern": "Runtime-produced Bash command identity stays unparseable",
+      "input": "r$(printf m) file",
+      "current": { "isUnparseable": true, "reasonContains": "dynamic Bash command identity" },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "outer", "kind": "Unsupported", "parent": "root", "slot": "Statement" },
+          { "id": "sub", "kind": "CommandSubstitution", "parent": "outer", "slot": "Substitution" },
+          { "id": "subBody", "kind": "Block", "parent": "sub", "slot": "Body" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "Diagnostic syntax may retain printf, but unparseable results expose no authorization projections."
+    },
+    {
+      "id": "bash-command-substitution-isolated-cwd",
+      "concern": "Bash substitution state is sequential inside and isolated outside",
+      "input": "printf '%s' \"$(cd /tmp; pwd)\"; cat relative.txt",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "printf", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 2 },
+          { "id": "sub", "kind": "CommandSubstitution", "parent": "printf", "slot": "Substitution" },
+          { "id": "subBody", "kind": "Block", "parent": "sub", "slot": "Body" },
+          { "id": "cd", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 0 },
+          { "id": "pwd", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 1 },
+          { "id": "cat", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 3 }
+        ],
+        "commands": [
+          { "authoredVerb": "cd", "immediateRole": "Substitution", "ancestry": ["root", "list", "sub", "subBody"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/work" } },
+          { "authoredVerb": "pwd", "immediateRole": "Substitution", "ancestry": ["root", "list", "sub", "subBody"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/tmp" } },
+          { "authoredVerb": "printf", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/work" } },
+          { "authoredVerb": "cat", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/work" } }
+        ],
+        "compatibility": { "verbs": ["cd", "pwd", "printf", "cat"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "NoSyntheticOperator"]
+      }
+    },
+    {
       "id": "bash-for-literal-finite",
       "concern": "Finite literal loop binding",
       "input": "for f in a.txt b.txt; do rm -- \"$f\"; done",
@@ -92,12 +257,14 @@
           { "id": "root", "kind": "Block", "slot": "Root" },
           { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
           { "id": "iterator", "kind": "Block", "parent": "loop", "slot": "Iterator" },
-          { "id": "find", "kind": "SimpleCommand", "parent": "iterator", "slot": "Statement", "commandIndex": 0 },
+          { "id": "sub", "kind": "CommandSubstitution", "parent": "iterator", "slot": "Substitution" },
+          { "id": "subBody", "kind": "Block", "parent": "sub", "slot": "Body" },
+          { "id": "find", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 0 },
           { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
           { "id": "rm", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
         ],
         "commands": [
-          { "authoredVerb": "find", "immediateRole": "Iterator", "ancestry": ["root", "loop", "iterator"], "isComplete": true },
+          { "authoredVerb": "find", "immediateRole": "Substitution", "ancestry": ["root", "loop", "iterator", "sub", "subBody"], "isComplete": true },
           {
             "authoredVerb": "rm",
             "immediateRole": "LoopBody",
