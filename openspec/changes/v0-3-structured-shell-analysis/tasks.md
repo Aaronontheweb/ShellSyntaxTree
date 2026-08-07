@@ -181,7 +181,7 @@
     pipeline, alias/cmdlet/native, redirect, and adversarial matrices remain in
     tasks 7.5-7.7.
 - [ ] 7.5 Cover aliases, cmdlets, native commands, nested loops, pipelines, script blocks, and wrapper boundaries.
-  - [ ] 7.5a Implement the version-pinned PowerShell 7 script-block receiver and
+  - [x] 7.5a Implement the version-pinned PowerShell 7 script-block receiver and
     parameter-binding catalog, including aliases, supported module-qualified
     identities, parameter abbreviations/inline values, positional binding,
     parameter sets, `ScriptBlock[]`, and ForEach-Object Begin/Process/End

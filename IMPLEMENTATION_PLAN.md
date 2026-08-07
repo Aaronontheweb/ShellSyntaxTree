@@ -361,8 +361,18 @@ priorities.
       executable-corpus DTOs now preserve direct and command-owned regions in
       the locked substitution-host-region order. No parser emits a region yet,
       and automated execution-region oracle coverage remains in task 7.7.
-      Continue in small slices: pinned receiver/parameter binding including
-      ForEach-Object multi-block phases; direct `&` / `.` and synchronous
+      The PowerShell 7.6.4 receiver and parameter-binding catalog is now
+      implemented with command-resolution proof as an explicit input. It pins
+      aliases, supported module qualification, exact and abbreviated/inline
+      parameters, positional slots, parameter sets, `ScriptBlock[]`, authored
+      ForEach-Object multi-block coordinates, and semantic Begin/Process/End
+      phases. The optional Microsoft.PowerShell.ThreadJob 2.2.0 entry remains
+      incomplete unless its separate module-baseline proof is supplied. Local
+      `Invoke-Command -AsJob`, ambiguous prefixes, malformed value binding,
+      unproved identities, and unknown receivers retain unknown/incomplete
+      facts. Module-qualified identities are catalogued, but the parser keeps
+      rejecting those forms atomically until the region-emission slice can
+      expose every body command. Continue in small slices with direct `&` / `.` and synchronous
       current-runspace callbacks; child process/runspace jobs and parallel
       blocks; deferred breakpoint/event/completion actions; then unknown
       receiver and nested/adversarial matrices. Preserve script blocks proved
