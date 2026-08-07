@@ -25,8 +25,8 @@
 - [x] 3.1 Add the locked public syntax-node hierarchy and defaults to the public API snapshot.
 - [x] 3.2 Add the locked command-occurrence, role, ancestry, completeness, and analysis records to the public API snapshot.
 - [x] 3.3 Add `ParsedCommand.Syntax` and `ParsedCommand.Commands` while retaining all v0.2 members.
-- [ ] 3.4 Build a library-owned traversal that emits each simple command occurrence exactly once in deterministic source order.
-- [ ] 3.5 Build the conservative `Clauses` compatibility flattener without inventing cross-structure compound operators.
+- [x] 3.4 Build a library-owned traversal that emits each simple command occurrence exactly once in deterministic source order.
+- [x] 3.5 Build the conservative `Clauses` compatibility flattener without inventing cross-structure compound operators.
 - [ ] 3.6 Adapt the existing Bash grammar to emit the structural model with no newly supported syntax.
 - [ ] 3.7 Adapt the existing PowerShell grammar to emit the structural model with no newly supported syntax.
 - [ ] 3.8 Add tests proving existing parser inputs retain their v0.2 leaf and compatibility results.

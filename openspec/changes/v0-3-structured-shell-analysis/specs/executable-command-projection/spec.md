@@ -25,6 +25,49 @@ their enum zero values. Ancestry SHALL be ordered outermost to innermost,
 exclude the simple-command leaf, and retain child indices and exact-or-null
 source ranges for correlation.
 
+Each frame SHALL describe the relationship from its ancestor to the next node
+on the path. The root block SHALL use `Root`; non-root blocks and command lists
+SHALL use `Statement`; pipelines SHALL use `PipelineStage`; groups SHALL use
+`GroupBody`; foreach nodes SHALL use `Iterator` or `LoopBody`; condition loops
+SHALL use `Condition` or `LoopBody`; conditionals SHALL use `Branch`;
+conditional-branch nodes SHALL use `Condition` or `Branch`; and substitutions
+SHALL use `Substitution`. Repeated children SHALL use their zero-based authored
+index, with an `else` child indexed after all conditional branches. Frame
+source ranges SHALL identify the ancestor. Blocks, command lists, and groups
+SHALL retain the incoming immediate role; a nearer pipeline, iterator, body,
+condition, branch, or substitution relation SHALL replace it.
+
+#### Scenario: Root and nested block coordinates are deterministic
+- **WHEN** a root statement contains a loop-body pipeline
+- **THEN** a stage occurrence has outer-to-inner `Root`, `LoopBody`,
+  `Statement`, and `PipelineStage` ancestry
+- **THEN** each repeated relation carries its authored child index
+
+### Requirement: Projection rejects malformed parser-owned structure and facts
+The projector SHALL accept only a tree with one syntax-node and one `Clause`
+reference per authored simple-command position. Node and source-fragment spans
+SHALL be both unavailable or a non-negative start/length pair. Structural enum
+values consumed by projection SHALL be known. Empty blocks MAY be valid, but
+empty pipelines, command lists, and conditionals SHALL be rejected.
+
+Value domains, cwd facts, effective-argument coordinates, redirect
+coordinates, redirect shapes, and heredoc facts SHALL satisfy their locked
+record invariants before projection succeeds. Any repeated identity, malformed
+shape, invalid coordinate, cycle, or depth overflow SHALL discard every
+partial command and compatibility result.
+
+#### Scenario: Shared leaf identity is not counted twice
+- **WHEN** an internal parser bug places one syntax leaf or `Clause` reference
+  at two authored positions
+- **THEN** projection fails instead of emitting two occurrences
+- **THEN** no partial command or compatibility projection is returned
+
+#### Scenario: Complete occurrence cannot contain invalid facts
+- **WHEN** parser-owned analysis supplies an invalid value domain, argument
+  coordinate, redirect shape, or unknown scope-affecting structural kind
+- **THEN** projection fails closed
+- **THEN** the occurrence is not published with `IsComplete=true`
+
 #### Scenario: While condition and body roles
 - **WHEN** Bash parses `while curl URL; do sleep 1; done`
 - **THEN** `curl` is identified as a condition occurrence
