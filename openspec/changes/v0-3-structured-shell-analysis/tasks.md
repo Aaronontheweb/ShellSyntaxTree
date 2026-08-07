@@ -95,15 +95,16 @@
       wrapper provenance in unit tests and the Bash corpus. Use bounded
       fixed-point widening for unknown cardinality and fail atomically after
       4096 total loop-body transitions.
-    - [ ] 6.5c.3 Re-parse each visit's complete effective argv for state
+    - [x] 6.5c.3 Re-parse each visit's complete effective argv for state
       transfers, including loop-derived `cd` options and wrapped dispatch;
       carry those transfers through the bounded fixed point, then remove only
       the temporary mutation rejections whose transfers are fully modeled.
   - The analyzer now publishes exact incoming cwd for reached loop occurrences
-    when no modeled transfer can disagree. It still rejects loop shell-state
-    mutation, nested active-binding reuse, and loops reached after recognized
-    prior shell-state mutation until 6.5c.3 reclassifies complete effective argv
-    and models the corresponding repeated transfers.
+    when no modeled transfer can disagree. Complete effective `cd` argv,
+    recursive exact `command` / `builtin` dispatch, failure-only invalid forms,
+    physical-path sanitation, and persistent post-loop binding protection are
+    implemented. It still rejects every unmodeled shell-state mutation,
+    control transfer, nested active-binding reuse, and dynamic dispatch.
 - [ ] 6.6 Cover empty iterables, separators, multiline bodies, redirects, pipelines, nested loops, and wrapper boundaries.
 - [ ] 6.7 Add adversarial cases for option injection, mutation, unquoted expansion, indirect expansion, substitutions, and cap overflow.
 - [ ] 6.8 Add sanitized Bash corpus entries and Netclaw allow/prompt/deny integration cases.

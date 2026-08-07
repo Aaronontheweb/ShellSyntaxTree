@@ -319,7 +319,18 @@ argument's complete shell-value provenance for each concrete visit. Effective
 argument facts at one authored occurrence SHALL join across reachable visits.
 State transfers such as `cd` SHALL parse the complete effective argv, including
 candidate-derived options and option terminators, rather than substituting only
-an operand. A transfer such as `break`, `continue`, `return`, `exit`, or `exec`,
+an operand. Exact `command` options `-p` and `--` and the exact `builtin --`
+delimiter SHALL be recursively unwrapped; `command -v` / `-V` SHALL remain a
+nonmutating query, while invalid or dynamic wrapper grammar SHALL fail closed.
+When effective option grammar makes an authored path resolution unsafe, the
+compatibility `Arg` and corresponding `ClauseElement` resolutions SHALL both be
+cleared without rewriting their authored spelling or flag classification.
+Option recognition SHALL stop at the first operand. An exact invalid option or
+second operand SHALL have no success partition, and a tracked loop-binding
+expansion whose argv cardinality is not proved SHALL make the containing region
+unparseable. Ambient dynamic values retain the compatibility contract's
+conservative unknown-state behavior. A
+transfer such as `break`, `continue`, `return`, `exit`, or `exec`,
 including recursively wrapped builtin forms, SHALL make the containing region
 unparseable until the analyzer implements that transfer explicitly. `eval`,
 `source` / `.`, execution-bearing `trap`, and mutation of tracked bindings
@@ -387,6 +398,23 @@ partition merely to publish exact continuation facts.
 - **THEN** the first visit treats `-P` as a `cd` option rather than a path operand
 - **THEN** the second visit treats `/tmp` as the operand under the resulting option grammar
 - **THEN** no state transfer reuses the authored `$f` flag classification
+
+#### Scenario: Loop-derived physical option sanitizes compatibility paths
+- **WHEN** isolated-mode Bash analyzes `for f in -P; do cd "$f" ./sub && cat file.txt; done`
+- **THEN** the effective argv is `cd -P ./sub`
+- **THEN** both compatibility projections clear the authored `/work/sub` resolution
+- **THEN** the reached `cat` has unknown cwd and no exact relative-path resolution
+- **WHEN** the loop candidate is `--` instead
+- **THEN** `./sub` remains the exact logical operand and the reached path resolves under `/work/sub`
+
+#### Scenario: Exact dispatch wrappers preserve cwd transfer grammar
+- **WHEN** a loop body invokes `command -p -- builtin -- cd "$f"`
+- **THEN** the analyzer recursively proves the wrapper grammar
+- **THEN** it interprets only the words after `cd` as the effective transfer argv
+- **WHEN** `command -v` or `command -V` is used
+- **THEN** the wrapper is a query and does not mutate cwd
+- **WHEN** a wrapper option is invalid or dynamic
+- **THEN** the loop remains fail closed
 
 #### Scenario: Empty-loop failure continuation is unreachable
 - **WHEN** isolated-mode Bash parses `for f in; do false; done || cat relative.txt`

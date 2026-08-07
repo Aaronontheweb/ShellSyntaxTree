@@ -314,9 +314,9 @@
     {
       "id": "bash-for-empty-iterable-preserves-cwd",
       "concern": "A proved empty loop has no state transition",
-      "compatibilityProjectionLanded": false,
+      "compatibilityProjectionLanded": true,
       "input": "for f in; do cd /tmp; done; pwd",
-      "current": { "isUnparseable": true, "reasonContains": "mutation" },
+      "current": { "isUnparseable": false },
       "desired": {
         "syntax": [
           { "id": "root", "kind": "Block", "slot": "Root" },

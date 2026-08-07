@@ -560,27 +560,27 @@ public class BashStructuralProjectionTests
     [InlineData("builtin builtin cd /outer && cat relative.txt")]
     [InlineData("command builtin cd /outer && cat relative.txt")]
     [InlineData("builtin command cd /outer && cat relative.txt")]
-    public void Nested_dispatch_wrapped_cwd_mutation_fails_closed(string source)
+    public void Nested_dispatch_wrapped_cwd_uses_the_effective_argv(string source)
     {
         var result = Parse(source);
 
-        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
-        Assert.Null(result.Clauses[1].Args[0].Resolved);
-        Assert.Contains(result.Clauses[1].Args, argument =>
-            argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+        Assert.Equal(
+            "/outer",
+            Assert.Single(result.Commands[1].WorkingDirectory.Values));
+        Assert.Equal("/outer/relative.txt", result.Clauses[1].Args[0].Resolved);
     }
 
     [Theory]
     [InlineData("command cd /outer && cat relative.txt")]
     [InlineData("builtin cd /outer && cat relative.txt")]
-    public void Dispatch_wrapped_cwd_mutation_fails_closed(string source)
+    public void Dispatch_wrapped_cwd_uses_the_effective_argv(string source)
     {
         var result = Parse(source);
 
-        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
-        Assert.Null(result.Clauses[1].Args[0].Resolved);
-        Assert.Contains(result.Clauses[1].Args, argument =>
-            argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+        Assert.Equal(
+            "/outer",
+            Assert.Single(result.Commands[1].WorkingDirectory.Values));
+        Assert.Equal("/outer/relative.txt", result.Clauses[1].Args[0].Resolved);
     }
 
     [Fact]

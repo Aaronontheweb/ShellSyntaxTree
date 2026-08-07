@@ -1,0 +1,24 @@
+{
+  "name": "v0.3 Bash static invalid cd is failure-only",
+  "input": "for f in x; do cd -Z || pwd; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "-Z", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": true }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "OrIf",
+        "verb": ["pwd"],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Complete static argv interpretation makes an invalid cd option failure-only, so the OR continuation retains the incoming cwd."
+}

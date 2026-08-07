@@ -4,6 +4,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 using System.Linq;
+using ShellSyntaxTree.Internal.Bash.Parsing;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests.Parsing;
@@ -138,10 +139,6 @@ public class BashForInStructuralTests
     }
 
     [Theory]
-    [InlineData("cd /a || cd /b; for f in *.txt; do rm -- \"$f\" rel.txt; done")]
-    [InlineData("cd /a | cat; for f in *.txt; do rm -- \"$f\" rel.txt; done")]
-    [InlineData("command cd /a; for f in x; do rm -- \"$f\" rel.txt; done")]
-    [InlineData("builtin cd /a; for f in x; do rm -- \"$f\" rel.txt; done")]
     [InlineData("eval \"cd /a\"; for f in x; do rm -- \"$f\" rel.txt; done")]
     [InlineData("trap \"f=x\" DEBUG; for f in a b; do echo \"$f\"; done")]
     public void Loop_after_prior_shell_state_mutation_fails_atomically(string source)
@@ -171,6 +168,276 @@ public class BashForInStructuralTests
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
         Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Fact]
+    public void Loop_derived_cd_operand_flows_through_success_continuation()
+    {
+        var result = Parse("for f in /tmp; do cd \"$f\"; done && pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/tmp");
+    }
+
+    [Fact]
+    public void Wrapped_loop_derived_cd_operand_uses_the_same_transfer_grammar()
+    {
+        var result = Parse(
+            "for f in /tmp; do command builtin cd \"$f\"; done && pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/tmp");
+    }
+
+    [Fact]
+    public void Loop_derived_cd_option_terminator_without_operand_uses_home()
+    {
+        var result = Parse("for f in --; do cd \"$f\"; done && pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(
+            result.Commands[1].WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "/home/test");
+    }
+
+    [Theory]
+    [InlineData("-L")]
+    [InlineData("-e")]
+    public void Logical_loop_derived_cd_option_without_operand_uses_home(
+        string candidate)
+    {
+        var result = Parse($"for f in {candidate}; do cd \"$f\"; done && pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(
+            result.Commands[1].WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "/home/test");
+    }
+
+    [Fact]
+    public void Invalid_loop_derived_cd_option_has_no_success_continuation()
+    {
+        var result = Parse("for f in -Z; do cd \"$f\"; done || pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/work");
+    }
+
+    [Theory]
+    [InlineData("cd -Z")]
+    [InlineData("cd ./a ./b")]
+    [InlineData("command -- cd -Z")]
+    public void Static_invalid_cd_argv_is_failure_only_inside_loop(string command)
+    {
+        var result = Parse($"for f in x; do {command} || pwd; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/work");
+    }
+
+    [Fact]
+    public void Multiple_effective_cd_operands_have_no_success_continuation()
+    {
+        var result = Parse("for f in /tmp; do cd \"$f\" /other; done || pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/work");
+    }
+
+    [Fact]
+    public void Multiple_effective_cd_operands_preserve_exact_failure_paths()
+    {
+        var result = Parse(
+            "for f in /other; do cd \"$f\" ./sub || cat file.txt; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/work");
+        Assert.Equal(
+            "/work/file.txt",
+            Assert.Single(
+                result.Clauses[1].Args,
+                argument => argument.Raw == "file.txt").Resolved);
+    }
+
+    [Theory]
+    [InlineData("--")]
+    [InlineData("-P")]
+    public void Option_shaped_word_after_operand_is_a_second_operand(string candidate)
+    {
+        var result = Parse(
+            $"for f in {candidate}; do cd ./a \"$f\" || pwd; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/work");
+        Assert.Equal(
+            "/work/a",
+            Assert.Single(result.Clauses[0].Args, argument => argument.Raw == "./a").Resolved);
+        Assert.Equal(
+            "/work/a",
+            Assert.Single(
+                result.Clauses[0].Elements,
+                element => element.Raw == "./a").Resolved);
+    }
+
+    [Fact]
+    public void Unquoted_loop_binding_with_unknown_argv_arity_fails_atomically()
+    {
+        var result = Parse("for f in 'a b'; do cd $f && pwd; done");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Theory]
+    [InlineData("for f in *.txt; do cd $f; done")]
+    [InlineData("for f in 'a b'; do cd \"$UNKNOWN\" $f; done")]
+    public void Every_effective_argv_word_is_preflighted_for_tracked_unknown_arity(
+        string source)
+    {
+        var result = Parse(source);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Theory]
+    [InlineData("-P")]
+    [InlineData("-@")]
+    [InlineData("-")]
+    public void Physical_or_oldpwd_loop_derived_cd_values_keep_success_cwd_unknown(
+        string candidate)
+    {
+        var result = Parse($"for f in {candidate}; do cd \"$f\"; done && pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+    }
+
+    [Fact]
+    public void Modeled_cd_before_loop_no_longer_invalidates_loop_analysis()
+    {
+        var result = Parse("cd /a && for f in x; do pwd; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/a");
+    }
+
+    [Theory]
+    [InlineData("command -- cd")]
+    [InlineData("command -p cd")]
+    [InlineData("builtin -- cd")]
+    [InlineData("command -p -- builtin -- cd")]
+    public void Static_dispatch_options_preserve_loop_derived_cwd_transfer(
+        string dispatch)
+    {
+        var result = Parse(
+            $"for f in /tmp; do {dispatch} \"$f\"; done && pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/tmp");
+    }
+
+    [Theory]
+    [InlineData("command -v cd")]
+    [InlineData("command -V cd")]
+    [InlineData("command -pv cd")]
+    public void Command_query_options_do_not_mutate_loop_state(string query)
+    {
+        var result = Parse($"for f in a; do {query}; done && pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(result.Commands[1].WorkingDirectory, ShellValueDomainKind.Exact, "/work");
+    }
+
+    [Theory]
+    [InlineData("command -Z cd")]
+    [InlineData("builtin -p cd")]
+    public void Invalid_dispatch_options_remain_rejected_in_loop(string dispatch)
+    {
+        var result = Parse($"for f in a; do {dispatch} \"$f\"; done");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
+    public void Loop_derived_physical_option_clears_stale_operand_resolution()
+    {
+        var result = Parse(
+            "for f in -P; do cd \"$f\" ./sub && cat file.txt; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var cd = result.Clauses[0];
+        Assert.Null(Assert.Single(cd.Args, argument => argument.Raw == "./sub").Resolved);
+        Assert.Null(Assert.Single(
+            cd.Elements,
+            element => element.Raw == "./sub").Resolved);
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+        Assert.Null(Assert.Single(
+            result.Clauses[1].Args,
+            argument => argument.Raw == "file.txt").Resolved);
+        Assert.Contains(
+            result.Clauses[1].Args,
+            argument => argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Fact]
+    public void Wrapped_loop_derived_physical_option_clears_stale_operand_resolution()
+    {
+        var result = Parse(
+            "for f in -P; do command -p -- builtin -- cd \"$f\" ./sub && " +
+            "cat file.txt; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Null(Assert.Single(
+            result.Clauses[0].Elements,
+            element => element.Raw == "./sub").Resolved);
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+    }
+
+    [Fact]
+    public void Loop_derived_option_terminator_retains_logical_operand_resolution()
+    {
+        var result = Parse(
+            "for f in --; do cd \"$f\" ./sub && cat file.txt; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(
+            "/work/sub",
+            Assert.Single(result.Clauses[0].Args, argument => argument.Raw == "./sub").Resolved);
+        Assert.Equal(
+            "/work/sub",
+            Assert.Single(
+                result.Clauses[0].Elements,
+                element => element.Raw == "./sub").Resolved);
+        AssertDomain(
+            result.Commands[1].WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "/work/sub");
+        Assert.Equal(
+            "/work/sub/file.txt",
+            Assert.Single(
+                result.Clauses[1].Args,
+                argument => argument.Raw == "file.txt").Resolved);
+    }
+
+    [Theory]
+    [InlineData("unset f")]
+    [InlineData("command unset f")]
+    [InlineData("builtin unset f")]
+    public void Post_loop_binding_mutation_fails_atomically(string mutation)
+    {
+        var result = Parse(
+            $"for f in a; do :; done; {mutation}; echo \"$f\"");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Fact]
@@ -426,6 +693,48 @@ public class BashForInStructuralTests
     }
 
     [Fact]
+    public void Effective_argv_binding_alternative_cap_is_exact_and_never_truncated()
+    {
+        var exact = new BashLoopBindingContext()
+            .WithBinding("a", FiniteDomain(4))
+            .WithBinding("b", FiniteDomain(8));
+        var overflow = new BashLoopBindingContext()
+            .WithBinding("a", FiniteDomain(4))
+            .WithBinding("b", FiniteDomain(9));
+
+        Assert.Equal(
+            BashBindingAlternativeResult.Exact,
+            exact.EnumerateExactAlternatives(
+                ShellAnalysisLimits.MaxValueCandidates,
+                new[] { "a", "b" },
+                out var exactAlternatives));
+        Assert.Equal(ShellAnalysisLimits.MaxValueCandidates, exactAlternatives.Count);
+        Assert.Equal(
+            BashBindingAlternativeResult.ExceededLimit,
+            overflow.EnumerateExactAlternatives(
+                ShellAnalysisLimits.MaxValueCandidates,
+                new[] { "a", "b" },
+                out var overflowAlternatives));
+        Assert.Empty(overflowAlternatives);
+    }
+
+    [Theory]
+    [InlineData("cd")]
+    [InlineData("command -- cd")]
+    public void Unreferenced_unknown_binding_does_not_poison_static_cwd_transfer(
+        string dispatch)
+    {
+        var result = Parse(
+            $"for f in \"$UNKNOWN\"; do :; done; {dispatch} /tmp && pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        AssertDomain(
+            result.Commands[2].WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "/tmp");
+    }
+
+    [Fact]
     public void Pipelines_compose_with_loop_ancestry_without_synthetic_operators()
     {
         var result = Parse("for f in a b; do printf '%s' \"$f\" | sort; done");
@@ -449,7 +758,6 @@ public class BashForInStructuralTests
     [InlineData("for f in a; do printf -v f x; done")]
     [InlineData("for f in a; do eval 'f=x'; done")]
     [InlineData("for f in a; do source script.sh; done")]
-    [InlineData("for f in a; do cd /tmp; done")]
     [InlineData("for f in a b; do trap 'f=x' DEBUG; echo \"$f\"; done")]
     [InlineData("for f in a; do command unset f; echo \"$f\"; done")]
     [InlineData("for f in a; do builtin unset f; echo \"$f\"; done")]
@@ -642,6 +950,12 @@ public class BashForInStructuralTests
         }).Parse(input);
 
     private static string CommandVerb(CommandOccurrence command) => command.Clause.Verb.Joined;
+
+    private static ShellValueDomain FiniteDomain(int count) => new()
+    {
+        Kind = ShellValueDomainKind.FiniteSet,
+        Values = Enumerable.Range(0, count).Select(index => $"v{index}").ToArray(),
+    };
 
     private static void AssertDomain(
         ShellValueDomain actual,

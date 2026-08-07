@@ -1,0 +1,25 @@
+{
+  "name": "v0.3 Bash option-shaped word after cd operand",
+  "input": "for f in --; do cd ./a \"$f\" || pwd; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "./a", "kind": "Literal", "isPath": true, "resolved": "/work/a", "isFlag": false },
+          { "raw": "\"$f\"", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "OrIf",
+        "verb": ["pwd"],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Once ./a is the operand, the rebound -- is a second operand rather than an option terminator; the exact invocation is failure-only."
+}

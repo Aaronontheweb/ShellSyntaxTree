@@ -18,6 +18,13 @@ internal enum BashIterationCardinality
     ZeroOrMore,
 }
 
+internal enum BashBindingAlternativeResult
+{
+    Exact,
+    Unknown,
+    ExceededLimit,
+}
+
 internal sealed record BashLoopWord(
     ShellValue? Value,
     bool HasUnmodeledBraceExpansion);
@@ -71,6 +78,103 @@ internal sealed class BashLoopBindingContext
     }
 
     internal BashLoopBindingContext WithoutBindings() => new();
+
+    internal bool HasBindings => _bindings.Count > 0;
+
+    internal BashBindingAlternativeResult EnumerateExactAlternatives(
+        int maximumCount,
+        IReadOnlyList<string> bindingNames,
+        out IReadOnlyList<BashLoopBindingContext> alternatives)
+    {
+        var current = new List<BashLoopBindingContext> { new() };
+        foreach (var binding in _bindings)
+        {
+            if (!ContainsName(bindingNames, binding.Name))
+            {
+                continue;
+            }
+
+            if (binding.Domain.Kind is not (
+                    ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet) ||
+                binding.Domain.Values.Count == 0)
+            {
+                alternatives = Array.Empty<BashLoopBindingContext>();
+                return BashBindingAlternativeResult.Unknown;
+            }
+
+            if (current.Count > maximumCount / binding.Domain.Values.Count)
+            {
+                alternatives = Array.Empty<BashLoopBindingContext>();
+                return BashBindingAlternativeResult.ExceededLimit;
+            }
+
+            var next = new List<BashLoopBindingContext>(
+                current.Count * binding.Domain.Values.Count);
+            foreach (var state in current)
+            {
+                foreach (var value in binding.Domain.Values)
+                {
+                    next.Add(state.WithBinding(
+                        binding.Name,
+                        new ShellValueDomain
+                        {
+                            Kind = ShellValueDomainKind.Exact,
+                            Values = new[] { value },
+                        }));
+                }
+            }
+
+            current = next;
+        }
+
+        alternatives = current;
+        return BashBindingAlternativeResult.Exact;
+    }
+
+    internal IReadOnlyList<string> FindReferencedBindingNames(
+        IReadOnlyList<ShellValue> values)
+    {
+        var names = new List<string>();
+        foreach (var binding in _bindings)
+        {
+            foreach (var value in values)
+            {
+                if (ReferencesBinding(value, binding.Name))
+                {
+                    names.Add(binding.Name);
+                    break;
+                }
+            }
+        }
+
+        return names;
+    }
+
+    internal bool ReferencesTrackedBinding(ShellValue value)
+    {
+        foreach (var binding in _bindings)
+        {
+            if (ReferencesBinding(value, binding.Name))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsName(IReadOnlyList<string> names, string expected)
+    {
+        foreach (var name in names)
+        {
+            if (string.Equals(name, expected, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     internal bool StateEquals(BashLoopBindingContext other)
     {
@@ -420,6 +524,22 @@ internal sealed class BashLoopBindingContext
 
         domain = CreateFiniteDomain(candidates);
         return true;
+    }
+
+    internal ShellValueDomain AnalyzeWordForTransfer(ShellValue value)
+    {
+        if (IsEntirelyLiteral(value))
+        {
+            return new ShellValueDomain
+            {
+                Kind = ShellValueDomainKind.Exact,
+                Values = new[] { value.Decoded },
+            };
+        }
+
+        return TryAnalyzeEffectiveValue(value, out var domain)
+            ? domain
+            : ShellValueDomain.Unknown;
     }
 
     private bool TryComposeCandidates(

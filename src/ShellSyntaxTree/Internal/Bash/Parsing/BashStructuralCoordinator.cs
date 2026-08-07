@@ -542,16 +542,23 @@ internal static partial class BashCommandParser
                 IsCommandStringWrapped = _markBashCWrapped,
             };
             var emitted = AttachAttributionArg(clause, _attribution);
+            var dispatchKind = BashCwdInvocationGrammar.Classify(
+                emitted,
+                out _);
             var isPotentialStateMutation = IsPotentialBindingMutation(emitted);
-            if (_activeLoopBindings.Count > 0 && isPotentialStateMutation)
+            var isModeledCwdTransfer = dispatchKind == BashDispatchKind.CwdTransfer;
+            if (_activeLoopBindings.Count > 0 &&
+                isPotentialStateMutation &&
+                !isModeledCwdTransfer)
             {
                 error = "Bash loop state mutation or control transfer is not supported for bounded analysis";
                 return false;
             }
 
-            _hasUnmodeledShellStateMutation |= isPotentialStateMutation;
+            _hasUnmodeledShellStateMutation |=
+                isPotentialStateMutation && !isModeledCwdTransfer;
             _hasUnmodeledVariableStateMutation |=
-                IsPotentialVariableStateMutation(emitted);
+                IsPotentialVariableStateMutation(emitted) && !isModeledCwdTransfer;
 
             if (!TryParseCommandSubstitutions(
                     substitutionFragments,
@@ -601,7 +608,7 @@ internal static partial class BashCommandParser
         {
             command = null;
             error = null;
-            if (_attribution.HasAttribution || _hasUnmodeledShellStateMutation)
+            if (_hasUnmodeledShellStateMutation)
             {
                 error = "Bash for-in after prior shell-state mutation requires structure-aware state analysis";
                 return false;
@@ -1418,6 +1425,12 @@ internal static partial class BashCommandParser
 
         private static bool IsPotentialBindingMutation(Clause clause)
         {
+            var dispatchKind = BashCwdInvocationGrammar.Classify(clause, out _);
+            if (dispatchKind == BashDispatchKind.Query)
+            {
+                return false;
+            }
+
             if (clause.Verb.Tokens.Count == 0)
             {
                 return true;
@@ -1459,8 +1472,10 @@ internal static partial class BashCommandParser
 
         private static bool IsPotentialVariableStateMutation(Clause clause)
         {
-            if (clause.Verb.Tokens.Count > 0 &&
-                clause.Verb.Tokens[0] is "cd" or "chdir" or "pushd" or "popd")
+            var dispatchKind = BashCwdInvocationGrammar.Classify(clause, out _);
+            if (dispatchKind is BashDispatchKind.CwdTransfer or BashDispatchKind.Query ||
+                clause.Verb.Tokens.Count > 0 &&
+                clause.Verb.Tokens[0] is "pushd" or "popd")
             {
                 return false;
             }

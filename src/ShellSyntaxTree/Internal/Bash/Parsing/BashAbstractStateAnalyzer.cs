@@ -26,6 +26,8 @@ internal sealed class BashAbstractStateAnalyzer
         new(ClauseReferenceComparer.Instance);
     private readonly Dictionary<Clause, Dictionary<int, ShellValueDomain>>
         _effectiveArguments = new(ClauseReferenceComparer.Instance);
+    private readonly Dictionary<Clause, HashSet<int>> _cwdResolutionSanitization =
+        new(ClauseReferenceComparer.Instance);
     private readonly List<BashForInAnalysisPlanReference> _rewrittenForInPlans = new();
     private bool _isComplete = true;
     private int _remainingLoopAnalysisTransitions = MaxLoopAnalysisTransitions;
@@ -133,9 +135,22 @@ internal sealed class BashAbstractStateAnalyzer
                 clearBindings: false);
         }
 
+        if (input.Bindings.HasBindings &&
+            IsPotentialPersistentBindingMutation(simple.Clause))
+        {
+            _isComplete = false;
+            return new BashFlowResult(null, null);
+        }
+
         RecordInput(simple.Clause, input);
         RecordEffectiveArguments(simple, input);
-        if (!TryGetCwdTransfer(simple.Clause, input, out var success))
+        var cwdTransfer = AnalyzeEffectiveCwdTransfer(simple, input);
+        if (cwdTransfer is BashFlowResult effectiveFlow)
+        {
+            return effectiveFlow;
+        }
+
+        if (!TryGetLegacyCwdTransfer(simple.Clause, input, out var success))
         {
             return BashFlowResult.Both(input);
         }
@@ -567,7 +582,357 @@ internal sealed class BashAbstractStateAnalyzer
         return accumulated;
     }
 
-    private bool TryGetCwdTransfer(
+    private void RecordCwdResolutionSanitization(
+        Clause clause,
+        IReadOnlyList<int> elementIndices)
+    {
+        if (!_cwdResolutionSanitization.TryGetValue(clause, out var accumulated))
+        {
+            accumulated = new HashSet<int>();
+            _cwdResolutionSanitization.Add(clause, accumulated);
+        }
+
+        foreach (var elementIndex in elementIndices)
+        {
+            accumulated.Add(elementIndex);
+        }
+    }
+
+    private BashFlowResult? AnalyzeEffectiveCwdTransfer(
+        SimpleCommandSyntax simple,
+        BashAbstractState input)
+    {
+        var dispatchKind = BashCwdInvocationGrammar.Classify(
+            simple.Clause,
+            out var argumentElementIndices);
+        if (dispatchKind == BashDispatchKind.Query)
+        {
+            return BashFlowResult.Both(input);
+        }
+
+        if (dispatchKind != BashDispatchKind.CwdTransfer)
+        {
+            return null;
+        }
+
+        if (!TryGetCwdArgumentValues(
+                simple,
+                argumentElementIndices,
+                out var argumentValues))
+        {
+            _isComplete = false;
+            return new BashFlowResult(null, null);
+        }
+
+        foreach (var argumentValue in argumentValues)
+        {
+            if (input.Bindings.ReferencesTrackedBinding(argumentValue) &&
+                !HasProvedSingleWordCardinality(argumentValue))
+            {
+                _isComplete = false;
+                return new BashFlowResult(null, null);
+            }
+        }
+
+        var referencedBindings = input.Bindings.FindReferencedBindingNames(argumentValues);
+        var alternativeResult = input.Bindings.EnumerateExactAlternatives(
+            ShellAnalysisLimits.MaxValueCandidates,
+            referencedBindings,
+            out var bindingAlternatives);
+        if (alternativeResult == BashBindingAlternativeResult.ExceededLimit)
+        {
+            _isComplete = false;
+            return new BashFlowResult(null, null);
+        }
+
+        if (alternativeResult == BashBindingAlternativeResult.Unknown)
+        {
+            RecordCwdResolutionSanitization(simple.Clause, argumentElementIndices);
+            return new BashFlowResult(input.WithUnknownCwd(), input);
+        }
+
+        BashAbstractState? success = null;
+        BashAbstractState? failure = null;
+        foreach (var bindings in bindingAlternatives)
+        {
+            BuildEffectiveCwdArguments(
+                bindings,
+                argumentElementIndices,
+                argumentValues,
+                input,
+                out var arguments);
+
+            BashFlowResult visit;
+            if (arguments is null)
+            {
+                RecordCwdResolutionSanitization(
+                    simple.Clause,
+                    argumentElementIndices);
+                visit = new BashFlowResult(input.WithUnknownCwd(), input);
+            }
+            else
+            {
+                visit = AnalyzeExactCwdArguments(simple.Clause, input, arguments);
+            }
+
+            success = BashAbstractState.JoinNullable(success, visit.OnSuccess);
+            failure = BashAbstractState.JoinNullable(failure, visit.OnFailure);
+        }
+
+        return new BashFlowResult(success, failure);
+    }
+
+    private bool TryGetCwdArgumentValues(
+        SimpleCommandSyntax simple,
+        IReadOnlyList<int> argumentElementIndices,
+        out IReadOnlyList<ShellValue> values)
+    {
+        var ordered = new List<ShellValue>(argumentElementIndices.Count);
+        var sourceFacts = _factsFactory(simple);
+        foreach (var elementIndex in argumentElementIndices)
+        {
+            ShellValueElementProvenance? provenance = null;
+            foreach (var candidate in sourceFacts.ValueProvenance)
+            {
+                if (candidate.ClauseElementIndex == elementIndex)
+                {
+                    provenance = candidate;
+                    break;
+                }
+            }
+
+            if (provenance is null)
+            {
+                values = Array.Empty<ShellValue>();
+                return false;
+            }
+
+            ordered.Add(provenance.Value.Value);
+        }
+
+        values = ordered;
+        return true;
+    }
+
+    private void BuildEffectiveCwdArguments(
+        BashLoopBindingContext bindings,
+        IReadOnlyList<int> argumentElementIndices,
+        IReadOnlyList<ShellValue> argumentValues,
+        BashAbstractState input,
+        out IReadOnlyList<EffectiveCwdArgument>? arguments)
+    {
+        var exact = new List<EffectiveCwdArgument>(argumentElementIndices.Count);
+        for (var index = 0; index < argumentElementIndices.Count; index++)
+        {
+            var dependsOnBinding = bindings.TryAnalyzeEffectiveValue(
+                argumentValues[index],
+                out var domain);
+            if (!dependsOnBinding)
+            {
+                domain = bindings.AnalyzeWordForTransfer(argumentValues[index]);
+            }
+
+            if (domain.Kind != ShellValueDomainKind.Exact &&
+                TryResolveKnownHomeWord(argumentValues[index], input, out var homeWord))
+            {
+                domain = new ShellValueDomain
+                {
+                    Kind = ShellValueDomainKind.Exact,
+                    Values = new[] { homeWord },
+                };
+            }
+
+            if (domain.Kind != ShellValueDomainKind.Exact || domain.Values.Count != 1)
+            {
+                arguments = null;
+                return;
+            }
+
+            exact.Add(new EffectiveCwdArgument(
+                argumentElementIndices[index],
+                domain.Values[0]));
+        }
+
+        arguments = exact;
+    }
+
+    private bool TryResolveKnownHomeWord(
+        ShellValue value,
+        BashAbstractState input,
+        out string resolvedValue)
+    {
+        var resolved = BashResolver.Resolve(
+            value,
+            treatAsPath: true,
+            OptionsFor(input),
+            workingDirectoryUnknown: input.WorkingDirectory is null,
+            consumer: ShellResolutionConsumer.BashArgument);
+        if (resolved.Kind == ArgKind.Tilde && resolved.Resolved is not null)
+        {
+            resolvedValue = resolved.Resolved;
+            return true;
+        }
+
+        resolvedValue = "";
+        return false;
+    }
+
+    private static bool HasProvedSingleWordCardinality(ShellValue value)
+    {
+        foreach (var fragment in value.Fragments)
+        {
+            if (fragment.Cardinality != ShellValueCardinality.ExactlyOne ||
+                (fragment.AllowedTransforms &
+                 (ShellLexicalTransform.FieldSplit | ShellLexicalTransform.Glob)) != 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private BashFlowResult AnalyzeExactCwdArguments(
+        Clause clause,
+        BashAbstractState input,
+        IReadOnlyList<EffectiveCwdArgument> arguments)
+    {
+        var optionsEnded = false;
+        var physical = false;
+        EffectiveCwdArgument? operand = null;
+        foreach (var argument in arguments)
+        {
+            if (operand is not null)
+            {
+                return new BashFlowResult(null, input);
+            }
+
+            if (!optionsEnded && argument.Value == "--")
+            {
+                optionsEnded = true;
+                continue;
+            }
+
+            if (!optionsEnded &&
+                argument.Value.Length > 1 &&
+                argument.Value[0] == '-' &&
+                argument.Value != "-")
+            {
+                if (!IsSupportedCdOption(
+                        argument.Value,
+                        out var requiresPhysicalResolution))
+                {
+                    return new BashFlowResult(null, input);
+                }
+
+                physical |= requiresPhysicalResolution;
+                continue;
+            }
+
+            operand = argument;
+            if (physical)
+            {
+                RecordCwdResolutionSanitization(
+                    clause,
+                    new[] { argument.ElementIndex });
+            }
+        }
+
+        if (operand is null)
+        {
+            var home = physical || string.IsNullOrEmpty(_options.HomeDirectory)
+                ? input.WithUnknownCwd()
+                : input.WithCwd(_options.HomeDirectory, true);
+            return new BashFlowResult(home, input);
+        }
+
+        if (physical ||
+            operand.Value.Value == "-" ||
+            IsCdPathSearchCandidate(operand.Value.Value))
+        {
+            return new BashFlowResult(input.WithUnknownCwd(), input);
+        }
+
+        var resolved = BashResolver.Resolve(
+            operand.Value.Value,
+            treatAsPath: true,
+            OptionsFor(input),
+            workingDirectoryUnknown: input.WorkingDirectory is null,
+            isLiteralBytes: true);
+        var success = resolved.Resolved is null
+            ? input.WithUnknownCwd()
+            : input.WithCwd(resolved.Resolved, true);
+        return new BashFlowResult(success, input);
+    }
+
+    private static bool IsSupportedCdOption(
+        string argument,
+        out bool requiresPhysicalResolution)
+    {
+        requiresPhysicalResolution = false;
+        for (var index = 1; index < argument.Length; index++)
+        {
+            switch (argument[index])
+            {
+                case 'L':
+                case 'e':
+                    break;
+                case 'P':
+                case '@':
+                    requiresPhysicalResolution = true;
+                    break;
+                default:
+                    return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsPotentialPersistentBindingMutation(Clause clause)
+    {
+        var dispatchKind = BashCwdInvocationGrammar.Classify(clause, out _);
+        if (dispatchKind is BashDispatchKind.CwdTransfer or BashDispatchKind.Query)
+        {
+            return false;
+        }
+
+        if (clause.Verb.Tokens.Count == 0)
+        {
+            return true;
+        }
+
+        var verb = clause.Verb.Tokens[0];
+        if (verb is "pushd" or "popd")
+        {
+            return false;
+        }
+
+        if (verb is "unset" or "read" or "readarray" or "mapfile" or
+            "declare" or "typeset" or "local" or "export" or "readonly" or
+            "let" or "eval" or "." or "source" or "getopts" or "set" or
+            "trap" or "command" or "builtin")
+        {
+            return true;
+        }
+
+        if (!string.Equals(verb, "printf", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        foreach (var argument in clause.Args)
+        {
+            if (string.Equals(argument.Raw, "-v", StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool TryGetLegacyCwdTransfer(
         Clause clause,
         BashAbstractState input,
         out BashAbstractState success)
@@ -905,7 +1270,8 @@ internal sealed class BashAbstractStateAnalyzer
                 var dependency = FindArgumentDependency(
                     dependencies,
                     authoredArgumentIndex);
-                var clearResolution = authoredArgumentIndex == clearCdTargetIndex;
+                var clearResolution = authoredArgumentIndex == clearCdTargetIndex ||
+                    IsArgumentResolutionSanitized(clause, authoredArgumentIndex);
                 var rebased = clearResolution
                     ? null
                     : RebaseResolution(
@@ -936,7 +1302,8 @@ internal sealed class BashAbstractStateAnalyzer
             var element = clause.Elements[index];
             var dependency = FindDependency(dependencies, index);
             var clearResolution = element.Role == ClauseElementRole.Argument &&
-                argumentElementIndex++ == clearCdTargetIndex;
+                (argumentElementIndex++ == clearCdTargetIndex ||
+                 IsElementResolutionSanitized(clause, index));
             var rebased = clearResolution
                 ? null
                 : RebaseResolution(
@@ -976,6 +1343,31 @@ internal sealed class BashAbstractStateAnalyzer
             Redirects = redirects,
         };
     }
+
+    private bool IsArgumentResolutionSanitized(Clause clause, int argumentIndex)
+    {
+        var currentArgument = 0;
+        for (var elementIndex = 0;
+             elementIndex < clause.Elements.Count;
+             elementIndex++)
+        {
+            if (clause.Elements[elementIndex].Role != ClauseElementRole.Argument)
+            {
+                continue;
+            }
+
+            if (currentArgument++ == argumentIndex)
+            {
+                return IsElementResolutionSanitized(clause, elementIndex);
+            }
+        }
+
+        return false;
+    }
+
+    private bool IsElementResolutionSanitized(Clause clause, int elementIndex) =>
+        _cwdResolutionSanitization.TryGetValue(clause, out var sanitized) &&
+        sanitized.Contains(elementIndex);
 
     private IReadOnlyList<Redirect> RewriteCompatibilityRedirects(
         Clause clause,
@@ -1451,6 +1843,8 @@ internal sealed class BashAbstractStateAnalyzer
 
         return rewritten;
     }
+
+    private readonly record struct EffectiveCwdArgument(int ElementIndex, string Value);
 
     private readonly struct BashFlowResult
     {

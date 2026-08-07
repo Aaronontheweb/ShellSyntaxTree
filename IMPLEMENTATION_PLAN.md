@@ -283,35 +283,21 @@ priorities.
       leaves preserve authored dynamic operands. Loop binding and cwd
       mutation fail closed, loops reached after recognized prior shell-state
       mutation fail closed, and occurrence cwd remains Unknown.
-- [ ] Design and implement structure-aware Bash abstract-state analysis before
-      enabling cwd-changing loop bodies or claiming the complete `for ... in`
-      vertical slice. The parse-order attribution model cannot soundly publish
-      occurrence cwd across pipelines, conditional lists, substitutions, and
-      repeated iterations. The design now requires internal success/failure
-      flow partitions, failure-aware `cd`, conservative `lastpipe` / `pipefail`,
-      ordered duplicate-preserving loop plans, inherited but isolated
-      decoded-wrapper state, and dynamic fail-closed compatibility attribution
-      whenever cwd joins to Unknown. The analyzer now owns persistent loop
-      bindings, ordered and empty iteration, occurrence-fact joins, unreachable
-      flow partitions, substitution inheritance, and explicit decoded-wrapper
-      remapping of loop plans and argument provenance. Unknown-cardinality
-      loops use bounded fixed-point widening, and a 4096-transition global
-      budget fails nested cross-products atomically. Static bodies retain an
-      exact incoming cwd when no transfer can change it. Keep OpenSpec task 6.5
-      open for full effective-argv transfer and removal of the temporary loop
-      mutation rejection, then add the Netclaw approval matrix. An adversarial
-      pre-implementation review halted the first loop-state draft: parser-time
-      binding frames could not model zero-iteration persistence, correlated
-      nested iterables, special Bash variables, or candidate-derived `cd`
-      options. The corrected contract now requires an explicit
-      `BashInitialStateMode`, a conservative supported scalar-name boundary,
-      analyzer-owned persistent bindings, parameterized ordered plans, complete
-      argument provenance/effective-argv transfer, occurrence-fact joins, and
-      unreachable flow partitions. Implement that contract before enabling any
-      cwd-changing loop body. Corpus-pin `HOME`, `RANDOM`, `LINENO`, `PATH`,
-      `CDPATH`, `IFS`, 32/33 ordered visits, zero iterations, nested
-      correlation, wrapped transfers, wrapper mapping, substitutions, and
-      pipelines across these two analyzer slices.
+- [x] Design and implement structure-aware Bash abstract-state analysis for the
+      complete bounded `for ... in` state slice. The analyzer owns
+      success/failure partitions, failure-aware cwd transfer, conservative
+      pipeline state, ordered duplicate-preserving loop plans, persistent loop
+      bindings, empty iteration, occurrence-fact joins, substitution isolation,
+      and explicit decoded-wrapper remapping. Unknown-cardinality loops use
+      bounded fixed-point widening, a 4096-transition global budget fails nested
+      cross-products atomically, and complete effective argv is re-evaluated for
+      every visit. Loop-derived `cd` options, terminators, invalid/multiple
+      operands, recursive exact `command` / `builtin` dispatch, physical-path
+      compatibility sanitation, and post-loop binding mutation are pinned by
+      unit tests, native Bash oracles, the design corpus, and executable corpus.
+      All unmodeled mutations, dynamic dispatch, and control transfers remain
+      fail closed. Next add the Netclaw approval matrix before calling the Bash
+      consumer integration complete.
 - [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
       Netclaw approval-matrix cases. The simple-command slice is delivered for
       ordinary, adjacent, quoted, here-string, redirect, standalone,
