@@ -531,7 +531,7 @@ internal static partial class PwshCommandParser
         if (classified.Kind == PwshCommandKind.PwshInvocation)
         {
             var recursion = TryRecurseIntoPwsh(
-                body, start, classified, source, baseOptions, effectiveOptions,
+                body, start, classified, source, effectiveOptions,
                 workingDirectoryUnknown, recursionDepth,
                 structuralDepth, segment, markWrapped, out var recursionResult);
             if (recursion)
@@ -1956,7 +1956,7 @@ internal static partial class PwshCommandParser
 
     private static bool TryRecurseIntoPwsh(
         List<PwshToken> body, int start, ClassifiedVerb verb, string source,
-        PwshParserOptions options, PwshParserOptions redirectOptions,
+        PwshParserOptions redirectOptions,
         bool workingDirectoryUnknown,
         int recursionDepth,
         int structuralDepth,
@@ -2078,9 +2078,22 @@ internal static partial class PwshCommandParser
                 return true;
             }
 
+            // A child process does not inherit a caller assertion about the
+            // parent runspace. A later host-option proof may opt the child in.
+            var childOptions = redirectOptions with
+            {
+                InitialStateMode = PwshInitialStateMode.Unknown,
+            };
+            PwshSetLocationContext? childLocation = null;
+            if (workingDirectoryUnknown)
+            {
+                childLocation = new PwshSetLocationContext();
+                childLocation.SetDynamic();
+            }
+
             var innerParsed = ParseInternal(
-                inner, options, recursionDepth + 1, structuralDepth + 1, markWrapped: true,
-                sharedLocation: null);
+                inner, childOptions, recursionDepth + 1, structuralDepth + 1, markWrapped: true,
+                sharedLocation: childLocation);
             if (innerParsed.IsUnparseable)
             {
                 result = BuildResult.Fail(innerParsed.UnparseableReason);

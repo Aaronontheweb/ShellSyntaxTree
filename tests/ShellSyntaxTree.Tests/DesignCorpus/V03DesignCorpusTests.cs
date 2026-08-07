@@ -54,6 +54,20 @@ public class V03DesignCorpusTests
                     value.Kind == DesignValueKind.FiniteSet
                     && value.Values.Count == MaxValueCandidates),
                 $"{file.Shell}: no case exercises the finite candidate cap.");
+
+            if (file.Shell == DesignShell.PowerShell)
+            {
+                Assert.Contains(file.Cases,
+                    designCase => designCase.PowerShellInitialStateMode is null);
+                Assert.Contains(file.Cases,
+                    designCase => designCase.PowerShellInitialStateMode
+                        == PwshInitialStateMode.IsolatedNonInteractiveNoProfile);
+            }
+            else
+            {
+                Assert.All(file.Cases,
+                    designCase => Assert.Null(designCase.PowerShellInitialStateMode));
+            }
         }
     }
 
@@ -62,10 +76,9 @@ public class V03DesignCorpusTests
     {
         foreach (var file in LoadFiles())
         {
-            var parser = CreateParser(file.Shell);
             foreach (var designCase in file.Cases)
             {
-                var actual = parser.Parse(designCase.Input);
+                var actual = CreateParser(file.Shell, designCase).Parse(designCase.Input);
                 var expectedIsUnparseable = designCase.CompatibilityProjectionLanded
                     ? designCase.Desired.IsUnparseable
                     : designCase.Current.IsUnparseable;
@@ -399,21 +412,25 @@ public class V03DesignCorpusTests
         Assert.Null(workingDirectory.Value);
     }
 
-    private static IShellParser CreateParser(DesignShell shell) => shell switch
-    {
-        DesignShell.Bash => new BashParser(new BashParserOptions
+    private static IShellParser CreateParser(
+        DesignShell shell,
+        V03DesignCase designCase) => shell switch
         {
-            HomeDirectory = "/home/test",
-            WorkingDirectory = "/work",
-            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
-        }),
-        DesignShell.PowerShell => new PwshParser(new PwshParserOptions
-        {
-            HomeDirectory = "C:/Users/user",
-            WorkingDirectory = "C:/work",
-        }),
-        _ => throw new InvalidOperationException($"Unsupported design-corpus shell '{shell}'."),
-    };
+            DesignShell.Bash => new BashParser(new BashParserOptions
+            {
+                HomeDirectory = "/home/test",
+                WorkingDirectory = "/work",
+                InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
+            }),
+            DesignShell.PowerShell => new PwshParser(new PwshParserOptions
+            {
+                HomeDirectory = "C:/Users/user",
+                WorkingDirectory = "C:/work",
+                InitialStateMode = designCase.PowerShellInitialStateMode
+                    ?? PwshInitialStateMode.Unknown,
+            }),
+            _ => throw new InvalidOperationException($"Unsupported design-corpus shell '{shell}'."),
+        };
 
     private static IReadOnlyList<V03DesignCorpusFile> LoadFiles()
     {
@@ -445,6 +462,8 @@ public sealed record V03DesignCase
     public string Input { get; init; } = "";
 
     public bool CompatibilityProjectionLanded { get; init; }
+
+    public PwshInitialStateMode? PowerShellInitialStateMode { get; init; }
 
     public CurrentBehaviorExpectation Current { get; init; } = new();
 

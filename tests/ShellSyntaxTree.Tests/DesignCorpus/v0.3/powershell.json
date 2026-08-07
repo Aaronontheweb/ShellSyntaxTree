@@ -215,6 +215,7 @@
     },
     {
       "id": "pwsh-foreach-literal-array",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "compatibilityProjectionLanded": true,
       "concern": "Finite literal foreach binding",
       "input": "foreach ($f in @('a.txt', 'b.txt')) { Remove-Item -LiteralPath $f }",
@@ -243,6 +244,7 @@
     },
     {
       "id": "pwsh-foreach-pipeline-iterator",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "compatibilityProjectionLanded": true,
       "concern": "Iterator command produces unknown PowerShell objects",
       "input": "foreach ($f in Get-ChildItem C:\\input) { Remove-Item -LiteralPath $f }",
@@ -275,6 +277,7 @@
     },
     {
       "id": "pwsh-foreach-subexpression-iterator",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "compatibilityProjectionLanded": true,
       "concern": "Subexpression iterator preserves nearest substitution role and outer iterator ancestry",
       "input": "foreach ($f in $(Get-ChildItem C:\\input)) { Remove-Item -LiteralPath $f }",
@@ -309,6 +312,7 @@
     },
     {
       "id": "pwsh-foreach-cmdlet-parameter-like-value",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "compatibilityProjectionLanded": true,
       "concern": "Expanded cmdlet value is not a syntactic parameter token",
       "input": "foreach ($f in @('-Force', 'a.txt')) { Remove-Item $f }",
@@ -338,6 +342,7 @@
     },
     {
       "id": "pwsh-foreach-native-option-like-value",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "compatibilityProjectionLanded": true,
       "concern": "Finite value can affect native option parsing",
       "input": "foreach ($f in @('-n', 'file.txt')) { tool $f }",
@@ -366,6 +371,7 @@
     },
     {
       "id": "pwsh-nested-foreach",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "compatibilityProjectionLanded": true,
       "concern": "Nested finite domains and structural ancestry",
       "input": "foreach ($d in @('a', 'b')) { foreach ($f in @('x', 'y')) { Write-Output \"$d/$f\" } }",
@@ -396,6 +402,7 @@
     },
     {
       "id": "pwsh-foreach-body-pipeline",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "compatibilityProjectionLanded": true,
       "concern": "Pipeline roles inside foreach ancestry",
       "input": "foreach ($f in @('a', 'b')) { Write-Output $f | Sort-Object }",
@@ -555,6 +562,7 @@
     },
     {
       "id": "pwsh-foreach-dynamic-command-identity",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "concern": "Dynamic invocation in a bounded loop body",
       "input": "foreach ($f in @('a', 'b')) { & $exe $f }",
       "current": { "isUnparseable": true, "reasonContains": "dynamic invocation" },
@@ -582,6 +590,7 @@
     },
     {
       "id": "pwsh-foreach-candidate-cap-32",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "compatibilityProjectionLanded": true,
       "concern": "Finite candidate domain at the fixed cap",
       "input": "foreach ($f in @('v01','v02','v03','v04','v05','v06','v07','v08','v09','v10','v11','v12','v13','v14','v15','v16','v17','v18','v19','v20','v21','v22','v23','v24','v25','v26','v27','v28','v29','v30','v31','v32')) { Write-Output $f }",
@@ -610,6 +619,7 @@
     },
     {
       "id": "pwsh-foreach-candidate-overflow-33",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "compatibilityProjectionLanded": true,
       "concern": "Candidate overflow collapses instead of truncating",
       "input": "foreach ($f in @('v01','v02','v03','v04','v05','v06','v07','v08','v09','v10','v11','v12','v13','v14','v15','v16','v17','v18','v19','v20','v21','v22','v23','v24','v25','v26','v27','v28','v29','v30','v31','v32','v33')) { Write-Output $f }",
@@ -635,6 +645,278 @@
         "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
         "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
       }
+    },
+    {
+      "id": "pwsh-foreach-default-initial-state-withholds-binding",
+      "compatibilityProjectionLanded": true,
+      "concern": "The safe default exposes structure without assuming an ambient variable is an ordinary string binding",
+      "input": "foreach ($f in @('a.txt', 'b.txt')) { Remove-Item -LiteralPath $f }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Remove-Item",
+          "immediateRole": "LoopBody",
+          "ancestry": ["root", "loop", "body"],
+          "isComplete": false,
+          "effectiveValues": [
+            { "sourceElement": "$f", "kind": "Unknown", "isPolicySensitive": true }
+          ]
+        }],
+        "compatibility": { "verbs": ["Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "No powerShellInitialStateMode field means PwshInitialStateMode.Unknown."
+    },
+    {
+      "id": "pwsh-foreach-literal-scalar",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "A single literal iterable produces one exact string binding",
+      "input": "foreach ($f in 'a.txt') { Remove-Item -LiteralPath $f }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Remove-Item",
+          "immediateRole": "LoopBody",
+          "ancestry": ["root", "loop", "body"],
+          "isComplete": true,
+          "effectiveValues": [
+            { "sourceElement": "$f", "kind": "Exact", "values": ["a.txt"], "isPolicySensitive": true }
+          ]
+        }],
+        "compatibility": { "verbs": ["Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-empty-iterable-preserves-cwd",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "concern": "A proved empty array performs no body state transition",
+      "input": "foreach ($f in @()) { Set-Location C:\\tmp }; Get-Location",
+      "current": { "isUnparseable": true, "reasonContains": "state mutation" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "loop", "kind": "ForEach", "parent": "list", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "set", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 },
+          { "id": "get", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Set-Location", "immediateRole": "LoopBody", "ancestry": ["root", "list", "loop", "body"], "isComplete": true, "workingDirectory": { "kind": "Unknown" } },
+          { "authoredVerb": "Get-Location", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "C:/work" } }
+        ],
+        "compatibility": { "verbs": ["Set-Location", "Get-Location"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative"]
+      },
+      "notes": "The body remains structurally visible, but the Never iteration plan contributes no location mutation."
+    },
+    {
+      "id": "pwsh-foreach-duplicate-order-controls-final-binding",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "Ordered visits preserve duplicates independently of the public finite set",
+      "input": "foreach ($f in @('a','b','a')) { Write-Output $f }; Write-Output $f",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "loop", "kind": "ForEach", "parent": "list", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "inside", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 },
+          { "id": "after", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Write-Output", "immediateRole": "LoopBody", "ancestry": ["root", "list", "loop", "body"], "isComplete": true, "effectiveValues": [{ "sourceElement": "$f", "kind": "FiniteSet", "values": ["a", "b"], "isPolicySensitive": false }] },
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "effectiveValues": [{ "sourceElement": "$f", "kind": "Exact", "values": ["a"], "isPolicySensitive": false }] }
+        ],
+        "compatibility": { "verbs": ["Write-Output", "Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "StateJoinConservative"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-binding-is-case-insensitive",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "PowerShell variable lookup uses one case-insensitive binding slot",
+      "input": "foreach ($f in @('a')) { Write-Output $F }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{ "authoredVerb": "Write-Output", "immediateRole": "LoopBody", "ancestry": ["root", "loop", "body"], "isComplete": true, "effectiveValues": [{ "sourceElement": "$F", "kind": "Exact", "values": ["a"], "isPolicySensitive": false }] }],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated"]
+      }
+    },
+    {
+      "id": "pwsh-nested-same-name-foreach-overwrites-binding",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "Nested same-name foreach assignment is persistent rather than lexical shadowing",
+      "input": "foreach ($f in @('outer')) { foreach ($f in @('inner')) { Write-Output $f }; Write-Output $f }; Write-Output $f",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "outer", "kind": "ForEach", "parent": "list", "slot": "Statement", "binding": "f" },
+          { "id": "outerBody", "kind": "Block", "parent": "outer", "slot": "Body" },
+          { "id": "inner", "kind": "ForEach", "parent": "outerBody", "slot": "Statement", "binding": "f" },
+          { "id": "innerBody", "kind": "Block", "parent": "inner", "slot": "Body" },
+          { "id": "innerWrite", "kind": "SimpleCommand", "parent": "innerBody", "slot": "Statement", "commandIndex": 0 },
+          { "id": "outerWrite", "kind": "SimpleCommand", "parent": "outerBody", "slot": "Statement", "commandIndex": 1 },
+          { "id": "afterWrite", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 2 }
+        ],
+        "commands": [
+          { "authoredVerb": "Write-Output", "immediateRole": "LoopBody", "ancestry": ["root", "list", "outer", "outerBody", "inner", "innerBody"], "isComplete": true, "effectiveValues": [{ "sourceElement": "$f", "kind": "Exact", "values": ["inner"], "isPolicySensitive": false }] },
+          { "authoredVerb": "Write-Output", "immediateRole": "LoopBody", "ancestry": ["root", "list", "outer", "outerBody"], "isComplete": true, "effectiveValues": [{ "sourceElement": "$f", "kind": "Exact", "values": ["inner"], "isPolicySensitive": false }] },
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "effectiveValues": [{ "sourceElement": "$f", "kind": "Exact", "values": ["inner"], "isPolicySensitive": false }] }
+        ],
+        "compatibility": { "verbs": ["Write-Output", "Write-Output", "Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "StateJoinConservative"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-array-containing-null",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "An array containing null visits once but does not prove a string argument",
+      "input": "foreach ($f in @($null)) { Write-Output $f }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{ "authoredVerb": "Write-Output", "immediateRole": "LoopBody", "ancestry": ["root", "loop", "body"], "isComplete": true, "effectiveValues": [{ "sourceElement": "$f", "kind": "Unknown", "isPolicySensitive": false }] }],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "This differs from @(), which performs no visit, and from scalar $null, whose enumeration is empty."
+    },
+    {
+      "id": "pwsh-foreach-binding-used-as-redirect-target",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "Loop values are resolved in redirect context for every candidate",
+      "input": "foreach ($f in @('a.log','b.log')) { Write-Output payload > $f }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{
+          "authoredVerb": "Write-Output",
+          "immediateRole": "LoopBody",
+          "ancestry": ["root", "loop", "body"],
+          "isComplete": true,
+          "redirects": [{ "operation": "FileOutput", "sourceDescriptor": 1, "target": { "sourceElement": "$f", "kind": "FiniteSet", "values": ["C:/work/a.log", "C:/work/b.log"], "isPolicySensitive": true }, "isPathRelevant": true, "isComplete": true }]
+        }],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-current-runspace-invoke-expression",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "Static Invoke-Expression shares the loop binding and current runspace",
+      "input": "foreach ($f in @('a','b')) { Invoke-Expression 'Write-Output $f' }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "iex", "kind": "Group", "parent": "body", "slot": "Statement" },
+          { "id": "iexBody", "kind": "Block", "parent": "iex", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "iexBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{ "authoredVerb": "Write-Output", "immediateRole": "LoopBody", "ancestry": ["root", "loop", "body", "iex", "iexBody"], "isComplete": true, "effectiveValues": [{ "sourceElement": "$f", "kind": "FiniteSet", "values": ["a", "b"], "isPolicySensitive": false }] }],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "EveryFiniteCandidateEvaluated", "StateJoinConservative"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-child-host-does-not-inherit-state-mode",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "A decoded child host needs an independently proved initial-runspace contract",
+      "input": "pwsh -NoProfile -NonInteractive -Command 'foreach ($f in @(\"a\")) { Write-Output $f }'",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "host", "kind": "Group", "parent": "root", "slot": "Statement" },
+          { "id": "hostBody", "kind": "Block", "parent": "host", "slot": "Body" },
+          { "id": "loop", "kind": "ForEach", "parent": "hostBody", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [{ "authoredVerb": "Write-Output", "immediateRole": "LoopBody", "ancestry": ["root", "host", "hostBody", "loop", "body"], "isComplete": false, "effectiveValues": [{ "sourceElement": "$f", "kind": "Unknown", "isPolicySensitive": false }] }],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "StateJoinConservative"]
+      },
+      "notes": "The child starts Unknown until host-option and launch-environment proof is implemented explicitly."
+    },
+    {
+      "id": "pwsh-foreach-automatic-variable-collision",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "concern": "Fresh process mode does not make automatic read-only variables writable",
+      "input": "foreach ($HOME in @('x')) { Write-Output $HOME }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-transition-budget-overflow",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "concern": "Nested concrete visits fail atomically above the parse-wide transition budget",
+      "input": "foreach ($a in @('a01','a02','a03','a04','a05','a06','a07','a08','a09','a10','a11','a12','a13','a14','a15','a16','a17')) { foreach ($b in @('b01','b02','b03','b04','b05','b06','b07','b08','b09','b10','b11','b12','b13','b14','b15','b16','b17')) { foreach ($c in @('c01','c02','c03','c04','c05','c06','c07','c08','c09','c10','c11','c12','c13','c14','c15')) { Write-Output \"$a$b$c\" } } }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "17 x 17 x 15 concrete innermost visits exceed the shared 4096-transition budget."
     },
     {
       "id": "pwsh-static-stream-merge",
@@ -680,6 +962,7 @@
     },
     {
       "id": "pwsh-foreach-location-failure-aware-join",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "concern": "Loop exit joins failure and divergent successful location state",
       "input": "foreach ($d in @('C:\\a', 'C:\\b')) { Set-Location $d }; Get-ChildItem file.txt",
       "current": { "isUnparseable": true, "reasonContains": "state mutation" },

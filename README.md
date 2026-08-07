@@ -117,8 +117,8 @@ public sealed class BashParser : IShellParser { /* … */ }
 public sealed class PwshParser : IShellParser { /* … */ }   // v0.2.0
 
 public abstract record ShellParserOptions { /* HomeDirectory, WorkingDirectory */ }
-public sealed record BashParserOptions : ShellParserOptions;
-public sealed record PwshParserOptions : ShellParserOptions;
+public sealed record BashParserOptions : ShellParserOptions; // InitialStateMode
+public sealed record PwshParserOptions : ShellParserOptions; // InitialStateMode
 
 public sealed record ParsedCommand { /* Source, Clauses, IsUnparseable, … */ }
 public sealed record Clause        { /* Operator, Verb, Args, Redirects, Elements, IsSubshell, IsCommandStringWrapped */ }

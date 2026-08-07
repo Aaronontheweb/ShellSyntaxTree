@@ -128,6 +128,11 @@
     iterator/body state or command-resolution mutation and dynamic invocation
     fail atomically. Current-scope continuations after a loop remain incomplete;
     isolated child-host loops do not taint their outer continuation.
+- [x] 7.2a Add the explicit `PwshInitialStateMode` contract and safe default
+  before value analysis. Lock the constrained noninteractive no-profile host
+  and module baseline, current-runspace sharing, child-host noninheritance,
+  mutation invalidation, and ambient typed/read-only binding hazards in the
+  canonical specs and case-specific design corpus.
 - [ ] 7.3 Derive exact and finite string domains without treating pipeline objects as literal strings.
 - [ ] 7.4 Propagate PowerShell scope and location state according to the locked statement semantics.
 - [ ] 7.5 Cover aliases, cmdlets, native commands, nested loops, pipelines, script blocks, and wrapper boundaries.

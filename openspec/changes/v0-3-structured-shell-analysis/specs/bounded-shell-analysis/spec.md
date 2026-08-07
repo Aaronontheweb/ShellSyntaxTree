@@ -168,6 +168,58 @@ the independently proved variable-state mode.
 - **THEN** the decoded child enters with unknown initial variable state
 - **THEN** the complete result is unparseable rather than publishing an isolated scalar proof
 
+### Requirement: PowerShell loop proofs require an explicit initial-runspace contract
+`PwshParserOptions.InitialStateMode` SHALL default to `Unknown`. In that mode,
+the parser MAY expose supported `foreach` structure and command occurrences,
+but SHALL NOT publish an exact or finite loop-binding proof whose semantics
+could be changed by ambient runspace state.
+
+`IsolatedNonInteractiveNoProfile` SHALL be an explicit caller assertion that
+the complete source runs in a newly spawned noninteractive PowerShell process,
+profiles are disabled, and the runspace has not been reused or initialized by
+uncontrolled caller variables, aliases, functions, or modules. The caller SHALL
+also control startup configuration and the inherited environment. Module
+auto-loading SHALL be disabled, or available modules and module search paths
+SHALL be pinned to the same reviewed baseline used by policy. A fixed bootstrap
+MAY establish those constraints only when it cannot define or mutate loop-bound
+variables or policy-relevant command identities. `-NoProfile -NonInteractive`
+alone SHALL NOT satisfy the contract. Exact and finite
+binding analysis SHALL remain limited to ordinary unscoped names that do not
+case-insensitively collide with automatic, constant, or read-only variables.
+Scoped/provider binding forms SHALL fail closed.
+
+Current-runspace groups, `$()`, and static `Invoke-Expression` payloads SHALL
+share supported binding, command-resolution, and cwd state. A decoded child
+PowerShell host SHALL NOT inherit the parent's fresh-state assertion unless
+that invocation independently proves the complete constrained-host contract.
+Host flags alone SHALL NOT prove the launch environment or module baseline.
+Recognized variable, alias, function, or module mutation SHALL invalidate later proofs in
+every observing scope; cwd-only mutation SHALL retain the independent
+initial-state assertion.
+
+#### Scenario: Unknown ambient PowerShell state withholds a finite proof
+- **WHEN** default-mode PowerShell parses `foreach ($f in @('a','b')) { Remove-Item -LiteralPath $f }`
+- **THEN** the loop structure and body command may remain visible
+- **THEN** the body occurrence is incomplete rather than assuming `$f` is an ordinary string binding
+
+#### Scenario: Isolated no-profile runspace permits an ordinary binding proof
+- **WHEN** the caller selects `IsolatedNonInteractiveNoProfile` for a newly spawned constrained host and parses `foreach ($f in @('a','b')) { Write-Output $f }`
+- **THEN** the bounded analyzer may publish the finite string domain `a`, `b`
+
+#### Scenario: Typed or read-only ambient binding is not erased by syntax
+- **WHEN** a reused runspace already contains `[int]$f` or a read-only `$f` and parses a loop that assigns string values
+- **THEN** default-mode analysis does not claim the authored strings are the effective loop values
+- **THEN** selecting isolated mode for that reused runspace would violate the caller contract
+
+#### Scenario: Child host does not inherit the parent's assertion
+- **WHEN** isolated-mode PowerShell parses a supported `pwsh -NoProfile -Command` child containing a `foreach`
+- **THEN** the child receives `Unknown` initial state unless the child invocation independently proves the complete constrained-host environment
+- **THEN** `-NoProfile` by itself does not prove the inherited environment or module baseline
+
+#### Scenario: Current-runspace evaluation shares state
+- **WHEN** a supported `$()` or static `Invoke-Expression` region mutates a loop-relevant binding or command-resolution fact
+- **THEN** every later observing occurrence is joined with or downgraded to the resulting conservative state
+
 ### Requirement: Shell values use explicit proof domains
 The analysis SHALL classify a policy-relevant shell value as exact, finite,
 bounded symbolic pattern, or unknown, and SHALL NOT present a weaker proof as a

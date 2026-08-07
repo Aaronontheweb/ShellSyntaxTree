@@ -423,6 +423,32 @@ later scope that can observe it. A decoded `bash -c` after `export` therefore
 enters with `Unknown` initial variable state, while a cwd-only transfer retains
 the caller's variable-state assertion.
 
+PowerShell needs the same explicit boundary for different reasons.
+`PwshParserOptions.InitialStateMode` defaults to `Unknown`, which permits
+structural discovery but withholds exact or finite `foreach` binding proofs.
+`IsolatedNonInteractiveNoProfile` asserts that the complete source executes in
+a newly spawned noninteractive, no-profile PowerShell process rather than an
+interactive, pooled, reused, profile-initialized, or uncontrolled caller-initialized
+runspace. The caller also controls startup configuration and the inherited
+environment: module auto-loading is disabled, or available modules and module
+search paths are pinned to the policy's reviewed baseline. A fixed bootstrap
+may establish those constraints only when it cannot define or mutate
+loop-bound variables or policy-relevant command identities.
+`-NoProfile -NonInteractive` alone is not proof of that environment. Ambient
+PowerShell bindings can be typed, validated, constant,
+read-only, or scoped; aliases, functions, and modules can independently change
+command identity. Syntax alone cannot erase any of those facts.
+
+The positive binding grammar therefore accepts only ordinary unscoped names
+that do not case-insensitively collide with automatic, constant, or read-only
+variables known to the supported runtime. Current-runspace groups, `$()`, and
+static `Invoke-Expression` share supported binding, command-resolution, and cwd
+state. A decoded child `pwsh` host starts at `Unknown` unless its own invocation
+independently proves the complete constrained-host contract. Recognized
+variable, alias,
+function, or module mutation invalidates every later observing proof; a cwd-only
+transfer preserves the independent initial-runspace assertion.
+
 Effective values are shell facts, not executable semantics. The analysis must
 preserve both the authored shell classification and each proved effective
 value. PowerShell does not retroactively turn a string value such as `-Force`

@@ -219,12 +219,27 @@ public class PublicApiSnapshotTests
 
         AssertInitProperty(t, "HomeDirectory", typeof(string), nullable: true);
         AssertInitProperty(t, "WorkingDirectory", typeof(string), nullable: true);
+        AssertInitProperty(t, "InitialStateMode", typeof(PwshInitialStateMode));
 
         var declaredProps = DeclaredInstanceProps(t)
             .Where(p => p.Name != "EqualityContract")
             .Select(p => p.Name)
             .ToArray();
-        Assert.Empty(declaredProps);
+        Assert.Equal(new[] { "InitialStateMode" }, declaredProps);
+    }
+
+    [Fact]
+    public void PwshInitialStateMode_has_expected_values_and_safe_default()
+    {
+        Assert.Equal(0, (int)PwshInitialStateMode.Unknown);
+        Assert.Equal(1, (int)PwshInitialStateMode.IsolatedNonInteractiveNoProfile);
+        Assert.Equal(PwshInitialStateMode.Unknown, new PwshParserOptions().InitialStateMode);
+        Assert.Equal(
+            PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+            new PwshParserOptions
+            {
+                InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+            }.InitialStateMode);
     }
 
     // -------- ParsedCommand --------
@@ -527,6 +542,7 @@ public class PublicApiSnapshotTests
             nameof(ParsedCommand),
             nameof(PipelineSyntax),
             nameof(PwshParser),
+            nameof(PwshInitialStateMode),
             nameof(PwshParserOptions),
             nameof(Redirect),
             nameof(RedirectAnalysis),
