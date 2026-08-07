@@ -22,7 +22,7 @@ namespace ShellSyntaxTree.Internal.Pwsh.Parsing;
 /// <c>pwsh -Command</c> / <c>-EncodedCommand</c> recursion, and the
 /// safe-fail anomaly contract.
 /// </summary>
-internal static class PwshCommandParser
+internal static partial class PwshCommandParser
 {
     /// <summary>Maximum <c>pwsh -Command</c> recursion depth (§10 / §11).</summary>
     private const int MaxRecursionDepth = 5;
@@ -86,71 +86,13 @@ internal static class PwshCommandParser
             return Unparseable(source, anomalyReason);
         }
 
-        var segments = SplitIntoSegments(significant, source, out var splitError);
-        if (splitError is not null)
-        {
-            return Unparseable(source, splitError);
-        }
-
-        var clauses = new List<Clause>(segments.Count);
-        var attribution = sharedLocation ?? new PwshSetLocationContext();
-
-        foreach (var segment in segments)
-        {
-            if (segment.Tokens.Count == 0)
-            {
-                continue;
-            }
-
-            // Effective resolver options reflect Set-Location attribution.
-            var effectiveOptions = options;
-            var workingDirectoryUnknown = false;
-            if (attribution.HasAttribution && !attribution.IsDynamic)
-            {
-                effectiveOptions = new PwshParserOptions
-                {
-                    HomeDirectory = options.HomeDirectory,
-                    WorkingDirectory = attribution.ResolvedCwd,
-                };
-            }
-            else if (attribution.IsDynamic)
-            {
-                workingDirectoryUnknown = true;
-            }
-
-            var built = BuildSegment(
-                segment, source, options, effectiveOptions, workingDirectoryUnknown,
-                recursionDepth, markWrapped, attribution);
-            if (built.Error is not null)
-            {
-                return Unparseable(source, built.Error);
-            }
-
-            for (var k = 0; k < built.Clauses.Count; k++)
-            {
-                var clause = built.Clauses[k];
-
-                // Expanded command-string clauses already carry wrapper and
-                // attribution state. Child pwsh uses an isolated context;
-                // Invoke-Expression shares and updates this one.
-                if (!built.IsRecursion)
-                {
-                    clause = AttachAttributionArg(clause, attribution);
-                }
-
-                clauses.Add(clause);
-            }
-
-            // A directly built Set-Location clause updates the attributed cwd
-            // for clauses that follow it (§9). Expanded command strings have
-            // already updated the appropriate isolated or shared context.
-            if (!built.IsRecursion && built.Clauses.Count == 1)
-            {
-                UpdateAttribution(built.Clauses[0], options, attribution);
-            }
-        }
-
-        return new ParsedCommand { Source = source, Clauses = clauses };
+        return ParseStructured(
+            source,
+            significant,
+            options,
+            recursionDepth,
+            markWrapped,
+            sharedLocation);
     }
 
     private static ParsedCommand Unparseable(string source, string? reason) => new()
@@ -244,8 +186,9 @@ internal static class PwshCommandParser
         IReadOnlyList<PwshToken> tokens, out string? reason)
     {
         var verbSlot = true;
-        foreach (var token in tokens)
+        for (var index = 0; index < tokens.Count; index++)
         {
+            var token = tokens[index];
             if (token.Kind == PwshTokenKind.Whitespace)
             {
                 verbSlot = true;
@@ -254,6 +197,14 @@ internal static class PwshCommandParser
 
             if (token.Kind == PwshTokenKind.Operator)
             {
+                if (token.OperatorText == "&" &&
+                    index + 1 < tokens.Count &&
+                    tokens[index + 1].Kind == PwshTokenKind.ScriptBlock)
+                {
+                    reason = "call-operator script blocks are not supported in v0.3";
+                    return true;
+                }
+
                 verbSlot = token.OperatorText is "&&" or "||" or ";" or "|" or "(" or "&";
                 continue;
             }
@@ -469,133 +420,6 @@ internal static class PwshCommandParser
         public int Depth { get; init; }
     }
 
-    private static List<Segment> SplitIntoSegments(
-        IReadOnlyList<PwshToken> tokens, string source, out string? error)
-    {
-        var segments = new List<Segment>();
-        var depth = 0;
-        var expressionArgumentDepth = 0;
-
-        Segment current = new() { PrecedingOperator = CompoundOperator.None, Depth = 0 };
-
-        void Flush()
-        {
-            if (current.Tokens.Count > 0)
-            {
-                segments.Add(current);
-            }
-        }
-
-        for (var i = 0; i < tokens.Count; i++)
-        {
-            var t = tokens[i];
-
-            if (expressionArgumentDepth > 0)
-            {
-                current.Tokens.Add(t);
-                if (t.Kind == PwshTokenKind.Operator)
-                {
-                    if (t.OperatorText == "(")
-                    {
-                        expressionArgumentDepth++;
-                    }
-                    else if (t.OperatorText == ")")
-                    {
-                        expressionArgumentDepth--;
-                    }
-                }
-
-                continue;
-            }
-
-            if (t.Kind == PwshTokenKind.Whitespace)
-            {
-                // A retained whitespace token is a newline statement
-                // separator. A separator on an empty pending segment
-                // collapses (blank lines, a newline after `|` / `&&` / `||`).
-                if (current.Tokens.Count == 0)
-                {
-                    continue;
-                }
-
-                segments.Add(current);
-                current = new Segment { PrecedingOperator = CompoundOperator.Sequence, Depth = depth };
-                continue;
-            }
-
-            if (t.Kind == PwshTokenKind.Operator)
-            {
-                var op = t.OperatorText;
-                if (op == "(")
-                {
-                    if (StartsWithInvokeExpression(current.Tokens))
-                    {
-                        current.Tokens.Add(t);
-                        expressionArgumentDepth = 1;
-                        continue;
-                    }
-
-                    Flush();
-                    depth++;
-                    current = new Segment { PrecedingOperator = CompoundOperator.None, Depth = depth };
-                    continue;
-                }
-
-                if (op == ")")
-                {
-                    if (depth == 0)
-                    {
-                        error = $"unbalanced ')' at position {t.SourceStart}";
-                        return segments;
-                    }
-
-                    depth--;
-                    Flush();
-                    current = new Segment { PrecedingOperator = CompoundOperator.None, Depth = depth };
-                    continue;
-                }
-
-                if (op is "&&" or "||" or ";" or "|")
-                {
-                    if (current.Tokens.Count == 0 && current.PrecedingOperator != CompoundOperator.None)
-                    {
-                        error = $"unexpected operator '{op}' at position {t.SourceStart}";
-                        return segments;
-                    }
-
-                    Flush();
-                    current = new Segment { PrecedingOperator = MapOperator(op), Depth = depth };
-                    continue;
-                }
-
-                // Redirect operators and a bare '&' stay inside the segment.
-                current.Tokens.Add(t);
-                continue;
-            }
-
-            current.Tokens.Add(t);
-        }
-
-        if (depth != 0 || expressionArgumentDepth != 0)
-        {
-            error = $"unbalanced '(' grouping at position {source.Length}";
-            return segments;
-        }
-
-        Flush();
-        error = null;
-        return segments;
-    }
-
-    private static CompoundOperator MapOperator(string? op) => op switch
-    {
-        "&&" => CompoundOperator.AndIf,
-        "||" => CompoundOperator.OrIf,
-        ";" => CompoundOperator.Sequence,
-        "|" => CompoundOperator.Pipe,
-        _ => CompoundOperator.None,
-    };
-
     private static bool StartsWithInvokeExpression(List<PwshToken> tokens)
     {
         var verbIndex = tokens.Count > 0
@@ -619,24 +443,38 @@ internal static class PwshCommandParser
     {
         public IReadOnlyList<Clause> Clauses { get; }
 
+        public ShellSyntaxNode? Syntax { get; }
+
         public string? Error { get; }
 
         public bool IsRecursion { get; }
 
-        private BuildResult(IReadOnlyList<Clause> clauses, string? error, bool isRecursion)
+        private BuildResult(
+            IReadOnlyList<Clause> clauses,
+            ShellSyntaxNode? syntax,
+            string? error,
+            bool isRecursion)
         {
             Clauses = clauses;
+            Syntax = syntax;
             Error = error;
             IsRecursion = isRecursion;
         }
 
-        public static BuildResult Ok(Clause c) => new(new[] { c }, null, false);
+        public static BuildResult Ok(Clause c) => new(new[] { c }, null, null, false);
 
         public static BuildResult Recursion(IReadOnlyList<Clause> clauses) =>
-            new(clauses, null, true);
+            new(clauses, null, null, true);
+
+        public static BuildResult Recursion(ShellSyntaxNode syntax) =>
+            new(Array.Empty<Clause>(), syntax, null, true);
 
         public static BuildResult Fail(string? reason) =>
-            new(Array.Empty<Clause>(), reason ?? "inner parse failed", false);
+            new(
+                Array.Empty<Clause>(),
+                null,
+                reason ?? "inner parse failed",
+                false);
     }
 
     private static BuildResult BuildSegment(
@@ -2002,21 +1840,20 @@ internal static class PwshCommandParser
             return true;
         }
 
-        var expanded = new List<Clause>(innerParsed.Clauses.Count);
-        for (var i = 0; i < innerParsed.Clauses.Count; i++)
+        if (!TryBuildDecodedWrapper(
+                innerParsed,
+                segment,
+                ShellGroupKind.CurrentScope,
+                Array.Empty<Redirect>(),
+                Array.Empty<ClauseElement>(),
+                out var wrapper))
         {
-            var innerClause = innerParsed.Clauses[i];
-            expanded.Add(innerClause with
-            {
-                Operator = i == 0 ? segment.PrecedingOperator : innerClause.Operator,
-                IsSubshell = segment.Depth > 0 || innerClause.IsSubshell,
-                IsCommandStringWrapped = true,
-                Elements = ClauseElementProvenance.WithoutOuterSourceSpans(
-                    innerClause.Elements),
-            });
+            result = BuildResult.Fail(
+                "Invoke-Expression decoded syntax could not be lifted safely");
+            return true;
         }
 
-        result = BuildResult.Recursion(expanded);
+        result = BuildResult.Recursion(wrapper!);
         return true;
     }
 
@@ -2165,6 +2002,15 @@ internal static class PwshCommandParser
                 continue;
             }
 
+            if (!HasExactWrapperPrefix(body, start + 1, i))
+            {
+                // A computed or noncanonical token before the command-string
+                // switch can itself change host option binding. Preserve the
+                // outer clause as incomplete instead of decoding one possible
+                // interpretation.
+                return false;
+            }
+
             if (failure is not null)
             {
                 result = BuildResult.Fail(failure);
@@ -2177,6 +2023,14 @@ internal static class PwshCommandParser
                     isEncoded ? "-EncodedCommand payload could not be decoded"
                               : "-Command is missing its payload");
                 return true;
+            }
+
+            if (!isEncoded && string.Equals(inner, "-", StringComparison.Ordinal))
+            {
+                // `-Command -` reads executable input from stdin. Retain the
+                // outer host clause so completeness can fail closed without
+                // inventing a literal command named `-`.
+                return false;
             }
 
             if (!TryBuildWrapperRedirects(
@@ -2209,64 +2063,58 @@ internal static class PwshCommandParser
                 return true;
             }
 
-            var expanded = new List<Clause>(innerParsed.Clauses.Count);
-            for (var k = 0; k < innerParsed.Clauses.Count; k++)
+            if (!TryBuildDecodedWrapper(
+                    innerParsed,
+                    segment,
+                    ShellGroupKind.IsolatedScope,
+                    wrapperRedirects,
+                    wrapperRedirectElements,
+                    out var wrapper))
             {
-                var ic = innerParsed.Clauses[k];
-                expanded.Add(ic with
-                {
-                    Operator = k == 0 ? segment.PrecedingOperator : ic.Operator,
-                    IsSubshell = segment.Depth > 0 || ic.IsSubshell,
-                    IsCommandStringWrapped = true,
-                    Elements = ClauseElementProvenance.WithoutOuterSourceSpans(ic.Elements),
-                });
+                result = BuildResult.Fail(
+                    "pwsh decoded syntax could not be lifted safely");
+                return true;
             }
 
-            if (expanded.Count == 0 && wrapperRedirects.Count > 0)
-            {
-                expanded.Add(new Clause
-                {
-                    Operator = segment.PrecedingOperator,
-                    Verb = new VerbChain(),
-                    Args = Array.Empty<Arg>(),
-                    Redirects = wrapperRedirects,
-                    Elements = wrapperRedirectElements,
-                    IsSubshell = segment.Depth > 0,
-                    IsCommandStringWrapped = true,
-                });
-            }
-            else if (expanded.Count > 0 && wrapperRedirects.Count > 0)
-            {
-                var lastIndex = expanded.Count - 1;
-                var lastClause = expanded[lastIndex];
-                var redirects = new List<Redirect>(lastClause.Redirects.Count + wrapperRedirects.Count);
-                redirects.AddRange(lastClause.Redirects);
-                redirects.AddRange(wrapperRedirects);
-
-                var elements = new List<ClauseElement>(
-                    lastClause.Elements.Count + wrapperRedirectElements.Count);
-                elements.AddRange(lastClause.Elements);
-                var precedingVerbCount = lastClause.Verb.Tokens.Count;
-                foreach (var redirectElement in wrapperRedirectElements)
-                {
-                    elements.Add(redirectElement with
-                    {
-                        PrecedingVerbElementCount = precedingVerbCount,
-                    });
-                }
-
-                expanded[lastIndex] = lastClause with
-                {
-                    Redirects = redirects,
-                    Elements = elements,
-                };
-            }
-
-            result = BuildResult.Recursion(expanded);
+            result = BuildResult.Recursion(wrapper!);
             return true;
         }
 
         return false;
+    }
+
+    private static bool HasExactWrapperPrefix(
+        IReadOnlyList<PwshToken> body,
+        int start,
+        int end)
+    {
+        for (var index = start; index < end; index++)
+        {
+            var token = body[index];
+            if (token.Kind != PwshTokenKind.Parameter ||
+                token.HasInterpolation ||
+                token.ResolverValue is null ||
+                !string.Equals(
+                    token.ResolverValue.Decoded,
+                    token.Value,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            foreach (var fragment in token.ResolverValue.Fragments)
+            {
+                if (fragment.Kind != ShellValueFragmentKind.Literal ||
+                    fragment.Expansion is not null ||
+                    fragment.Cardinality != ShellValueCardinality.ExactlyOne ||
+                    fragment.OpaqueCause != ShellOpaqueCause.None)
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     private static bool IsCommandParameter(string name)

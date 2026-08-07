@@ -325,6 +325,11 @@ quoted_string    := single_quoted | double_quoted
   arguments is a syntax error and makes the whole result unparseable.
 - A parenthesized **pipeline** `( ... )` parses as a grouped sub-pipeline;
   its clauses carry `IsSubshell = true` as a *structural* marker only.
+  PowerShell permits that grouped expression only as the first pipeline
+  element; `Get-Date | (Get-Process)` is unparseable rather than a second
+  grouped stage. The group body is one pipeline, so statement separators such
+  as `(Get-Date; Get-Process)` are also unparseable. Leading and trailing
+  newlines inside the delimiters collapse.
   Unlike a bash subshell, PowerShell's `( ... )` is a grouping operator — it
   creates **no scope and no working-directory boundary** (`$PWD` is runspace
   state, not a scoped variable). `Set-Location` attribution therefore
@@ -1099,6 +1104,15 @@ command string. The parser appends each such redirect to the last surfaced
 inner clause's `Redirects` and `Elements`; its outer source span remains exact.
 Non-redirect arguments after a quoted, script-block, colon-bound, or encoded
 payload are not modeled and set `IsUnparseable=true` rather than disappearing.
+
+When the complete command-string production is not proved, the parser retains
+the authored outer host clause but sets its command occurrence
+`IsComplete=false`. This includes dynamic or quoted wrapper-control input,
+`--%`, stdin-driven `-Command -`, and command-string-capable forms outside the
+locked grammar such as `-CommandWithArgs` / `-cwa`. The same incomplete-outer
+rule applies to a computed `Invoke-Expression` payload. These leaves preserve
+compatibility evidence; they are never sufficient authorization evidence and
+must not be mistaken for proof that no hidden command can execute.
 
 `pwsh -File script.ps1` is **not** recursion — the file content is not
 available to the parser. It parses as an ordinary clause with `script.ps1`

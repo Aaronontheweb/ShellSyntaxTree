@@ -73,6 +73,16 @@ partial command and compatibility result.
 - **THEN** the existing outer compatibility leaf remains visible with direct source provenance
 - **THEN** its command occurrence has `IsComplete=false` because no hidden command-string body was discovered
 
+#### Scenario: Unproved PowerShell command string remains incomplete
+- **WHEN** PowerShell parses a `pwsh` or `powershell` host whose command-string control is dynamic, quoted, hidden behind `--%`, stdin-driven by `-Command -`, or uses an unsupported command-string-capable form such as `-CommandWithArgs` / `-cwa`
+- **THEN** the existing outer compatibility leaf remains visible with direct source provenance
+- **THEN** its command occurrence has `IsComplete=false` because no complete executable body was discovered
+
+#### Scenario: Computed Invoke-Expression remains incomplete
+- **WHEN** PowerShell retains an outer `Invoke-Expression` clause because its payload is computed rather than one exact static scalar
+- **THEN** the payload remains an authored `DynamicSkip` value
+- **THEN** the command occurrence has `IsComplete=false` and cannot authorize hidden code
+
 #### Scenario: While condition and body roles
 - **WHEN** Bash parses `while curl URL; do sleep 1; done`
 - **THEN** `curl` is identified as a condition occurrence

@@ -134,7 +134,8 @@
         "commands": [],
         "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
         "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
-      }
+      },
+      "compatibilityProjectionLanded": true
     },
     {
       "id": "pwsh-standalone-subexpression-is-not-invocation",
