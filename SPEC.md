@@ -929,7 +929,10 @@ command         := clause (compound_op clause)*
 compound_op     := "&&" | "||" | ";" | "|" | NEWLINE
 clause          := subshell | bash_c_wrapper | simple_clause
 subshell        := "(" command ")"
-bash_c_wrapper  := ("bash" | "sh") "-c" QUOTED_STRING
+bash_c_wrapper  := ("bash" | "sh") static_flag* "-c" STATIC_QUOTED_STRING
+static_flag     := exact-one literal Word beginning with "-"
+STATIC_QUOTED_STRING := QuotedString whose outer-shell provenance is entirely
+                        literal and exactly one value
 simple_clause   := verb_chain arg* redirect*
 verb_chain      := verb_like_word (FW_pair? verb_like_word)*
                                      // greedy walk per §6.1; FW_pair is a
@@ -1668,6 +1671,16 @@ Clause 1: Op=AndIf, Verb=cmd, Args=[/a attribution], IsCommandStringWrapped=true
 The outer `bash -c` itself does not appear as a clause — it's "consumed"
 by the recursion. Consumers that care that this came from a wrapper can
 inspect `IsCommandStringWrapped` on the surfaced clauses.
+
+A `bash` or `sh` clause whose authored arguments are dynamic, contain a decoded
+`-c`, or contain a combined short option that may select command-string mode,
+but that does not match the complete static wrapper production, remains visible
+through its v0.2 compatibility leaf, including its direct outer source spans.
+Its v0.3 command occurrence has `IsComplete=false`. Wrapper-control tokens and
+the quoted body must each have literal, exactly-one outer-shell provenance;
+token kind or decoded spelling alone is insufficient. A proved `--` ends this
+conservative option scan. The parser does not claim to have discovered a
+dynamic or otherwise unsupported command-string body.
 
 **Recursion limit:** parse `bash -c "bash -c ..."` chains up to depth 5.
 Deeper nesting → set the outer `ParsedCommand.IsUnparseable = true` with

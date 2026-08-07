@@ -19,9 +19,11 @@ namespace ShellSyntaxTree.Internal.Bash.Parsing;
 /// (SPEC §7), the resolver (SPEC §8), and the flag-with-value-aware verb-
 /// chain probe. PR 5 lands cd-in-compound attribution propagation
 /// (SPEC §9), subshell isolation (SPEC §10), and <c>bash -c</c> recursion
-/// with the depth-5 cap per locked interpretation #4.
+/// with the depth-5 cap per locked interpretation #4. The v0.3 structural
+/// coordinator owns lists, pipelines, groups, and command projections while
+/// this type retains the proven simple-command leaf analysis.
 /// </summary>
-internal static class BashCommandParser
+internal static partial class BashCommandParser
 {
     /// <summary>
     /// Maximum allowed <c>bash -c</c> / <c>sh -c</c> nesting depth before
@@ -68,250 +70,36 @@ internal static class BashCommandParser
     {
         if (source.Length == 0)
         {
-            return new ParsedCommand
-            {
-                Source = source,
-                Clauses = Array.Empty<Clause>(),
-                IsUnparseable = false,
-            };
+            return ParseStructured(
+                source,
+                Array.Empty<BashToken>(),
+                options,
+                bashCDepth,
+                markBashCWrapped);
         }
 
         var tokens = BashLexer.Tokenize(source);
-
-        // Step 1: lift any UnparseableSentinel to the outer ParsedCommand.
-        // SPEC §11 step 3 says we may also return whatever clauses were
-        // parsed up to that point — we keep it strictly safe-fail (empty
-        // Clauses) so consumers can't build on a partial AST whose shape
-        // a sibling clause might invalidate. The reason text comes
-        // straight from the lexer.
-        for (var i = 0; i < tokens.Count; i++)
+        for (var index = 0; index < tokens.Count; index++)
         {
-            var t = tokens[i];
-            if (t.Kind == BashTokenKind.UnparseableSentinel)
+            var token = tokens[index];
+            if (token.Kind == BashTokenKind.UnparseableSentinel)
             {
-                return new ParsedCommand
-                {
-                    Source = source,
-                    Clauses = Array.Empty<Clause>(),
-                    IsUnparseable = true,
-                    UnparseableReason = t.UnparseableReason,
-                };
+                return StructuralFailure(source, token.UnparseableReason);
             }
         }
 
-        // Step 2: split the (filtered, non-whitespace) token stream into
-        // clause segments at top-level &&, ||, ;, and |.
         var significant = FilterSignificant(tokens);
-
-        // Step 3: detect anomalies that map straight to outer IsUnparseable.
         if (TryDetectAnomaly(significant, out var anomalyReason))
         {
-            return new ParsedCommand
-            {
-                Source = source,
-                Clauses = Array.Empty<Clause>(),
-                IsUnparseable = true,
-                UnparseableReason = anomalyReason,
-            };
+            return StructuralFailure(source, anomalyReason);
         }
 
-        var segments = SplitIntoSegments(significant, source, out var splitError);
-        if (splitError is not null)
-        {
-            return new ParsedCommand
-            {
-                Source = source,
-                Clauses = Array.Empty<Clause>(),
-                IsUnparseable = true,
-                UnparseableReason = splitError,
-            };
-        }
-
-        // Step 4: walk segments with the cd-attribution context and the
-        // bash -c recursion machinery.
-        var clauses = new List<Clause>(segments.Count);
-        var attribution = new CdAttributionContext();
-        IReadOnlyList<int> prevStack = new[] { 0 };
-
-        foreach (var segment in segments)
-        {
-            // ---- Subshell push/pop driven by SubshellStack divergence ----
-            //
-            // Each segment carries the *full* stack of subshell IDs it
-            // sits inside (outer-most → inner-most), with ID 0 reserved
-            // for the top-level command. We pop pushed frames back to the
-            // common prefix between prevStack and segment.SubshellStack,
-            // then push fresh frames for each new ID we're entering. This
-            // correctly handles `(a) && (b)`: between the two segments
-            // we exit subshell A (pop) and enter subshell B (push), even
-            // though SubshellDepth=1 on both.
-            var commonPrefix = 0;
-            while (commonPrefix < prevStack.Count
-                && commonPrefix < segment.SubshellStack.Count
-                && prevStack[commonPrefix] == segment.SubshellStack[commonPrefix])
-            {
-                commonPrefix++;
-            }
-
-            // Pop everything past the common prefix in prevStack.
-            for (var k = prevStack.Count - 1; k >= commonPrefix; k--)
-            {
-                attribution.PopForSubshell();
-            }
-
-            // Push fresh frames for the new IDs in segment.SubshellStack.
-            for (var k = commonPrefix; k < segment.SubshellStack.Count; k++)
-            {
-                attribution.PushForSubshell();
-            }
-
-            prevStack = segment.SubshellStack;
-
-            // ---- bash -c detection (before clause-build) ----
-            //
-            // Locked interpretation #4: nested `bash -c "..."` wrappers
-            // expand inline; the outer wrapper clause is consumed. The cap
-            // at depth 5 fires here — one more level past 5 → outer
-            // ParsedCommand.IsUnparseable = true with reason naming the
-            // overflow. Sub-clauses parsed *up to* the cap may still appear,
-            // but per SPEC §11 + locked interpretation #4 we keep clauses
-            // empty for hostile-input safety.
-            if (TryDetectBashCWrapper(segment, source, out var innerCommand))
-            {
-                if (bashCDepth + 1 > MaxBashCRecursionDepth)
-                {
-                    return new ParsedCommand
-                    {
-                        Source = source,
-                        Clauses = Array.Empty<Clause>(),
-                        IsUnparseable = true,
-                        UnparseableReason = "bash -c recursion depth exceeded (>5)",
-                    };
-                }
-
-                // Recurse with the original options — bash -c spawns a
-                // fresh shell, so outer cd-attribution does *not* propagate
-                // into the inner command. This is a v0.1 decision; v0.1.x
-                // can revisit if real-world commands surface a counter-case.
-                var inner = ParseInternal(
-                    innerCommand!,
-                    options,
-                    bashCDepth: bashCDepth + 1,
-                    markBashCWrapped: true);
-
-                if (inner.IsUnparseable)
-                {
-                    return new ParsedCommand
-                    {
-                        Source = source,
-                        Clauses = Array.Empty<Clause>(),
-                        IsUnparseable = true,
-                        UnparseableReason = inner.UnparseableReason,
-                    };
-                }
-
-                // First inner clause inherits the outer segment's operator
-                // (since the bash -c clause itself is consumed). Remaining
-                // inner clauses keep their parsed operators.
-                var innerClauses = inner.Clauses;
-                for (var k = 0; k < innerClauses.Count; k++)
-                {
-                    var ic = innerClauses[k];
-                    var op = k == 0 ? segment.PrecedingOperator : ic.Operator;
-                    var isSubshell = segment.SubshellDepth > 0 || ic.IsSubshell;
-                    clauses.Add(ic with
-                    {
-                        Operator = op,
-                        IsSubshell = isSubshell,
-                        IsCommandStringWrapped = true,
-                        Elements = ClauseElementProvenance.WithoutOuterSourceSpans(ic.Elements),
-                    });
-                }
-
-                continue;
-            }
-
-            // ---- Normal clause path with attribution propagation ----
-            //
-            // Effective resolution options depend on attribution state:
-            //   - no attribution → caller options pass through unchanged.
-            //   - literal cd attribution → swap WorkingDirectory to the cd
-            //     target so relative path args in subsequent clauses
-            //     resolve under it (SPEC §9 example: `cd /a && cat foo`
-            //     → cat's `foo` resolves to `/a/foo`).
-            //   - dynamic cd attribution (locked interpretation #6) →
-            //     keep caller options but set the resolver's
-            //     `workingDirectoryUnknown` flag so relative paths surface
-            //     as DynamicSkip (the daemon cwd is *not* the right
-            //     fallback; we statically don't know the actual cwd).
-            var effectiveOptions = options;
-            var workingDirectoryUnknown = false;
-            if (attribution.HasAttribution && !attribution.IsDynamic)
-            {
-                effectiveOptions = new BashParserOptions
-                {
-                    HomeDirectory = options.HomeDirectory,
-                    WorkingDirectory = attribution.ResolvedCwd,
-                };
-            }
-            else if (attribution.IsDynamic)
-            {
-                workingDirectoryUnknown = true;
-            }
-
-            var clauseOrError = ParseClauseSegment(segment, source, effectiveOptions, workingDirectoryUnknown);
-            if (clauseOrError.Error is not null)
-            {
-                return new ParsedCommand
-                {
-                    Source = source,
-                    Clauses = Array.Empty<Clause>(),
-                    IsUnparseable = true,
-                    UnparseableReason = clauseOrError.Error,
-                };
-            }
-
-            foreach (var clause in clauseOrError.Clauses)
-            {
-                // Apply the IsSubshell / IsCommandStringWrapped flags first; both
-                // are properties of the *segment*, not the clause body.
-                var withFlags = clause with
-                {
-                    IsSubshell = segment.SubshellDepth > 0,
-                    IsCommandStringWrapped = markBashCWrapped,
-                };
-
-                // Inspect the verb to decide whether this clause updates
-                // the attribution context after emission.
-                var verb = clause.Verb;
-                var firstVerbToken = verb.Tokens.Count > 0 ? verb.Tokens[0] : null;
-                var isCdLike = firstVerbToken is not null
-                    && (string.Equals(firstVerbToken, "cd", StringComparison.OrdinalIgnoreCase)
-                        || string.Equals(firstVerbToken, "chdir", StringComparison.OrdinalIgnoreCase));
-
-                // Every clause receives the *current* attribution as a
-                // synthetic arg — including cd/chdir clauses themselves
-                // (per SPEC §9 rule 2 "subsequent clauses inherit", which
-                // applies to cd /b in `cd /a && cd /b`). The attribution
-                // state is updated *after* the arg is attached, so the
-                // newly-set cd /b doesn't attribute to itself.
-                var emitted = AttachAttributionArg(withFlags, attribution);
-
-                if (isCdLike)
-                {
-                    UpdateAttributionFromCd(clause, attribution);
-                }
-
-                clauses.Add(emitted);
-            }
-        }
-
-        return new ParsedCommand
-        {
-            Source = source,
-            Clauses = clauses,
-            IsUnparseable = false,
-        };
+        return ParseStructured(
+            source,
+            significant,
+            options,
+            bashCDepth,
+            markBashCWrapped);
     }
 
     // ---------------------------------------------------------------- cd attribution
@@ -432,9 +220,11 @@ internal static class BashCommandParser
     /// We scan the segment's tokens directly (rather than running through
     /// the full clause parser first) so the wrapper is consumed cleanly —
     /// the outer clause never appears in <c>ParsedCommand.Clauses</c>. The
-    /// scan looks for: a Word verb of <c>bash</c> or <c>sh</c>, followed by
-    /// any combination of flag tokens, then a <c>-c</c> Word flag, then an
-    /// adjacent QuotedString token whose value becomes the inner command.
+    /// scan looks for an exact literal Word verb of <c>bash</c> or <c>sh</c>,
+    /// followed by exact literal flag tokens, an exact <c>-c</c> Word flag,
+    /// and a quoted body whose outer-shell provenance is entirely literal
+    /// and exactly one value. Decoded spelling alone is insufficient because
+    /// outer expansions could change the command before the inner shell sees it.
     /// </remarks>
     private static bool TryDetectBashCWrapper(Segment segment, string source, out string? innerCommand)
     {
@@ -447,7 +237,7 @@ internal static class BashCommandParser
 
         // First non-flag Word token must be `bash` or `sh`.
         var t0 = segment.Tokens[0];
-        if (t0.Kind != BashTokenKind.Word)
+        if (t0.Kind != BashTokenKind.Word || !HasExactLiteralValue(t0))
         {
             return false;
         }
@@ -462,7 +252,7 @@ internal static class BashCommandParser
         for (var i = 1; i < segment.Tokens.Count - 1; i++)
         {
             var t = segment.Tokens[i];
-            if (t.Kind != BashTokenKind.Word)
+            if (t.Kind != BashTokenKind.Word || !HasExactLiteralValue(t))
             {
                 return false;
             }
@@ -470,7 +260,8 @@ internal static class BashCommandParser
             if (string.Equals(t.Value, "-c", StringComparison.Ordinal))
             {
                 var next = segment.Tokens[i + 1];
-                if (next.Kind == BashTokenKind.QuotedString)
+                if (next.Kind == BashTokenKind.QuotedString &&
+                    HasExactLiteralValue(next))
                 {
                     innerCommand = next.Value;
                     return true;
@@ -500,8 +291,8 @@ internal static class BashCommandParser
         foreach (var t in tokens)
         {
             // A newline-bearing Whitespace token is a statement separator
-            // (SPEC §4) — it survives filtering so SplitIntoSegments can
-            // split clauses on it, exactly like an explicit ';'. Plain
+            // (SPEC §4) — it survives filtering so the structural coordinator
+            // can treat it exactly like an explicit ';'. Plain
             // space/tab Whitespace, Continuation, and Comment carry no
             // structural signal and are dropped.
             if ((t.Kind == BashTokenKind.Whitespace && !t.IsStatementSeparator)
@@ -547,7 +338,7 @@ internal static class BashCommandParser
     {
         // Control-flow keyword at verb position runs FIRST (SPEC §11
         // precedence). A keyword like `case x in a) ;; esac` would
-        // otherwise trip the paren-balance check in SplitIntoSegments
+        // otherwise trip structural parenthesis validation
         // before we get to ParseClauseSegment's per-clause keyword check
         // — and the resulting "unbalanced parens" reason hides the real
         // cause. Verb position = index 0 OR immediately after a clause
@@ -622,165 +413,14 @@ internal static class BashCommandParser
         return false;
     }
 
-    // ---------------------------------------------------------------- segment split
+    // ---------------------------------------------------------------- simple-command leaf adapter
 
     private sealed class Segment
     {
         public CompoundOperator PrecedingOperator { get; init; }
 
         public List<BashToken> Tokens { get; init; } = new();
-
-        public bool FromSubshell { get; init; }
-
-        /// <summary>
-        /// Paren-nesting depth of this segment. 0 = top-level; 1 = direct
-        /// child of one subshell; etc. PR 5 uses transitions in this value
-        /// across consecutive segments to push/pop the cd-attribution stack.
-        /// </summary>
-        public int SubshellDepth { get; init; }
-
-        /// <summary>
-        /// Stack of subshell IDs from outermost to innermost. ID 0 is the
-        /// top-level command; each subsequent <c>(</c> open assigns a fresh
-        /// monotonically-increasing ID. PR 5 uses divergence in this stack
-        /// across consecutive segments to detect exit-then-re-enter
-        /// boundaries (e.g. <c>(a) &amp;&amp; (b)</c> where both segments
-        /// have SubshellDepth=1 but live in different subshells).
-        /// </summary>
-        public IReadOnlyList<int> SubshellStack { get; init; } = Array.Empty<int>();
     }
-
-    private static List<Segment> SplitIntoSegments(
-        IReadOnlyList<BashToken> tokens,
-        string source,
-        out string? error)
-    {
-        var segments = new List<Segment>();
-        var subshellStack = new List<int> { 0 }; // ID 0 is the top-level command.
-        var nextSubshellId = 1;
-        var depth = 0;
-
-        // Shared factory for the segment opened at every clause boundary:
-        // FromSubshell / SubshellDepth / SubshellStack are uniform (driven
-        // by the current `depth`), so only the preceding operator varies.
-        Segment OpenSegment(CompoundOperator precedingOperator) => new()
-        {
-            PrecedingOperator = precedingOperator,
-            FromSubshell = depth > 0,
-            SubshellDepth = depth,
-            SubshellStack = subshellStack.ToArray(),
-        };
-
-        var current = OpenSegment(CompoundOperator.None);
-
-        for (var i = 0; i < tokens.Count; i++)
-        {
-            var t = tokens[i];
-
-            // A retained Whitespace token is a newline statement separator
-            // (SPEC §4), equivalent to ';'. Unlike a stray ';', a newline
-            // on an empty pending segment is NOT an error — it simply
-            // collapses, so blank lines, leading newlines, and a newline
-            // right after a compound operator never produce an empty clause.
-            if (t.Kind == BashTokenKind.Whitespace)
-            {
-                if (current.Tokens.Count == 0)
-                {
-                    continue;
-                }
-
-                segments.Add(current);
-                current = OpenSegment(CompoundOperator.Sequence);
-                continue;
-            }
-
-            if (t.Kind == BashTokenKind.Operator)
-            {
-                var op = t.OperatorText;
-
-                if (op == "(")
-                {
-                    if (current.Tokens.Count > 0)
-                    {
-                        segments.Add(current);
-                    }
-
-                    depth++;
-                    subshellStack.Add(nextSubshellId++);
-                    current = OpenSegment(current.Tokens.Count > 0
-                        ? CompoundOperator.Sequence
-                        : current.PrecedingOperator);
-                    continue;
-                }
-
-                if (op == ")")
-                {
-                    if (depth == 0)
-                    {
-                        error = $"unbalanced parens at position {t.SourceStart}";
-                        return segments;
-                    }
-
-                    depth--;
-                    subshellStack.RemoveAt(subshellStack.Count - 1);
-
-                    if (current.Tokens.Count > 0)
-                    {
-                        segments.Add(current);
-                    }
-
-                    current = OpenSegment(CompoundOperator.None);
-                    continue;
-                }
-
-                if (op == "&&" || op == "||" || op == ";" || op == "|")
-                {
-                    if (current.Tokens.Count == 0 && current.PrecedingOperator != CompoundOperator.None)
-                    {
-                        error = $"unexpected operator '{op}' at position {t.SourceStart}";
-                        return segments;
-                    }
-
-                    if (current.Tokens.Count > 0)
-                    {
-                        segments.Add(current);
-                    }
-
-                    current = OpenSegment(MapOperator(op));
-                    continue;
-                }
-
-                // Redirect operators stay inside the current segment.
-                current.Tokens.Add(t);
-                continue;
-            }
-
-            current.Tokens.Add(t);
-        }
-
-        if (depth != 0)
-        {
-            error = $"unbalanced parens at position {source.Length}";
-            return segments;
-        }
-
-        if (current.Tokens.Count > 0)
-        {
-            segments.Add(current);
-        }
-
-        error = null;
-        return segments;
-    }
-
-    private static CompoundOperator MapOperator(string? op) => op switch
-    {
-        "&&" => CompoundOperator.AndIf,
-        "||" => CompoundOperator.OrIf,
-        ";" => CompoundOperator.Sequence,
-        "|" => CompoundOperator.Pipe,
-        _ => CompoundOperator.None,
-    };
 
     // ---------------------------------------------------------------- clause parse
 
@@ -796,25 +436,14 @@ internal static class BashCommandParser
             Error = error;
         }
 
-        public static ClauseResult Empty() => new(Array.Empty<Clause>(), null);
-
         public static ClauseResult Ok(Clause c) => new(new[] { c }, null);
 
         public static ClauseResult Fail(string reason) => new(Array.Empty<Clause>(), reason);
     }
 
     private static ClauseResult ParseClauseSegment(
-        Segment segment, string source, BashParserOptions options)
-        => ParseClauseSegment(segment, source, options, workingDirectoryUnknown: false);
-
-    private static ClauseResult ParseClauseSegment(
         Segment segment, string source, BashParserOptions options, bool workingDirectoryUnknown)
     {
-        if (segment.Tokens.Count == 0)
-        {
-            return ClauseResult.Empty();
-        }
-
         // Verb-chain extraction per SPEC §6.1. The FileVerb carveout is
         // load-bearing: downstream per-verb positional-arg classification
         // depends on the verb chain staying 1 token for FILE verbs so

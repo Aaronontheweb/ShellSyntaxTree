@@ -233,8 +233,15 @@ priorities.
       precedence, ancestry coordinates, reference identity, span and enum
       validity, value/redirect invariants, safe defaults, copied collections,
       and the 16-container bound.
-- [ ] Adapt the existing Bash and PowerShell grammars to emit the structural
-      and command-occurrence projections before enabling any control-flow
+- [x] Adapt the existing Bash grammar to emit structural and command-occurrence
+      projections before enabling control flow. The recursive coordinator
+      preserves pipeline/list precedence, isolated nested groups, decoded
+      wrapper ownership and nullable spans, compatibility operators, and exact
+      `Clause` identity; unsupported wrapper tails and depth overflow fail
+      closed. Redirect-bearing leaves remain incomplete until the explicit
+      redirect-analysis slice lands.
+- [ ] Adapt the existing PowerShell grammar to emit the structural and
+      command-occurrence projections before enabling any control-flow
       construct.
 - [ ] Deliver paired Bash and PowerShell `$()` substitution slices for all
       locked executable value positions, including ordering, ancestry,
