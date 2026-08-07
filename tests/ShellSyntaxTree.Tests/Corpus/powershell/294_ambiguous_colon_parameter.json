@@ -1,17 +1,33 @@
 {
   "name": "Ambiguous colon parameter fails closed",
-  "input": "Get-Content -P:\"safe.txt\"",
+  "input": "Get-Content -P:\u0022safe.txt\u0022",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-Content"],
-      "args": [
-        { "raw": "-P", "kind": "Literal", "isPath": false, "isFlag": true },
-        { "raw": "\"safe.txt\"", "kind": "DynamicSkip", "isPath": false }
-      ],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "-P",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\u0022safe.txt\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "-P matches multiple known parameters, so neither binding nor path mode is proved."
 }

@@ -1381,6 +1381,13 @@ The shared corpus DTO gains two optional fields:
   `Invoke-Expression`, an over-cap input (§11), or a recursion-depth overflow
   — because real `pwsh` parses the *outer* invocation without error.
 
+The shared v0.3 `syntax` and `commands` expectations defined in `SPEC.md` §13
+apply unchanged. Selected PowerShell entries SHALL pin current-scope groups,
+pipeline/list precedence, exact direct spans, null decoded-wrapper spans,
+command roles, ancestry, completeness, and exact compatibility-leaf identity.
+The manifest marks these entries explicitly so regeneration preserves the
+structural assertions; entries without the marker retain the legacy schema.
+
 ### Coverage targets for v0.2.0
 
 | Category | Min |

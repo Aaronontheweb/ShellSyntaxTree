@@ -3,12 +3,24 @@
   "input": "Get-Content Z:\\x",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-Content"],
-      "args": [{ "raw": "Z:\\x", "kind": "DynamicSkip", "isPath": false }],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "Z:\\x",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "A single-letter drive is not proved FileSystem merely from its spelling."
 }

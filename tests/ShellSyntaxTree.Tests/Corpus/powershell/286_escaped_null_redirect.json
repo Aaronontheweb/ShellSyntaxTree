@@ -1,14 +1,32 @@
 {
   "name": "Escaped PowerShell null text is a literal file target",
-  "input": "Write-Output ok > `$null",
+  "input": "Write-Output ok \u003E \u0060$null",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Write-Output"],
-      "args": [{ "raw": "ok", "kind": "Literal", "isPath": false }],
-      "redirects": [{ "direction": "Out", "target": "C:/work/$null", "isDynamicSkip": false }]
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "ok",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/work/$null",
+            "isDynamicSkip": false
+          }
+        ]
+      }
+    ]
   },
   "notes": "Decoded text alone is insufficient: the backtick proves this is not the null sink."
 }

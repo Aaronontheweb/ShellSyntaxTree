@@ -20,6 +20,98 @@
         "isSubshell": true,
         "isCommandStringWrapped": false
       }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 7,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Group",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 7,
+        "clauseIndex": null,
+        "groupKind": "IsolatedScope",
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "GroupBody",
+        "childIndex": null,
+        "sourceStart": 1,
+        "sourceLength": 5,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Pipeline",
+        "parentIndex": 2,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 1,
+        "sourceLength": 5,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "PipelineStage",
+        "childIndex": 0,
+        "sourceStart": 1,
+        "sourceLength": 1,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "PipelineStage",
+        "childIndex": 1,
+        "sourceStart": 5,
+        "sourceLength": 1,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 7 },
+          { "ancestorKind": "Group", "region": "GroupBody", "childIndex": null, "sourceStart": 0, "sourceLength": 7 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 1, "sourceLength": 5 },
+          { "ancestorKind": "Pipeline", "region": "PipelineStage", "childIndex": 0, "sourceStart": 1, "sourceLength": 5 }
+        ]
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 7 },
+          { "ancestorKind": "Group", "region": "GroupBody", "childIndex": null, "sourceStart": 0, "sourceLength": 7 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 1, "sourceLength": 5 },
+          { "ancestorKind": "Pipeline", "region": "PipelineStage", "childIndex": 1, "sourceStart": 1, "sourceLength": 5 }
+        ]
+      }
     ]
   },
   "notes": "Pipe inside subshell — both clauses carry IsSubshell=true."

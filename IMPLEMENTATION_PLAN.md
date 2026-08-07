@@ -249,6 +249,15 @@ priorities.
       shared leaf identity. It rejects hostile structural depth before descent
       and leaves redirects, dynamic identities, unproved host command strings,
       and undiscovered executable expressions incomplete.
+- [x] Promote representative existing constructs into the executable corpus
+      with exact v0.3 syntax and command-occurrence expectations. Bash and
+      PowerShell cases pin simple commands, list/pipeline precedence, group
+      scope, static and dynamic wrappers, redirects, hidden substitutions,
+      roles, ancestry, completeness, nullable decoded spans, compatibility
+      operators, and exact shared `Clause` identity. The strict DTO rejects
+      unknown fields and always requires unparseable projections to be empty.
+      The PowerShell manifest now owns all 310 entries and round-trips exactly;
+      explicit false/null assertions remain opt-in and generator-preserved.
 - [ ] Deliver paired Bash and PowerShell `$()` substitution slices for all
       locked executable value positions, including ordering, ancestry,
       shell-specific cwd propagation, literal/escaped boundaries, dynamic
@@ -272,9 +281,6 @@ priorities.
 
 - Seed corpus entries from sanitized real-world dogfood logs (SPEC §14
   workflow) — both shells.
-- Synchronize PowerShell corpus manifest entries 282–309 before using the
-  generator as an all-corpus rewrite; until then, targeted manifest changes
-  must preserve the checked-in hand-authored tail.
 - Expand verb / cmdlet / alias tables as the corpus surfaces real commands.
 - Performance sanity check (~1 ms typical) with a tiny BenchmarkDotNet
   harness — only if anything in the daemon hot path complains.

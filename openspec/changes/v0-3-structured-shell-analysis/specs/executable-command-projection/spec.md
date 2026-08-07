@@ -15,6 +15,12 @@ of whether the command is top-level or nested.
 - **THEN** the authored `echo` command appears once
 - **THEN** its possible effective values are represented by analysis facts rather than three duplicated occurrences
 
+#### Scenario: Executable corpus pins all public projections
+- **WHEN** a selected Bash or PowerShell corpus entry is marked for structural verification
+- **THEN** the corpus records the complete syntax tree and command-occurrence collection in authored order
+- **THEN** every simple-command node and occurrence references the exact compatibility clause by index and object identity
+- **THEN** roles, completeness, ancestry coordinates, and exact-or-null source ranges are compared without weakening legacy corpus entries that omit structural expectations
+
 ### Requirement: Occurrences identify structural execution roles
 Each command occurrence SHALL identify its immediate structural execution role
 and SHALL retain compositional ancestry for analysis, diagnostics, and UI

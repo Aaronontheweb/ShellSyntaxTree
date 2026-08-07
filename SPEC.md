@@ -1964,6 +1964,26 @@ An entry may add an `elements` list to a clause to pin the complete
 `resolved`). The field is opt-in so older corpus entries remain readable;
 issue-specific provenance entries SHALL include it.
 
+An entry may also add both of the following v0.3 structural expectations:
+
+- `syntax` is the complete `ParsedCommand.Syntax` tree flattened in preorder.
+  Each item records `kind`, `parentIndex`, the incoming ancestry `region` and
+  `childIndex`, exact-or-null `sourceStart` / `sourceLength`, and the
+  kind-specific `clauseIndex`, `groupKind`, or `listOperator`. `clauseIndex`
+  identifies the exact compatibility `Clause` instance owned by a
+  `SimpleCommand` node; it is not a copied value comparison.
+- `commands` is the complete `ParsedCommand.Commands` projection in authored
+  order. Each item records its `clauseIndex`, `immediateRole`, `isComplete`,
+  and outermost-to-innermost `ancestry` frames. Each frame records
+  `ancestorKind`, `region`, `childIndex`, and exact-or-null source range.
+
+These fields are independently opt-in so legacy corpus entries retain their
+v0.2 shape; structural acceptance cases normally provide both. When present,
+the runner compares every node, relationship, range, occurrence, role,
+completeness bit, ancestry frame, and `Clause` reference. Unknown JSON members
+are rejected. An unparseable result always asserts empty `Clauses` and
+`Commands`, even when those arrays are omitted from the JSON.
+
 The corpus runner also lexes every direct, parseable input and verifies that
 each authored verb, argument, opaque region, and redirect token is covered by
 exactly-positioned clause-element provenance. This invariant applies even when

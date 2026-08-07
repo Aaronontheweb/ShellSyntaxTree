@@ -3,13 +3,25 @@
   "input": "Get-$(Write-Output Content) /etc/passwd",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-$(Write-Output Content)"],
-      "isDynamic": true,
-      "args": [{ "raw": "/etc/passwd", "kind": "Literal", "isPath": true, "resolved": "/etc/passwd" }],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-$(Write-Output Content)"
+        ],
+        "isDynamic": true,
+        "args": [
+          {
+            "raw": "/etc/passwd",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/etc/passwd",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "Adjacent aggregation preserves the opaque executable identity through VerbChain.IsDynamic."
 }

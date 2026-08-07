@@ -1,14 +1,26 @@
 {
   "name": "Runtime PowerShell Unicode variable fails closed",
-  "input": "Get-Content \"$é\"",
+  "input": "Get-Content \u0022$\u00E9\u0022",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-Content"],
-      "args": [{ "raw": "\"$é\"", "kind": "DynamicSkip", "isPath": false }],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "\u0022$\u00E9\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "Unicode variable names are recognized expansions rather than literal filenames."
 }

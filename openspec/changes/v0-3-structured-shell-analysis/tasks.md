@@ -30,7 +30,7 @@
 - [x] 3.6 Adapt the existing Bash grammar to emit the structural model with no newly supported syntax.
 - [x] 3.7 Adapt the existing PowerShell grammar to emit the structural model with no newly supported syntax.
 - [x] 3.8 Add tests proving existing parser inputs retain their v0.2 leaf and compatibility results, except for explicitly promoted v0.3 fail-closed cases.
-- [ ] 3.9 Add corpus expectations for syntax shape, occurrences, roles, and completeness for existing constructs.
+- [x] 3.9 Add corpus expectations for syntax shape, occurrences, roles, and completeness for existing constructs.
 - [ ] 3.10 Implement Bash `$()` discovery in supported argument words, redirect values, iterables, and expanding heredoc bodies; retain literal/escaped spellings and fail closed on command-name substitutions, legacy backticks, or incomplete interiors.
 - [ ] 3.11 Implement PowerShell `$()` discovery in supported words, redirect values, foreach expressions, call-operator dynamic identities, standalone expression statements, double-quoted strings, and expandable here-strings; never invent invocation from standalone output, retain literal/escaped spellings, and fail closed on trailing command-style arguments, call-operator script blocks, or unsupported execution-bearing `@()` / `@{}` forms.
 - [ ] 3.12 Pin substitution parentage, authored sibling indices, innermost-first ordering, Bash-isolated versus PowerShell-current-scope state, unknown-state propagation, nesting/depth limits, and incomplete dynamic identities in direct tests.

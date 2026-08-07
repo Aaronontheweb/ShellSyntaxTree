@@ -1,14 +1,26 @@
 {
   "name": "Empty PowerShell path value fails closed",
-  "input": "Get-Content \"\"",
+  "input": "Get-Content \u0022\u0022",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-Content"],
-      "args": [{ "raw": "\"\"", "kind": "DynamicSkip", "isPath": false }],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "\u0022\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "An empty filesystem argument is not a resolvable static path."
 }

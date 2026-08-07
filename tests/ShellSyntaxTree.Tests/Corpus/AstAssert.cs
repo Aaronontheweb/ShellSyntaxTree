@@ -97,6 +97,12 @@ internal static class AstAssert
                 }
             }
 
+            if (actual.Commands.Count != 0 || actual.Clauses.Count != 0)
+            {
+                throw new XunitException(
+                    prefix + "unparseable result retained command or compatibility projections");
+            }
+
             return;
         }
 
@@ -113,7 +119,478 @@ internal static class AstAssert
         {
             AssertClauseEqual(expectedClauses[i], actual.Clauses[i], $"{prefix}clauses[{i}]");
         }
+
+        if (expected.Syntax is not null)
+        {
+            AssertSyntaxEqual(expected.Syntax, actual, prefix);
+        }
+
+        if (expected.Commands is not null)
+        {
+            AssertCommandsEqual(expected.Commands, actual, prefix);
+        }
     }
+
+    private static void AssertSyntaxEqual(
+        IReadOnlyList<ExpectedSyntaxNode> expected,
+        ParsedCommand actual,
+        string prefix)
+    {
+        ValidateExpectedSyntax(expected, prefix);
+        var flattened = new List<ActualSyntaxNode>();
+        AppendSyntax(
+            actual.Syntax,
+            parentIndex: null,
+            CommandAncestryRegion.Unknown,
+            childIndex: null,
+            listOperator: null,
+            actual.Clauses,
+            flattened,
+            isRootBlock: true);
+        if (expected.Count != flattened.Count)
+        {
+            throw new XunitException(
+                prefix + $"syntax.count: expected={expected.Count}, actual={flattened.Count}");
+        }
+
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var wanted = expected[index];
+            var observed = flattened[index];
+            if (wanted.Kind != observed.Kind ||
+                wanted.ParentIndex != observed.ParentIndex ||
+                wanted.Region != observed.Region ||
+                wanted.ChildIndex != observed.ChildIndex ||
+                wanted.SourceStart != observed.SourceStart ||
+                wanted.SourceLength != observed.SourceLength ||
+                wanted.ClauseIndex != observed.ClauseIndex ||
+                wanted.GroupKind != observed.GroupKind ||
+                wanted.ListOperator != observed.ListOperator)
+            {
+                throw new XunitException(
+                    prefix + $"syntax[{index}]: expected={Summarize(wanted)}, "
+                    + $"actual={Summarize(observed)}");
+            }
+
+            if (observed.Clause is not null &&
+                (wanted.ClauseIndex is null ||
+                 wanted.ClauseIndex < 0 ||
+                 wanted.ClauseIndex >= actual.Clauses.Count ||
+                 !object.ReferenceEquals(
+                     observed.Clause,
+                     actual.Clauses[wanted.ClauseIndex.Value])))
+            {
+                throw new XunitException(
+                    prefix + $"syntax[{index}].clauseIndex does not reference the exact compatibility Clause");
+            }
+        }
+    }
+
+    private static void ValidateExpectedSyntax(
+        IReadOnlyList<ExpectedSyntaxNode> expected,
+        string prefix)
+    {
+        if (expected.Count == 0 ||
+            expected[0].Kind != ShellSyntaxKind.Block ||
+            expected[0].ParentIndex is not null ||
+            expected[0].Region != CommandAncestryRegion.Unknown ||
+            expected[0].ChildIndex is not null ||
+            expected[0].ListOperator is not null)
+        {
+            throw new XunitException(prefix + "syntax[0] must be the root block");
+        }
+
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var node = expected[index];
+            if (node.Kind == ShellSyntaxKind.Unknown ||
+                (node.Kind == ShellSyntaxKind.SimpleCommand) != node.ClauseIndex.HasValue ||
+                (node.Kind == ShellSyntaxKind.Group) != node.GroupKind.HasValue)
+            {
+                throw new XunitException(
+                    prefix + $"syntax[{index}] has an invalid kind-specific field");
+            }
+
+            if (node.SourceStart.HasValue != node.SourceLength.HasValue ||
+                node.SourceStart < 0 ||
+                node.SourceLength < 0 ||
+                node.ChildIndex < 0)
+            {
+                throw new XunitException(
+                    prefix + $"syntax[{index}] has an invalid coordinate");
+            }
+
+            if (index == 0)
+            {
+                continue;
+            }
+
+            if (node.ParentIndex is null ||
+                node.ParentIndex < 0 ||
+                node.ParentIndex >= index)
+            {
+                throw new XunitException(
+                    prefix + $"syntax[{index}].parentIndex must name an earlier node");
+            }
+
+            var parent = expected[node.ParentIndex.Value];
+            var relationshipIsValid = parent.Kind switch
+            {
+                ShellSyntaxKind.Block =>
+                    node.Region == (node.ParentIndex == 0
+                        ? CommandAncestryRegion.Root
+                        : CommandAncestryRegion.Statement) &&
+                    node.ChildIndex.HasValue,
+                ShellSyntaxKind.SimpleCommand =>
+                    node.Region == CommandAncestryRegion.Substitution &&
+                    node.ChildIndex.HasValue,
+                ShellSyntaxKind.Pipeline =>
+                    node.Region == CommandAncestryRegion.PipelineStage &&
+                    node.ChildIndex.HasValue,
+                ShellSyntaxKind.CommandList =>
+                    node.Region == CommandAncestryRegion.Statement &&
+                    node.ChildIndex.HasValue &&
+                    node.ListOperator.HasValue,
+                ShellSyntaxKind.Group =>
+                    node.Region == CommandAncestryRegion.GroupBody &&
+                    node.ChildIndex is null,
+                ShellSyntaxKind.ForEach =>
+                    (node.Region is CommandAncestryRegion.Iterator or
+                        CommandAncestryRegion.LoopBody) &&
+                    node.ChildIndex is null,
+                ShellSyntaxKind.ConditionLoop =>
+                    (node.Region is CommandAncestryRegion.Condition or
+                        CommandAncestryRegion.LoopBody) &&
+                    node.ChildIndex is null,
+                ShellSyntaxKind.Conditional =>
+                    node.Region == CommandAncestryRegion.Branch &&
+                    node.ChildIndex.HasValue,
+                ShellSyntaxKind.ConditionalBranch =>
+                    (node.Region is CommandAncestryRegion.Condition or
+                        CommandAncestryRegion.Branch) &&
+                    node.ChildIndex is null,
+                ShellSyntaxKind.CommandSubstitution =>
+                    node.Region == CommandAncestryRegion.Substitution,
+                _ => false,
+            };
+            if (!relationshipIsValid ||
+                parent.Kind != ShellSyntaxKind.CommandList && node.ListOperator.HasValue)
+            {
+                throw new XunitException(
+                    prefix + $"syntax[{index}] has an invalid parent relationship");
+            }
+        }
+    }
+
+    private static void AssertCommandsEqual(
+        IReadOnlyList<ExpectedCommandOccurrence> expected,
+        ParsedCommand actual,
+        string prefix)
+    {
+        if (expected.Count != actual.Commands.Count)
+        {
+            throw new XunitException(
+                prefix + $"commands.count: expected={expected.Count}, actual={actual.Commands.Count}");
+        }
+
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var wanted = expected[index];
+            var observed = actual.Commands[index];
+            if (wanted.ImmediateRole == CommandOccurrenceRole.Unknown ||
+                observed.ImmediateRole == CommandOccurrenceRole.Unknown)
+            {
+                throw new XunitException(
+                    prefix + $"commands[{index}].immediateRole must be known");
+            }
+
+            if (wanted.ClauseIndex < 0 || wanted.ClauseIndex >= actual.Clauses.Count)
+            {
+                throw new XunitException(
+                    prefix + $"commands[{index}].clauseIndex is outside Clauses");
+            }
+
+            if (!object.ReferenceEquals(
+                    observed.Clause,
+                    actual.Clauses[wanted.ClauseIndex]))
+            {
+                throw new XunitException(
+                    prefix + $"commands[{index}].clauseIndex does not reference the exact compatibility Clause");
+            }
+
+            if (wanted.ImmediateRole != observed.ImmediateRole ||
+                wanted.IsComplete != observed.IsComplete)
+            {
+                throw new XunitException(
+                    prefix + $"commands[{index}]: expected role={wanted.ImmediateRole}, complete={wanted.IsComplete}; "
+                    + $"actual role={observed.ImmediateRole}, complete={observed.IsComplete}");
+            }
+
+            var expectedFrames = wanted.Ancestry ?? new List<ExpectedCommandAncestryFrame>();
+            if (expectedFrames.Count != observed.Ancestry.Count)
+            {
+                throw new XunitException(
+                    prefix + $"commands[{index}].ancestry.count: "
+                    + $"expected={expectedFrames.Count}, actual={observed.Ancestry.Count}");
+            }
+
+            for (var frameIndex = 0; frameIndex < expectedFrames.Count; frameIndex++)
+            {
+                var expectedFrame = expectedFrames[frameIndex];
+                var actualFrame = observed.Ancestry[frameIndex];
+                if (expectedFrame.AncestorKind == ShellSyntaxKind.Unknown ||
+                    actualFrame.AncestorKind == ShellSyntaxKind.Unknown ||
+                    expectedFrame.Region == CommandAncestryRegion.Unknown ||
+                    actualFrame.Region == CommandAncestryRegion.Unknown)
+                {
+                    throw new XunitException(
+                        prefix + $"commands[{index}].ancestry[{frameIndex}] contains an unknown enum");
+                }
+
+                if (expectedFrame.AncestorKind != actualFrame.AncestorKind ||
+                    expectedFrame.Region != actualFrame.Region ||
+                    expectedFrame.ChildIndex != actualFrame.ChildIndex ||
+                    expectedFrame.SourceStart != actualFrame.SourceStart ||
+                    expectedFrame.SourceLength != actualFrame.SourceLength)
+                {
+                    throw new XunitException(
+                        prefix + $"commands[{index}].ancestry[{frameIndex}] differs");
+                }
+            }
+        }
+    }
+
+    private static void AppendSyntax(
+        ShellSyntaxNode node,
+        int? parentIndex,
+        CommandAncestryRegion region,
+        int? childIndex,
+        CompoundOperator? listOperator,
+        IReadOnlyList<Clause> clauses,
+        List<ActualSyntaxNode> nodes,
+        bool isRootBlock = false)
+    {
+        if (node.Kind == ShellSyntaxKind.Unknown)
+        {
+            throw new XunitException("Cannot flatten an unknown syntax node into corpus expectations");
+        }
+
+        var clause = (node as SimpleCommandSyntax)?.Clause;
+        int? clauseIndex = clause is null ? null : FindClauseIndex(clauses, clause);
+        var currentIndex = nodes.Count;
+        nodes.Add(new ActualSyntaxNode(
+            node.Kind,
+            parentIndex,
+            region,
+            childIndex,
+            node.SourceStart,
+            node.SourceLength,
+            clauseIndex,
+            (node as GroupSyntax)?.GroupKind,
+            listOperator,
+            clause));
+
+        switch (node)
+        {
+            case ShellBlockSyntax block:
+                var statementRegion = isRootBlock
+                    ? CommandAncestryRegion.Root
+                    : CommandAncestryRegion.Statement;
+                for (var index = 0; index < block.Statements.Count; index++)
+                {
+                    AppendSyntax(
+                        block.Statements[index],
+                        currentIndex,
+                        statementRegion,
+                        index,
+                        listOperator: null,
+                        clauses,
+                        nodes);
+                }
+
+                break;
+            case SimpleCommandSyntax simple:
+                for (var index = 0; index < simple.Substitutions.Count; index++)
+                {
+                    AppendSyntax(
+                        simple.Substitutions[index],
+                        currentIndex,
+                        CommandAncestryRegion.Substitution,
+                        index,
+                        listOperator: null,
+                        clauses,
+                        nodes);
+                }
+
+                break;
+            case PipelineSyntax pipeline:
+                for (var index = 0; index < pipeline.Stages.Count; index++)
+                {
+                    AppendSyntax(
+                        pipeline.Stages[index],
+                        currentIndex,
+                        CommandAncestryRegion.PipelineStage,
+                        index,
+                        listOperator: null,
+                        clauses,
+                        nodes);
+                }
+
+                break;
+            case CommandListSyntax list:
+                for (var index = 0; index < list.Items.Count; index++)
+                {
+                    AppendSyntax(
+                        list.Items[index].Command,
+                        currentIndex,
+                        CommandAncestryRegion.Statement,
+                        index,
+                        list.Items[index].Operator,
+                        clauses,
+                        nodes);
+                }
+
+                break;
+            case GroupSyntax group:
+                AppendSyntax(
+                    group.Body,
+                    currentIndex,
+                    CommandAncestryRegion.GroupBody,
+                    childIndex: null,
+                    listOperator: null,
+                    clauses,
+                    nodes);
+                break;
+            case ForEachSyntax forEach:
+                AppendSyntax(
+                    forEach.IteratorCommands,
+                    currentIndex,
+                    CommandAncestryRegion.Iterator,
+                    childIndex: null,
+                    listOperator: null,
+                    clauses,
+                    nodes);
+                AppendSyntax(
+                    forEach.Body,
+                    currentIndex,
+                    CommandAncestryRegion.LoopBody,
+                    childIndex: null,
+                    listOperator: null,
+                    clauses,
+                    nodes);
+                break;
+            case ConditionLoopSyntax loop:
+                AppendSyntax(
+                    loop.Condition,
+                    currentIndex,
+                    CommandAncestryRegion.Condition,
+                    childIndex: null,
+                    listOperator: null,
+                    clauses,
+                    nodes);
+                AppendSyntax(
+                    loop.Body,
+                    currentIndex,
+                    CommandAncestryRegion.LoopBody,
+                    childIndex: null,
+                    listOperator: null,
+                    clauses,
+                    nodes);
+                break;
+            case ConditionalSyntax conditional:
+                for (var index = 0; index < conditional.Branches.Count; index++)
+                {
+                    AppendSyntax(
+                        conditional.Branches[index],
+                        currentIndex,
+                        CommandAncestryRegion.Branch,
+                        index,
+                        listOperator: null,
+                        clauses,
+                        nodes);
+                }
+
+                if (conditional.Else is not null)
+                {
+                    AppendSyntax(
+                        conditional.Else,
+                        currentIndex,
+                        CommandAncestryRegion.Branch,
+                        conditional.Branches.Count,
+                        listOperator: null,
+                        clauses,
+                        nodes);
+                }
+
+                break;
+            case ConditionalBranchSyntax branch:
+                AppendSyntax(
+                    branch.Condition,
+                    currentIndex,
+                    CommandAncestryRegion.Condition,
+                    childIndex: null,
+                    listOperator: null,
+                    clauses,
+                    nodes);
+                AppendSyntax(
+                    branch.Body,
+                    currentIndex,
+                    CommandAncestryRegion.Branch,
+                    childIndex: null,
+                    listOperator: null,
+                    clauses,
+                    nodes);
+                break;
+            case CommandSubstitutionSyntax substitution:
+                AppendSyntax(
+                    substitution.Body,
+                    currentIndex,
+                    CommandAncestryRegion.Substitution,
+                    childIndex,
+                    listOperator: null,
+                    clauses,
+                    nodes);
+                break;
+            default:
+                throw new XunitException(
+                    $"Cannot flatten unsupported syntax type {node.GetType().FullName} into corpus expectations");
+        }
+    }
+
+    private static int FindClauseIndex(IReadOnlyList<Clause> clauses, Clause clause)
+    {
+        for (var index = 0; index < clauses.Count; index++)
+        {
+            if (object.ReferenceEquals(clauses[index], clause))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string Summarize(ExpectedSyntaxNode node) =>
+        $"{{kind={node.Kind}, parent={node.ParentIndex}, region={node.Region}, "
+        + $"child={node.ChildIndex}, span={node.SourceStart}:{node.SourceLength}, "
+        + $"clause={node.ClauseIndex}, group={node.GroupKind}, listOp={node.ListOperator}}}";
+
+    private static string Summarize(ActualSyntaxNode node) =>
+        $"{{kind={node.Kind}, parent={node.ParentIndex}, region={node.Region}, "
+        + $"child={node.ChildIndex}, span={node.SourceStart}:{node.SourceLength}, "
+        + $"clause={node.ClauseIndex}, group={node.GroupKind}, listOp={node.ListOperator}}}";
+
+    private sealed record ActualSyntaxNode(
+        ShellSyntaxKind Kind,
+        int? ParentIndex,
+        CommandAncestryRegion Region,
+        int? ChildIndex,
+        int? SourceStart,
+        int? SourceLength,
+        int? ClauseIndex,
+        ShellGroupKind? GroupKind,
+        CompoundOperator? ListOperator,
+        Clause? Clause);
 
     private static void AssertClauseEqual(ExpectedClause expected, Clause actual, string path)
     {

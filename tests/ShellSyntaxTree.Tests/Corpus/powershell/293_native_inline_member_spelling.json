@@ -3,16 +3,38 @@
   "input": "curl --output=$HOME.Length https://example.invalid/api",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["curl"],
-      "args": [
-        { "raw": "--output", "kind": "Literal", "isPath": false, "isFlag": true },
-        { "raw": "$HOME.Length", "kind": "Tilde", "isPath": true, "resolved": "C:/Users/user.Length" },
-        { "raw": "https://example.invalid/api", "kind": "Literal", "isPath": false }
-      ],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "curl"
+        ],
+        "args": [
+          {
+            "raw": "--output",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "$HOME.Length",
+            "kind": "Tilde",
+            "isPath": true,
+            "resolved": "C:/Users/user.Length",
+            "isFlag": false
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "The same authored fragment has native rather than cmdlet binding semantics."
 }
