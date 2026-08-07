@@ -1,14 +1,27 @@
 {
   "name": "Quoted native wildcard is a literal path",
-  "input": "git add \"*.txt\"",
+  "input": "git add \u0022*.txt\u0022",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["git", "add"],
-      "args": [{ "raw": "\"*.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/*.txt" }],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git",
+          "add"
+        ],
+        "args": [
+          {
+            "raw": "\u0022*.txt\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/*.txt",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "PowerShell native argument wildcard eligibility is quote-sensitive."
 }

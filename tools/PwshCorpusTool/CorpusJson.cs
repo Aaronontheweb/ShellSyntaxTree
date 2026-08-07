@@ -30,13 +30,19 @@ internal static class CorpusJson
         ParsedCommand parsed,
         string notes,
         bool outOfScope,
-        bool includeElements)
+        bool includeElements,
+        bool includeStructure,
+        bool includeOptionalAssertions)
     {
         var obj = new JsonObject
         {
             ["name"] = name,
             ["input"] = input,
-            ["expected"] = BuildExpected(parsed, includeElements),
+            ["expected"] = BuildExpected(
+                parsed,
+                includeElements,
+                includeStructure,
+                includeOptionalAssertions),
             ["notes"] = notes,
         };
 
@@ -48,7 +54,11 @@ internal static class CorpusJson
         return obj.ToJsonString(WriteOptions) + "\n";
     }
 
-    private static JsonObject BuildExpected(ParsedCommand parsed, bool includeElements)
+    private static JsonObject BuildExpected(
+        ParsedCommand parsed,
+        bool includeElements,
+        bool includeStructure,
+        bool includeOptionalAssertions)
     {
         var expected = new JsonObject { ["isUnparseable"] = parsed.IsUnparseable };
         if (parsed.IsUnparseable)
@@ -60,14 +70,294 @@ internal static class CorpusJson
         var clauses = new JsonArray();
         foreach (var clause in parsed.Clauses)
         {
-            clauses.Add(BuildClause(clause, includeElements));
+            clauses.Add(BuildClause(clause, includeElements, includeOptionalAssertions));
         }
 
         expected["clauses"] = clauses;
+        if (includeStructure)
+        {
+            expected["syntax"] = BuildSyntax(parsed);
+            expected["commands"] = BuildCommands(parsed);
+        }
+
         return expected;
     }
 
-    private static JsonObject BuildClause(Clause clause, bool includeElements)
+    private static JsonArray BuildSyntax(ParsedCommand parsed)
+    {
+        var nodes = new JsonArray();
+        AppendSyntax(
+            parsed.Syntax,
+            parentIndex: null,
+            CommandAncestryRegion.Unknown,
+            childIndex: null,
+            listOperator: null,
+            parsed,
+            nodes,
+            isRootBlock: true);
+        return nodes;
+    }
+
+    private static void AppendSyntax(
+        ShellSyntaxNode node,
+        int? parentIndex,
+        CommandAncestryRegion region,
+        int? childIndex,
+        CompoundOperator? listOperator,
+        ParsedCommand parsed,
+        JsonArray nodes,
+        bool isRootBlock = false)
+    {
+        if (node.Kind == ShellSyntaxKind.Unknown)
+        {
+            throw new InvalidOperationException(
+                "Cannot generate corpus expectations for an unknown syntax node");
+        }
+
+        var currentIndex = nodes.Count;
+        var clause = (node as SimpleCommandSyntax)?.Clause;
+        var clauseIndex = clause is null ? (int?)null : FindClauseIndex(parsed, clause);
+        nodes.Add(new JsonObject
+        {
+            ["kind"] = node.Kind.ToString(),
+            ["parentIndex"] = JsonValue.Create(parentIndex),
+            ["region"] = region.ToString(),
+            ["childIndex"] = JsonValue.Create(childIndex),
+            ["sourceStart"] = JsonValue.Create(node.SourceStart),
+            ["sourceLength"] = JsonValue.Create(node.SourceLength),
+            ["clauseIndex"] = JsonValue.Create(clauseIndex),
+            ["groupKind"] = (node as GroupSyntax)?.GroupKind.ToString(),
+            ["listOperator"] = listOperator?.ToString(),
+        });
+
+        switch (node)
+        {
+            case ShellBlockSyntax block:
+                var statementRegion = isRootBlock
+                    ? CommandAncestryRegion.Root
+                    : CommandAncestryRegion.Statement;
+                for (var index = 0; index < block.Statements.Count; index++)
+                {
+                    AppendSyntax(
+                        block.Statements[index],
+                        currentIndex,
+                        statementRegion,
+                        index,
+                        listOperator: null,
+                        parsed,
+                        nodes);
+                }
+
+                break;
+            case SimpleCommandSyntax simple:
+                for (var index = 0; index < simple.Substitutions.Count; index++)
+                {
+                    AppendSyntax(
+                        simple.Substitutions[index],
+                        currentIndex,
+                        CommandAncestryRegion.Substitution,
+                        index,
+                        listOperator: null,
+                        parsed,
+                        nodes);
+                }
+
+                break;
+            case PipelineSyntax pipeline:
+                for (var index = 0; index < pipeline.Stages.Count; index++)
+                {
+                    AppendSyntax(
+                        pipeline.Stages[index],
+                        currentIndex,
+                        CommandAncestryRegion.PipelineStage,
+                        index,
+                        listOperator: null,
+                        parsed,
+                        nodes);
+                }
+
+                break;
+            case CommandListSyntax list:
+                for (var index = 0; index < list.Items.Count; index++)
+                {
+                    AppendSyntax(
+                        list.Items[index].Command,
+                        currentIndex,
+                        CommandAncestryRegion.Statement,
+                        index,
+                        list.Items[index].Operator,
+                        parsed,
+                        nodes);
+                }
+
+                break;
+            case GroupSyntax group:
+                AppendSyntax(
+                    group.Body,
+                    currentIndex,
+                    CommandAncestryRegion.GroupBody,
+                    childIndex: null,
+                    listOperator: null,
+                    parsed,
+                    nodes);
+                break;
+            case ForEachSyntax forEach:
+                AppendSyntax(
+                    forEach.IteratorCommands,
+                    currentIndex,
+                    CommandAncestryRegion.Iterator,
+                    childIndex: null,
+                    listOperator: null,
+                    parsed,
+                    nodes);
+                AppendSyntax(
+                    forEach.Body,
+                    currentIndex,
+                    CommandAncestryRegion.LoopBody,
+                    childIndex: null,
+                    listOperator: null,
+                    parsed,
+                    nodes);
+                break;
+            case ConditionLoopSyntax loop:
+                AppendSyntax(
+                    loop.Condition,
+                    currentIndex,
+                    CommandAncestryRegion.Condition,
+                    childIndex: null,
+                    listOperator: null,
+                    parsed,
+                    nodes);
+                AppendSyntax(
+                    loop.Body,
+                    currentIndex,
+                    CommandAncestryRegion.LoopBody,
+                    childIndex: null,
+                    listOperator: null,
+                    parsed,
+                    nodes);
+                break;
+            case ConditionalSyntax conditional:
+                for (var index = 0; index < conditional.Branches.Count; index++)
+                {
+                    AppendSyntax(
+                        conditional.Branches[index],
+                        currentIndex,
+                        CommandAncestryRegion.Branch,
+                        index,
+                        listOperator: null,
+                        parsed,
+                        nodes);
+                }
+
+                if (conditional.Else is not null)
+                {
+                    AppendSyntax(
+                        conditional.Else,
+                        currentIndex,
+                        CommandAncestryRegion.Branch,
+                        conditional.Branches.Count,
+                        listOperator: null,
+                        parsed,
+                        nodes);
+                }
+
+                break;
+            case ConditionalBranchSyntax branch:
+                AppendSyntax(
+                    branch.Condition,
+                    currentIndex,
+                    CommandAncestryRegion.Condition,
+                    childIndex: null,
+                    listOperator: null,
+                    parsed,
+                    nodes);
+                AppendSyntax(
+                    branch.Body,
+                    currentIndex,
+                    CommandAncestryRegion.Branch,
+                    childIndex: null,
+                    listOperator: null,
+                    parsed,
+                    nodes);
+                break;
+            case CommandSubstitutionSyntax substitution:
+                AppendSyntax(
+                    substitution.Body,
+                    currentIndex,
+                    CommandAncestryRegion.Substitution,
+                    childIndex,
+                    listOperator: null,
+                    parsed,
+                    nodes);
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Cannot generate corpus expectations for syntax type {node.GetType().FullName}");
+        }
+    }
+
+    private static JsonArray BuildCommands(ParsedCommand parsed)
+    {
+        var commands = new JsonArray();
+        foreach (var command in parsed.Commands)
+        {
+            if (command.ImmediateRole == CommandOccurrenceRole.Unknown)
+            {
+                throw new InvalidOperationException(
+                    "Cannot generate corpus expectations for an unknown command role");
+            }
+
+            var ancestry = new JsonArray();
+            foreach (var frame in command.Ancestry)
+            {
+                if (frame.AncestorKind == ShellSyntaxKind.Unknown ||
+                    frame.Region == CommandAncestryRegion.Unknown)
+                {
+                    throw new InvalidOperationException(
+                        "Cannot generate corpus expectations for unknown command ancestry");
+                }
+
+                ancestry.Add(new JsonObject
+                {
+                    ["ancestorKind"] = frame.AncestorKind.ToString(),
+                    ["region"] = frame.Region.ToString(),
+                    ["childIndex"] = JsonValue.Create(frame.ChildIndex),
+                    ["sourceStart"] = JsonValue.Create(frame.SourceStart),
+                    ["sourceLength"] = JsonValue.Create(frame.SourceLength),
+                });
+            }
+
+            commands.Add(new JsonObject
+            {
+                ["clauseIndex"] = FindClauseIndex(parsed, command.Clause),
+                ["immediateRole"] = command.ImmediateRole.ToString(),
+                ["isComplete"] = command.IsComplete,
+                ["ancestry"] = ancestry,
+            });
+        }
+
+        return commands;
+    }
+
+    private static int FindClauseIndex(ParsedCommand parsed, Clause clause)
+    {
+        for (var index = 0; index < parsed.Clauses.Count; index++)
+        {
+            if (object.ReferenceEquals(parsed.Clauses[index], clause))
+            {
+                return index;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Structural corpus generation found a Clause outside ParsedCommand.Clauses");
+    }
+
+    private static JsonObject BuildClause(
+        Clause clause,
+        bool includeElements,
+        bool includeOptionalAssertions)
     {
         var verb = new JsonArray();
         foreach (var token in clause.Verb.Tokens)
@@ -94,7 +384,7 @@ internal static class CorpusJson
         var args = new JsonArray();
         foreach (var arg in clause.Args)
         {
-            args.Add(BuildArg(arg));
+            args.Add(BuildArg(arg, includeOptionalAssertions));
         }
 
         obj["args"] = args;
@@ -102,7 +392,7 @@ internal static class CorpusJson
         var redirects = new JsonArray();
         foreach (var redirect in clause.Redirects)
         {
-            redirects.Add(BuildRedirect(redirect));
+            redirects.Add(BuildRedirect(redirect, includeOptionalAssertions));
         }
 
         obj["redirects"] = redirects;
@@ -131,7 +421,7 @@ internal static class CorpusJson
         return obj;
     }
 
-    private static JsonObject BuildArg(Arg arg)
+    private static JsonObject BuildArg(Arg arg, bool includeOptionalAssertions)
     {
         var obj = new JsonObject
         {
@@ -144,6 +434,15 @@ internal static class CorpusJson
         {
             obj["resolved"] = arg.Resolved;
         }
+        else if (includeOptionalAssertions)
+        {
+            obj["resolved"] = "__NULL__";
+        }
+
+        if (includeOptionalAssertions)
+        {
+            obj["isFlag"] = arg.IsFlag;
+        }
 
         if (arg.IsCwdAttribution)
         {
@@ -153,7 +452,9 @@ internal static class CorpusJson
         return obj;
     }
 
-    private static JsonObject BuildRedirect(Redirect redirect)
+    private static JsonObject BuildRedirect(
+        Redirect redirect,
+        bool includeOptionalAssertions)
     {
         var obj = new JsonObject
         {
@@ -164,6 +465,10 @@ internal static class CorpusJson
         if (redirect.IsDynamicSkip)
         {
             obj["isDynamicSkip"] = true;
+        }
+        else if (includeOptionalAssertions)
+        {
+            obj["isDynamicSkip"] = false;
         }
 
         return obj;

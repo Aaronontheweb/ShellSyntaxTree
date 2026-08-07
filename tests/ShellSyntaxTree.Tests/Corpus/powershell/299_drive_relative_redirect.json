@@ -1,14 +1,32 @@
 {
   "name": "Drive-relative redirect fails closed",
-  "input": "Write-Output ok > C:relative.txt",
+  "input": "Write-Output ok \u003E C:relative.txt",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Write-Output"],
-      "args": [{ "raw": "ok", "kind": "Literal", "isPath": false }],
-      "redirects": [{ "direction": "Out", "target": "C:relative.txt", "isDynamicSkip": true }]
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "ok",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:relative.txt",
+            "isDynamicSkip": true
+          }
+        ]
+      }
+    ]
   },
   "notes": "A configured C drive does not prove its drive-relative current location."
 }

@@ -1,14 +1,26 @@
 {
   "name": "Runtime PowerShell braced variable fails closed",
-  "input": "Get-Content \"${braced-name}\"",
+  "input": "Get-Content \u0022${braced-name}\u0022",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-Content"],
-      "args": [{ "raw": "\"${braced-name}\"", "kind": "DynamicSkip", "isPath": false }],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "\u0022${braced-name}\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "A braced variable name is a recognized expansion rather than an exact literal filename."
 }

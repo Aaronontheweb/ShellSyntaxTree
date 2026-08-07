@@ -1,10 +1,9 @@
 {
   "name": "Unterminated PowerShell braced interpolation is unparseable",
-  "input": "Get-Content \"${HOME\"",
+  "input": "Get-Content \u0022${HOME\u0022",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "unbalanced '${'",
-    "clauses": []
+    "unparseableReasonContains": "unbalanced \u0027${\u0027 variable interpolation"
   },
   "notes": "PowerShell reports parser errors; no compatibility path is exposed."
 }

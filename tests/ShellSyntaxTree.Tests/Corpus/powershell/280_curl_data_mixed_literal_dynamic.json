@@ -67,5 +67,5 @@
       }
     ]
   },
-  "notes": "All fragments are literal, so the curl @ prefix is removed without reinterpreting the quoted $HOME text."
+  "notes": "Resolver-sensitive mixed quoting safe-fails instead of expanding literal bytes."
 }

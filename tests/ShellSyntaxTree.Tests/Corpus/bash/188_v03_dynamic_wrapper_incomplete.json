@@ -1,0 +1,35 @@
+{
+  "name": "v0.3 dynamic bash command string remains incomplete",
+  "input": "bash -c \"$code\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["bash"],
+        "args": [
+          { "raw": "-c", "kind": "Literal", "isPath": false },
+          { "raw": "\"$code\"", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      }
+    ],
+    "syntax": [
+      { "kind": "Block", "parentIndex": null, "region": "Unknown", "childIndex": null, "sourceStart": 0, "sourceLength": 15, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "SimpleCommand", "parentIndex": 0, "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 15, "clauseIndex": 0, "groupKind": null, "listOperator": null }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 15 }
+        ]
+      }
+    ]
+  },
+  "notes": "An expanding command-string body cannot be decoded as one exact static program, so the direct host leaf remains incomplete."
+}

@@ -364,6 +364,7 @@ public class CorpusRunnerTests
         PropertyNameCaseInsensitive = true,
         ReadCommentHandling = JsonCommentHandling.Skip,
         AllowTrailingCommas = true,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
         Converters = { new JsonStringEnumConverter() },
     };
 }
@@ -396,6 +397,63 @@ public sealed record ExpectedParsedCommand
     public string? UnparseableReasonContains { get; init; }
 
     public List<ExpectedClause>? Clauses { get; init; }
+
+    /// <summary>
+    /// Optional pre-order structural projection. When present, every syntax
+    /// node, relationship, span, and simple-command clause identity is pinned.
+    /// </summary>
+    public List<ExpectedSyntaxNode>? Syntax { get; init; }
+
+    /// <summary>
+    /// Optional executable-accounting projection. When present, command order,
+    /// role, ancestry, completeness, and compatibility-clause identity are pinned.
+    /// </summary>
+    public List<ExpectedCommandOccurrence>? Commands { get; init; }
+}
+
+public sealed record ExpectedSyntaxNode
+{
+    public ShellSyntaxKind Kind { get; init; }
+
+    public int? ParentIndex { get; init; }
+
+    public CommandAncestryRegion Region { get; init; }
+
+    public int? ChildIndex { get; init; }
+
+    public int? SourceStart { get; init; }
+
+    public int? SourceLength { get; init; }
+
+    public int? ClauseIndex { get; init; }
+
+    public ShellGroupKind? GroupKind { get; init; }
+
+    public CompoundOperator? ListOperator { get; init; }
+}
+
+public sealed record ExpectedCommandOccurrence
+{
+    public int ClauseIndex { get; init; }
+
+    public CommandOccurrenceRole ImmediateRole { get; init; }
+
+    public bool IsComplete { get; init; }
+
+    public List<ExpectedCommandAncestryFrame>? Ancestry { get; init; }
+}
+
+public sealed record ExpectedCommandAncestryFrame
+{
+    public ShellSyntaxKind AncestorKind { get; init; }
+
+    public CommandAncestryRegion Region { get; init; }
+
+    public int? ChildIndex { get; init; }
+
+    public int? SourceStart { get; init; }
+
+    public int? SourceLength { get; init; }
 }
 
 public sealed record ExpectedClause

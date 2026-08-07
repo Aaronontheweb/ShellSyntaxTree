@@ -49,7 +49,13 @@ and parser slice exists. The PII audit scans both corpus trees.
 
 The curated inputs live in `tools/PwshCorpusTool/CorpusManifest.cs`; the
 `expected` AST is generated from `PwshParser`, and `PwshOracleTests`
-independently validates every input against real `pwsh`.
+independently validates every input against real `pwsh`. The manifest owns
+every checked-in PowerShell entry. `IncludeStructure` opts selected entries
+into exact `syntax` / `commands` expectations, while
+`IncludeOptionalAssertions` preserves explicit false/null security assertions
+for cases that require them. A safe generator change MUST regenerate to a
+temporary directory and produce an exact directory diff before rewriting the
+checked-in corpus.
 
 ## Source Control and CI
 

@@ -3,16 +3,38 @@
   "input": "curl --output $HOME.Length https://example.invalid/api",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["curl"],
-      "args": [
-        { "raw": "--output", "kind": "Literal", "isPath": false, "isFlag": true },
-        { "raw": "$HOME.Length", "kind": "DynamicSkip", "isPath": false },
-        { "raw": "https://example.invalid/api", "kind": "Literal", "isPath": false }
-      ],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "curl"
+        ],
+        "args": [
+          {
+            "raw": "--output",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "$HOME.Length",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "A bare variable at the start of a spaced native argument remains a PowerShell member expression; native command kind does not turn the suffix into literal text."
 }

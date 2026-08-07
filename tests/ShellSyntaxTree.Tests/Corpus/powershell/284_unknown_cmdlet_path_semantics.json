@@ -3,15 +3,31 @@
   "input": "Get-Foo -Path FileSystem::C:/safe",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-Foo"],
-      "args": [
-        { "raw": "-Path", "kind": "Literal", "isPath": false, "isFlag": true },
-        { "raw": "FileSystem::C:/safe", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__" }
-      ],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Foo"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "FileSystem::C:/safe",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "Only a closed-table known cmdlet or alias may activate provider and parameter semantics."
 }

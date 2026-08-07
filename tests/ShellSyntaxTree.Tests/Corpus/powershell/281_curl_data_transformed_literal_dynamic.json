@@ -67,5 +67,5 @@
       }
     ]
   },
-  "notes": "The quoted tilde remains literal after curl\u0027s @ marker is removed."
+  "notes": "Resolver-sensitive syntax exposed after curl\u0027s @ marker is removed still safe-fails."
 }

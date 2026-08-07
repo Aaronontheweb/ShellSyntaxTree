@@ -3,15 +3,31 @@
   "input": "Get-Content -Path:$HOME.Length",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-Content"],
-      "args": [
-        { "raw": "-Path", "kind": "Literal", "isPath": false, "isFlag": true },
-        { "raw": "$HOME.Length", "kind": "DynamicSkip", "isPath": false }
-      ],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "$HOME.Length",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "PowerShell binds the colon tail as a MemberExpressionAst and the parser does not evaluate it."
 }

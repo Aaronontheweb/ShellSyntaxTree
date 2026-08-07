@@ -1,0 +1,34 @@
+{
+  "name": "v0.3 hidden command substitution remains incomplete",
+  "input": "rm $(find /tmp)",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["rm"],
+        "args": [
+          { "raw": "$(find /tmp)", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      }
+    ],
+    "syntax": [
+      { "kind": "Block", "parentIndex": null, "region": "Unknown", "childIndex": null, "sourceStart": 0, "sourceLength": 15, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "SimpleCommand", "parentIndex": 0, "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 15, "clauseIndex": 0, "groupKind": null, "listOperator": null }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 15 }
+        ]
+      }
+    ]
+  },
+  "notes": "Until task 3.10 discovers the inner find command, the authored outer leaf stays visible but cannot authorize execution."
+}

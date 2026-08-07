@@ -3,15 +3,31 @@
   "input": "Get-Content -P safe.txt",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-Content"],
-      "args": [
-        { "raw": "-P", "kind": "DynamicSkip", "isPath": false, "isFlag": true },
-        { "raw": "safe.txt", "kind": "DynamicSkip", "isPath": false }
-      ],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "-P",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "safe.txt",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "The following token cannot safely be treated as either a bound value or a positional path."
 }

@@ -23,13 +23,16 @@ internal sealed record ManifestEntry(
     string Notes,
     bool OutOfScope,
     ManifestTransform Transform,
-    bool IncludeElements = false)
+    bool IncludeElements = false,
+    bool IncludeStructure = false,
+    bool IncludeOptionalAssertions = false,
+    string? DisplayName = null)
 {
-    /// <summary>Human-readable corpus entry name, derived from the slug.</summary>
+    /// <summary>Explicit display name when supplied; otherwise derived from the slug.</summary>
     public string Name =>
-        Slug.Length == 0
+        DisplayName ?? (Slug.Length == 0
             ? Slug
-            : char.ToUpperInvariant(Slug[0]) + Slug.Substring(1).Replace('_', ' ');
+            : char.ToUpperInvariant(Slug[0]) + Slug.Substring(1).Replace('_', ' '));
 
     /// <summary>The actual command string, after applying <see cref="Transform"/>.</summary>
     public string ResolveInput() => Transform switch
@@ -57,6 +60,19 @@ internal static class CorpusManifest
     private static ManifestEntry P(string slug, string input, string notes) =>
         new(slug, input, notes, false, ManifestTransform.None, IncludeElements: true);
 
+    private static ManifestEntry S(string slug, string input, string notes) =>
+        new(slug, input, notes, false, ManifestTransform.None, IncludeStructure: true);
+
+    private static ManifestEntry A(string slug, string name, string input, string notes) =>
+        new(
+            slug,
+            input,
+            notes,
+            false,
+            ManifestTransform.None,
+            IncludeOptionalAssertions: true,
+            DisplayName: name);
+
     private static ManifestEntry Oos(string slug, string input, string notes) =>
         new(slug, input, notes, true, ManifestTransform.None);
 
@@ -82,7 +98,7 @@ internal static class CorpusManifest
     internal static IReadOnlyList<ManifestEntry> All() => new List<ManifestEntry>
     {
         // ---- Simple cmdlet (§13: ≥10) ----
-        E("simple_get_date", "Get-Date", "Bare cmdlet, no args."),
+        S("simple_get_date", "Get-Date", "Bare cmdlet, no args."),
         E("simple_get_childitem", "Get-ChildItem", "Bare cmdlet, no args."),
         E("simple_get_location", "Get-Location", "Bare cmdlet, no args."),
         E("simple_get_process", "Get-Process", "Bare cmdlet, no args."),
@@ -180,7 +196,7 @@ internal static class CorpusManifest
         E("compound_mixed_operators", "Get-Date && Get-Location || Get-Process",
             "Mixed && / || chain."),
         E("compound_group", "(Get-ChildItem)", "A parenthesized pipeline marks IsSubshell."),
-        E("compound_group_pipeline", "(gci C:\\tmp | Remove-Item)",
+        S("compound_group_pipeline", "(gci C:\\tmp | Remove-Item)",
             "A group wrapping a pipeline; both clauses marked IsSubshell."),
         E("compound_newline", "Get-Date\nGet-Location",
             "A bare newline is a statement separator."),
@@ -311,7 +327,7 @@ internal static class CorpusManifest
             "-Name is a path leaf for New-Item (§7.1)."),
 
         // ---- Redirect (§13: ≥10) ----
-        E("redirect_out", "Get-Date > out.txt", "> stdout redirect (truncate)."),
+        S("redirect_out", "Get-Date > out.txt", "> stdout redirect (truncate)."),
         E("redirect_append", "Get-Date >> log.txt", ">> stdout append."),
         E("redirect_err", "Get-Process 2> err.txt", "2> stderr redirect."),
         E("redirect_err_append", "Get-Process 2>> err.txt", "2>> stderr append."),
@@ -330,7 +346,7 @@ internal static class CorpusManifest
             "pwsh -Command with a quoted-string payload; inner clause surfaces wrapped."),
         E("recursion_short_c", "pwsh -c \"Get-Date\"",
             "The short -c flag is recognized as -Command."),
-        E("recursion_command_pipeline", "pwsh -Command \"gci | rm\"",
+        S("recursion_command_pipeline", "pwsh -Command \"gci | rm\"",
             "A pipeline inside -Command surfaces as two wrapped clauses."),
         E("recursion_command_scriptblock", "pwsh -Command { Get-Date }",
             "pwsh -Command with a script-block payload."),
@@ -377,7 +393,7 @@ internal static class CorpusManifest
             "An $env: reference in a path slot resolves to DynamicSkip."),
         E("dynamic_variable_path_arg", "Remove-Item $targetPath",
             "A $var in a path slot is DynamicSkip."),
-        E("dynamic_subexpression_arg", "Get-Content $(Get-Location)",
+        S("dynamic_subexpression_arg", "Get-Content $(Get-Location)",
             "A $( ) subexpression argument is opaque DynamicSkip."),
         E("dynamic_array_subexpression", "Write-Output @(1, 2, 3)",
             "An @( ) array subexpression argument is opaque DynamicSkip."),
@@ -502,7 +518,7 @@ internal static class CorpusManifest
             "The full cmdlet name recurses into one static literal payload."),
         E("iex_command_parameter_static", "Invoke-Expression -Command 'Get-Process'",
             "The exact -Command parameter binds one static payload."),
-        E("iex_variable_dynamic", "Invoke-Expression $code",
+        S("iex_variable_dynamic", "Invoke-Expression $code",
             "A variable payload remains an Invoke-Expression clause with one DynamicSkip arg."),
         E("iex_interpolated_dynamic", "iex \"Remove-$noun C:\\x\"",
             "An interpolated payload remains opaque and dynamic."),
@@ -642,5 +658,67 @@ internal static class CorpusManifest
         P("curl_data_transformed_literal_dynamic",
             "curl --data='@~'\"/secret.json\" https://example.invalid/api",
             "Resolver-sensitive syntax exposed after curl's @ marker is removed still safe-fails."),
+
+        // ---- Resolver and interpolation hardening follow-up ----
+        A("escaped_home_literal_path", "Backtick escaped HOME remains a literal path", "Get-Content `$HOME",
+            "The backtick escape removes interpolation eligibility without erasing the authored path value."),
+        A("literalpath_abbreviation_wildcard", "LiteralPath abbreviation suppresses wildcard semantics", "Get-Content -LiteralP \"*.txt\"",
+            "Unambiguous parameter-prefix binding retains canonical LiteralPath identity."),
+        A("unknown_cmdlet_path_semantics", "Cmdlet shape alone does not prove Path semantics", "Get-Foo -Path FileSystem::C:/safe",
+            "Only a closed-table known cmdlet or alias may activate provider and parameter semantics."),
+        A("null_sink_redirect", "PowerShell null sink redirect remains non-file", "Write-Output ok > $null",
+            "The unescaped variable token is the PowerShell discard sink, not a filesystem target."),
+        A("escaped_null_redirect", "Escaped PowerShell null text is a literal file target", "Write-Output ok > `$null",
+            "Decoded text alone is insufficient: the backtick proves this is not the null sink."),
+        A("native_quoted_wildcard", "Quoted native wildcard is a literal path", "git add \"*.txt\"",
+            "PowerShell native argument wildcard eligibility is quote-sensitive."),
+        A("cmdlet_path_wildcard", "Cmdlet Path wildcard remains a pattern", "Get-Content -Path \"*.txt\"",
+            "Cmdlet Path applies wildcard semantics after quote removal, unlike native arguments."),
+        A("adjacent_escaped_redirect_target", "Adjacent escaped PowerShell redirect fragments form one target", "Write-Output ok > `$HOME\".txt\"",
+            "The redirect target is aggregated before provider-aware resolution."),
+        A("cmdlet_index_expression", "Cmdlet index expression fails closed", "Get-Content -LiteralPath $HOME[0]",
+            "PowerShell binds this as an IndexExpressionAst, not HOME plus literal suffix text."),
+        A("cmdlet_colon_member_expression", "Cmdlet colon member expression fails closed", "Get-Content -Path:$HOME.Length",
+            "PowerShell binds the colon tail as a MemberExpressionAst and the parser does not evaluate it."),
+        A("native_member_spelling", "Spaced native member expression fails closed", "curl --output $HOME.Length https://example.invalid/api",
+            "A bare variable at the start of a spaced native argument remains a PowerShell member expression; native command kind does not turn the suffix into literal text."),
+        A("native_inline_member_spelling", "Native inline member-looking spelling is literal suffix text", "curl --output=$HOME.Length https://example.invalid/api",
+            "The same authored fragment has native rather than cmdlet binding semantics."),
+        A("ambiguous_colon_parameter", "Ambiguous colon parameter fails closed", "Get-Content -P:\"safe.txt\"",
+            "-P matches multiple known parameters, so neither binding nor path mode is proved."),
+        A("ambiguous_separated_parameter", "Ambiguous separated parameter fails closed", "Get-Content -P safe.txt",
+            "The following token cannot safely be treated as either a bound value or a positional path."),
+        A("unproved_single_letter_psdrive", "Unproved single-letter PSDrive fails closed", "Get-Content Z:\\x",
+            "A single-letter drive is not proved FileSystem merely from its spelling."),
+        A("unproved_psdrive_redirect", "Unproved PSDrive redirect fails closed", "Write-Output ok > Z:\\x",
+            "Redirect path semantics require a proved PSDrive provider mapping."),
+        A("drive_relative_path", "Drive-relative path fails closed", "Get-Content C:relative.txt",
+            "C:relative.txt depends on PowerShell's per-drive current location, which parser options do not model."),
+        A("drive_relative_redirect", "Drive-relative redirect fails closed", "Write-Output ok > C:relative.txt",
+            "A configured C drive does not prove its drive-relative current location."),
+        A("quoted_member_suffix", "Quoted member-looking suffix remains exact", "Get-Content -Path $HOME\".Length\"",
+            "The quote boundary makes .Length literal text rather than a MemberExpressionAst."),
+        A("dynamic_command_identity", "Opaque PowerShell command identity remains dynamic", "Get-$(Write-Output Content) /etc/passwd",
+            "Adjacent aggregation preserves the opaque executable identity through VerbChain.IsDynamic."),
+        A("empty_path_value", "Empty PowerShell path value fails closed", "Get-Content \"\"",
+            "An empty filesystem argument is not a resolvable static path."),
+        A("runtime_question_parameter_path", "Runtime PowerShell status variable fails closed", "Get-Content \"$?\"",
+            "The special variable has a runtime value and cannot be reclassified as literal punctuation."),
+        A("runtime_numeric_variable_path", "Runtime PowerShell numeric variable fails closed", "Get-Content \"$1\"",
+            "Numeric variable identity is retained while its runtime path value remains unknown."),
+        A("runtime_unicode_variable_path", "Runtime PowerShell Unicode variable fails closed", "Get-Content \"$é\"",
+            "Unicode variable names are recognized expansions rather than literal filenames."),
+        A("unterminated_braced_interpolation", "Unterminated PowerShell braced interpolation is unparseable", "Get-Content \"${HOME\"",
+            "PowerShell reports parser errors; no compatibility path is exposed."),
+        A("escaped_open_brace_literal_path", "Escaped PowerShell interpolation start remains literal", "Get-Content \"`${HOME\"",
+            "The backtick escapes the dollar, so the open brace remains exact literal data."),
+        A("runtime_scoped_variable_path", "Runtime PowerShell scoped variable fails closed", "Get-Content \"$global:scoped\"",
+            "Scoped variable identity is retained while its runtime filesystem value remains unknown."),
+        A("runtime_braced_variable_path", "Runtime PowerShell braced variable fails closed", "Get-Content \"${braced-name}\"",
+            "A braced variable name is a recognized expansion rather than an exact literal filename."),
+
+        S("v03_mixed_list_pipeline",
+            "gci | Select-Object Name && Get-Date; Get-Process",
+            "A pipeline followed by && and ; pins statement-versus-pipeline structure."),
     };
 }

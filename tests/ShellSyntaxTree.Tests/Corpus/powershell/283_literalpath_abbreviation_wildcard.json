@@ -1,17 +1,33 @@
 {
   "name": "LiteralPath abbreviation suppresses wildcard semantics",
-  "input": "Get-Content -LiteralP \"*.txt\"",
+  "input": "Get-Content -LiteralP \u0022*.txt\u0022",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["Get-Content"],
-      "args": [
-        { "raw": "-LiteralP", "kind": "Literal", "isPath": false, "isFlag": true },
-        { "raw": "\"*.txt\"", "kind": "Literal", "isPath": true, "resolved": "C:/work/*.txt" }
-      ],
-      "redirects": []
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "-LiteralP",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\u0022*.txt\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/*.txt",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
   "notes": "Unambiguous parameter-prefix binding retains canonical LiteralPath identity."
 }
