@@ -207,6 +207,13 @@ priorities.
       unchanged. It introduces no new compatibility correction; the
       shell-oracle-proved corrections remain the ones documented in the
       preceding provenance item.
+- [x] Audit duplicated Bash and PowerShell path-normalization helpers. Share
+      only the identical string-level join and separator-normalization rules;
+      keep root detection, drive-relative handling, full segment
+      normalization, provider/PSDrive behavior, and resolver failure policy in
+      their shell-specific implementations. Direct boundary tests pin the
+      extracted helpers, while the complete resolver and corpus suites prove
+      the refactor leaves both compatibility projections unchanged.
 - [ ] Add the structural and command-occurrence projections for the existing
       grammar before enabling any control-flow construct.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
