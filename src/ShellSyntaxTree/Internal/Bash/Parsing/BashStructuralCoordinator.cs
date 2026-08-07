@@ -40,8 +40,10 @@ internal static partial class BashCommandParser
                 syntax,
                 options,
                 coordinator.GetFacts,
+                coordinator.GetForInPlan,
                 out var analyzedSyntax,
-                out var analyzedFacts) ||
+                out var analyzedFacts,
+                out var analyzedForInPlans) ||
             !ShellSyntaxProjection.TryProject(
                 analyzedSyntax,
                 analyzedFacts,
@@ -62,7 +64,9 @@ internal static partial class BashCommandParser
         };
         return new BashParseResult(
             command,
-            CreateDependencySets(projection.Commands, analyzedFacts));
+            CreateDependencySets(projection.Commands, analyzedFacts),
+            CreateValueProvenanceSets(projection.Commands, analyzedFacts),
+            analyzedForInPlans);
     }
 
     private static IReadOnlyList<CwdPathDependencySet> CreateDependencySets(
@@ -82,6 +86,23 @@ internal static partial class BashCommandParser
         return sets;
     }
 
+    private static IReadOnlyList<ShellValueProvenanceSet> CreateValueProvenanceSets(
+        IReadOnlyList<CommandOccurrence> commands,
+        Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory)
+    {
+        var sets = new ShellValueProvenanceSet[commands.Count];
+        for (var index = 0; index < sets.Length; index++)
+        {
+            var clause = commands[index].Clause;
+            var facts = factsFactory(new SimpleCommandSyntax { Clause = clause });
+            sets[index] = new ShellValueProvenanceSet(
+                clause,
+                facts.ValueProvenance);
+        }
+
+        return sets;
+    }
+
     private static BashParseResult StructuralFailure(
         string source,
         string? reason,
@@ -95,7 +116,9 @@ internal static partial class BashCommandParser
                 IsUnparseable = true,
                 UnparseableReason = reason,
             },
-            Array.Empty<CwdPathDependencySet>());
+            Array.Empty<CwdPathDependencySet>(),
+            Array.Empty<ShellValueProvenanceSet>(),
+            Array.Empty<BashForInAnalysisPlanReference>());
 
     private sealed class StructuralCoordinator
     {
@@ -108,9 +131,11 @@ internal static partial class BashCommandParser
         private readonly int _sourceStart;
         private readonly int _sourceLength;
         private readonly CdAttributionContext _attribution = new();
-        private readonly BashLoopBindingContext _bindings;
+        private readonly List<string> _activeLoopBindings;
         private readonly Dictionary<Clause, CommandOccurrenceFacts> _facts =
             new(ClauseReferenceComparer.Instance);
+        private readonly Dictionary<ForEachSyntax, BashForInAnalysisPlan> _forInPlans =
+            new(ForEachReferenceComparer.Instance);
         private int _position;
         private int _subshellDepth;
         private int _loopDepth;
@@ -126,7 +151,7 @@ internal static partial class BashCommandParser
             bool markBashCWrapped,
             int sourceStart,
             int sourceLength,
-            BashLoopBindingContext? bindings = null,
+            IReadOnlyList<string>? activeLoopBindings = null,
             bool hasUnmodeledShellStateMutation = false,
             bool hasUnmodeledVariableStateMutation = false)
         {
@@ -138,7 +163,9 @@ internal static partial class BashCommandParser
             _markBashCWrapped = markBashCWrapped;
             _sourceStart = sourceStart;
             _sourceLength = sourceLength;
-            _bindings = bindings ?? new BashLoopBindingContext();
+            _activeLoopBindings = activeLoopBindings is null
+                ? new List<string>()
+                : new List<string>(activeLoopBindings);
             _hasUnmodeledShellStateMutation = hasUnmodeledShellStateMutation;
             _hasUnmodeledVariableStateMutation = hasUnmodeledVariableStateMutation;
         }
@@ -147,6 +174,9 @@ internal static partial class BashCommandParser
             _facts.TryGetValue(simple.Clause, out var facts)
                 ? facts
                 : CreateDefaultFacts(simple.Clause);
+
+        internal BashForInAnalysisPlan? GetForInPlan(ForEachSyntax forEach) =>
+            _forInPlans.TryGetValue(forEach, out var plan) ? plan : null;
 
         private CommandOccurrenceFacts CreateDefaultFacts(Clause clause) => new()
         {
@@ -447,7 +477,8 @@ internal static partial class BashCommandParser
                         compatibilityOperator,
                         _subshellDepth > 0,
                         ref firstLeaf,
-                        out var body))
+                        out var body,
+                        out var referenceMap))
                 {
                     error = "decoded bash -c syntax could not be lifted safely";
                     return false;
@@ -463,11 +494,7 @@ internal static partial class BashCommandParser
                     SourceLength = lastToken.SourceStart + lastToken.SourceLength -
                         firstToken.SourceStart,
                 };
-                if (!TryRegisterDecodedFacts(
-                        inner,
-                        innerResult.CwdPathDependencySets,
-                        body,
-                        out error))
+                if (!TryRegisterDecodedFacts(innerResult, referenceMap, out error))
                 {
                     command = null;
                     return false;
@@ -516,9 +543,9 @@ internal static partial class BashCommandParser
             };
             var emitted = AttachAttributionArg(clause, _attribution);
             var isPotentialStateMutation = IsPotentialBindingMutation(emitted);
-            if (_bindings.Count > 0 && isPotentialStateMutation)
+            if (_activeLoopBindings.Count > 0 && isPotentialStateMutation)
             {
-                error = "Bash loop binding mutation is not supported for bounded analysis";
+                error = "Bash loop state mutation or control transfer is not supported for bounded analysis";
                 return false;
             }
 
@@ -614,7 +641,7 @@ internal static partial class BashCommandParser
                 return false;
             }
 
-            if (_bindings.Contains(bindingToken.Value))
+            if (_activeLoopBindings.Contains(bindingToken.Value))
             {
                 error = "nested Bash for-in binding reuse requires state propagation";
                 return false;
@@ -697,10 +724,9 @@ internal static partial class BashCommandParser
                 ? iterableStart
                 : iterableWords[iterableWords.Count - 1].SourceStart +
                     iterableWords[iterableWords.Count - 1].SourceLength;
-            var iterableDomain = _bindings.AnalyzeIterable(
-                iterableWords,
-                _options,
-                workingDirectoryUnknown: false);
+            var analysisPlan = BashLoopBindingContext.CapturePlan(
+                bindingToken.Value,
+                iterableWords);
             if (!TryParseIteratorSubstitutions(
                     iterableWords,
                     CurrentOptions(),
@@ -712,7 +738,7 @@ internal static partial class BashCommandParser
                 return false;
             }
 
-            _bindings.Push(bindingToken.Value, iterableDomain);
+            _activeLoopBindings.Add(bindingToken.Value);
             _loopDepth++;
             var parsedBody = TryParseList(
                 stopAtRightParen: false,
@@ -721,7 +747,7 @@ internal static partial class BashCommandParser
                 out var bodyCommand,
                 out error);
             _loopDepth--;
-            _bindings.Pop();
+            _activeLoopBindings.RemoveAt(_activeLoopBindings.Count - 1);
             if (!parsedBody)
             {
                 return false;
@@ -747,7 +773,7 @@ internal static partial class BashCommandParser
                 SourceLength = doneToken.SourceStart -
                     doToken.SourceStart - doToken.SourceLength,
             };
-            command = new ForEachSyntax
+            var forEach = new ForEachSyntax
             {
                 Binding = new LoopBindingSyntax
                 {
@@ -771,6 +797,8 @@ internal static partial class BashCommandParser
                 SourceLength = doneToken.SourceStart + doneToken.SourceLength -
                     forToken.SourceStart,
             };
+            _forInPlans.Add(forEach, analysisPlan);
+            command = forEach;
             return true;
         }
 
@@ -1176,7 +1204,7 @@ internal static partial class BashCommandParser
                 _markBashCWrapped,
                 sourceStart,
                 sourceLength,
-                _bindings.Clone(),
+                _activeLoopBindings,
                 _hasUnmodeledShellStateMutation,
                 _hasUnmodeledVariableStateMutation);
             if (!coordinator.TryParse(out body, out error))
@@ -1194,7 +1222,7 @@ internal static partial class BashCommandParser
             IReadOnlyList<BashPathResolutionSeed> pathResolutions,
             BashParserOptions parseOptions)
         {
-            var effective = new List<EffectiveArgument>();
+            var valueProvenance = new List<ShellValueElementProvenance>();
             var cwdPathDependencies = new List<CwdPathDependency>();
             for (var elementIndex = 0;
                  elementIndex < simple.Clause.Elements.Count;
@@ -1206,14 +1234,11 @@ internal static partial class BashCommandParser
                     continue;
                 }
 
-                if (element.Role == ClauseElementRole.Argument &&
-                    _bindings.TryAnalyzeEffectiveValue(value, out var domain))
+                if (element.Role == ClauseElementRole.Argument)
                 {
-                    effective.Add(new EffectiveArgument
-                    {
-                        ClauseElementIndex = elementIndex,
-                        Value = domain,
-                    });
+                    valueProvenance.Add(new ShellValueElementProvenance(
+                        elementIndex,
+                        value));
                 }
 
             }
@@ -1237,7 +1262,7 @@ internal static partial class BashCommandParser
 
             _facts.Add(simple.Clause, new CommandOccurrenceFacts
             {
-                EffectiveArguments = effective.ToArray(),
+                ValueProvenance = valueProvenance.ToArray(),
                 CwdPathDependencies = cwdPathDependencies.ToArray(),
                 IsComplete = simple.Clause.Redirects.Count == 0 &&
                     !HasUnexpandedCommandString(simple.Clause),
@@ -1292,53 +1317,103 @@ internal static partial class BashCommandParser
                 _facts.Add(pair.Key, pair.Value);
             }
 
+            foreach (var pair in nested._forInPlans)
+            {
+                _forInPlans.Add(pair.Key, pair.Value);
+            }
+
         }
 
         private bool TryRegisterDecodedFacts(
-            ParsedCommand inner,
-            IReadOnlyList<CwdPathDependencySet> dependencySets,
-            ShellBlockSyntax clonedBody,
+            BashParseResult innerResult,
+            DecodedReferenceMap referenceMap,
             out string? error)
         {
-            if (!ShellSyntaxProjection.TryProject(clonedBody, out var clonedProjection) ||
-                clonedProjection.Commands.Count != inner.Commands.Count)
+            var inner = innerResult.Command;
+            foreach (var source in inner.Commands)
             {
-                error = "decoded bash -c facts could not be mapped safely";
-                return false;
-            }
-
-            for (var index = 0; index < inner.Commands.Count; index++)
-            {
-                var source = inner.Commands[index];
-                _facts.Add(clonedProjection.Commands[index].Clause, new CommandOccurrenceFacts
+                if (!referenceMap.TryGetClause(source.Clause, out var clonedClause))
                 {
-                    EffectiveArguments = source.EffectiveArguments,
-                    WorkingDirectory = source.WorkingDirectory,
+                    error = "decoded bash -c clause facts could not be mapped safely";
+                    return false;
+                }
+
+                if (!TryFindValueProvenance(
+                        innerResult.ValueProvenanceSets,
+                        source.Clause,
+                        out var valueProvenance))
+                {
+                    error = "decoded bash -c argument provenance could not be mapped safely";
+                    return false;
+                }
+
+                if (!TryFindDependencies(
+                        innerResult.CwdPathDependencySets,
+                        source.Clause,
+                        out var cwdPathDependencies))
+                {
+                    error = "decoded bash -c cwd provenance could not be mapped safely";
+                    return false;
+                }
+
+                _facts.Add(clonedClause, new CommandOccurrenceFacts
+                {
                     Redirects = source.Redirects,
-                    CwdPathDependencies = FindDependencies(
-                        dependencySets,
-                        source.Clause),
+                    CwdPathDependencies = cwdPathDependencies,
+                    ValueProvenance = valueProvenance,
                     IsComplete = source.IsComplete,
                 });
+            }
+
+            foreach (var sourcePlan in innerResult.ForInPlans)
+            {
+                if (!referenceMap.TryGetForEach(sourcePlan.Syntax, out var clonedForEach))
+                {
+                    error = "decoded bash -c loop plan could not be mapped safely";
+                    return false;
+                }
+
+                _forInPlans.Add(clonedForEach, sourcePlan.Plan);
             }
 
             error = null;
             return true;
         }
 
-        private static IReadOnlyList<CwdPathDependency> FindDependencies(
+        private static bool TryFindValueProvenance(
+            IReadOnlyList<ShellValueProvenanceSet> provenanceSets,
+            Clause clause,
+            out IReadOnlyList<ShellValueElementProvenance> provenance)
+        {
+            foreach (var set in provenanceSets)
+            {
+                if (object.ReferenceEquals(set.Clause, clause))
+                {
+                    provenance = set.Provenance;
+                    return true;
+                }
+            }
+
+            provenance = Array.Empty<ShellValueElementProvenance>();
+            return false;
+        }
+
+        private static bool TryFindDependencies(
             IReadOnlyList<CwdPathDependencySet> dependencySets,
-            Clause clause)
+            Clause clause,
+            out IReadOnlyList<CwdPathDependency> dependencies)
         {
             foreach (var set in dependencySets)
             {
                 if (object.ReferenceEquals(set.Clause, clause))
                 {
-                    return set.Dependencies;
+                    dependencies = set.Dependencies;
+                    return true;
                 }
             }
 
-            return Array.Empty<CwdPathDependency>();
+            dependencies = Array.Empty<CwdPathDependency>();
+            return false;
         }
 
         private static bool IsPotentialBindingMutation(Clause clause)
@@ -1352,7 +1427,8 @@ internal static partial class BashCommandParser
             if (verb is "unset" or "read" or "readarray" or "mapfile" or
                 "declare" or "typeset" or "local" or "export" or "readonly" or
                 "let" or "eval" or "." or "source" or "getopts" or "set" or
-                "cd" or "chdir" or "pushd" or "popd" or "trap")
+                "cd" or "chdir" or "pushd" or "popd" or "trap" or
+                "break" or "continue" or "return" or "exit" or "exec")
             {
                 return true;
             }
@@ -1439,6 +1515,16 @@ internal static partial class BashCommandParser
             public bool Equals(Clause? x, Clause? y) => object.ReferenceEquals(x, y);
 
             public int GetHashCode(Clause obj) => RuntimeHelpers.GetHashCode(obj);
+        }
+
+        private sealed class ForEachReferenceComparer : IEqualityComparer<ForEachSyntax>
+        {
+            internal static ForEachReferenceComparer Instance { get; } = new();
+
+            public bool Equals(ForEachSyntax? x, ForEachSyntax? y) =>
+                object.ReferenceEquals(x, y);
+
+            public int GetHashCode(ForEachSyntax obj) => RuntimeHelpers.GetHashCode(obj);
         }
     }
 
@@ -1636,6 +1722,25 @@ internal static partial class BashCommandParser
         CompoundOperator firstOperator,
         bool outerSubshell,
         ref bool firstLeaf,
+        out ShellBlockSyntax clone,
+        out DecodedReferenceMap referenceMap)
+    {
+        referenceMap = new DecodedReferenceMap();
+        return TryCloneDecodedBlock(
+            source,
+            firstOperator,
+            outerSubshell,
+            ref firstLeaf,
+            referenceMap,
+            out clone);
+    }
+
+    private static bool TryCloneDecodedBlock(
+        ShellBlockSyntax source,
+        CompoundOperator firstOperator,
+        bool outerSubshell,
+        ref bool firstLeaf,
+        DecodedReferenceMap referenceMap,
         out ShellBlockSyntax clone)
     {
         if (source is null || source.Statements is null)
@@ -1652,6 +1757,7 @@ internal static partial class BashCommandParser
                     firstOperator,
                     outerSubshell,
                     ref firstLeaf,
+                    referenceMap,
                     out var cloned))
             {
                 clone = new ShellBlockSyntax();
@@ -1670,6 +1776,7 @@ internal static partial class BashCommandParser
         CompoundOperator firstOperator,
         bool outerSubshell,
         ref bool firstLeaf,
+        DecodedReferenceMap referenceMap,
         out ShellSyntaxNode? clone)
     {
         clone = null;
@@ -1681,6 +1788,7 @@ internal static partial class BashCommandParser
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out var clonedBlock))
                 {
                     return false;
@@ -1697,6 +1805,7 @@ internal static partial class BashCommandParser
                             firstOperator,
                             outerSubshell,
                             ref firstLeaf,
+                            referenceMap,
                             out var clonedSubstitution) ||
                         clonedSubstitution is not CommandSubstitutionSyntax typedSubstitution)
                     {
@@ -1708,18 +1817,20 @@ internal static partial class BashCommandParser
 
                 var clauseOperator = firstLeaf ? firstOperator : simple.Clause.Operator;
                 firstLeaf = false;
+                var clonedClause = simple.Clause with
+                {
+                    Operator = clauseOperator,
+                    IsSubshell = outerSubshell || simple.Clause.IsSubshell,
+                    IsCommandStringWrapped = true,
+                    Elements = ClauseElementProvenance.WithoutOuterSourceSpans(
+                        simple.Clause.Elements),
+                };
                 clone = new SimpleCommandSyntax
                 {
-                    Clause = simple.Clause with
-                    {
-                        Operator = clauseOperator,
-                        IsSubshell = outerSubshell || simple.Clause.IsSubshell,
-                        IsCommandStringWrapped = true,
-                        Elements = ClauseElementProvenance.WithoutOuterSourceSpans(
-                            simple.Clause.Elements),
-                    },
+                    Clause = clonedClause,
                     Substitutions = substitutions,
                 };
+                referenceMap.Add(simple.Clause, clonedClause);
                 return true;
             case PipelineSyntax pipeline:
                 return TryCloneDecodedCollection(
@@ -1727,6 +1838,7 @@ internal static partial class BashCommandParser
                     firstOperator,
                     outerSubshell,
                     ref firstLeaf,
+                    referenceMap,
                     stages => new PipelineSyntax { Stages = stages },
                     out clone);
             case CommandListSyntax list:
@@ -1738,6 +1850,7 @@ internal static partial class BashCommandParser
                             firstOperator,
                             outerSubshell,
                             ref firstLeaf,
+                            referenceMap,
                             out var itemCommand))
                     {
                         return false;
@@ -1758,6 +1871,7 @@ internal static partial class BashCommandParser
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out var groupBody))
                 {
                     return false;
@@ -1771,18 +1885,20 @@ internal static partial class BashCommandParser
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out var iterator) ||
                     !TryCloneDecodedBlock(
                         forEach.Body,
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out var forBody))
                 {
                     return false;
                 }
 
-                clone = new ForEachSyntax
+                var clonedForEach = new ForEachSyntax
                 {
                     Binding = new LoopBindingSyntax
                     {
@@ -1793,6 +1909,8 @@ internal static partial class BashCommandParser
                     IteratorCommands = iterator,
                     Body = forBody,
                 };
+                clone = clonedForEach;
+                referenceMap.Add(forEach, clonedForEach);
                 return true;
             case ConditionLoopSyntax loop:
                 if (!TryCloneDecodedBlock(
@@ -1800,12 +1918,14 @@ internal static partial class BashCommandParser
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out var condition) ||
                     !TryCloneDecodedBlock(
                         loop.Body,
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out var loopBody))
                 {
                     return false;
@@ -1827,6 +1947,7 @@ internal static partial class BashCommandParser
                             firstOperator,
                             outerSubshell,
                             ref firstLeaf,
+                            referenceMap,
                             out var clonedBranch) ||
                         clonedBranch is not ConditionalBranchSyntax typedBranch)
                     {
@@ -1842,6 +1963,7 @@ internal static partial class BashCommandParser
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out @else))
                 {
                     return false;
@@ -1855,12 +1977,14 @@ internal static partial class BashCommandParser
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out var branchCondition) ||
                     !TryCloneDecodedBlock(
                         branch.Body,
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out var branchBody))
                 {
                     return false;
@@ -1878,6 +2002,7 @@ internal static partial class BashCommandParser
                         firstOperator,
                         outerSubshell,
                         ref firstLeaf,
+                        referenceMap,
                         out var substitutionBody))
                 {
                     return false;
@@ -1895,6 +2020,7 @@ internal static partial class BashCommandParser
         CompoundOperator firstOperator,
         bool outerSubshell,
         ref bool firstLeaf,
+        DecodedReferenceMap referenceMap,
         Func<IReadOnlyList<ShellSyntaxNode>, ShellSyntaxNode> factory,
         out ShellSyntaxNode? clone)
     {
@@ -1906,6 +2032,7 @@ internal static partial class BashCommandParser
                     firstOperator,
                     outerSubshell,
                     ref firstLeaf,
+                    referenceMap,
                     out var clonedChild))
             {
                 clone = null;
@@ -1923,4 +2050,45 @@ internal static partial class BashCommandParser
     {
         Raw = source.Raw,
     };
+
+    private sealed class DecodedReferenceMap
+    {
+        private readonly List<(Clause Source, Clause Clone)> _clauses = new();
+        private readonly List<(ForEachSyntax Source, ForEachSyntax Clone)> _forEach = new();
+
+        internal void Add(Clause source, Clause clone) => _clauses.Add((source, clone));
+
+        internal void Add(ForEachSyntax source, ForEachSyntax clone) =>
+            _forEach.Add((source, clone));
+
+        internal bool TryGetClause(Clause source, out Clause clone)
+        {
+            foreach (var pair in _clauses)
+            {
+                if (object.ReferenceEquals(pair.Source, source))
+                {
+                    clone = pair.Clone;
+                    return true;
+                }
+            }
+
+            clone = null!;
+            return false;
+        }
+
+        internal bool TryGetForEach(ForEachSyntax source, out ForEachSyntax clone)
+        {
+            foreach (var pair in _forEach)
+            {
+                if (object.ReferenceEquals(pair.Source, source))
+                {
+                    clone = pair.Clone;
+                    return true;
+                }
+            }
+
+            clone = null!;
+            return false;
+        }
+    }
 }

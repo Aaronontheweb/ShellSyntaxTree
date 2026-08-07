@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash wrapped loop exit transfer rejected",
+  "input": "for f in a; do command exit 0; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "mutation or control transfer"
+  },
+  "notes": "A statically wrapped exit cannot bypass the loop control-transfer guard.",
+  "oracleExpectation": "OutOfScope"
+}

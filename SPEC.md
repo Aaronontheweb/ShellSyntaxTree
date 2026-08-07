@@ -599,7 +599,9 @@ iteration plan: `a b a` performs three state transitions and leaves an exact
 final binding of `a`; 33 authored values use widening even when every value is
 the same. An iterable that depends on an outer binding is evaluated separately
 for each concrete outer visit so correlated nested state is not flattened into
-an artificial cross-product.
+an artificial cross-product. The analyzer permits at most 4096 total loop-body
+transitions per parse; exceeding that resource budget makes the complete result
+unparseable rather than returning a partial cross-product.
 
 Each concrete iteration assigns its candidate into the analyzer variable map,
 re-evaluates the complete effective argument vector for every body occurrence,

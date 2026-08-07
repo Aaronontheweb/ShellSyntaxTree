@@ -87,17 +87,23 @@
       make the analyzer own persistent bindings, parameterized ordered plans,
       full argument provenance/effective-argv transfer, occurrence-fact joins,
       and unreachable exit partitions.
-    - [ ] 6.5c.2 Implement that corrected contract and corpus-pin `HOME`,
-      `RANDOM`, `LINENO`, `PATH`, `CDPATH`, `IFS`, 32/33 ordered visits,
-      zero-iteration state, loop-derived `cd` options, nested correlation,
-      wrapped transfers, wrapper mapping, substitutions, and pipelines.
-  - The first static-value slice deliberately leaves occurrence cwd Unknown
-    and rejects loop shell-state mutation, nested active-binding reuse, or
-    loops reached after recognized prior shell-state mutation. A separate
-    structure-aware abstract-state pass is required
-    before enabling cwd-changing bodies;
-    mutable parse-order attribution is unsound across pipelines, `&&` / `||`,
-    substitutions, and repeated iterations.
+    - [x] 6.5c.2 Make the analyzer own persistent bindings, ordered and empty
+      iteration, visit-joined effective arguments, unreachable exit partitions,
+      substitution inheritance, and explicit decoded-wrapper remapping. Pin
+      special-name rejection, 32/33 visit boundaries, duplicate order,
+      zero-iteration state, nested correlation, substitutions, pipelines, and
+      wrapper provenance in unit tests and the Bash corpus. Use bounded
+      fixed-point widening for unknown cardinality and fail atomically after
+      4096 total loop-body transitions.
+    - [ ] 6.5c.3 Re-parse each visit's complete effective argv for state
+      transfers, including loop-derived `cd` options and wrapped dispatch;
+      carry those transfers through the bounded fixed point, then remove only
+      the temporary mutation rejections whose transfers are fully modeled.
+  - The analyzer now publishes exact incoming cwd for reached loop occurrences
+    when no modeled transfer can disagree. It still rejects loop shell-state
+    mutation, nested active-binding reuse, and loops reached after recognized
+    prior shell-state mutation until 6.5c.3 reclassifies complete effective argv
+    and models the corresponding repeated transfers.
 - [ ] 6.6 Cover empty iterables, separators, multiline bodies, redirects, pipelines, nested loops, and wrapper boundaries.
 - [ ] 6.7 Add adversarial cases for option injection, mutation, unquoted expansion, indirect expansion, substitutions, and cap overflow.
 - [ ] 6.8 Add sanitized Bash corpus entries and Netclaw allow/prompt/deny integration cases.

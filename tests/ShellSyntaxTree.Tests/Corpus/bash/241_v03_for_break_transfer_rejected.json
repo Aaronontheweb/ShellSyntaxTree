@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash loop break transfer rejected",
+  "input": "for f in a b; do break; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "mutation or control transfer"
+  },
+  "notes": "A valid Bash break changes loop reachability; it fails atomically until the analyzer models that transfer.",
+  "oracleExpectation": "OutOfScope"
+}

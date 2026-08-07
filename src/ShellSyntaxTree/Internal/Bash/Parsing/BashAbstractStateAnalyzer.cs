@@ -17,38 +17,69 @@ namespace ShellSyntaxTree.Internal.Bash.Parsing;
 /// </summary>
 internal sealed class BashAbstractStateAnalyzer
 {
+    private const int MaxLoopAnalysisTransitions = 4096;
+
     private readonly BashParserOptions _options;
     private readonly Func<SimpleCommandSyntax, CommandOccurrenceFacts> _factsFactory;
+    private readonly Func<ForEachSyntax, BashForInAnalysisPlan?> _forInPlanFactory;
     private readonly Dictionary<Clause, BashAbstractState> _inputs =
         new(ClauseReferenceComparer.Instance);
+    private readonly Dictionary<Clause, Dictionary<int, ShellValueDomain>>
+        _effectiveArguments = new(ClauseReferenceComparer.Instance);
+    private readonly List<BashForInAnalysisPlanReference> _rewrittenForInPlans = new();
+    private bool _isComplete = true;
+    private int _remainingLoopAnalysisTransitions = MaxLoopAnalysisTransitions;
 
     private BashAbstractStateAnalyzer(
         BashParserOptions options,
-        Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory)
+        Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory,
+        Func<ForEachSyntax, BashForInAnalysisPlan?> forInPlanFactory)
     {
         _options = options;
         _factsFactory = factsFactory;
+        _forInPlanFactory = forInPlanFactory;
     }
 
     internal static bool TryAnalyze(
         ShellBlockSyntax syntax,
         BashParserOptions options,
         Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory,
+        Func<ForEachSyntax, BashForInAnalysisPlan?> forInPlanFactory,
         out ShellBlockSyntax analyzedSyntax,
-        out Func<SimpleCommandSyntax, CommandOccurrenceFacts> analyzedFacts)
+        out Func<SimpleCommandSyntax, CommandOccurrenceFacts> analyzedFacts,
+        out IReadOnlyList<BashForInAnalysisPlanReference> analyzedForInPlans)
     {
-        var analyzer = new BashAbstractStateAnalyzer(options, factsFactory);
+        var analyzer = new BashAbstractStateAnalyzer(
+            options,
+            factsFactory,
+            forInPlanFactory);
         var initial = new BashAbstractState(
             options.WorkingDirectory ?? Environment.CurrentDirectory,
-            hasCompatibilityAttribution: false);
+            hasCompatibilityAttribution: false,
+            new BashLoopBindingContext());
         analyzer.AnalyzeBlock(syntax, initial);
+        if (!analyzer._isComplete)
+        {
+            analyzedSyntax = syntax;
+            analyzedFacts = factsFactory;
+            analyzedForInPlans = Array.Empty<BashForInAnalysisPlanReference>();
+            return false;
+        }
 
         var facts = new Dictionary<Clause, CommandOccurrenceFacts>(
             ClauseReferenceComparer.Instance);
         analyzedSyntax = analyzer.RewriteBlock(syntax, facts);
+        if (!analyzer._isComplete)
+        {
+            analyzedFacts = factsFactory;
+            analyzedForInPlans = Array.Empty<BashForInAnalysisPlanReference>();
+            return false;
+        }
+
         analyzedFacts = simple => facts.TryGetValue(simple.Clause, out var value)
             ? value
             : new CommandOccurrenceFacts();
+        analyzedForInPlans = analyzer._rewrittenForInPlans.ToArray();
         return true;
     }
 
@@ -63,8 +94,9 @@ internal sealed class BashAbstractStateAnalyzer
             CommandSubstitutionSyntax substitution => AnalyzeIsolatedBody(
                 substitution.Body,
                 input,
-                resetCompatibilityAttribution: true),
-            ForEachSyntax => BashFlowResult.Both(input),
+                resetCompatibilityAttribution: true,
+                clearBindings: false),
+            ForEachSyntax forEach => AnalyzeForEach(forEach, input),
             ConditionLoopSyntax => BashFlowResult.Both(input.WithUnknownCwd()),
             ConditionalSyntax conditional => AnalyzeConditional(conditional, input),
             ConditionalBranchSyntax branch => AnalyzeBranch(branch, input),
@@ -76,7 +108,13 @@ internal sealed class BashAbstractStateAnalyzer
         var flow = BashFlowResult.Both(input);
         foreach (var statement in block.Statements)
         {
-            flow = AnalyzeNode(statement, flow.JoinedState);
+            var joined = flow.JoinedState;
+            if (joined is null)
+            {
+                break;
+            }
+
+            flow = AnalyzeNode(statement, joined.Value);
         }
 
         return flow;
@@ -91,10 +129,12 @@ internal sealed class BashAbstractStateAnalyzer
             AnalyzeIsolatedBody(
                 substitution.Body,
                 input,
-                resetCompatibilityAttribution: true);
+                resetCompatibilityAttribution: true,
+                clearBindings: false);
         }
 
         RecordInput(simple.Clause, input);
+        RecordEffectiveArguments(simple, input);
         if (!TryGetCwdTransfer(simple.Clause, input, out var success))
         {
             return BashFlowResult.Both(input);
@@ -113,7 +153,12 @@ internal sealed class BashAbstractStateAnalyzer
             {
                 case CompoundOperator.AndIf:
                     {
-                        var right = AnalyzeNode(item.Command, flow.OnSuccess ?? flow.JoinedState);
+                        if (flow.OnSuccess is null)
+                        {
+                            break;
+                        }
+
+                        var right = AnalyzeNode(item.Command, flow.OnSuccess.Value);
                         flow = new BashFlowResult(
                             right.OnSuccess,
                             BashAbstractState.JoinNullable(flow.OnFailure, right.OnFailure));
@@ -121,17 +166,28 @@ internal sealed class BashAbstractStateAnalyzer
                     }
                 case CompoundOperator.OrIf:
                     {
-                        var right = AnalyzeNode(item.Command, flow.OnFailure ?? flow.JoinedState);
+                        if (flow.OnFailure is null)
+                        {
+                            break;
+                        }
+
+                        var right = AnalyzeNode(item.Command, flow.OnFailure.Value);
                         flow = new BashFlowResult(
                             BashAbstractState.JoinNullable(flow.OnSuccess, right.OnSuccess),
                             right.OnFailure);
                         break;
                     }
                 case CompoundOperator.Sequence:
-                    flow = AnalyzeNode(item.Command, flow.JoinedState);
+                    if (flow.JoinedState is BashAbstractState sequenceInput)
+                    {
+                        flow = AnalyzeNode(item.Command, sequenceInput);
+                    }
+
                     break;
                 default:
-                    return BashFlowResult.Both(flow.JoinedState.WithUnknownCwd());
+                    return flow.JoinedState is BashAbstractState joined
+                        ? BashFlowResult.Both(joined.WithUnknownCwd())
+                        : flow;
             }
         }
 
@@ -152,7 +208,12 @@ internal sealed class BashAbstractStateAnalyzer
         // independently controls which exit partition receives it. With no
         // proved shell options, both partitions conservatively receive the
         // join of isolated and current-scope outcomes.
-        var joined = BashAbstractState.Join(input, last!.Value.JoinedState);
+        if (last?.JoinedState is not BashAbstractState lastState)
+        {
+            return new BashFlowResult(null, null);
+        }
+
+        var joined = BashAbstractState.Join(input, lastState);
         return BashFlowResult.Both(joined);
     }
 
@@ -166,17 +227,155 @@ internal sealed class BashAbstractStateAnalyzer
         return AnalyzeIsolatedBody(
             group.Body,
             input,
-            resetCompatibilityAttribution: IsDecodedWrapper(group.Body));
+            resetCompatibilityAttribution: IsDecodedWrapper(group.Body),
+            clearBindings: IsDecodedWrapper(group.Body));
+    }
+
+    private BashFlowResult AnalyzeForEach(
+        ForEachSyntax forEach,
+        BashAbstractState input)
+    {
+        var iterator = AnalyzeBlock(forEach.IteratorCommands, input);
+        var loopInput = iterator.JoinedState;
+        var sourcePlan = _forInPlanFactory(forEach);
+        if (sourcePlan is null)
+        {
+            _isComplete = false;
+            return new BashFlowResult(null, null);
+        }
+
+        if (loopInput is null)
+        {
+            return new BashFlowResult(null, null);
+        }
+
+        var plan = loopInput.Value.Bindings.AnalyzeIterationPlan(
+            sourcePlan.Words,
+            OptionsFor(loopInput.Value),
+            workingDirectoryUnknown: loopInput.Value.WorkingDirectory is null);
+        if (plan.Cardinality == BashIterationCardinality.Never)
+        {
+            RecordUnvisitedBindingArguments(forEach.Body, sourcePlan.BindingName);
+            return BashFlowResult.Success(loopInput.Value);
+        }
+
+        if (plan.RequiresFixedPoint)
+        {
+            return AnalyzeForEachFixedPoint(
+                forEach,
+                loopInput.Value,
+                sourcePlan,
+                plan);
+        }
+
+        BashFlowResult? last = null;
+        var iterationInput = loopInput.Value;
+        foreach (var candidate in plan.OrderedCandidates)
+        {
+            if (!TryConsumeLoopAnalysisTransition())
+            {
+                return new BashFlowResult(null, null);
+            }
+
+            iterationInput = iterationInput.WithBinding(
+                sourcePlan.BindingName,
+                candidate);
+            last = AnalyzeBlock(forEach.Body, iterationInput);
+            if (last.Value.JoinedState is not BashAbstractState next)
+            {
+                return new BashFlowResult(null, null);
+            }
+
+            iterationInput = next;
+        }
+
+        return last ?? BashFlowResult.Success(loopInput.Value);
+    }
+
+    private BashFlowResult AnalyzeForEachFixedPoint(
+        ForEachSyntax forEach,
+        BashAbstractState loopInput,
+        BashForInAnalysisPlan sourcePlan,
+        BashIterationPlan plan)
+    {
+        BashAbstractState? success = plan.Cardinality == BashIterationCardinality.ZeroOrMore
+            ? loopInput
+            : null;
+        BashAbstractState? failure = null;
+        var head = loopInput;
+        var wideningBase = loopInput;
+        var nextHead = loopInput;
+        for (var iteration = 0;
+             iteration <= ShellAnalysisLimits.MaxValueCandidates;
+             iteration++)
+        {
+            if (!TryConsumeLoopAnalysisTransition())
+            {
+                return new BashFlowResult(null, null);
+            }
+
+            var body = AnalyzeBlock(
+                forEach.Body,
+                head.WithBinding(sourcePlan.BindingName, plan.Summary));
+            success = BashAbstractState.JoinNullable(success, body.OnSuccess);
+            failure = BashAbstractState.JoinNullable(failure, body.OnFailure);
+            if (body.JoinedState is not BashAbstractState bodyExit)
+            {
+                return new BashFlowResult(success, failure);
+            }
+
+            wideningBase = head;
+            nextHead = BashAbstractState.Join(head, bodyExit);
+            if (head.StateEquals(nextHead))
+            {
+                return new BashFlowResult(success, failure);
+            }
+
+            head = nextHead;
+        }
+
+        // Widen disagreement after the finite-domain budget, then run the body
+        // once more so occurrence facts also reflect the widened entry state.
+        if (!TryConsumeLoopAnalysisTransition())
+        {
+            return new BashFlowResult(null, null);
+        }
+
+        var widened = BashAbstractState.Widen(wideningBase, nextHead);
+        var widenedBody = AnalyzeBlock(
+            forEach.Body,
+            widened.WithBinding(sourcePlan.BindingName, plan.Summary));
+        return new BashFlowResult(
+            BashAbstractState.JoinNullable(success, widenedBody.OnSuccess),
+            BashAbstractState.JoinNullable(failure, widenedBody.OnFailure));
+    }
+
+    private bool TryConsumeLoopAnalysisTransition()
+    {
+        if (_remainingLoopAnalysisTransitions == 0)
+        {
+            _isComplete = false;
+            return false;
+        }
+
+        _remainingLoopAnalysisTransitions--;
+        return true;
     }
 
     private BashFlowResult AnalyzeIsolatedBody(
         ShellBlockSyntax body,
         BashAbstractState input,
-        bool resetCompatibilityAttribution)
+        bool resetCompatibilityAttribution,
+        bool clearBindings)
     {
         var childInput = resetCompatibilityAttribution
             ? input.WithoutCompatibilityAttribution()
             : input;
+        if (clearBindings)
+        {
+            childInput = childInput.WithoutBindings();
+        }
+
         var inner = AnalyzeBlock(body, childInput);
         return new BashFlowResult(
             inner.OnSuccess is null ? null : input,
@@ -191,14 +390,19 @@ internal sealed class BashAbstractStateAnalyzer
         BashAbstractState? failure = input;
         foreach (var branch in conditional.Branches)
         {
-            var branchFlow = AnalyzeBranch(branch, failure ?? input.WithUnknownCwd());
+            if (failure is null)
+            {
+                break;
+            }
+
+            var branchFlow = AnalyzeBranch(branch, failure.Value);
             success = BashAbstractState.JoinNullable(success, branchFlow.OnSuccess);
-            failure = BashAbstractState.JoinNullable(failure, branchFlow.OnFailure);
+            failure = branchFlow.OnFailure;
         }
 
-        if (conditional.Else is not null)
+        if (conditional.Else is not null && failure is not null)
         {
-            var elseFlow = AnalyzeBlock(conditional.Else, failure ?? input.WithUnknownCwd());
+            var elseFlow = AnalyzeBlock(conditional.Else, failure.Value);
             success = BashAbstractState.JoinNullable(success, elseFlow.OnSuccess);
             failure = elseFlow.OnFailure;
         }
@@ -211,7 +415,12 @@ internal sealed class BashAbstractStateAnalyzer
         BashAbstractState input)
     {
         var condition = AnalyzeBlock(branch.Condition, input);
-        var body = AnalyzeBlock(branch.Body, condition.OnSuccess ?? condition.JoinedState);
+        if (condition.OnSuccess is null)
+        {
+            return new BashFlowResult(null, condition.OnFailure);
+        }
+
+        var body = AnalyzeBlock(branch.Body, condition.OnSuccess.Value);
         return new BashFlowResult(
             body.OnSuccess,
             BashAbstractState.JoinNullable(condition.OnFailure, body.OnFailure));
@@ -227,6 +436,135 @@ internal sealed class BashAbstractStateAnalyzer
         {
             _inputs.Add(clause, input);
         }
+    }
+
+    private void RecordEffectiveArguments(
+        SimpleCommandSyntax simple,
+        BashAbstractState input)
+    {
+        var sourceFacts = _factsFactory(simple);
+        if (sourceFacts.ValueProvenance.Count == 0)
+        {
+            return;
+        }
+
+        Dictionary<int, ShellValueDomain>? accumulated = null;
+        var evaluator = input.Bindings;
+        foreach (var provenance in sourceFacts.ValueProvenance)
+        {
+            if (!evaluator.TryAnalyzeEffectiveValue(provenance.Value, out var domain))
+            {
+                continue;
+            }
+
+            accumulated ??= GetEffectiveArguments(simple.Clause);
+            if (accumulated.TryGetValue(provenance.ClauseElementIndex, out var prior))
+            {
+                accumulated[provenance.ClauseElementIndex] =
+                    BashLoopBindingContext.JoinDomains(prior, domain);
+            }
+            else
+            {
+                accumulated.Add(provenance.ClauseElementIndex, domain);
+            }
+        }
+    }
+
+    private void RecordUnvisitedBindingArguments(
+        ShellBlockSyntax block,
+        string bindingName)
+    {
+        foreach (var statement in block.Statements)
+        {
+            RecordUnvisitedBindingArguments(statement, bindingName);
+        }
+    }
+
+    private void RecordUnvisitedBindingArguments(
+        ShellSyntaxNode node,
+        string bindingName)
+    {
+        switch (node)
+        {
+            case SimpleCommandSyntax simple:
+                var sourceFacts = _factsFactory(simple);
+                foreach (var provenance in sourceFacts.ValueProvenance)
+                {
+                    if (BashLoopBindingContext.ReferencesBinding(
+                            provenance.Value,
+                            bindingName))
+                    {
+                        GetEffectiveArguments(simple.Clause)[provenance.ClauseElementIndex] =
+                            ShellValueDomain.Unknown;
+                    }
+                }
+
+                foreach (var substitution in simple.Substitutions)
+                {
+                    RecordUnvisitedBindingArguments(substitution.Body, bindingName);
+                }
+
+                break;
+            case ShellBlockSyntax nestedBlock:
+                RecordUnvisitedBindingArguments(nestedBlock, bindingName);
+                break;
+            case PipelineSyntax pipeline:
+                foreach (var stage in pipeline.Stages)
+                {
+                    RecordUnvisitedBindingArguments(stage, bindingName);
+                }
+
+                break;
+            case CommandListSyntax list:
+                foreach (var item in list.Items)
+                {
+                    RecordUnvisitedBindingArguments(item.Command, bindingName);
+                }
+
+                break;
+            case GroupSyntax group:
+                RecordUnvisitedBindingArguments(group.Body, bindingName);
+                break;
+            case ForEachSyntax forEach:
+                RecordUnvisitedBindingArguments(forEach.IteratorCommands, bindingName);
+                RecordUnvisitedBindingArguments(forEach.Body, bindingName);
+                break;
+            case ConditionLoopSyntax loop:
+                RecordUnvisitedBindingArguments(loop.Condition, bindingName);
+                RecordUnvisitedBindingArguments(loop.Body, bindingName);
+                break;
+            case ConditionalSyntax conditional:
+                foreach (var branch in conditional.Branches)
+                {
+                    RecordUnvisitedBindingArguments(branch, bindingName);
+                }
+
+                if (conditional.Else is not null)
+                {
+                    RecordUnvisitedBindingArguments(conditional.Else, bindingName);
+                }
+
+                break;
+            case ConditionalBranchSyntax branch:
+                RecordUnvisitedBindingArguments(branch.Condition, bindingName);
+                RecordUnvisitedBindingArguments(branch.Body, bindingName);
+                break;
+            case CommandSubstitutionSyntax substitution:
+                RecordUnvisitedBindingArguments(substitution.Body, bindingName);
+                break;
+        }
+    }
+
+    private Dictionary<int, ShellValueDomain> GetEffectiveArguments(Clause clause)
+    {
+        if (_effectiveArguments.TryGetValue(clause, out var accumulated))
+        {
+            return accumulated;
+        }
+
+        accumulated = new Dictionary<int, ShellValueDomain>();
+        _effectiveArguments.Add(clause, accumulated);
+        return accumulated;
     }
 
     private bool TryGetCwdTransfer(
@@ -279,7 +617,7 @@ internal sealed class BashAbstractStateAnalyzer
 
             success = string.IsNullOrEmpty(_options.HomeDirectory)
                 ? input.WithUnknownCwd()
-                : new BashAbstractState(_options.HomeDirectory, true);
+                : input.WithCwd(_options.HomeDirectory, true);
             return true;
         }
 
@@ -291,7 +629,7 @@ internal sealed class BashAbstractStateAnalyzer
 
         if (target.Kind == ArgKind.Tilde && target.Resolved is not null)
         {
-            success = new BashAbstractState(target.Resolved, true);
+            success = input.WithCwd(target.Resolved, true);
             return true;
         }
 
@@ -311,7 +649,7 @@ internal sealed class BashAbstractStateAnalyzer
             isLiteralBytes: true);
         success = resolved.Resolved is null
             ? input.WithUnknownCwd()
-            : new BashAbstractState(resolved.Resolved, true);
+            : input.WithCwd(resolved.Resolved, true);
         return true;
     }
 
@@ -435,11 +773,7 @@ internal sealed class BashAbstractStateAnalyzer
                 Items = RewriteItems(list.Items, facts),
             },
             GroupSyntax group => group with { Body = RewriteBlock(group.Body, facts) },
-            ForEachSyntax forEach => forEach with
-            {
-                IteratorCommands = RewriteBlock(forEach.IteratorCommands, facts),
-                Body = RewriteBlock(forEach.Body, facts),
-            },
+            ForEachSyntax forEach => RewriteForEach(forEach, facts),
             ConditionLoopSyntax loop => loop with
             {
                 Condition = RewriteBlock(loop.Condition, facts),
@@ -462,6 +796,30 @@ internal sealed class BashAbstractStateAnalyzer
             _ => node,
         };
 
+    private ForEachSyntax RewriteForEach(
+        ForEachSyntax forEach,
+        Dictionary<Clause, CommandOccurrenceFacts> facts)
+    {
+        var rewritten = forEach with
+        {
+            IteratorCommands = RewriteBlock(forEach.IteratorCommands, facts),
+            Body = RewriteBlock(forEach.Body, facts),
+        };
+        var plan = _forInPlanFactory(forEach);
+        if (plan is null)
+        {
+            _isComplete = false;
+        }
+        else
+        {
+            _rewrittenForInPlans.Add(new BashForInAnalysisPlanReference(
+                rewritten,
+                plan));
+        }
+
+        return rewritten;
+    }
+
     private SimpleCommandSyntax RewriteSimple(
         SimpleCommandSyntax simple,
         Dictionary<Clause, CommandOccurrenceFacts> facts)
@@ -477,17 +835,20 @@ internal sealed class BashAbstractStateAnalyzer
         var sourceFacts = _factsFactory(simple);
         if (!_inputs.TryGetValue(simple.Clause, out var input))
         {
-            facts.Add(simple.Clause, sourceFacts);
-            return simple with { Substitutions = substitutions };
+            input = new BashAbstractState(
+                workingDirectory: null,
+                hasCompatibilityAttribution: true,
+                bindings: new BashLoopBindingContext());
         }
 
         var clause = RewriteClause(simple.Clause, input, sourceFacts.CwdPathDependencies);
         facts.Add(clause, new CommandOccurrenceFacts
         {
-            EffectiveArguments = sourceFacts.EffectiveArguments,
+            EffectiveArguments = CreateEffectiveArguments(simple.Clause),
             WorkingDirectory = input.ToDomain(),
             Redirects = RewriteRedirectFacts(sourceFacts.Redirects, clause),
             CwdPathDependencies = sourceFacts.CwdPathDependencies,
+            ValueProvenance = sourceFacts.ValueProvenance,
             IsComplete = sourceFacts.IsComplete,
         });
         return simple with
@@ -495,6 +856,29 @@ internal sealed class BashAbstractStateAnalyzer
             Clause = clause,
             Substitutions = substitutions,
         };
+    }
+
+    private IReadOnlyList<EffectiveArgument> CreateEffectiveArguments(Clause clause)
+    {
+        if (!_effectiveArguments.TryGetValue(clause, out var accumulated) ||
+            accumulated.Count == 0)
+        {
+            return Array.Empty<EffectiveArgument>();
+        }
+
+        var indices = new List<int>(accumulated.Keys);
+        indices.Sort();
+        var effective = new EffectiveArgument[indices.Count];
+        for (var index = 0; index < effective.Length; index++)
+        {
+            effective[index] = new EffectiveArgument
+            {
+                ClauseElementIndex = indices[index],
+                Value = accumulated[indices[index]],
+            };
+        }
+
+        return effective;
     }
 
     private Clause RewriteClause(
@@ -1080,31 +1464,52 @@ internal sealed class BashAbstractStateAnalyzer
 
         internal BashAbstractState? OnFailure { get; }
 
-        internal BashAbstractState JoinedState =>
-            BashAbstractState.JoinNullable(OnSuccess, OnFailure) ??
-            new BashAbstractState(null, true);
+        internal BashAbstractState? JoinedState =>
+            BashAbstractState.JoinNullable(OnSuccess, OnFailure);
 
         internal static BashFlowResult Both(BashAbstractState state) => new(state, state);
+
+        internal static BashFlowResult Success(BashAbstractState state) => new(state, null);
     }
 
     private readonly struct BashAbstractState
     {
         internal BashAbstractState(
             string? workingDirectory,
-            bool hasCompatibilityAttribution)
+            bool hasCompatibilityAttribution,
+            BashLoopBindingContext bindings)
         {
             WorkingDirectory = workingDirectory;
             HasCompatibilityAttribution = hasCompatibilityAttribution;
+            Bindings = bindings;
         }
 
         internal string? WorkingDirectory { get; }
 
         internal bool HasCompatibilityAttribution { get; }
 
-        internal BashAbstractState WithUnknownCwd() => new(null, true);
+        internal BashLoopBindingContext Bindings { get; }
+
+        internal BashAbstractState WithUnknownCwd() => new(null, true, Bindings);
+
+        internal BashAbstractState WithBinding(
+            string name,
+            ShellValueDomain domain) =>
+            new(
+                WorkingDirectory,
+                HasCompatibilityAttribution,
+                Bindings.WithBinding(name, domain));
+
+        internal BashAbstractState WithoutBindings() =>
+            new(WorkingDirectory, HasCompatibilityAttribution, Bindings.WithoutBindings());
+
+        internal BashAbstractState WithCwd(
+            string? workingDirectory,
+            bool hasCompatibilityAttribution) =>
+            new(workingDirectory, hasCompatibilityAttribution, Bindings);
 
         internal BashAbstractState WithoutCompatibilityAttribution() =>
-            new(WorkingDirectory, WorkingDirectory is null);
+            new(WorkingDirectory, WorkingDirectory is null, Bindings);
 
         internal ShellValueDomain ToDomain() =>
             WorkingDirectory is null
@@ -1115,6 +1520,11 @@ internal sealed class BashAbstractStateAnalyzer
                     Values = new[] { WorkingDirectory },
                 };
 
+        internal bool StateEquals(BashAbstractState other) =>
+            string.Equals(WorkingDirectory, other.WorkingDirectory, StringComparison.Ordinal) &&
+            HasCompatibilityAttribution == other.HasCompatibilityAttribution &&
+            Bindings.StateEquals(other.Bindings);
+
         internal static BashAbstractState Join(
             BashAbstractState left,
             BashAbstractState right) => new(
@@ -1124,7 +1534,20 @@ internal sealed class BashAbstractStateAnalyzer
                     StringComparison.Ordinal)
                     ? left.WorkingDirectory
                     : null,
-                left.HasCompatibilityAttribution || right.HasCompatibilityAttribution);
+                left.HasCompatibilityAttribution || right.HasCompatibilityAttribution,
+                BashLoopBindingContext.JoinState(left.Bindings, right.Bindings));
+
+        internal static BashAbstractState Widen(
+            BashAbstractState left,
+            BashAbstractState right) => new(
+                string.Equals(
+                    left.WorkingDirectory,
+                    right.WorkingDirectory,
+                    StringComparison.Ordinal)
+                    ? left.WorkingDirectory
+                    : null,
+                left.HasCompatibilityAttribution || right.HasCompatibilityAttribution,
+                BashLoopBindingContext.WidenState(left.Bindings, right.Bindings));
 
         internal static BashAbstractState? JoinNullable(
             BashAbstractState? left,
@@ -1152,4 +1575,5 @@ internal sealed class BashAbstractStateAnalyzer
 
         public int GetHashCode(Clause obj) => RuntimeHelpers.GetHashCode(obj);
     }
+
 }

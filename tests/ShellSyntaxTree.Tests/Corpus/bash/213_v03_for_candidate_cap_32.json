@@ -165,8 +165,8 @@
           }
         ],
         "workingDirectory": {
-          "kind": "Unknown",
-          "values": [],
+          "kind": "Exact",
+          "values": ["/work"],
           "pattern": null,
           "coveringDirectory": null
         }
