@@ -41,6 +41,8 @@ public class PwshForEachStructuralTests
         Assert.Same(body.Clause, Assert.Single(result.Clauses));
         Assert.Equal(CommandOccurrenceRole.LoopBody, occurrence.ImmediateRole);
         Assert.False(occurrence.IsComplete);
+        Assert.All(occurrence.EffectiveArguments, argument =>
+            Assert.Equal(ShellValueDomainKind.Unknown, argument.Value.Kind));
     }
 
     [Fact]

@@ -198,6 +198,34 @@ outside the first bounded scalar grammar. The parser also downgrades a decoded
 `export`; resolver-only option cloning for an exact cwd retains the independent
 variable-state assertion.
 
+PowerShell `foreach` value proofs require the parallel but shell-specific
+assertion. `PwshInitialStateMode.Unknown` is the safe default: the parser can
+still expose supported loop structure, but ambient typed, validated,
+read-only, scoped, alias, function, and module state prevents a closed-world
+binding proof. Select `IsolatedNonInteractiveNoProfile` only when the caller
+executes the complete source in a newly spawned noninteractive PowerShell
+process with profiles disabled and no reused or uncontrolled caller-initialized
+runspace. The launch must also disable module auto-loading or pin available
+modules and module search paths to the same reviewed baseline used by policy.
+A fixed bootstrap may establish those constraints only if it cannot define or
+mutate loop-bound variables or policy-relevant command identities:
+
+```csharp
+var parser = new PwshParser(new PwshParserOptions
+{
+    WorkingDirectory = workingDirectory,
+    InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+});
+```
+
+The assertion does not automatically cross `pwsh -Command` or
+`pwsh -EncodedCommand`; a child host needs its own independently proved launch
+contract. By contrast, `( ... )`, `$()`, and static `Invoke-Expression` share
+the current runspace and its mutations. Never select isolated mode for an
+interactive session or runspace pool merely to suppress approval prompts.
+`-NoProfile -NonInteractive` alone does not prove the inherited environment,
+startup configuration, or module baseline.
+
 Heredoc and Bash here-string bodies are stdin data, not implicit child commands
 or filesystem paths. Authorize any command substitutions surfaced from an
 expanding heredoc as normal occurrences, then let executable-specific policy

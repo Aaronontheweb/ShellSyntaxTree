@@ -115,11 +115,18 @@ public abstract record ShellParserOptions
 /// = ... }` still compiles.</summary>
 public sealed record BashParserOptions : ShellParserOptions;
 
-/// <summary>Configuration knobs for PwshParser. Empty in v0.2.0 — alias
-/// resolution is unconditional (§6.3) and the resolver knobs live on the
-/// shared ShellParserOptions base. Kept as a distinct type so a future
-/// PowerShell-only knob is an additive change, not a new type.</summary>
-public sealed record PwshParserOptions : ShellParserOptions;
+/// <summary>Declares which ambient PowerShell runspace facts the caller can prove.</summary>
+public enum PwshInitialStateMode
+{
+    Unknown,
+    IsolatedNonInteractiveNoProfile,
+}
+
+/// <summary>Configuration knobs for PwshParser.</summary>
+public sealed record PwshParserOptions : ShellParserOptions
+{
+    public PwshInitialStateMode InitialStateMode { get; init; }
+}
 
 /// <summary>PowerShell implementation of IShellParser.</summary>
 public sealed class PwshParser : IShellParser
@@ -406,6 +413,39 @@ PowerShell object-to-string conversion. The body is recursively parsed only
 after the structural grammar proves that the `ScriptBlock` token is the body
 of a recognized statement. An ordinary script-block argument remains one
 opaque `DynamicSkip` value and does not invent child execution.
+
+Publishing those exact or finite values also requires
+`PwshInitialStateMode.IsolatedNonInteractiveNoProfile`. The default `Unknown`
+mode still exposes the complete supported structure, but loop-body occurrences
+whose safety depends on the binding remain incomplete. The isolated mode is a
+caller assertion that the complete source runs in a newly spawned,
+non-interactive, no-profile PowerShell process with no reused or
+uncontrolled caller-initialized runspace state. Startup configuration and the
+inherited environment must also be controlled: module auto-loading is disabled,
+or available modules and module search paths are pinned to the same reviewed
+baseline used by policy. `-NoProfile -NonInteractive` alone is insufficient.
+A fixed bootstrap may establish those constraints only when it cannot define
+or mutate loop-bound variables or policy-relevant command identities. The mode
+does not permit assumptions about an interactive session, a runspace pool,
+profiles, startup scripts, or uncontrolled ambient variables, aliases,
+functions, and modules.
+
+Even under that assertion, only ordinary unscoped binding names that do not
+case-insensitively collide with PowerShell's automatic, constant, or read-only
+variables are eligible. Scoped/provider bindings such as `$global:x`,
+`$script:x`, `$private:x`, and `$env:X` fail the loop region closed. A typed,
+validated, constant, or read-only ambient binding therefore cannot coerce,
+reject, or otherwise alter a value the analyzer presents as an exact string.
+
+Parenthesized groups, `$()`, and static `Invoke-Expression` execute in the
+current runspace and share supported binding, command-resolution, and location
+state. Decoded `pwsh -Command` and `pwsh -EncodedCommand` payloads run in child
+hosts and do not inherit the parent's fresh-state assertion unless their own
+invocation independently proves the complete constrained-host contract; host
+flags alone do not prove the launch environment or module baseline.
+Recognized variable, alias, function, or module mutation invalidates later
+proofs in every observing scope; cwd-only mutation retains the independent
+initial-state assertion.
 
 A completely delimited `$()` used as an ordinary word, dynamic command
 identity after `&`, redirect value, foreach expression, double-quoted interpolation, or

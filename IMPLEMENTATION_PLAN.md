@@ -315,10 +315,15 @@ priorities.
       initial-runspace contract and wrapper-state metadata: ambient typed,
       read-only, scoped, alias, function, and module state can change binding
       assignment and command resolution, while child hosts inherit no fresh
-      state guarantee unless their own invocation proves it. Expand the design
-      corpus for cardinality, mutation, separators, wrappers, redirects, and
-      transition caps before tasks 7.3-7.7. The simple-command slice is delivered for
-      ordinary, adjacent, quoted, here-string, redirect, standalone,
+      state guarantee unless their own invocation proves it. The additive
+      `PwshInitialStateMode` API and safe-default contract are now locked;
+      `-NoProfile -NonInteractive` alone is explicitly insufficient without a
+      controlled startup, inherited environment, and module baseline. Design
+      cases select the mode individually and pin default `Unknown`. Tasks
+      7.3-7.4 must consume the contract rather than inferring isolation. Expand the
+      design corpus for cardinality, mutation, separators, wrappers, redirects,
+      and transition caps before tasks 7.3-7.7. The simple-command slice is
+      delivered for ordinary, adjacent, quoted, here-string, redirect, standalone,
       call-operator, dynamic-identity, and host-wrapper positions, with
       current-scope state propagation and bounded expression rejection pinned
       by the 361-entry executable corpus.

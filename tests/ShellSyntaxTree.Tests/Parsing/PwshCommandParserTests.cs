@@ -936,6 +936,33 @@ public class PwshCommandParserTests
     }
 
     [Fact]
+    public void Child_pwsh_inherits_exact_invocation_location()
+    {
+        var result = Parse(
+            "Set-Location C:\\a; pwsh -Command 'Get-Item child.txt'");
+        var child = result.Clauses.Last();
+
+        Assert.Contains(child.Args,
+            argument => argument.Raw == "child.txt"
+                && argument.Resolved == "C:/a/child.txt");
+    }
+
+    [Fact]
+    public void Child_pwsh_inherits_dynamic_invocation_location_conservatively()
+    {
+        var result = Parse(
+            "Set-Location $target; pwsh -Command 'Get-Item child.txt'");
+        var child = result.Clauses.Last();
+        var argument = Assert.Single(child.Args, candidate => candidate.Raw == "child.txt");
+
+        Assert.Equal(ArgKind.DynamicSkip, argument.Kind);
+        Assert.False(argument.IsPath);
+        Assert.Null(argument.Resolved);
+        Assert.Contains(child.Args, candidate =>
+            candidate.IsCwdAttribution && candidate.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Fact]
     public void Invoke_expression_depth_five_parses()
     {
         var result = Parse(NestInvokeExpression("Get-Date", 5));

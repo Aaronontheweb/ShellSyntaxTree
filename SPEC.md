@@ -122,9 +122,18 @@ public sealed record BashParserOptions : ShellParserOptions
     public BashInitialStateMode InitialStateMode { get; init; }
 }
 
-/// <summary>Configuration knobs for PwshParser (v0.2.0). Empty — the
-/// resolver knobs live on ShellParserOptions.</summary>
-public sealed record PwshParserOptions : ShellParserOptions;
+/// <summary>Declares which ambient PowerShell runspace facts the caller can prove.</summary>
+public enum PwshInitialStateMode
+{
+    Unknown,
+    IsolatedNonInteractiveNoProfile,
+}
+
+/// <summary>Configuration knobs for PwshParser.</summary>
+public sealed record PwshParserOptions : ShellParserOptions
+{
+    public PwshInitialStateMode InitialStateMode { get; init; }
+}
 
 // The pre-v0.2.0 BashParserOptions body, now hoisted onto ShellParserOptions:
 public abstract record ShellParserOptions
@@ -269,6 +278,42 @@ Bash magic variables and resolver- or executable-identity-sensitive names such
 as `RANDOM`, `LINENO`, `HOME`, `PATH`, `CDPATH`, and `IFS`. The boundary is
 extend-only: a later version may add a proved variable-state model or
 additional explicitly reviewed ordinary names.
+
+`PwshInitialStateMode.Unknown` is likewise the safe default. In this mode the
+parser may expose `foreach` structure and commands, but it does not publish an
+exact or finite loop-binding proof. Ambient PowerShell variables can be typed,
+read-only, constant, scoped, or validated, and ambient aliases, functions, and
+modules can change command resolution. Treating a loop assignment as a plain
+string assignment without excluding those facts would be unsound.
+
+`PwshInitialStateMode.IsolatedNonInteractiveNoProfile` is an explicit caller
+assertion that the complete source is executed by a newly spawned,
+non-interactive PowerShell process with profiles disabled and without a reused
+or uncontrolled caller-initialized runspace. The caller must also control
+startup configuration and the inherited environment: module auto-loading must
+be disabled, or the available modules and module search paths must be pinned to
+the same reviewed baseline used by policy. `-NoProfile -NonInteractive` alone
+does not establish this contract. A fixed bootstrap may establish these
+constraints only when it cannot define or mutate loop-bound variables or
+policy-relevant command identities.
+
+The mode does not erase PowerShell's built-in automatic variables. Exact and
+finite binding proofs remain limited to
+ordinary unscoped variable names that do not collide, case-insensitively, with
+automatic, constant, or read-only bindings known to the supported PowerShell
+runtime. Scoped/provider forms such as `$global:x`, `$script:x`, and `$env:X`
+are outside the bounded loop-binding grammar.
+
+The assertion applies only to the host that the caller actually constrains.
+Current-runspace regions such as `( ... )`, `$()`, and a static
+`Invoke-Expression` payload share supported variable, command-resolution, and
+location state. A decoded `pwsh -Command` or `pwsh -EncodedCommand` child does
+not inherit the assertion unless its own invocation contract independently
+proves the complete constrained-host environment, not merely `-NoProfile`.
+Recognized mutation of variables,
+aliases, functions, or modules invalidates later proofs wherever PowerShell
+scope rules make the mutation observable. Cwd-only state changes retain the
+independent initial-runspace assertion.
 
 For a successful result, every authored simple command appears once in
 `Syntax`, once in `Commands`, and once in `Clauses`, with all three projections

@@ -463,6 +463,7 @@ internal static partial class PwshCommandParser
                 {
                     HomeDirectory = _options.HomeDirectory,
                     WorkingDirectory = _attribution.ResolvedCwd,
+                    InitialStateMode = _options.InitialStateMode,
                 };
             }
             else if (_attribution.IsDynamic)
