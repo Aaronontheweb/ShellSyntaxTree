@@ -9,7 +9,7 @@ The public syntax family SHALL be a closed hierarchy of records derived from
 `ShellSyntaxNode`. Every node SHALL expose a `ShellSyntaxKind` discriminant and
 zero SHALL mean `Unknown`. The locked family SHALL include block, simple
 command, pipeline, command list, group, foreach, condition loop, conditional,
-conditional branch, and command substitution nodes.
+conditional branch, command substitution, and execution-region nodes.
 
 #### Scenario: Existing flat command receives a structural root
 - **WHEN** either parser parses `git status && dotnet test`
@@ -30,7 +30,9 @@ A simple-command syntax node SHALL expose the existing `Clause` facts rather
 than replacing `VerbChain`, `Arg`, `Redirect`, or `ClauseElement` with a second
 incompatible leaf model. It SHALL also own an authored-order collection of
 completely delimited command substitutions evaluated for its words and
-redirects, including expanding heredoc bodies. Nested substitutions SHALL
+redirects, including expanding heredoc bodies, and an authored-order
+collection of execution-bearing regions bound to its arguments. Nested
+substitutions and execution regions SHALL
 remain attached to the nearest containing simple command; they SHALL NOT be
 promoted to unrelated siblings or stored only in a side table.
 
@@ -48,6 +50,12 @@ promoted to unrelated siblings or stored only in a side table.
 - **WHEN** a supported shell parses a command substitution inside another substitution
 - **THEN** the inner substitution belongs to the simple command inside the outer substitution
 - **THEN** the inner substitution is not flattened into the outer command's substitution collection
+
+#### Scenario: Cmdlet-owned execution region preserves its host
+- **WHEN** PowerShell parses `Get-ChildItem | ForEach-Object { Remove-Item $_ }`
+- **THEN** the `ForEach-Object` simple-command node owns one execution region
+- **THEN** the region body contains `Remove-Item`
+- **THEN** the authored script-block argument remains on the host `Clause`
 
 ### Requirement: Executable substitution boundaries are accounted for
 Stable v0.3 SHALL recursively parse every completely delimited Bash `$()` or
@@ -95,10 +103,78 @@ escaped substitution-looking text SHALL NOT create syntax or occurrences.
 - **THEN** `Write-Output` is exposed before one incomplete dynamic outer invocation
 - **THEN** the produced string is not assumed to equal a static command identity
 
-#### Scenario: PowerShell call operator script block remains gated
+#### Scenario: PowerShell call operator script block is a direct execution region
 - **WHEN** PowerShell encounters `& { Remove-Item target.txt }`
-- **THEN** the whole result is unparseable until script-block execution semantics are modeled
-- **THEN** the body is not treated as an ordinary opaque argument
+- **THEN** the root contains a synchronous, once-per-invocation execution region
+- **THEN** the body contains `Remove-Item`
+- **THEN** no synthetic outer command occurrence is invented for `&`
+
+### Requirement: Execution-bearing regions are typed independently from scope
+An `ExecutionRegionSyntax` SHALL represent a completely delimited authored
+body that may execute because of a direct shell invocation operator or a
+recognized command argument binding. It SHALL expose an execution origin,
+phase, timing, cardinality, exact-or-null source range, optional host
+`ClauseElement` coordinate, and body. Origin, phase, timing, and cardinality
+SHALL be independent enum facts whose zero values are `Unknown`.
+
+Origin SHALL have `Unknown`, `DirectCall`, `DotSource`, and `CommandArgument`
+values. Direct call and dot-source regions SHALL retain their distinct origins
+even when source text is unavailable to a consumer. A command-owned region
+SHALL use `CommandArgument`.
+
+The region SHALL NOT expose one shared/isolated scope flag. PowerShell
+variable, working-directory, command-resolution, runspace, and process state
+do not share one boundary: for example, `& {}` isolates ordinary variable
+assignment while sharing location. Those effects SHALL remain shell-specific
+analysis and SHALL be reflected in occurrence facts and following state.
+
+The containing command's `ExecutionRegions` collection SHALL preserve authored
+script-block order. Semantic phase order MAY differ and SHALL be consumed by
+the shell-specific analyzer rather than by reordering authored syntax. A direct
+`& {}` or `. {}` region SHALL appear as a statement, SHALL use `DirectCall` or
+`DotSource` respectively, and SHALL have no host element coordinate. A region
+bound to a command argument SHALL be attached to
+that `SimpleCommandSyntax` and SHALL identify the exact script-block
+`ClauseElement` when the binding is proved.
+
+#### Scenario: Reordered pipeline phases retain both orders
+- **WHEN** PowerShell parses `1 | ForEach-Object -End { Write-Output end } -Begin { Write-Output begin } -Process { Write-Output $_ }`
+- **THEN** the execution-region collection retains the authored `End`, `Begin`, `Process` order
+- **THEN** each region carries its semantic phase
+- **THEN** state analysis applies Begin, Process, End semantics without rewriting the authored tree
+
+#### Scenario: Dot-sourced block has current-scope effects
+- **WHEN** PowerShell parses `. { $x = 'changed'; Set-Location /tmp }`
+- **THEN** the body is a synchronous once-per-invocation execution region
+- **THEN** supported variable and location changes propagate according to dot-source semantics
+- **THEN** the `.` operator does not become a synthetic command occurrence
+
+#### Scenario: Direct block arguments remain atomic until binding is modeled
+- **WHEN** PowerShell encounters `& { Write-Output $args } alpha` or `. { Write-Output $args } alpha`
+- **THEN** the whole parse is unparseable
+- **THEN** no body command is exposed as authorization evidence from a partial binding model
+
+#### Scenario: Leading region parameter declaration remains atomic
+- **WHEN** an execution region begins with `param(...)`
+- **THEN** the whole parse is unparseable until bounded declaration grammar is implemented
+- **THEN** a realistic argument completer is not partially authorized from only its post-declaration body
+
+#### Scenario: Deferred action is still authorization-visible
+- **WHEN** PowerShell parses `Register-EngineEvent -SourceIdentifier ready -Action { Remove-Item marker.txt }`
+- **THEN** the host command appears before the action body in the occurrence projection
+- **THEN** the action region is `Deferred` with `ZeroOrMore` cardinality
+- **THEN** `Remove-Item` remains authorization-visible even though registration does not execute it
+
+#### Scenario: Known non-executing script-block data stays data
+- **WHEN** a constrained canonical-command context parses `Write-Output { Remove-Item target.txt }`
+- **THEN** the script block remains one opaque compatibility argument
+- **THEN** no execution region or `Remove-Item` occurrence is invented
+
+#### Scenario: Unknown script-block receiver over-approximates execution
+- **WHEN** command resolution or script-block parameter binding cannot prove whether a receiver executes its block
+- **THEN** the completely parsed block is retained as an execution region with unknown facts
+- **THEN** affected occurrences are incomplete
+- **THEN** an unsupported block interior makes the whole result unparseable rather than hiding commands
 
 ### Requirement: Bash for-in loops preserve header and body structure
 The Bash parser SHALL represent a supported `for name in words; do body; done`
@@ -200,6 +276,6 @@ syntax SHALL be diagnostic evidence only.
 - **THEN** the whole result is unparseable until concurrency and state boundaries are specified
 
 #### Scenario: Ordinary PowerShell script-block argument
-- **WHEN** PowerShell parses a script block as an ordinary command argument rather than a recognized statement body
+- **WHEN** PowerShell parses a script block for a canonical receiver proved not to execute that argument
 - **THEN** it remains an opaque dynamic argument
-- **THEN** the parser does not invent the block contents as commands that necessarily execute
+- **THEN** the parser does not invent the block contents as commands

@@ -54,6 +54,8 @@ public enum ShellSyntaxKind
     ConditionalBranch,
     /// <summary>A command substitution.</summary>
     CommandSubstitution,
+    /// <summary>An authored body activated by shell or command semantics.</summary>
+    ExecutionRegion,
 }
 
 /// <summary>An ordered block of authored statements.</summary>
@@ -86,6 +88,13 @@ public sealed record SimpleCommandSyntax : ShellSyntaxNode
     /// </summary>
     public IReadOnlyList<CommandSubstitutionSyntax> Substitutions { get; init; } =
         Array.Empty<CommandSubstitutionSyntax>();
+
+    /// <summary>
+    /// Gets execution-bearing regions bound to this command's arguments, in
+    /// authored order.
+    /// </summary>
+    public IReadOnlyList<ExecutionRegionSyntax> ExecutionRegions { get; init; } =
+        Array.Empty<ExecutionRegionSyntax>();
 }
 
 /// <summary>An ordered pipeline.</summary>
@@ -264,4 +273,96 @@ public sealed record CommandSubstitutionSyntax : ShellSyntaxNode
 
     /// <summary>Gets the commands inside the substitution.</summary>
     public ShellBlockSyntax Body { get; init; } = new();
+}
+
+/// <summary>An authored body whose activation is described by shell semantics.</summary>
+public sealed record ExecutionRegionSyntax : ShellSyntaxNode
+{
+    private protected override bool IsLibraryOwnedNode => true;
+
+    /// <inheritdoc />
+    public override ShellSyntaxKind Kind => ShellSyntaxKind.ExecutionRegion;
+
+    /// <summary>Gets the syntax or binding that introduces the region.</summary>
+    public ExecutionRegionOrigin Origin { get; init; }
+
+    /// <summary>
+    /// Gets the index of the bound script-block token in the owning command's
+    /// <see cref="Clause.Elements"/>, or null for a direct shell invocation.
+    /// </summary>
+    public int? HostClauseElementIndex { get; init; }
+
+    /// <summary>Gets the semantic activation phase.</summary>
+    public ExecutionRegionPhase Phase { get; init; }
+
+    /// <summary>Gets the relationship between registration and execution time.</summary>
+    public ExecutionRegionTiming Timing { get; init; }
+
+    /// <summary>Gets how activations relate to one authored region.</summary>
+    public ExecutionRegionCardinality Cardinality { get; init; }
+
+    /// <summary>Gets the recursively parsed region body.</summary>
+    public ShellBlockSyntax Body { get; init; } = new();
+}
+
+/// <summary>Identifies how an authored execution region is introduced.</summary>
+public enum ExecutionRegionOrigin
+{
+    /// <summary>The introducing syntax or binding is unknown.</summary>
+    Unknown,
+    /// <summary>A direct PowerShell call-operator script block: <c>&amp; { ... }</c>.</summary>
+    DirectCall,
+    /// <summary>A direct PowerShell dot-source script block: <c>. { ... }</c>.</summary>
+    DotSource,
+    /// <summary>A script block bound to an argument of a host command.</summary>
+    CommandArgument,
+}
+
+/// <summary>Identifies an execution region's semantic phase.</summary>
+public enum ExecutionRegionPhase
+{
+    /// <summary>The phase is unknown.</summary>
+    Unknown,
+    /// <summary>The primary body of an invocation.</summary>
+    Main,
+    /// <summary>An initialization body.</summary>
+    Initialization,
+    /// <summary>A pipeline begin body.</summary>
+    Begin,
+    /// <summary>A pipeline process body.</summary>
+    Process,
+    /// <summary>A pipeline end body.</summary>
+    End,
+    /// <summary>A per-input filter body.</summary>
+    Filter,
+    /// <summary>An externally triggered action body.</summary>
+    Action,
+    /// <summary>An argument-completion body.</summary>
+    Completion,
+}
+
+/// <summary>Identifies when an execution region may run.</summary>
+public enum ExecutionRegionTiming
+{
+    /// <summary>The timing is unknown.</summary>
+    Unknown,
+    /// <summary>The body completes as part of the containing invocation.</summary>
+    Synchronous,
+    /// <summary>Instances or the containing continuation may overlap.</summary>
+    Concurrent,
+    /// <summary>Registration and a later trigger are distinct.</summary>
+    Deferred,
+}
+
+/// <summary>Identifies how often one authored execution region may activate.</summary>
+public enum ExecutionRegionCardinality
+{
+    /// <summary>The activation cardinality is unknown.</summary>
+    Unknown,
+    /// <summary>The body activates once per proved host invocation.</summary>
+    Once,
+    /// <summary>The body activates once per input object.</summary>
+    OncePerInputObject,
+    /// <summary>The body may activate zero or more times.</summary>
+    ZeroOrMore,
 }

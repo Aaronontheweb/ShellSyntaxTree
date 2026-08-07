@@ -37,11 +37,12 @@ SHALL use `Statement`; pipelines SHALL use `PipelineStage`; groups SHALL use
 `GroupBody`; foreach nodes SHALL use `Iterator` or `LoopBody`; condition loops
 SHALL use `Condition` or `LoopBody`; conditionals SHALL use `Branch`;
 conditional-branch nodes SHALL use `Condition` or `Branch`; and substitutions
-SHALL use `Substitution`. Repeated children SHALL use their zero-based authored
+SHALL use `Substitution`; execution regions SHALL use `ExecutionRegion`.
+Repeated children SHALL use their zero-based authored
 index, with an `else` child indexed after all conditional branches. Frame
 source ranges SHALL identify the ancestor. Blocks, command lists, and groups
 SHALL retain the incoming immediate role; a nearer pipeline, iterator, body,
-condition, branch, or substitution relation SHALL replace it.
+condition, branch, substitution, or execution-region relation SHALL replace it.
 
 #### Scenario: Root and nested block coordinates are deterministic
 - **WHEN** a root statement contains a loop-body pipeline
@@ -118,6 +119,34 @@ when the produced value is unknown.
 - **WHEN** Bash encounters `diff <(git show HEAD) <(git show HEAD~1)` before process substitution discovery is supported
 - **THEN** the result is unparseable rather than omitting either `git` command
 
+### Requirement: Script-block execution regions remain visible
+Every completely delimited execution-bearing PowerShell script block SHALL
+contribute each authored body command exactly once. A direct call or dot-source
+region SHALL contribute only its body commands. A command-owned region SHALL
+retain the host command occurrence as well as its body commands. An ambiguous
+receiver MAY produce incomplete occurrences with unknown region facts, but it
+SHALL NOT omit the body or authorize it as inert data.
+
+#### Scenario: Direct call operator has no synthetic host
+- **WHEN** PowerShell parses `& { Remove-Item target.txt }`
+- **THEN** `Remove-Item` appears exactly once with immediate role `ExecutionRegion`
+- **THEN** no occurrence is created for `&` or the script block itself
+
+#### Scenario: Pipeline callback retains host and body
+- **WHEN** PowerShell parses `Get-ChildItem | ForEach-Object { Remove-Item $_ }`
+- **THEN** occurrences contain `Get-ChildItem`, `ForEach-Object`, and `Remove-Item` exactly once
+- **THEN** the body occurrence has execution-region ancestry nested beneath the pipeline stage
+
+#### Scenario: Deferred callback remains a may-execute command
+- **WHEN** PowerShell registers a breakpoint, event action, or argument completer with a supported script block
+- **THEN** the registration command and every body command appear exactly once
+- **THEN** projection does not predict how many future triggers occur
+
+#### Scenario: Unknown receiver does not hide a script block
+- **WHEN** a script-block argument's receiver or binding is not statically proved
+- **THEN** the host and every body command remain visible
+- **THEN** the affected occurrence facts are incomplete or unknown
+
 ### Requirement: Occurrence completeness is explicit
 Each occurrence SHALL state whether its command identity, structural ancestry,
 and parser-owned shell analysis are complete. No incomplete occurrence SHALL
@@ -146,7 +175,10 @@ authored source order. An enclosed substitution SHALL precede its containing
 simple command. Nested substitutions SHALL be emitted innermost first. When
 decoded wrapper content has no comparable outer spans, the containing
 structural collection order SHALL be used. `ParsedCommand.Clauses` SHALL use
-the same ordering. A substitution ancestry frame SHALL use
+the same ordering. A command-owned execution region SHALL follow its host
+command and sibling regions SHALL follow authored script-block order;
+shell-specific state analysis MAY schedule semantic phases independently.
+A substitution ancestry frame SHALL use
 `Region=Substitution` and the authored zero-based child index in its containing
 structural collection. For an embedded simple-command value this is
 `SimpleCommandSyntax.Substitutions`; for a direct iterator substitution this is
@@ -181,6 +213,12 @@ the iterator-command collection.
 - **WHEN** standalone PowerShell `$()` produces text shaped like a command name
 - **THEN** the occurrence collection contains its inner commands only
 - **THEN** an outer command occurrence exists only when the call operator invokes that value
+
+#### Scenario: Host precedes its script-block regions
+- **WHEN** PowerShell parses `ForEach-Object -End { Write-Output end } -Begin { Write-Output begin }`
+- **THEN** `ForEach-Object` precedes both body commands
+- **THEN** the body commands retain authored End-then-Begin projection order
+- **THEN** semantic execution order is an analyzer fact rather than a projection reorder
 
 ### Requirement: Command discovery is library-owned
 Security consumers SHALL be able to enumerate every potentially executable

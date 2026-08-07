@@ -335,7 +335,7 @@ becomes unknown rather than being truncated.
 The parser SHALL support at most 16 nested executable containers and at most 5
 decoded command-string wrapper recursions. Structural depth starts at zero for
 the root and increments once when entering a foreach loop, condition loop,
-conditional, group, or command substitution. Blocks, conditional-branch
+conditional, group, command substitution, or execution region. Blocks, conditional-branch
 records, command lists, pipelines, and simple-command leaves do not increment
 the depth independently. These bounds SHALL NOT be caller-configurable.
 Exceeding either bound SHALL make the whole result unparseable rather than
@@ -613,6 +613,94 @@ partition merely to publish exact continuation facts.
 - **WHEN** a PowerShell subexpression changes location to an unknown value
 - **THEN** later commands inside the subexpression and in the containing outer continuation have unknown working-directory facts
 - **THEN** no prior exact cwd is selected as a fallback
+
+### Requirement: PowerShell execution regions use shell-specific state flow
+The PowerShell analyzer SHALL interpret execution-region origin, phase, timing,
+and cardinality together with the proved host command, parameter set, and current
+abstract state. It SHALL NOT infer variable, location, command-resolution,
+runspace, or process propagation from one public scope flag.
+
+The stable v0.3 built-in catalog SHALL cover direct call and dot-source script
+blocks; `ForEach-Object` Begin, Process, End, RemainingScripts, and Parallel
+binding; `Where-Object -FilterScript`; in-process and remote
+`Invoke-Command -ScriptBlock`; `Measure-Command -Expression`;
+`Trace-Command -Expression`; `Start-Job` ScriptBlock and
+InitializationScript; `New-Module -ScriptBlock`; `Set-PSBreakpoint -Action`;
+`Register-ObjectEvent -Action`; `Register-EngineEvent -Action`; and
+`Register-ArgumentCompleter -ScriptBlock`. The optional inbox
+`Microsoft.PowerShell.ThreadJob` command MAY be complete only when the caller's
+pinned module baseline proves its canonical identity; otherwise it follows the
+unknown-receiver rule.
+
+Known aliases, supported module-qualified spellings, static call-operator
+spellings, PowerShell parameter prefixes and inline values, positional
+binding, parameter-set selection, and `ScriptBlock[]` binding SHALL resolve to
+the same catalog entry. In particular, multiple `ForEach-Object` script blocks
+SHALL be assigned Begin, Process, and End semantics according to PowerShell's
+binder rather than assumed to share the authored parameter name or position.
+An ambiguous binding SHALL retain every body as an unknown execution region,
+make affected analysis incomplete, and conservatively invalidate following
+state that may be observed or mutated.
+
+Direct `& {}` executes once synchronously in a child variable/command scope
+while sharing runspace location. Direct `. {}` executes once synchronously in
+the current scope. Their `DirectCall` and `DotSource` origins SHALL remain
+distinguishable without source-text reparsing. `ForEach-Object` Begin and End
+execute once per invocation;
+Process and `Where-Object` Filter execute once per input object and share the
+current runspace state. `Measure-Command` and `Trace-Command` expressions
+execute synchronously in the current scope. In-process `Invoke-Command`
+without `-NoNewScope` isolates ordinary assignment while sharing location;
+`-NoNewScope` shares supported state. The in-process parameter set does not
+support `-AsJob` and is always synchronous/once. Remote/session/SSH/VM/container
+targets, multiple targets, and remote `-AsJob` SHALL retain only facts proved
+from the complete parameter set.
+
+#### Scenario: In-process Invoke-Command does not invent AsJob semantics
+- **WHEN** PowerShell parses `Invoke-Command -ScriptBlock { Get-Date }`
+- **THEN** the region is synchronous and activates once
+- **THEN** analysis does not model `-AsJob` as an in-process option
+
+#### Scenario: Direct invocation origin survives without source text
+- **WHEN** a consumer receives direct call and dot-source execution-region nodes
+- **THEN** their origins are `DirectCall` and `DotSource` respectively
+- **THEN** the consumer can select child-scope or current-scope state flow without reparsing source text
+
+`Start-Job` executes initialization before its main block in a child process;
+`ForEach-Object -Parallel` and a proved `Start-ThreadJob` execute in child
+runspaces. Their exit mutation does not flow into the containing continuation.
+Breakpoint actions, event actions, and argument completers are deferred and
+may execute zero or more times; their trigger-time cwd and mutable state are
+Unknown unless independently proved. Deferred commands remain in the
+may-execute projection even though registration itself does not execute them.
+
+#### Scenario: Child scope and shared location are independent
+- **WHEN** isolated-mode PowerShell parses `foreach ($x in 'outer') { }; & { Write-Output inner -OutVariable x; Set-Location /tmp }; Write-Output $x; Get-Location`
+- **THEN** the following `$x` proof retains `outer` when the child-scope writer succeeds
+- **THEN** supported location outcomes include the call region's `/tmp` mutation
+- **THEN** the analyzer does not label both facts shared or both isolated
+
+#### Scenario: Dot source shares variable and location state
+- **WHEN** isolated-mode PowerShell parses `foreach ($x in 'outer') { }; . { Write-Output inner -OutVariable x; Set-Location /tmp }; Write-Output $x; Get-Location`
+- **THEN** following analysis observes the supported `x` and location transfers
+
+#### Scenario: ForEach phases use semantic schedule
+- **WHEN** PowerShell authors End, Begin, and Process script blocks out of phase order
+- **THEN** syntax and occurrence projection retain authored order
+- **THEN** abstract-state execution applies Begin, then Process per input, then End
+- **THEN** facts are joined back to their authored occurrences
+
+#### Scenario: Deferred trigger-time state is unknown
+- **WHEN** an event action contains `Remove-Item relative.txt`
+- **THEN** the action occurrence remains visible
+- **THEN** its trigger-time cwd is Unknown without an independent proof
+- **THEN** no registration-time relative path approval is synthesized
+
+#### Scenario: Ambiguous custom receiver fails closed without hiding the body
+- **WHEN** PowerShell parses `Invoke-Custom { Remove-Item target.txt }` without a proved receiver contract
+- **THEN** both host and body commands remain visible
+- **THEN** their execution-region facts and observing continuation are incomplete
+- **THEN** an unsupported body interior makes the whole result unparseable
 
 ### Requirement: Unknown analysis remains policy-sensitive
 An unknown value SHALL identify the occurrence and position it affects so a

@@ -3,7 +3,8 @@
 ### Requirement: Existing Clause projection remains conservative
 `ParsedCommand.Clauses` SHALL remain available in v0.3 and SHALL contain every
 authored simple command that may execute for a fully parseable result, including
-nested condition, iterator, branch, body, and substitution commands.
+nested condition, iterator, branch, body, substitution, and execution-region
+commands.
 
 Existing raw spelling, decoded values, source spans, and unaffected v0.2 leaf
 classifications SHALL remain compatible. A paired real-shell oracle MAY
@@ -23,6 +24,12 @@ signal.
 - **WHEN** isolated-mode Bash fully parses `for f in a b; do rm "$f"; done`
 - **THEN** the compatibility clauses include the authored `rm` command
 - **THEN** its authored variable argument remains conservatively dynamic rather than being silently replaced
+
+#### Scenario: Old consumer sees a script-block body command
+- **WHEN** PowerShell fully parses `Get-ChildItem | ForEach-Object { Remove-Item $_ }`
+- **THEN** compatibility clauses contain the host and the authored `Remove-Item` body command
+- **THEN** the host's script-block argument remains conservatively dynamic
+- **THEN** no synthetic operator is invented between host and body
 
 #### Scenario: Structural boundaries do not invent operators
 - **WHEN** clauses are flattened from separate control-flow regions
@@ -89,6 +96,16 @@ recursive syntax traversal to discover executable commands.
 - **THEN** it may use syntax ancestry for display
 - **THEN** authorization still uses the complete occurrence collection
 
+#### Scenario: Deferred execution is authorized at registration
+- **WHEN** a registration command contains a deferred event, breakpoint, or completion body
+- **THEN** the example authorization algorithm evaluates the registration command and every body occurrence
+- **THEN** it does not wait for the external trigger or omit the deferred body
+
+#### Scenario: Execution metadata does not grant approval
+- **WHEN** an execution region is synchronous, concurrent, or deferred
+- **THEN** timing and cardinality remain explanatory shell facts
+- **THEN** the consumer still interprets every authored command occurrence and policy-sensitive value
+
 ### Requirement: Unknown facts fail closed when policy-sensitive
 The consumer guide SHALL require strict matching, prompt, or deny whenever an
 unknown fact can affect command identity, option interpretation, path scope,
@@ -103,6 +120,11 @@ position.
 #### Scenario: Unknown node or enum member
 - **WHEN** a consumer encounters a syntax, role, domain, or redirect kind it does not recognize
 - **THEN** it fails closed for authorization
+
+#### Scenario: Unknown execution-region facts
+- **WHEN** a script-block origin, receiver, phase, timing, cardinality, or trigger-time state is unknown
+- **THEN** a consumer prompts or denies whenever the uncertainty affects its policy
+- **THEN** it does not treat the visible body as proof that following state is unchanged
 
 ### Requirement: Non-path redirect data does not create implicit approval scope
 The consumer guide SHALL distinguish complete heredoc and here-string data from

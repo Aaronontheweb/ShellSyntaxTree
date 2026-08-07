@@ -18,7 +18,14 @@ fail-closed behavior for incomplete analysis.
   contract where their semantics actually coincide.
 - Add a library-owned command-occurrence projection containing every command
   that may execute, including condition, iterator, branch, loop-body, wrapped,
-  and substitution commands.
+  substitution, and PowerShell script-block execution-region commands.
+- Correct the PowerShell script-block boundary: represent direct invocation,
+  current-runspace callbacks, child-runspace/process jobs, module
+  initialization, and deferred actions as typed execution regions while
+  retaining proved non-executing script-block data as opaque values. Origin,
+  phase, timing, and cardinality are public structural facts; variable,
+  location, command-resolution, runspace, and process propagation remain
+  independent shell-specific analysis.
 - Add conservative value and shell-state analysis that distinguishes exact,
   finite, bounded-symbolic, and unknown facts without executing commands or
   enumerating the filesystem.
@@ -81,6 +88,12 @@ shell parsers, corpus schemas, public API snapshots, the shared and
 PowerShell specifications, and `docs/CONSUMER_GUIDE.md`. Adding properties to
 public records also changes generated equality, hashing, `ToString()`, and
 default serialization and therefore requires explicit migration notes.
+
+This accepted scope supersedes the earlier assumption that every ordinary
+PowerShell script-block argument is non-executing. Canonical receivers proved
+to treat a block as data remain opaque; known execution-bearing bindings are
+typed, and unknown receivers conservatively expose the body with incomplete
+facts rather than hiding it.
 
 The implementation also corrects a v0.2 security defect at an internal
 boundary: decoded token text currently loses lexical provenance and

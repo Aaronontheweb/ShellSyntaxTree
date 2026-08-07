@@ -63,7 +63,9 @@ public class V03PublicApiSnapshotTests
             ShellSyntaxKind.SimpleCommand,
             (nameof(SimpleCommandSyntax.Clause), typeof(Clause)),
             (nameof(SimpleCommandSyntax.Substitutions),
-                typeof(IReadOnlyList<CommandSubstitutionSyntax>)));
+                typeof(IReadOnlyList<CommandSubstitutionSyntax>)),
+            (nameof(SimpleCommandSyntax.ExecutionRegions),
+                typeof(IReadOnlyList<ExecutionRegionSyntax>)));
         AssertNode(
             new PipelineSyntax(),
             ShellSyntaxKind.Pipeline,
@@ -104,11 +106,22 @@ public class V03PublicApiSnapshotTests
             new CommandSubstitutionSyntax(),
             ShellSyntaxKind.CommandSubstitution,
             (nameof(CommandSubstitutionSyntax.Body), typeof(ShellBlockSyntax)));
+        AssertNode(
+            new ExecutionRegionSyntax(),
+            ShellSyntaxKind.ExecutionRegion,
+            (nameof(ExecutionRegionSyntax.Origin), typeof(ExecutionRegionOrigin)),
+            (nameof(ExecutionRegionSyntax.HostClauseElementIndex), typeof(int?)),
+            (nameof(ExecutionRegionSyntax.Phase), typeof(ExecutionRegionPhase)),
+            (nameof(ExecutionRegionSyntax.Timing), typeof(ExecutionRegionTiming)),
+            (nameof(ExecutionRegionSyntax.Cardinality), typeof(ExecutionRegionCardinality)),
+            (nameof(ExecutionRegionSyntax.Body), typeof(ShellBlockSyntax)));
 
         var simple = new SimpleCommandSyntax();
         Assert.NotNull(simple.Clause);
         Assert.NotNull(simple.Substitutions);
         Assert.Empty(simple.Substitutions);
+        Assert.NotNull(simple.ExecutionRegions);
+        Assert.Empty(simple.ExecutionRegions);
         Assert.Empty(new ShellBlockSyntax().Statements);
         Assert.Empty(new PipelineSyntax().Stages);
         Assert.Empty(new CommandListSyntax().Items);
@@ -145,6 +158,15 @@ public class V03PublicApiSnapshotTests
         var substitution = new CommandSubstitutionSyntax();
         Assert.NotNull(substitution.Body);
         Assert.Empty(substitution.Body.Statements);
+
+        var executionRegion = new ExecutionRegionSyntax();
+        Assert.Equal(ExecutionRegionOrigin.Unknown, executionRegion.Origin);
+        Assert.Null(executionRegion.HostClauseElementIndex);
+        Assert.Equal(ExecutionRegionPhase.Unknown, executionRegion.Phase);
+        Assert.Equal(ExecutionRegionTiming.Unknown, executionRegion.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Unknown, executionRegion.Cardinality);
+        Assert.NotNull(executionRegion.Body);
+        Assert.Empty(executionRegion.Body.Statements);
     }
 
     [Fact]
@@ -304,15 +326,25 @@ public class V03PublicApiSnapshotTests
         AssertEnum<ShellSyntaxKind>(
             "Unknown", "Block", "SimpleCommand", "Pipeline", "CommandList",
             "Group", "ForEach", "ConditionLoop", "Conditional",
-            "ConditionalBranch", "CommandSubstitution");
+            "ConditionalBranch", "CommandSubstitution", "ExecutionRegion");
         AssertEnum<ShellGroupKind>("Unknown", "CurrentScope", "IsolatedScope");
         AssertEnum<ConditionLoopKind>("Unknown", "While", "Until");
+        AssertEnum<ExecutionRegionOrigin>(
+            "Unknown", "DirectCall", "DotSource", "CommandArgument");
+        AssertEnum<ExecutionRegionPhase>(
+            "Unknown", "Main", "Initialization", "Begin", "Process", "End",
+            "Filter", "Action", "Completion");
+        AssertEnum<ExecutionRegionTiming>(
+            "Unknown", "Synchronous", "Concurrent", "Deferred");
+        AssertEnum<ExecutionRegionCardinality>(
+            "Unknown", "Once", "OncePerInputObject", "ZeroOrMore");
         AssertEnum<CommandOccurrenceRole>(
             "Unknown", "Ordinary", "PipelineStage", "Condition", "Iterator",
-            "LoopBody", "Branch", "Substitution");
+            "LoopBody", "Branch", "Substitution", "ExecutionRegion");
         AssertEnum<CommandAncestryRegion>(
             "Unknown", "Root", "Statement", "PipelineStage", "GroupBody",
-            "Iterator", "LoopBody", "Condition", "Branch", "Substitution");
+            "Iterator", "LoopBody", "Condition", "Branch", "Substitution",
+            "ExecutionRegion");
         AssertEnum<ShellValueDomainKind>("Unknown", "Exact", "FiniteSet", "Pattern");
         AssertEnum<HereDocumentExpansionMode>("Unknown", "Literal", "Expand");
         AssertEnum<RedirectSourceKind>(
@@ -343,6 +375,7 @@ public class V03PublicApiSnapshotTests
             typeof(ConditionalSyntax),
             typeof(ConditionalBranchSyntax),
             typeof(CommandSubstitutionSyntax),
+            typeof(ExecutionRegionSyntax),
             typeof(CommandOccurrence),
             typeof(CommandAncestryFrame),
             typeof(EffectiveArgument),
