@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 background list fails closed",
+  "input": "echo \u0022$(id \u0026 evil)\u0022",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "single-\u0027\u0026\u0027 background lists are not supported"
+  },
+  "notes": "Single-ampersand concurrency is outside the bounded grammar and publishes no partial commands.",
+  "oracleExpectation": "OutOfScope"
+}

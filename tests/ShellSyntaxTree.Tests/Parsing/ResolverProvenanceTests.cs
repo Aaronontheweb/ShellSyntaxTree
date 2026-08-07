@@ -66,14 +66,14 @@ public class ResolverProvenanceTests
     }
 
     [Fact]
-    public void Bash_command_substitution_inside_double_quotes_is_opaque()
+    public void Bash_backtick_substitution_inside_double_quotes_fails_closed()
     {
-        var argument = Assert.Single(
-            Assert.Single(Bash.Parse("cat \"`printf /etc/passwd`\"").Clauses).Args);
+        var parsed = Bash.Parse("cat \"`printf /etc/passwd`\"");
 
-        Assert.Equal(ArgKind.DynamicSkip, argument.Kind);
-        Assert.False(argument.IsPath);
-        Assert.Null(argument.Resolved);
+        Assert.True(parsed.IsUnparseable);
+        Assert.Empty(parsed.Clauses);
+        Assert.Empty(parsed.Commands);
+        Assert.Contains("backtick", parsed.UnparseableReason!);
     }
 
     [Fact]

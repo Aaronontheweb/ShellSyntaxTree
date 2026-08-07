@@ -401,7 +401,8 @@ public class BashCommandParserTests
     public void Redirect_target_is_dynamic_when_opaque_substitution()
     {
         var result = Parse("cmd > $(date +log)");
-        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "date", "cmd" }, result.Clauses.Select(clause => clause.Verb.Joined));
+        var clause = result.Clauses[1];
         var redirect = Assert.Single(clause.Redirects);
         Assert.True(redirect.IsDynamicSkip);
     }
@@ -424,7 +425,8 @@ public class BashCommandParserTests
     {
         var result = Parse("rm $(find /tmp)");
         Assert.False(result.IsUnparseable);
-        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "find", "rm" }, result.Clauses.Select(clause => clause.Verb.Joined));
+        var clause = result.Clauses[1];
         Assert.Equal(new[] { "rm" }, clause.Verb.Tokens);
         var arg = Assert.Single(clause.Args);
         Assert.Equal(ArgKind.DynamicSkip, arg.Kind);
@@ -433,13 +435,13 @@ public class BashCommandParserTests
     }
 
     [Fact]
-    public void Backtick_substitution_becomes_DynamicSkip_arg()
+    public void Backtick_substitution_is_unparseable_until_its_distinct_grammar_is_supported()
     {
         var result = Parse("rm `find /tmp`");
-        Assert.False(result.IsUnparseable);
-        var clause = Assert.Single(result.Clauses);
-        var arg = Assert.Single(clause.Args);
-        Assert.Equal(ArgKind.DynamicSkip, arg.Kind);
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Clauses);
+        Assert.Empty(result.Commands);
+        Assert.Contains("backtick", result.UnparseableReason!);
     }
 
     // ---------------- Unparseable ----------------

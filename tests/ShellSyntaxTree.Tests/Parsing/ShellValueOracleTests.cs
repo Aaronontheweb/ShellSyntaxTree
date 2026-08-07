@@ -552,6 +552,34 @@ public class ShellValueOracleTests
         }
     }
 
+    [Fact]
+    public void Bash_continuation_and_comment_boundary_samples_are_valid()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var sources = new[]
+        {
+            "echo \"$(printf x # )\nid)\"",
+            "echo \"$(printf x \\\n# )\nid)\"",
+            "echo \"$(printf x \\\r\n# )\r\nid)\"",
+            "r\\\nm target",
+            "echo \"$(r\\\n#suffix)\"",
+            "echo \"$(X\\\n=1 rm -rf /tmp/x)\"",
+        };
+        foreach (var source in sources)
+        {
+            var result = RunUnchecked("bash", "-n", "-c", source);
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.True(
+                string.IsNullOrEmpty(result.StandardError),
+                $"bash syntax oracle wrote to stderr: {result.StandardError}");
+        }
+    }
+
     private static bool IsAvailable(string executable)
     {
         try

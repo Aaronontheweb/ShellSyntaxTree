@@ -258,10 +258,19 @@ priorities.
       unknown fields and always requires unparseable projections to be empty.
       The PowerShell manifest now owns all 310 entries and round-trips exactly;
       explicit false/null assertions remain opt-in and generator-preserved.
-- [ ] Deliver paired Bash and PowerShell `$()` substitution slices for all
-      locked executable value positions, including ordering, ancestry,
-      shell-specific cwd propagation, literal/escaped boundaries, dynamic
-      identities, fail-closed negatives, executable corpus, and Netclaw cases.
+- [x] Deliver the first Bash `$()` substitution slice for supported
+      simple-command arguments and redirect targets. Direct tests and corpus
+      entries pin multiple and nested ordering, exact ancestry/spans, isolated
+      cwd, decoded wrappers, literal boundaries, dynamic compatibility values,
+      depth limits, comment-safe delimiter scanning, and fail-closed command
+      identities, background lists, assignment prefixes, backticks, heredocs,
+      and malformed interiors.
+- [ ] Extend Bash substitution discovery to iterables and expanding heredoc
+      bodies, then add the corresponding Netclaw approval-matrix cases.
+- [ ] Deliver the PowerShell `$()` substitution slice for every locked value
+      and expression position, including current-scope state propagation,
+      literal boundaries, incomplete dynamic identities, executable corpus,
+      and Netclaw cases.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.
