@@ -1,9 +1,19 @@
 {
-  "name": "v0.3 hidden command substitution remains incomplete",
+  "name": "v0.3 command substitution is discovered",
   "input": "rm $(find /tmp)",
   "expected": {
     "isUnparseable": false,
     "clauses": [
+      {
+        "operator": "None",
+        "verb": ["find"],
+        "args": [
+          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      },
       {
         "operator": "None",
         "verb": ["rm"],
@@ -17,18 +27,31 @@
     ],
     "syntax": [
       { "kind": "Block", "parentIndex": null, "region": "Unknown", "childIndex": null, "sourceStart": 0, "sourceLength": 15, "clauseIndex": null, "groupKind": null, "listOperator": null },
-      { "kind": "SimpleCommand", "parentIndex": 0, "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 15, "clauseIndex": 0, "groupKind": null, "listOperator": null }
+      { "kind": "SimpleCommand", "parentIndex": 0, "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 15, "clauseIndex": 1, "groupKind": null, "listOperator": null },
+      { "kind": "CommandSubstitution", "parentIndex": 1, "region": "Substitution", "childIndex": 0, "sourceStart": 3, "sourceLength": 12, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "Block", "parentIndex": 2, "region": "Substitution", "childIndex": 0, "sourceStart": 5, "sourceLength": 9, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "SimpleCommand", "parentIndex": 3, "region": "Statement", "childIndex": 0, "sourceStart": 5, "sourceLength": 9, "clauseIndex": 0, "groupKind": null, "listOperator": null }
     ],
     "commands": [
       {
         "clauseIndex": 0,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 15 },
+          { "ancestorKind": "CommandSubstitution", "region": "Substitution", "childIndex": 0, "sourceStart": 3, "sourceLength": 12 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 5, "sourceLength": 9 }
+        ]
+      },
+      {
+        "clauseIndex": 1,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 15 }
         ]
       }
     ]
   },
-  "notes": "Until task 3.10 discovers the inner find command, the authored outer leaf stays visible but cannot authorize execution."
+  "notes": "The inner find command is visible before rm while the authored DynamicSkip argument remains unchanged."
 }

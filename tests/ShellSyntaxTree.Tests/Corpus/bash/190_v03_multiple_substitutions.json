@@ -1,0 +1,218 @@
+{
+  "name": "v0.3 multiple command substitutions",
+  "input": "printf \u0027%s %s\u0027 \u0022$(whoami)\u0022 \u0022$(pwd)\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "whoami"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "pwd"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "printf"
+        ],
+        "args": [
+          {
+            "raw": "\u0027%s %s\u0027",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          },
+          {
+            "raw": "\u0022$(whoami)\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          },
+          {
+            "raw": "\u0022$(pwd)\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 35,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 35,
+        "clauseIndex": 2,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandSubstitution",
+        "parentIndex": 1,
+        "region": "Substitution",
+        "childIndex": 0,
+        "sourceStart": 16,
+        "sourceLength": 9,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 2,
+        "region": "Substitution",
+        "childIndex": 0,
+        "sourceStart": 18,
+        "sourceLength": 6,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 18,
+        "sourceLength": 6,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandSubstitution",
+        "parentIndex": 1,
+        "region": "Substitution",
+        "childIndex": 1,
+        "sourceStart": 28,
+        "sourceLength": 6,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 5,
+        "region": "Substitution",
+        "childIndex": 1,
+        "sourceStart": 30,
+        "sourceLength": 3,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 6,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 30,
+        "sourceLength": 3,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 35
+          },
+          {
+            "ancestorKind": "CommandSubstitution",
+            "region": "Substitution",
+            "childIndex": 0,
+            "sourceStart": 16,
+            "sourceLength": 9
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 18,
+            "sourceLength": 6
+          }
+        ]
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 35
+          },
+          {
+            "ancestorKind": "CommandSubstitution",
+            "region": "Substitution",
+            "childIndex": 1,
+            "sourceStart": 28,
+            "sourceLength": 6
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 30,
+            "sourceLength": 3
+          }
+        ]
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 35
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Both substitutions are ordered before their containing printf occurrence."
+}

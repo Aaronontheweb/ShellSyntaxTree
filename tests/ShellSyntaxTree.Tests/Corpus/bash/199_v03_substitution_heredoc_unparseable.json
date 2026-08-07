@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 substitution heredoc fails closed",
+  "input": "rm \u0022$(cat \u003C\u003CEOF\nvalue\nEOF\n)\u0022",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "heredocs inside command substitution are not supported"
+  },
+  "notes": "Heredoc bodies inside command substitution remain fail-closed until their boundaries are modeled.",
+  "oracleExpectation": "OutOfScope"
+}

@@ -53,12 +53,11 @@ command can consume it.
 - Variable expansion. We mark dynamic tokens, never resolve them.
 - Function definitions, here-docs body extraction, complex parameter
   expansion (`${var//pattern/replacement}`), arithmetic expansion.
-- Command-substitution evaluation. `$(cmd)` and backtick `` `cmd` `` are
-  recognized at the lex level and collapsed into a single
-  `Kind=DynamicSkip, IsPath=false` arg per locked interpretation #2 (see
-  `openspec/changes/archive/.../v0.1-locked-interpretations`). The
-  surrounding clause stays parseable so hard-deny rules still fire on
-  visible parts.
+- Command-substitution evaluation. The library never executes a substitution
+  or claims its produced value is known. Stable v0.3 recursively discovers
+  commands inside supported Bash `$()` positions while retaining the authored
+  `Kind=DynamicSkip, IsPath=false` compatibility value. Legacy backticks and
+  incomplete executable interiors fail closed.
 - Performance tuning beyond "fast enough to invoke per shell call without
   noticeable latency" (~1ms per typical input).
 
@@ -966,7 +965,9 @@ quoted_string   := single-quoted | double-quoted
   immediately following a compound operator all collapse: they never
   yield an empty clause. The newline after a heredoc terminator likewise
   separates the heredoc's clause from what follows.
-- `\` followed by a newline is a line continuation (treat as whitespace).
+- `\` followed by a newline is removed before word-boundary analysis. It joins
+  adjacent fragments (`r\` + newline + `m` is the command name `rm`); actual
+  surrounding spaces still separate words.
 - Bash line comments (`#` at a word boundary through end-of-line) are
   whitespace-equivalent at the lexer level — they emit a Comment token
   for source fidelity but are filtered alongside Whitespace by the
@@ -982,10 +983,10 @@ quoted_string   := single-quoted | double-quoted
   NOT path-resolved. The parser carries the raw token (e.g. `&1`) on
   `Redirect.Target` and sets `Redirect.IsDynamicSkip = true`. This
   prevents `2>&1` from being incorrectly resolved to `<cwd>/&1`.
-- Function definitions, `case`/`esac`, C-style or implicit loops, arithmetic
-  execution, process substitution, and single-`&` background lists remain
-  unparseable in stable v0.3 because they can hide executable regions outside
-  the bounded grammar below.
+- Function definitions, assignment-prefix commands, `case`/`esac`, C-style or
+  implicit loops, arithmetic execution, process substitution, and single-`&`
+  background lists remain unparseable in stable v0.3 because they can hide
+  executable regions outside the bounded grammar below.
 
 ### v0.3 structured Bash grammar
 
@@ -1072,7 +1073,8 @@ The lexer produces tokens consumed by the parser. Token kinds:
   is flagged as a **statement separator**; the parser retains those
   tokens past `FilterSignificant` and splits clauses on them per §4. A
   pure space/tab run carries no flag and is discarded after splitting.
-- **CONTINUATION** — `\` + `\n`. Treated as whitespace.
+- **CONTINUATION** — `\` + `\n` (or `\r\n`). Removed before word-boundary
+  analysis; adjacent lexical fragments remain one authored word.
 - **OPAQUE_SUBSTITUTION** — `$(cmd)` or backtick `` `cmd` ``. The full
   substitution slice (including delimiters) becomes a single token.
   Boundary tracking handles nested same-kind regions, nested quotes,

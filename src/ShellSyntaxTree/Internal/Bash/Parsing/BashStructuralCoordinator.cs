@@ -18,6 +18,7 @@ internal static partial class BashCommandParser
         IReadOnlyList<BashToken> tokens,
         BashParserOptions options,
         int bashCDepth,
+        int structuralDepth,
         bool markBashCWrapped)
     {
         var coordinator = new StructuralCoordinator(
@@ -25,7 +26,10 @@ internal static partial class BashCommandParser
             tokens,
             options,
             bashCDepth,
-            markBashCWrapped);
+            structuralDepth,
+            markBashCWrapped,
+            sourceStart: 0,
+            source.Length);
         if (!coordinator.TryParse(out var syntax, out var error))
         {
             return StructuralFailure(source, error, syntax);
@@ -36,8 +40,7 @@ internal static partial class BashCommandParser
                 simple => new CommandOccurrenceFacts
                 {
                     IsComplete = simple.Clause.Redirects.Count == 0 &&
-                        !HasUnexpandedCommandString(simple.Clause) &&
-                        !HasUndiscoveredExecutableRegion(simple.Clause),
+                        !HasUnexpandedCommandString(simple.Clause),
                 },
                 out var projection))
         {
@@ -75,7 +78,10 @@ internal static partial class BashCommandParser
         private readonly IReadOnlyList<BashToken> _tokens;
         private readonly BashParserOptions _options;
         private readonly int _bashCDepth;
+        private readonly int _structuralDepth;
         private readonly bool _markBashCWrapped;
+        private readonly int _sourceStart;
+        private readonly int _sourceLength;
         private readonly CdAttributionContext _attribution = new();
         private int _position;
         private int _subshellDepth;
@@ -85,13 +91,19 @@ internal static partial class BashCommandParser
             IReadOnlyList<BashToken> tokens,
             BashParserOptions options,
             int bashCDepth,
-            bool markBashCWrapped)
+            int structuralDepth,
+            bool markBashCWrapped,
+            int sourceStart,
+            int sourceLength)
         {
             _source = source;
             _tokens = tokens;
             _options = options;
             _bashCDepth = bashCDepth;
+            _structuralDepth = structuralDepth;
             _markBashCWrapped = markBashCWrapped;
+            _sourceStart = sourceStart;
+            _sourceLength = sourceLength;
         }
 
         internal bool TryParse(out ShellBlockSyntax syntax, out string? error)
@@ -101,8 +113,8 @@ internal static partial class BashCommandParser
             {
                 syntax = new ShellBlockSyntax
                 {
-                    SourceStart = 0,
-                    SourceLength = _source.Length,
+                    SourceStart = _sourceStart,
+                    SourceLength = _sourceLength,
                 };
                 error = null;
                 return true;
@@ -132,8 +144,8 @@ internal static partial class BashCommandParser
             syntax = new ShellBlockSyntax
             {
                 Statements = new[] { command },
-                SourceStart = 0,
-                SourceLength = _source.Length,
+                SourceStart = _sourceStart,
+                SourceLength = _sourceLength,
             };
             return true;
         }
@@ -314,6 +326,20 @@ internal static partial class BashCommandParser
                 Tokens = segmentTokens,
             };
 
+            if (HasAssignmentPrefix(segmentTokens))
+            {
+                error = "Bash assignment-prefix commands are not supported";
+                return false;
+            }
+
+            if (!TryCollectCommandSubstitutions(
+                    segmentTokens,
+                    out var substitutionFragments,
+                    out error))
+            {
+                return false;
+            }
+
             if (TryDetectBashCWrapper(segment, _source, out var innerCommand))
             {
                 if (!IsExactStaticWrapper(segmentTokens))
@@ -332,6 +358,7 @@ internal static partial class BashCommandParser
                     innerCommand!,
                     _options,
                     _bashCDepth + 1,
+                    _structuralDepth + _subshellDepth + 1,
                     markBashCWrapped: true);
                 if (inner.IsUnparseable)
                 {
@@ -402,6 +429,15 @@ internal static partial class BashCommandParser
                 IsCommandStringWrapped = _markBashCWrapped,
             };
             var emitted = AttachAttributionArg(clause, _attribution);
+            if (!TryParseCommandSubstitutions(
+                    substitutionFragments,
+                    effectiveOptions,
+                    out var substitutions,
+                    out error))
+            {
+                return false;
+            }
+
             var firstVerbToken = clause.Verb.Tokens.Count > 0 ? clause.Verb.Tokens[0] : null;
             if (firstVerbToken is not null &&
                 (string.Equals(firstVerbToken, "cd", StringComparison.OrdinalIgnoreCase) ||
@@ -415,6 +451,7 @@ internal static partial class BashCommandParser
             command = new SimpleCommandSyntax
             {
                 Clause = emitted,
+                Substitutions = substitutions,
                 SourceStart = firstSource.SourceStart,
                 SourceLength = lastSource.SourceStart + lastSource.SourceLength -
                     firstSource.SourceStart,
@@ -427,7 +464,8 @@ internal static partial class BashCommandParser
             out ShellSyntaxNode? command,
             out string? error)
         {
-            if (_subshellDepth >= ShellAnalysisLimits.MaxStructuralNesting)
+            if (_structuralDepth + _subshellDepth >=
+                ShellAnalysisLimits.MaxStructuralNesting)
             {
                 command = null;
                 error = "Bash structural nesting depth exceeded (>16)";
@@ -454,7 +492,7 @@ internal static partial class BashCommandParser
             if (_position == _tokens.Count || !IsOperator(")"))
             {
                 command = null;
-                error = $"unbalanced parens at position {_source.Length}";
+                error = $"unbalanced parens at position {_sourceStart + _sourceLength}";
                 return false;
             }
 
@@ -527,6 +565,261 @@ internal static partial class BashCommandParser
             _position < _tokens.Count &&
             _tokens[_position].Kind == BashTokenKind.Operator &&
             string.Equals(_tokens[_position].OperatorText, value, StringComparison.Ordinal);
+
+        private bool TryCollectCommandSubstitutions(
+            IReadOnlyList<BashToken> tokens,
+            out IReadOnlyList<ShellValueFragment> substitutions,
+            out string? error)
+        {
+            var discovered = new List<ShellValueFragment>();
+            var commandNameEnd = tokens[0].SourceStart + tokens[0].SourceLength;
+            for (var index = 1; index < tokens.Count; index++)
+            {
+                var token = tokens[index];
+                if (token.Kind == BashTokenKind.Operator ||
+                    token.SourceStart != commandNameEnd)
+                {
+                    break;
+                }
+
+                commandNameEnd = token.SourceStart + token.SourceLength;
+            }
+
+            foreach (var token in tokens)
+            {
+                var value = token.ResolverValue;
+                if (value is null)
+                {
+                    continue;
+                }
+
+                foreach (var fragment in value.Fragments)
+                {
+                    if (fragment.Kind != ShellValueFragmentKind.Opaque ||
+                        fragment.OpaqueCause != ShellOpaqueCause.CommandSubstitution)
+                    {
+                        continue;
+                    }
+
+                    if (fragment.SourceStart is null || fragment.SourceLength is null ||
+                        fragment.SourceLength < 2 ||
+                        fragment.SourceStart < _sourceStart ||
+                        fragment.SourceStart + fragment.SourceLength >
+                            _sourceStart + _sourceLength)
+                    {
+                        substitutions = Array.Empty<ShellValueFragment>();
+                        error = "Bash command substitution has invalid source provenance";
+                        return false;
+                    }
+
+                    var raw = _source.Substring(
+                        fragment.SourceStart.Value,
+                        fragment.SourceLength.Value);
+                    if (raw[0] == '`')
+                    {
+                        substitutions = Array.Empty<ShellValueFragment>();
+                        error = "legacy backtick command substitution is not supported";
+                        return false;
+                    }
+
+                    if (!raw.StartsWith("$(", StringComparison.Ordinal) || raw[raw.Length - 1] != ')')
+                    {
+                        substitutions = Array.Empty<ShellValueFragment>();
+                        error = "unsupported Bash command substitution provenance";
+                        return false;
+                    }
+
+                    if (fragment.SourceStart < commandNameEnd)
+                    {
+                        substitutions = Array.Empty<ShellValueFragment>();
+                        error = "Bash command-name substitution is not supported";
+                        return false;
+                    }
+
+                    discovered.Add(fragment);
+                }
+            }
+
+            substitutions = discovered;
+            error = null;
+            return true;
+        }
+
+        private bool HasAssignmentPrefix(IReadOnlyList<BashToken> tokens)
+        {
+            var spelling = _source.Substring(tokens[0].SourceStart, tokens[0].SourceLength)
+                .Replace("\\\r\n", string.Empty)
+                .Replace("\\\n", string.Empty)
+                .Replace("\\\r", string.Empty);
+            var index = 0;
+            if (spelling.Length == 0 || !IsBashIdentifierStart(spelling[index]))
+            {
+                return false;
+            }
+
+            index++;
+            while (index < spelling.Length && IsBashIdentifierContinuation(spelling[index]))
+            {
+                index++;
+            }
+
+            if (index < spelling.Length && spelling[index] == '[')
+            {
+                while (index < spelling.Length && spelling[index] != ']')
+                {
+                    index++;
+                }
+
+                if (index >= spelling.Length)
+                {
+                    return false;
+                }
+
+                index++;
+            }
+
+            if (index < spelling.Length && spelling[index] == '+')
+            {
+                index++;
+            }
+
+            return index < spelling.Length && spelling[index] == '=';
+        }
+
+        private static bool IsBashIdentifierStart(char value) =>
+            value == '_' || value is >= 'A' and <= 'Z' or >= 'a' and <= 'z';
+
+        private static bool IsBashIdentifierContinuation(char value) =>
+            IsBashIdentifierStart(value) || value is >= '0' and <= '9';
+
+        private bool TryParseCommandSubstitutions(
+            IReadOnlyList<ShellValueFragment> fragments,
+            BashParserOptions options,
+            out IReadOnlyList<CommandSubstitutionSyntax> substitutions,
+            out string? error)
+        {
+            if (fragments.Count == 0)
+            {
+                substitutions = Array.Empty<CommandSubstitutionSyntax>();
+                error = null;
+                return true;
+            }
+
+            if (_structuralDepth + _subshellDepth + 1 >
+                ShellAnalysisLimits.MaxStructuralNesting)
+            {
+                substitutions = Array.Empty<CommandSubstitutionSyntax>();
+                error = "Bash structural nesting depth exceeded (>16)";
+                return false;
+            }
+
+            var parsed = new List<CommandSubstitutionSyntax>(fragments.Count);
+            foreach (var fragment in fragments)
+            {
+                var sourceStart = fragment.SourceStart!.Value;
+                var sourceLength = fragment.SourceLength!.Value;
+                var bodyStart = sourceStart + 2;
+                var bodyLength = sourceLength - 3;
+                if (!TryParseSubstitutionBody(
+                        bodyStart,
+                        bodyLength,
+                        options,
+                        out var body,
+                        out error))
+                {
+                    substitutions = Array.Empty<CommandSubstitutionSyntax>();
+                    return false;
+                }
+
+                parsed.Add(new CommandSubstitutionSyntax
+                {
+                    Body = body,
+                    SourceStart = sourceStart,
+                    SourceLength = sourceLength,
+                });
+            }
+
+            substitutions = parsed;
+            error = null;
+            return true;
+        }
+
+        private bool TryParseSubstitutionBody(
+            int sourceStart,
+            int sourceLength,
+            BashParserOptions options,
+            out ShellBlockSyntax body,
+            out string? error)
+        {
+            var source = _source.Substring(sourceStart, sourceLength);
+            var relativeTokens = BashLexer.Tokenize(source);
+            for (var index = 0; index < relativeTokens.Count; index++)
+            {
+                if (relativeTokens[index].Kind == BashTokenKind.UnparseableSentinel)
+                {
+                    body = new ShellBlockSyntax();
+                    error = relativeTokens[index].UnparseableReason;
+                    return false;
+                }
+            }
+
+            var significant = FilterSignificant(relativeTokens);
+            if (TryDetectAnomaly(significant, out error))
+            {
+                body = new ShellBlockSyntax();
+                return false;
+            }
+
+            var shifted = ShiftTokens(significant, sourceStart);
+            var coordinator = new StructuralCoordinator(
+                _source,
+                shifted,
+                options,
+                _bashCDepth,
+                _structuralDepth + _subshellDepth + 1,
+                _markBashCWrapped,
+                sourceStart,
+                sourceLength);
+            return coordinator.TryParse(out body, out error);
+        }
+    }
+
+    private static IReadOnlyList<BashToken> ShiftTokens(
+        IReadOnlyList<BashToken> tokens,
+        int sourceOffset)
+    {
+        var shifted = new BashToken[tokens.Count];
+        for (var index = 0; index < tokens.Count; index++)
+        {
+            var token = tokens[index];
+            shifted[index] = token with
+            {
+                SourceStart = token.SourceStart + sourceOffset,
+                ResolverValue = ShiftValue(token.ResolverValue, sourceOffset),
+            };
+        }
+
+        return shifted;
+    }
+
+    private static ShellValue? ShiftValue(ShellValue? value, int sourceOffset)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var fragments = new ShellValueFragment[value.Fragments.Count];
+        for (var index = 0; index < value.Fragments.Count; index++)
+        {
+            var fragment = value.Fragments[index];
+            fragments[index] = fragment with
+            {
+                SourceStart = fragment.SourceStart + sourceOffset,
+            };
+        }
+
+        return new ShellValue(value.Decoded, fragments);
     }
 
     private static bool IsStructuralBoundary(BashToken token) =>
@@ -642,26 +935,6 @@ internal static partial class BashCommandParser
         for (var index = 1; index < value.Length; index++)
         {
             if (value[index] == 'c')
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool HasUndiscoveredExecutableRegion(Clause clause)
-    {
-        for (var index = 0; index < clause.Elements.Count; index++)
-        {
-            var element = clause.Elements[index];
-            if (element.Kind != ArgKind.DynamicSkip)
-            {
-                continue;
-            }
-
-            if (element.Raw.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
-                element.Raw.IndexOf('`') >= 0)
             {
                 return true;
             }

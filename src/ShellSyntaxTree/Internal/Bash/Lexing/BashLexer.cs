@@ -21,10 +21,10 @@ namespace ShellSyntaxTree.Internal.Bash.Lexing;
 ///   <item>The lexer never expands variables. <c>$VAR</c> and
 ///         <c>${VAR}</c> stay literal inside a <see cref="BashTokenKind.Word"/>
 ///         token; the resolver in PR 4 decides what to do with them.</item>
-///   <item>Opaque regions (<c>$(…)</c> and backtick <c>`…`</c>) are
-///         consumed by <see cref="OpaqueRegionScanner"/> and emitted as
-///         a single <see cref="BashTokenKind.OpaqueSubstitution"/> token
-///         per the v0.1 locked interpretation.</item>
+///   <item>Command substitutions use a Bash-specific boundary scan so line
+///         comments cannot hide a closing parenthesis. Backtick regions use
+///         <see cref="OpaqueRegionScanner"/>. Both are emitted as a single
+///         <see cref="BashTokenKind.OpaqueSubstitution"/> token.</item>
 ///   <item>Constructs SPEC §1 calls non-goals — arithmetic expansion
 ///         <c>$((…))</c> and complex parameter expansion
 ///         <c>${var//pat/repl}</c> — emit a
@@ -134,6 +134,24 @@ internal static class BashLexer
                 continue;
             }
 
+            if (c == '&')
+            {
+                if (TryConsumeFileDescriptorTarget(src, i, tokens, out var afterTarget))
+                {
+                    i = afterTarget;
+                    continue;
+                }
+
+                tokens.Add(new BashToken(
+                    BashTokenKind.UnparseableSentinel,
+                    src.Slice(i).ToString(),
+                    null,
+                    i,
+                    src.Length - i,
+                    "single-'&' background lists are not supported"));
+                return tokens;
+            }
+
             // ---- quoted strings ----
             if (c == '\'')
             {
@@ -215,6 +233,93 @@ internal static class BashLexer
         }
 
         return tokens;
+    }
+
+    private static bool TryConsumeFileDescriptorTarget(
+        ReadOnlySpan<char> src,
+        int start,
+        List<BashToken> tokens,
+        out int afterTarget)
+    {
+        afterTarget = start;
+        var previousIndex = tokens.Count - 1;
+        while (previousIndex >= 0)
+        {
+            var previous = tokens[previousIndex];
+            if (previous.Kind == BashTokenKind.Whitespace)
+            {
+                if (previous.IsStatementSeparator)
+                {
+                    return false;
+                }
+
+                previousIndex--;
+                continue;
+            }
+
+            if (previous.Kind is BashTokenKind.Continuation or BashTokenKind.Comment)
+            {
+                previousIndex--;
+                continue;
+            }
+
+            break;
+        }
+
+        if (previousIndex < 0 || tokens[previousIndex].Kind != BashTokenKind.Operator ||
+            tokens[previousIndex].OperatorText is not (">" or ">>" or "<" or "2>" or "2>>"))
+        {
+            return false;
+        }
+
+        var end = start + 1;
+        if (end < src.Length && src[end] == '$')
+        {
+            afterTarget = ReadWord(src, start, tokens, allowLeadingAmpersand: true);
+            return afterTarget > start + 1;
+        }
+
+        if (end < src.Length && src[end] == '-')
+        {
+            end++;
+        }
+        else
+        {
+            var digitStart = end;
+            while (end < src.Length && src[end] is >= '0' and <= '9')
+            {
+                end++;
+            }
+
+            if (end == digitStart)
+            {
+                return false;
+            }
+
+            if (end < src.Length && src[end] == '-')
+            {
+                end++;
+            }
+        }
+
+        if (end < src.Length && !char.IsWhiteSpace(src[end]) && !IsOperatorStart(src, end))
+        {
+            return false;
+        }
+
+        var raw = src.Slice(start, end - start).ToString();
+        tokens.Add(new BashToken(
+            BashTokenKind.Word,
+            raw,
+            null,
+            start,
+            end - start,
+            null)
+        {
+            ResolverValue = ShellValue.Literal(raw, start, end - start),
+        });
+        afterTarget = end;
+        return true;
     }
 
     // ---------------------------------------------------------------- operators
@@ -417,7 +522,7 @@ internal static class BashLexer
     {
         // src[start] = '$', src[start+1] = '('
         var openParen = start + 1;
-        var scan = OpaqueRegionScanner.Scan(src, openParen, '(', ')');
+        var scan = ScanCommandSubstitution(src, openParen);
         if (!scan.Closed)
         {
             tokens.Add(new BashToken(
@@ -426,7 +531,7 @@ internal static class BashLexer
                 null,
                 start,
                 src.Length - start,
-                "unbalanced '$(' command substitution"));
+                scan.Error ?? "unbalanced '$(' command substitution"));
             return src.Length;
         }
 
@@ -449,6 +554,196 @@ internal static class BashLexer
         });
         return start + length;
     }
+
+    private static CommandSubstitutionScan ScanCommandSubstitution(
+        ReadOnlySpan<char> src,
+        int openParen)
+    {
+        if (openParen < 0 || openParen >= src.Length || src[openParen] != '(')
+        {
+            return new CommandSubstitutionScan(src.Length, false, null);
+        }
+
+        var resumeDoubleQuote = new Stack<bool>();
+        resumeDoubleQuote.Push(false);
+        var inDoubleQuote = false;
+        var atWordBoundary = true;
+        var i = openParen + 1;
+        while (i < src.Length)
+        {
+            var c = src[i];
+            if (inDoubleQuote)
+            {
+                if (c == '\\' && i + 1 < src.Length)
+                {
+                    if (src[i + 1] == '\r' && i + 2 < src.Length && src[i + 2] == '\n')
+                    {
+                        i += 3;
+                        continue;
+                    }
+
+                    i += 2;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inDoubleQuote = false;
+                    i++;
+                    continue;
+                }
+
+                if (c == '`')
+                {
+                    return new CommandSubstitutionScan(
+                        src.Length,
+                        false,
+                        "legacy backtick command substitution is not supported");
+                }
+
+                if (c == '$' && i + 1 < src.Length && src[i + 1] == '(')
+                {
+                    if (resumeDoubleQuote.Count >= ShellAnalysisLimits.MaxStructuralNesting)
+                    {
+                        return StructuralNestingOverflow(src.Length);
+                    }
+
+                    resumeDoubleQuote.Push(true);
+                    inDoubleQuote = false;
+                    atWordBoundary = true;
+                    i += 2;
+                    continue;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (c == '\\' && i + 1 < src.Length)
+            {
+                if (src[i + 1] is '\n' or '\r')
+                {
+                    i += src[i + 1] == '\r' && i + 2 < src.Length && src[i + 2] == '\n'
+                        ? 3
+                        : 2;
+                    continue;
+                }
+
+                atWordBoundary = false;
+                i += 2;
+                continue;
+            }
+
+            if (c == '\'')
+            {
+                i++;
+                while (i < src.Length && src[i] != '\'')
+                {
+                    i++;
+                }
+
+                if (i >= src.Length)
+                {
+                    return new CommandSubstitutionScan(src.Length, false, null);
+                }
+
+                atWordBoundary = false;
+                i++;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inDoubleQuote = true;
+                atWordBoundary = false;
+                i++;
+                continue;
+            }
+
+            if (c == '`')
+            {
+                return new CommandSubstitutionScan(
+                    src.Length,
+                    false,
+                    "legacy backtick command substitution is not supported");
+            }
+
+            if (c == '#' && atWordBoundary)
+            {
+                while (i < src.Length && src[i] is not '\n' and not '\r')
+                {
+                    i++;
+                }
+
+                atWordBoundary = true;
+                continue;
+            }
+
+            if (c == '<' && i + 1 < src.Length && src[i + 1] == '<')
+            {
+                return new CommandSubstitutionScan(
+                    src.Length,
+                    false,
+                    "heredocs inside command substitution are not supported");
+            }
+
+            if (c == '$' && i + 1 < src.Length && src[i + 1] == '(')
+            {
+                if (resumeDoubleQuote.Count >= ShellAnalysisLimits.MaxStructuralNesting)
+                {
+                    return StructuralNestingOverflow(src.Length);
+                }
+
+                resumeDoubleQuote.Push(false);
+                atWordBoundary = true;
+                i += 2;
+                continue;
+            }
+
+            if (c == '(')
+            {
+                if (resumeDoubleQuote.Count >= ShellAnalysisLimits.MaxStructuralNesting)
+                {
+                    return StructuralNestingOverflow(src.Length);
+                }
+
+                resumeDoubleQuote.Push(false);
+                atWordBoundary = true;
+                i++;
+                continue;
+            }
+
+            if (c == ')')
+            {
+                var restoreDoubleQuote = resumeDoubleQuote.Pop();
+                if (resumeDoubleQuote.Count == 0)
+                {
+                    return new CommandSubstitutionScan(i, true, null);
+                }
+
+                inDoubleQuote = restoreDoubleQuote;
+                atWordBoundary = false;
+                i++;
+                continue;
+            }
+
+            atWordBoundary = char.IsWhiteSpace(c) || c is ';' or '|' or '&' or '<' or '>';
+            i++;
+        }
+
+        return new CommandSubstitutionScan(src.Length, false, null);
+    }
+
+    private static CommandSubstitutionScan StructuralNestingOverflow(int endIndex) =>
+        new(
+            endIndex,
+            false,
+            $"Bash structural nesting depth exceeded (>{ShellAnalysisLimits.MaxStructuralNesting})");
+
+    private readonly record struct CommandSubstitutionScan(
+        int EndIndex,
+        bool Closed,
+        string? Error);
 
     private static int ConsumeBacktickSubstitution(
         ReadOnlySpan<char> src, int start, List<BashToken> tokens)
@@ -607,7 +902,10 @@ internal static class BashLexer
     // ---------------------------------------------------------------- words
 
     private static int ReadWord(
-        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
+        ReadOnlySpan<char> src,
+        int start,
+        List<BashToken> tokens,
+        bool allowLeadingAmpersand = false)
     {
         // A word continues until we hit whitespace, an operator boundary,
         // a newline, a quote, a backtick, or the start of an opaque region
@@ -631,7 +929,8 @@ internal static class BashLexer
             // Stop conditions.
             if (c == ' ' || c == '\t' || c == '\n' || c == '\r') break;
             if (c == '\'' || c == '"' || c == '`') break;
-            if (IsOperatorStart(src, i)) break;
+            if (IsOperatorStart(src, i)
+                && !(allowLeadingAmpersand && i == start && c == '&')) break;
 
             // Backslash escapes the next character (outside quotes).
             if (c == '\\')
@@ -647,9 +946,12 @@ internal static class BashLexer
                 var n = src[i + 1];
                 if (n == '\n' || n == '\r')
                 {
-                    // Continuation: terminate the current word; the outer
-                    // loop will pick up the continuation token.
-                    break;
+                    // Bash removes a continuation before word-boundary
+                    // analysis, so adjacent fragments remain one word.
+                    i += n == '\r' && i + 2 < src.Length && src[i + 2] == '\n'
+                        ? 3
+                        : 2;
+                    continue;
                 }
 
                 value.AppendLiteral(n, i, 2);
@@ -766,10 +1068,10 @@ internal static class BashLexer
                 return true;
             }
 
-            var scan = OpaqueRegionScanner.Scan(src, start + 1, '(', ')');
+            var scan = ScanCommandSubstitution(src, start + 1);
             if (!scan.Closed)
             {
-                error = "unbalanced '$(' command substitution";
+                error = scan.Error ?? "unbalanced '$(' command substitution";
                 index = src.Length;
                 return true;
             }
@@ -889,11 +1191,9 @@ internal static class BashLexer
             case ')':
                 return true;
             case '&':
-                // Only `&&` is an operator in v0.1; bare `&` is unsupported
-                // background-job syntax. Treat `&` not followed by `&` as a
-                // word char to avoid silently splitting; consumers will see
-                // it in the Raw value.
-                return i + 1 < src.Length && src[i + 1] == '&';
+                // Both `&&` and unsupported bare `&` terminate a word. The
+                // tokenizer emits a sentinel for the latter on its next pass.
+                return true;
             case '2':
                 // `2>` and `2>>` start with '2' — only treat them as operator
                 // starts when the immediate next char is '>'.

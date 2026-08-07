@@ -1,0 +1,142 @@
+{
+  "name": "v0.3 outer bash wrapper substitution",
+  "input": "bash -c \u0022echo $(id)\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "id"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "bash"
+        ],
+        "args": [
+          {
+            "raw": "-c",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\u0022echo $(id)\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 20,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 20,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandSubstitution",
+        "parentIndex": 1,
+        "region": "Substitution",
+        "childIndex": 0,
+        "sourceStart": 14,
+        "sourceLength": 5,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 2,
+        "region": "Substitution",
+        "childIndex": 0,
+        "sourceStart": 16,
+        "sourceLength": 2,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 16,
+        "sourceLength": 2,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 20
+          },
+          {
+            "ancestorKind": "CommandSubstitution",
+            "region": "Substitution",
+            "childIndex": 0,
+            "sourceStart": 14,
+            "sourceLength": 5
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 16,
+            "sourceLength": 2
+          }
+        ]
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 20
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "A substitution executed before the outer wrapper remains directly source-addressable."
+}

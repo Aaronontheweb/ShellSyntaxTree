@@ -51,13 +51,20 @@ internal static partial class BashCommandParser
             throw new ArgumentNullException(nameof(options));
         }
 
-        return ParseInternal(source, options, bashCDepth: 0, markBashCWrapped: false);
+        return ParseInternal(
+            source,
+            options,
+            bashCDepth: 0,
+            structuralDepth: 0,
+            markBashCWrapped: false);
     }
 
     /// <summary>
     /// Recursion entry point. <paramref name="bashCDepth"/> counts how many
     /// <c>bash -c</c> wrappers we've unwrapped to reach this call; the
-    /// outer caller passes 0. <paramref name="markBashCWrapped"/> sets
+    /// outer caller passes 0. <paramref name="structuralDepth"/> shares the
+    /// bounded nesting budget across substitutions, subshells, and decoded
+    /// wrappers. <paramref name="markBashCWrapped"/> sets
     /// <see cref="Clause.IsCommandStringWrapped"/> on every emitted clause and
     /// fires only on recursive calls (the outer top-level command doesn't
     /// pretend to be wrapped).
@@ -66,6 +73,7 @@ internal static partial class BashCommandParser
         string source,
         BashParserOptions options,
         int bashCDepth,
+        int structuralDepth,
         bool markBashCWrapped)
     {
         if (source.Length == 0)
@@ -75,6 +83,7 @@ internal static partial class BashCommandParser
                 Array.Empty<BashToken>(),
                 options,
                 bashCDepth,
+                structuralDepth,
                 markBashCWrapped);
         }
 
@@ -99,6 +108,7 @@ internal static partial class BashCommandParser
             significant,
             options,
             bashCDepth,
+            structuralDepth,
             markBashCWrapped);
     }
 
@@ -288,6 +298,8 @@ internal static partial class BashCommandParser
     private static List<BashToken> FilterSignificant(IReadOnlyList<BashToken> tokens)
     {
         var filtered = new List<BashToken>(tokens.Count);
+        var joinsAcrossContinuation = false;
+        var continuationEnd = -1;
         foreach (var t in tokens)
         {
             // A newline-bearing Whitespace token is a statement separator
@@ -295,17 +307,31 @@ internal static partial class BashCommandParser
             // can treat it exactly like an explicit ';'. Plain
             // space/tab Whitespace, Continuation, and Comment carry no
             // structural signal and are dropped.
+            if (t.Kind == BashTokenKind.Continuation)
+            {
+                var followsJoinedFragment = joinsAcrossContinuation
+                    ? t.SourceStart == continuationEnd
+                    : filtered.Count > 0
+                      && IsNativeArgumentFragment(filtered[filtered.Count - 1])
+                      && filtered[filtered.Count - 1].SourceStart
+                         + filtered[filtered.Count - 1].SourceLength == t.SourceStart;
+                joinsAcrossContinuation = followsJoinedFragment;
+                continuationEnd = t.SourceStart + t.SourceLength;
+                continue;
+            }
+
             if ((t.Kind == BashTokenKind.Whitespace && !t.IsStatementSeparator)
-                || t.Kind == BashTokenKind.Continuation
                 || t.Kind == BashTokenKind.Comment)
             {
+                joinsAcrossContinuation = false;
                 continue;
             }
 
             if (filtered.Count > 0
                 && IsNativeArgumentFragment(filtered[filtered.Count - 1])
                 && IsNativeArgumentFragment(t)
-                && IsAdjacent(filtered[filtered.Count - 1], t)
+                && (IsAdjacent(filtered[filtered.Count - 1], t)
+                    || joinsAcrossContinuation && t.SourceStart == continuationEnd)
                 && !IsInlineNativeArgumentPrefix(filtered[filtered.Count - 1]))
             {
                 var previous = filtered[filtered.Count - 1];
@@ -323,9 +349,11 @@ internal static partial class BashCommandParser
                 {
                     ResolverValue = ShellValue.Concat(new[] { previousValue, currentValue }),
                 };
+                joinsAcrossContinuation = false;
                 continue;
             }
 
+            joinsAcrossContinuation = false;
             filtered.Add(t);
         }
 

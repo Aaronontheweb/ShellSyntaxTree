@@ -1,14 +1,10 @@
 {
-  "name": "Backtick substitution inside double quotes remains opaque",
+  "name": "Backtick substitution inside double quotes fails closed",
   "input": "cat \"`printf /etc/passwd`\"",
   "expected": {
-    "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["cat"],
-      "args": [{ "raw": "\"`printf /etc/passwd`\"", "kind": "DynamicSkip", "isPath": false }],
-      "redirects": []
-    }]
+    "isUnparseable": true,
+    "unparseableReasonContains": "backtick command substitution",
+    "clauses": []
   },
-  "notes": "Bash executes the backtick region before forming the quoted argument, so the parser cannot claim an exact path."
+  "notes": "Bash executes the backtick region before forming the quoted argument; stable v0.3 rejects it until its distinct grammar has complete command discovery."
 }

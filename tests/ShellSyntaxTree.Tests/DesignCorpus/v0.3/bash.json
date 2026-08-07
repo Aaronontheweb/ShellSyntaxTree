@@ -4,6 +4,7 @@
     {
       "id": "bash-simple-command-substitution",
       "concern": "Substitution is attached to its containing simple command",
+      "compatibilityProjectionLanded": true,
       "input": "rm \"$(find /tmp)\"",
       "current": {
         "isUnparseable": false,
@@ -37,6 +38,7 @@
     {
       "id": "bash-multiple-command-substitutions",
       "concern": "Sibling substitutions preserve authored order before their consumer",
+      "compatibilityProjectionLanded": true,
       "input": "printf '%s %s' \"$(first)\" \"$(second)\"",
       "current": { "isUnparseable": false },
       "desired": {
@@ -62,6 +64,7 @@
     {
       "id": "bash-nested-command-substitutions",
       "concern": "Nested substitutions retain parentage and project innermost first",
+      "compatibilityProjectionLanded": true,
       "input": "printf '%s' \"$(echo \"$(whoami)\")\"",
       "current": { "isUnparseable": false },
       "desired": {
@@ -87,6 +90,7 @@
     {
       "id": "bash-literal-substitution-spellings",
       "concern": "Quoted and escaped substitution-looking text does not execute",
+      "compatibilityProjectionLanded": true,
       "input": "printf '%s %s' '$(whoami)' \"\\$(id)\"",
       "current": { "isUnparseable": false },
       "desired": {
@@ -104,6 +108,7 @@
     {
       "id": "bash-backtick-substitution-gated",
       "concern": "Legacy backtick execution remains fail closed until escape semantics are modeled",
+      "compatibilityProjectionLanded": true,
       "input": "echo `whoami`",
       "current": {
         "isUnparseable": false,
@@ -123,6 +128,7 @@
     {
       "id": "bash-command-name-substitution-gated",
       "concern": "Runtime-produced Bash command identity stays unparseable",
+      "compatibilityProjectionLanded": true,
       "input": "r$(printf m) file",
       "current": { "isUnparseable": true, "reasonContains": "dynamic Bash command identity" },
       "desired": {
@@ -143,6 +149,7 @@
     {
       "id": "bash-command-substitution-isolated-cwd",
       "concern": "Bash substitution state is sequential inside and isolated outside",
+      "compatibilityProjectionLanded": true,
       "input": "printf '%s' \"$(cd /tmp; pwd)\"; cat relative.txt",
       "current": { "isUnparseable": false },
       "desired": {

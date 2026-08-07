@@ -3,7 +3,7 @@
   "input": "r$(printf m) -rf /tmp/x",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "dynamic Bash command identity",
+    "unparseableReasonContains": "command-name substitution",
     "clauses": []
   },
   "notes": "Adjacent aggregation must not erase a command substitution from the executable identity."

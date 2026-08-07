@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 assignment prefix fails closed",
+  "input": "echo \u0022$(X=1 rm -rf /tmp/x)\u0022",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "Bash assignment-prefix commands are not supported"
+  },
+  "notes": "Assignment-prefix shell syntax is not modeled and therefore publishes no partial commands.",
+  "oracleExpectation": "OutOfScope"
+}
