@@ -359,8 +359,16 @@ priorities.
       design-corpus categories are delivered. The shared projector,
       compatibility flattener, depth guard, decoded-wrapper cloning, and
       executable-corpus DTOs now preserve direct and command-owned regions in
-      the locked substitution-host-region order. No parser emits a region yet,
-      and automated execution-region oracle coverage remains in task 7.7.
+      the locked substitution-host-region order. The PowerShell structural
+      parser now emits command-argument script blocks as conservative unknown,
+      incomplete regions, recursively exposes supported body commands, retains
+      pure output expressions without inventing command occurrences, and fails
+      atomically on unsupported execution-bearing expressions. Until a receiver
+      contract proves scope and timing, an unknown region also poisons
+      subsequent observing cwd, variable, and command-resolution facts so a
+      continuation cannot reuse stale authorization evidence. Receiver-aware
+      typed facts and shell-specific state flow remain in tasks 7.5b-7.5e, and
+      automated execution-region oracle coverage remains in task 7.7.
       The PowerShell 7.6.4 receiver and parameter-binding catalog is now
       implemented with command-resolution proof as an explicit input. It pins
       aliases, supported module qualification, exact and abbreviated/inline

@@ -288,7 +288,7 @@ public class PwshForEachStructuralTests
     }
 
     [Fact]
-    public void Foreach_object_alias_remains_an_opaque_script_block_argument()
+    public void Foreach_object_alias_exposes_an_unknown_script_block_region()
     {
         var result = Parse("Get-ChildItem | foreach { Write-Output $_ }");
 
@@ -296,7 +296,11 @@ public class PwshForEachStructuralTests
         Assert.Equal("Get-ChildItem", CommandVerb(result.Commands[0]));
         Assert.Equal("ForEach-Object", result.Commands[1].Clause.Verb.CanonicalVerb);
         Assert.IsType<PipelineSyntax>(Assert.Single(result.Syntax.Statements));
-        Assert.Equal(2, result.Commands.Count);
+        Assert.Equal(3, result.Commands.Count);
+        var pipeline = Assert.IsType<PipelineSyntax>(Assert.Single(result.Syntax.Statements));
+        var host = Assert.IsType<SimpleCommandSyntax>(pipeline.Stages[1]);
+        Assert.Single(host.ExecutionRegions);
+        Assert.Equal(CommandOccurrenceRole.ExecutionRegion, result.Commands[2].ImmediateRole);
     }
 
     [Fact]

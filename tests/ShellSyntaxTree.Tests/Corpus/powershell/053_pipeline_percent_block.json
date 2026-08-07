@@ -27,8 +27,22 @@
           }
         ],
         "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "$_",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
       }
     ]
   },
-  "notes": "% alias resolves to ForEach-Object; body is opaque."
+  "notes": "% resolves to ForEach-Object; its unknown execution region keeps the body command visible."
 }
