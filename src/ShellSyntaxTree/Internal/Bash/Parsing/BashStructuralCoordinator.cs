@@ -1832,6 +1832,25 @@ internal static partial class BashCommandParser
 
                 var clauseOperator = firstLeaf ? firstOperator : simple.Clause.Operator;
                 firstLeaf = false;
+                var executionRegions = new List<ExecutionRegionSyntax>(
+                    simple.ExecutionRegions.Count);
+                foreach (var executionRegion in simple.ExecutionRegions)
+                {
+                    if (!TryCloneDecodedNode(
+                            executionRegion,
+                            firstOperator,
+                            outerSubshell,
+                            ref firstLeaf,
+                            referenceMap,
+                            out var clonedExecutionRegion) ||
+                        clonedExecutionRegion is not ExecutionRegionSyntax typedExecutionRegion)
+                    {
+                        return false;
+                    }
+
+                    executionRegions.Add(typedExecutionRegion);
+                }
+
                 var clonedClause = simple.Clause with
                 {
                     Operator = clauseOperator,
@@ -1844,6 +1863,7 @@ internal static partial class BashCommandParser
                 {
                     Clause = clonedClause,
                     Substitutions = substitutions,
+                    ExecutionRegions = executionRegions,
                 };
                 referenceMap.Add(simple.Clause, clonedClause);
                 return true;
@@ -2024,6 +2044,28 @@ internal static partial class BashCommandParser
                 }
 
                 clone = new CommandSubstitutionSyntax { Body = substitutionBody };
+                return true;
+            case ExecutionRegionSyntax executionRegion:
+                if (!TryCloneDecodedBlock(
+                        executionRegion.Body,
+                        firstOperator,
+                        outerSubshell,
+                        ref firstLeaf,
+                        referenceMap,
+                        out var executionBody))
+                {
+                    return false;
+                }
+
+                clone = new ExecutionRegionSyntax
+                {
+                    Origin = executionRegion.Origin,
+                    HostClauseElementIndex = executionRegion.HostClauseElementIndex,
+                    Phase = executionRegion.Phase,
+                    Timing = executionRegion.Timing,
+                    Cardinality = executionRegion.Cardinality,
+                    Body = executionBody,
+                };
                 return true;
             default:
                 return false;

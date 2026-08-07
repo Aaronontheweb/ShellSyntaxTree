@@ -122,7 +122,7 @@ internal static class AstAssert
 
         if (expected.Syntax is not null)
         {
-            AssertSyntaxEqual(expected.Syntax, actual, prefix);
+            AssertSyntaxEqual(expected.Syntax, expectedClauses, actual, prefix);
         }
 
         if (expected.Commands is not null)
@@ -133,10 +133,11 @@ internal static class AstAssert
 
     private static void AssertSyntaxEqual(
         IReadOnlyList<ExpectedSyntaxNode> expected,
+        IReadOnlyList<ExpectedClause> expectedClauses,
         ParsedCommand actual,
         string prefix)
     {
-        ValidateExpectedSyntax(expected, prefix);
+        ValidateExpectedSyntax(expected, expectedClauses, prefix);
         var flattened = new List<ActualSyntaxNode>();
         AppendSyntax(
             actual.Syntax,
@@ -172,7 +173,12 @@ internal static class AstAssert
                 wanted.BindingSourceLength != observed.BindingSourceLength ||
                 wanted.IterableRaw != observed.IterableRaw ||
                 wanted.IterableSourceStart != observed.IterableSourceStart ||
-                wanted.IterableSourceLength != observed.IterableSourceLength)
+                wanted.IterableSourceLength != observed.IterableSourceLength ||
+                wanted.ExecutionOrigin != observed.ExecutionOrigin ||
+                wanted.HostClauseElementIndex != observed.HostClauseElementIndex ||
+                wanted.ExecutionPhase != observed.ExecutionPhase ||
+                wanted.ExecutionTiming != observed.ExecutionTiming ||
+                wanted.ExecutionCardinality != observed.ExecutionCardinality)
             {
                 throw new XunitException(
                     prefix + $"syntax[{index}]: expected={Summarize(wanted)}, "
@@ -195,6 +201,7 @@ internal static class AstAssert
 
     private static void ValidateExpectedSyntax(
         IReadOnlyList<ExpectedSyntaxNode> expected,
+        IReadOnlyList<ExpectedClause> expectedClauses,
         string prefix)
     {
         if (expected.Count == 0 ||
@@ -207,12 +214,20 @@ internal static class AstAssert
             throw new XunitException(prefix + "syntax[0] must be the root block");
         }
 
+        var executionRegionCoordinates = new HashSet<(int ParentIndex, int ElementIndex)>();
         for (var index = 0; index < expected.Count; index++)
         {
             var node = expected[index];
+            var isExecutionRegion = node.Kind == ShellSyntaxKind.ExecutionRegion;
             if (node.Kind == ShellSyntaxKind.Unknown ||
                 (node.Kind == ShellSyntaxKind.SimpleCommand) != node.ClauseIndex.HasValue ||
-                (node.Kind == ShellSyntaxKind.Group) != node.GroupKind.HasValue)
+                (node.Kind == ShellSyntaxKind.Group) != node.GroupKind.HasValue ||
+                isExecutionRegion != node.ExecutionOrigin.HasValue ||
+                isExecutionRegion != node.ExecutionPhase.HasValue ||
+                isExecutionRegion != node.ExecutionTiming.HasValue ||
+                isExecutionRegion != node.ExecutionCardinality.HasValue ||
+                isExecutionRegion && !IsValidExpectedExecutionRegion(node) ||
+                !isExecutionRegion && node.HostClauseElementIndex.HasValue)
             {
                 throw new XunitException(
                     prefix + $"syntax[{index}] has an invalid kind-specific field");
@@ -249,7 +264,10 @@ internal static class AstAssert
                         : CommandAncestryRegion.Statement) &&
                     node.ChildIndex.HasValue,
                 ShellSyntaxKind.SimpleCommand =>
-                    node.Region == CommandAncestryRegion.Substitution &&
+                    ((node.Kind == ShellSyntaxKind.CommandSubstitution &&
+                      node.Region == CommandAncestryRegion.Substitution) ||
+                     (node.Kind == ShellSyntaxKind.ExecutionRegion &&
+                      node.Region == CommandAncestryRegion.ExecutionRegion)) &&
                     node.ChildIndex.HasValue,
                 ShellSyntaxKind.Pipeline =>
                     node.Region == CommandAncestryRegion.PipelineStage &&
@@ -278,9 +296,27 @@ internal static class AstAssert
                     node.ChildIndex is null,
                 ShellSyntaxKind.CommandSubstitution =>
                     node.Region == CommandAncestryRegion.Substitution,
+                ShellSyntaxKind.ExecutionRegion =>
+                    node.Kind == ShellSyntaxKind.Block &&
+                    node.Region == CommandAncestryRegion.ExecutionRegion,
                 _ => false,
             };
+            var executionRegionPlacementIsValid =
+                node.Kind != ShellSyntaxKind.ExecutionRegion ||
+                (node.ExecutionOrigin == ExecutionRegionOrigin.CommandArgument) ==
+                (parent.Kind == ShellSyntaxKind.SimpleCommand);
+            var executionRegionCoordinateIsValid =
+                node.Kind != ShellSyntaxKind.ExecutionRegion ||
+                node.ExecutionOrigin != ExecutionRegionOrigin.CommandArgument ||
+                IsValidExpectedHostCoordinate(
+                    node,
+                    parent,
+                    node.ParentIndex.Value,
+                    expectedClauses,
+                    executionRegionCoordinates);
             if (!relationshipIsValid ||
+                !executionRegionPlacementIsValid ||
+                !executionRegionCoordinateIsValid ||
                 parent.Kind != ShellSyntaxKind.CommandList && node.ListOperator.HasValue)
             {
                 throw new XunitException(
@@ -288,6 +324,50 @@ internal static class AstAssert
             }
         }
     }
+
+    private static bool IsValidExpectedHostCoordinate(
+        ExpectedSyntaxNode executionRegion,
+        ExpectedSyntaxNode parent,
+        int parentIndex,
+        IReadOnlyList<ExpectedClause> expectedClauses,
+        ISet<(int ParentIndex, int ElementIndex)> coordinates)
+    {
+        if (parent.ClauseIndex is not int clauseIndex ||
+            clauseIndex < 0 ||
+            clauseIndex >= expectedClauses.Count ||
+            executionRegion.HostClauseElementIndex is not int elementIndex ||
+            expectedClauses[clauseIndex].Elements is not { } elements ||
+            elementIndex < 0 ||
+            elementIndex >= elements.Count)
+        {
+            return false;
+        }
+
+        var element = elements[elementIndex];
+        return coordinates.Add((parentIndex, elementIndex)) &&
+            element.Role == ClauseElementRole.Argument &&
+            element.Kind == ArgKind.DynamicSkip;
+    }
+
+    private static bool IsValidExpectedExecutionRegion(ExpectedSyntaxNode node) =>
+        node.ExecutionOrigin.HasValue &&
+        System.Enum.IsDefined(typeof(ExecutionRegionOrigin), node.ExecutionOrigin.Value) &&
+        node.ExecutionOrigin.Value != ExecutionRegionOrigin.Unknown &&
+        node.ExecutionPhase.HasValue &&
+        System.Enum.IsDefined(typeof(ExecutionRegionPhase), node.ExecutionPhase.Value) &&
+        node.ExecutionTiming.HasValue &&
+        System.Enum.IsDefined(typeof(ExecutionRegionTiming), node.ExecutionTiming.Value) &&
+        node.ExecutionCardinality.HasValue &&
+        System.Enum.IsDefined(
+            typeof(ExecutionRegionCardinality),
+            node.ExecutionCardinality.Value) &&
+        node.ExecutionOrigin.Value switch
+        {
+            ExecutionRegionOrigin.DirectCall or ExecutionRegionOrigin.DotSource =>
+                node.HostClauseElementIndex is null,
+            ExecutionRegionOrigin.CommandArgument => node.HostClauseElementIndex >= 0,
+            _ => false,
+        };
 
     private static void AssertCommandsEqual(
         IReadOnlyList<ExpectedCommandOccurrence> expected,
@@ -438,6 +518,7 @@ internal static class AstAssert
 
         var clause = (node as SimpleCommandSyntax)?.Clause;
         var forEachNode = node as ForEachSyntax;
+        var executionRegion = node as ExecutionRegionSyntax;
         int? clauseIndex = clause is null ? null : FindClauseIndex(clauses, clause);
         var currentIndex = nodes.Count;
         nodes.Add(new ActualSyntaxNode(
@@ -457,6 +538,11 @@ internal static class AstAssert
             forEachNode?.Iterable.Raw,
             forEachNode?.Iterable.SourceStart,
             forEachNode?.Iterable.SourceLength,
+            executionRegion?.Origin,
+            executionRegion?.HostClauseElementIndex,
+            executionRegion?.Phase,
+            executionRegion?.Timing,
+            executionRegion?.Cardinality,
             clause));
 
         switch (node)
@@ -485,6 +571,18 @@ internal static class AstAssert
                         simple.Substitutions[index],
                         currentIndex,
                         CommandAncestryRegion.Substitution,
+                        index,
+                        listOperator: null,
+                        clauses,
+                        nodes);
+                }
+
+                for (var index = 0; index < simple.ExecutionRegions.Count; index++)
+                {
+                    AppendSyntax(
+                        simple.ExecutionRegions[index],
+                        currentIndex,
+                        CommandAncestryRegion.ExecutionRegion,
                         index,
                         listOperator: null,
                         clauses,
@@ -620,6 +718,16 @@ internal static class AstAssert
                     clauses,
                     nodes);
                 break;
+            case ExecutionRegionSyntax regionNode:
+                AppendSyntax(
+                    regionNode.Body,
+                    currentIndex,
+                    CommandAncestryRegion.ExecutionRegion,
+                    childIndex,
+                    listOperator: null,
+                    clauses,
+                    nodes);
+                break;
             default:
                 throw new XunitException(
                     $"Cannot flatten unsupported syntax type {node.GetType().FullName} into corpus expectations");
@@ -643,13 +751,19 @@ internal static class AstAssert
         $"{{kind={node.Kind}, parent={node.ParentIndex}, region={node.Region}, "
         + $"child={node.ChildIndex}, span={node.SourceStart}:{node.SourceLength}, "
         + $"clause={node.ClauseIndex}, group={node.GroupKind}, listOp={node.ListOperator}, "
-        + $"binding={node.BindingName}, iterable={node.IterableRaw}}}";
+        + $"binding={node.BindingName}, iterable={node.IterableRaw}, "
+        + $"execution={node.ExecutionOrigin}/{node.ExecutionPhase}/"
+        + $"{node.ExecutionTiming}/{node.ExecutionCardinality}, "
+        + $"hostElement={node.HostClauseElementIndex}}}";
 
     private static string Summarize(ActualSyntaxNode node) =>
         $"{{kind={node.Kind}, parent={node.ParentIndex}, region={node.Region}, "
         + $"child={node.ChildIndex}, span={node.SourceStart}:{node.SourceLength}, "
         + $"clause={node.ClauseIndex}, group={node.GroupKind}, listOp={node.ListOperator}, "
-        + $"binding={node.BindingName}, iterable={node.IterableRaw}}}";
+        + $"binding={node.BindingName}, iterable={node.IterableRaw}, "
+        + $"execution={node.ExecutionOrigin}/{node.ExecutionPhase}/"
+        + $"{node.ExecutionTiming}/{node.ExecutionCardinality}, "
+        + $"hostElement={node.HostClauseElementIndex}}}";
 
     private sealed record ActualSyntaxNode(
         ShellSyntaxKind Kind,
@@ -668,6 +782,11 @@ internal static class AstAssert
         string? IterableRaw,
         int? IterableSourceStart,
         int? IterableSourceLength,
+        ExecutionRegionOrigin? ExecutionOrigin,
+        int? HostClauseElementIndex,
+        ExecutionRegionPhase? ExecutionPhase,
+        ExecutionRegionTiming? ExecutionTiming,
+        ExecutionRegionCardinality? ExecutionCardinality,
         Clause? Clause);
 
     private static void AssertClauseEqual(ExpectedClause expected, Clause actual, string path)

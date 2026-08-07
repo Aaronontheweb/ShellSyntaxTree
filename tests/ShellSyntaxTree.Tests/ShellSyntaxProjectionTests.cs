@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests;
@@ -198,6 +199,209 @@ public class ShellSyntaxProjectionTests
             (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0),
             (ShellSyntaxKind.CommandSubstitution, CommandAncestryRegion.Substitution, 0),
             (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0));
+    }
+
+    [Fact]
+    public void Direct_execution_region_projects_only_its_body()
+    {
+        var remove = Leaf("Remove-Item", 3);
+        var region = ExecutionRegion(
+            ExecutionRegionOrigin.DirectCall,
+            hostClauseElementIndex: null,
+            1,
+            remove);
+
+        var succeeded = ShellSyntaxProjection.TryProject(
+            Block(0, region),
+            _ => new CommandOccurrenceFacts { IsComplete = true },
+            out var result);
+
+        Assert.True(succeeded);
+        var occurrence = Assert.Single(result.Commands);
+        Assert.Equal("Remove-Item", Verb(occurrence));
+        Assert.Equal(CommandOccurrenceRole.ExecutionRegion, occurrence.ImmediateRole);
+        Assert.True(occurrence.IsComplete);
+        Assert.Same(remove.Clause, Assert.Single(result.Clauses));
+        AssertFrames(
+            occurrence,
+            (ShellSyntaxKind.Block, CommandAncestryRegion.Root, 0),
+            (ShellSyntaxKind.ExecutionRegion, CommandAncestryRegion.ExecutionRegion, 0),
+            (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0));
+    }
+
+    [Fact]
+    public void Command_owned_regions_follow_the_host_in_authored_order()
+    {
+        var hostClause = ClauseFor("ForEach-Object") with
+        {
+            Elements = new[]
+            {
+                new ClauseElement { Role = ClauseElementRole.Verb },
+                new ClauseElement
+                {
+                    Role = ClauseElementRole.Argument,
+                    Kind = ArgKind.DynamicSkip,
+                },
+                new ClauseElement
+                {
+                    Role = ClauseElementRole.Argument,
+                    Kind = ArgKind.DynamicSkip,
+                },
+            },
+        };
+        var host = Leaf(hostClause, 1) with
+        {
+            Substitutions = new[]
+            {
+                Substitution(1, Leaf("prepare", 1)),
+            },
+            ExecutionRegions = new[]
+            {
+                ExecutionRegion(
+                    ExecutionRegionOrigin.CommandArgument,
+                    hostClauseElementIndex: 1,
+                    2,
+                    Leaf("end", 3),
+                    ExecutionRegionPhase.End),
+                ExecutionRegion(
+                    ExecutionRegionOrigin.CommandArgument,
+                    hostClauseElementIndex: 2,
+                    4,
+                    Leaf("begin", 5),
+                    ExecutionRegionPhase.Begin),
+            },
+        };
+        var pipeline = new PipelineSyntax
+        {
+            Stages = new ShellSyntaxNode[] { host },
+        };
+
+        var succeeded = ShellSyntaxProjection.TryProject(
+            Block(0, pipeline),
+            _ => new CommandOccurrenceFacts { IsComplete = true },
+            out var result);
+
+        Assert.True(succeeded);
+        Assert.Equal(
+            new[] { "prepare", "ForEach-Object", "end", "begin" },
+            result.Commands.Select(Verb));
+        Assert.Equal(result.Commands.Select(command => command.Clause), result.Clauses);
+        Assert.Equal(CommandOccurrenceRole.Substitution, result.Commands[0].ImmediateRole);
+        Assert.Equal(CommandOccurrenceRole.PipelineStage, result.Commands[1].ImmediateRole);
+        Assert.All(
+            result.Commands.Skip(2),
+            occurrence => Assert.Equal(
+                CommandOccurrenceRole.ExecutionRegion,
+                occurrence.ImmediateRole));
+        Assert.All(result.Commands, occurrence => Assert.True(occurrence.IsComplete));
+        AssertFrames(
+            result.Commands[2],
+            (ShellSyntaxKind.Block, CommandAncestryRegion.Root, 0),
+            (ShellSyntaxKind.Pipeline, CommandAncestryRegion.PipelineStage, 0),
+            (ShellSyntaxKind.ExecutionRegion, CommandAncestryRegion.ExecutionRegion, 0),
+            (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0));
+        AssertFrames(
+            result.Commands[3],
+            (ShellSyntaxKind.Block, CommandAncestryRegion.Root, 0),
+            (ShellSyntaxKind.Pipeline, CommandAncestryRegion.PipelineStage, 0),
+            (ShellSyntaxKind.ExecutionRegion, CommandAncestryRegion.ExecutionRegion, 1),
+            (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0));
+    }
+
+    [Fact]
+    public void Unknown_execution_region_facts_make_host_and_body_incomplete()
+    {
+        var clause = ClauseFor("Invoke-Custom") with
+        {
+            Elements = new[]
+            {
+                new ClauseElement { Role = ClauseElementRole.Verb },
+                new ClauseElement
+                {
+                    Role = ClauseElementRole.Argument,
+                    Kind = ArgKind.DynamicSkip,
+                },
+            },
+        };
+        var host = Leaf(clause, 1) with
+        {
+            ExecutionRegions = new[]
+            {
+                new ExecutionRegionSyntax
+                {
+                    Origin = ExecutionRegionOrigin.CommandArgument,
+                    HostClauseElementIndex = 1,
+                    Body = Block(2, Leaf("Remove-Item", 3)),
+                },
+            },
+        };
+
+        var succeeded = ShellSyntaxProjection.TryProject(
+            Block(0, host),
+            _ => new CommandOccurrenceFacts { IsComplete = true },
+            out var result);
+
+        Assert.True(succeeded);
+        Assert.Equal(new[] { "Invoke-Custom", "Remove-Item" }, result.Commands.Select(Verb));
+        Assert.All(result.Commands, occurrence => Assert.False(occurrence.IsComplete));
+    }
+
+    [Fact]
+    public void PowerShell_decoded_wrapper_clone_preserves_regions_and_targets_last_body_leaf()
+    {
+        var source = DecodedExecutionRegionTree();
+        var wrapperRedirect = new Redirect
+        {
+            Direction = RedirectDirection.Out,
+            Target = "wrapper.txt",
+        };
+        var wrapperElement = new ClauseElement
+        {
+            Role = ClauseElementRole.Redirect,
+            Raw = "> wrapper.txt",
+            Value = "wrapper.txt",
+        };
+
+        var clone = InvokePowerShellDecodedClone(
+            source,
+            CompoundOperator.AndIf,
+            new[] { wrapperRedirect },
+            new[] { wrapperElement });
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(clone.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        var body = Assert.IsType<SimpleCommandSyntax>(Assert.Single(region.Body.Statements));
+        Assert.Equal(CompoundOperator.AndIf, host.Clause.Operator);
+        Assert.Empty(host.Clause.Redirects);
+        Assert.Equal(CompoundOperator.None, body.Clause.Operator);
+        Assert.Same(wrapperRedirect, Assert.Single(body.Clause.Redirects));
+        Assert.Equal(
+            wrapperElement with { PrecedingVerbElementCount = 1 },
+            Assert.Single(body.Clause.Elements.Skip(1)));
+        Assert.True(host.Clause.IsSubshell);
+        Assert.True(body.Clause.IsSubshell);
+        Assert.True(host.Clause.IsCommandStringWrapped);
+        Assert.True(body.Clause.IsCommandStringWrapped);
+        AssertExecutionRegionClone(region);
+    }
+
+    [Fact]
+    public void Bash_decoded_wrapper_clone_preserves_regions_after_the_host()
+    {
+        var clone = InvokeBashDecodedClone(
+            DecodedExecutionRegionTree(),
+            CompoundOperator.OrIf);
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(clone.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        var body = Assert.IsType<SimpleCommandSyntax>(Assert.Single(region.Body.Statements));
+        Assert.Equal(CompoundOperator.OrIf, host.Clause.Operator);
+        Assert.Equal(CompoundOperator.None, body.Clause.Operator);
+        Assert.True(host.Clause.IsSubshell);
+        Assert.True(body.Clause.IsSubshell);
+        Assert.True(host.Clause.IsCommandStringWrapped);
+        Assert.True(body.Clause.IsCommandStringWrapped);
+        AssertExecutionRegionClone(region);
     }
 
     [Fact]
@@ -475,6 +679,23 @@ public class ShellSyntaxProjectionTests
     }
 
     [Fact]
+    public void Execution_regions_share_the_structural_depth_budget()
+    {
+        var exact = NestedExecutionRegions(ShellAnalysisLimits.MaxStructuralNesting);
+        var overflow = NestedExecutionRegions(ShellAnalysisLimits.MaxStructuralNesting + 1);
+
+        Assert.True(ShellSyntaxProjection.TryProject(exact, out var exactResult));
+        Assert.Single(exactResult.Commands);
+        Assert.Equal(
+            (ShellAnalysisLimits.MaxStructuralNesting * 2) + 1,
+            exactResult.Commands[0].Ancestry.Count);
+
+        Assert.False(ShellSyntaxProjection.TryProject(overflow, out var overflowResult));
+        Assert.Empty(overflowResult.Commands);
+        Assert.Empty(overflowResult.Clauses);
+    }
+
+    [Fact]
     public void Structural_depth_overflow_discards_partial_projections()
     {
         var first = Leaf("first", 0);
@@ -566,6 +787,28 @@ public class ShellSyntaxProjectionTests
                 },
                 Body = Block(2, Leaf("foreach-span", 2)),
             },
+            new ExecutionRegionSyntax
+            {
+                Body = Block(2, Leaf("unknown-origin", 2)),
+            },
+            new ExecutionRegionSyntax
+            {
+                Origin = ExecutionRegionOrigin.DirectCall,
+                HostClauseElementIndex = 1,
+                Phase = ExecutionRegionPhase.Main,
+                Timing = ExecutionRegionTiming.Synchronous,
+                Cardinality = ExecutionRegionCardinality.Once,
+                Body = Block(2, Leaf("direct-host-index", 2)),
+            },
+            new ExecutionRegionSyntax
+            {
+                Origin = ExecutionRegionOrigin.CommandArgument,
+                HostClauseElementIndex = 1,
+                Phase = ExecutionRegionPhase.Main,
+                Timing = ExecutionRegionTiming.Synchronous,
+                Cardinality = ExecutionRegionCardinality.Once,
+                Body = Block(2, Leaf("detached-argument", 2)),
+            },
         };
 
         foreach (var invalidNode in invalidNodes)
@@ -577,6 +820,81 @@ public class ShellSyntaxProjectionTests
             Assert.Empty(result.Commands);
             Assert.Empty(result.Clauses);
         }
+    }
+
+    [Fact]
+    public void Invalid_command_owned_execution_regions_fail_closed()
+    {
+        var clause = ClauseFor("host") with
+        {
+            Elements = new[]
+            {
+                new ClauseElement { Role = ClauseElementRole.Verb },
+                new ClauseElement
+                {
+                    Role = ClauseElementRole.Argument,
+                    Kind = ArgKind.DynamicSkip,
+                },
+            },
+        };
+        var valid = ExecutionRegion(
+            ExecutionRegionOrigin.CommandArgument,
+            hostClauseElementIndex: 1,
+            2,
+            Leaf("body", 3));
+        var invalidCollections = new IReadOnlyList<ExecutionRegionSyntax>[]
+        {
+            null!,
+            new ExecutionRegionSyntax[] { null! },
+            new[] { valid with { Origin = ExecutionRegionOrigin.DirectCall } },
+            new[] { valid with { HostClauseElementIndex = null } },
+            new[] { valid with { HostClauseElementIndex = 2 } },
+            new[] { valid with { HostClauseElementIndex = 0 } },
+            new[] { valid with { Phase = (ExecutionRegionPhase)999 } },
+            new[] { valid with { Body = null! } },
+            new[] { valid, valid },
+            new[]
+            {
+                valid,
+                valid with
+                {
+                    Body = Block(4, Leaf("distinct-duplicate-coordinate", 5)),
+                },
+            },
+        };
+
+        foreach (var executionRegions in invalidCollections)
+        {
+            var host = Leaf(clause, 1) with { ExecutionRegions = executionRegions };
+            var succeeded = ShellSyntaxProjection.TryProject(Block(0, host), out var result);
+
+            Assert.False(succeeded);
+            Assert.Empty(result.Commands);
+            Assert.Empty(result.Clauses);
+        }
+
+        var literalHost = Leaf(
+            clause with
+            {
+                Elements = new[]
+                {
+                    new ClauseElement { Role = ClauseElementRole.Verb },
+                    new ClauseElement
+                    {
+                        Role = ClauseElementRole.Argument,
+                        Kind = ArgKind.Literal,
+                    },
+                },
+            },
+            1) with
+        {
+            ExecutionRegions = new[] { valid },
+        };
+        Assert.False(ShellSyntaxProjection.TryProject(
+            Block(0, literalHost),
+            out var literalResult));
+        Assert.Empty(literalResult.Commands);
+        Assert.Empty(literalResult.Clauses);
     }
 
     [Fact]
@@ -946,6 +1264,136 @@ public class ShellSyntaxProjectionTests
         return Block(0, current);
     }
 
+    private static ShellBlockSyntax NestedExecutionRegions(int count)
+    {
+        ShellSyntaxNode current = Leaf("deepest", count);
+        for (var index = count - 1; index >= 0; index--)
+        {
+            current = ExecutionRegion(
+                ExecutionRegionOrigin.DirectCall,
+                hostClauseElementIndex: null,
+                index,
+                current);
+        }
+
+        return Block(0, current);
+    }
+
+    private static ShellBlockSyntax DecodedExecutionRegionTree()
+    {
+        var hostClause = ClauseFor("host") with
+        {
+            Elements = new[]
+            {
+                new ClauseElement { Role = ClauseElementRole.Verb },
+                new ClauseElement
+                {
+                    Role = ClauseElementRole.Argument,
+                    Kind = ArgKind.DynamicSkip,
+                },
+            },
+        };
+        return Block(
+            0,
+            Leaf(hostClause, 1) with
+            {
+                ExecutionRegions = new[]
+                {
+                    ExecutionRegion(
+                        ExecutionRegionOrigin.CommandArgument,
+                        hostClauseElementIndex: 1,
+                        2,
+                        Leaf("body", 3),
+                        ExecutionRegionPhase.End) with
+                    {
+                        Timing = ExecutionRegionTiming.Concurrent,
+                        Cardinality = ExecutionRegionCardinality.ZeroOrMore,
+                    },
+                },
+            });
+    }
+
+    private static ShellBlockSyntax InvokePowerShellDecodedClone(
+        ShellBlockSyntax source,
+        CompoundOperator firstOperator,
+        IReadOnlyList<Redirect> wrapperRedirects,
+        IReadOnlyList<ClauseElement> wrapperElements)
+    {
+        var parserType = typeof(PwshParser).Assembly.GetType(
+            "ShellSyntaxTree.Internal.Pwsh.Parsing.PwshCommandParser",
+            throwOnError: true)!;
+        var stateType = parserType.GetNestedType(
+            "DecodedCloneState",
+            BindingFlags.NonPublic)!;
+        var state = Activator.CreateInstance(stateType, nonPublic: true)!;
+        SetProperty(stateType, state, "FirstOperator", firstOperator);
+        SetProperty(stateType, state, "OuterSubshell", true);
+        SetProperty(stateType, state, "LeafCount", 2);
+        SetProperty(stateType, state, "WrapperRedirects", wrapperRedirects);
+        SetProperty(stateType, state, "WrapperRedirectElements", wrapperElements);
+        var method = parserType.GetMethod(
+            "TryCloneDecodedBlock",
+            BindingFlags.Static | BindingFlags.NonPublic)!;
+        var arguments = new object?[] { source, state, null };
+
+        Assert.True((bool)method.Invoke(null, arguments)!);
+        Assert.Equal(2, GetProperty<int>(stateType, state, "LeafIndex"));
+        return Assert.IsType<ShellBlockSyntax>(arguments[2]);
+    }
+
+    private static ShellBlockSyntax InvokeBashDecodedClone(
+        ShellBlockSyntax source,
+        CompoundOperator firstOperator)
+    {
+        var parserType = typeof(BashParser).Assembly.GetType(
+            "ShellSyntaxTree.Internal.Bash.Parsing.BashCommandParser",
+            throwOnError: true)!;
+        var method = parserType
+            .GetMethods(BindingFlags.Static | BindingFlags.NonPublic)
+            .Single(candidate =>
+                candidate.Name == "TryCloneDecodedBlock" &&
+                candidate.GetParameters()[4].ParameterType ==
+                    typeof(ShellBlockSyntax).MakeByRefType());
+        var arguments = new object?[]
+        {
+            source,
+            firstOperator,
+            true,
+            true,
+            null,
+            null,
+        };
+
+        Assert.True((bool)method.Invoke(null, arguments)!);
+        Assert.False(Assert.IsType<bool>(arguments[3]));
+        Assert.NotNull(arguments[5]);
+        return Assert.IsType<ShellBlockSyntax>(arguments[4]);
+    }
+
+    private static void AssertExecutionRegionClone(ExecutionRegionSyntax region)
+    {
+        Assert.Equal(ExecutionRegionOrigin.CommandArgument, region.Origin);
+        Assert.Equal(1, region.HostClauseElementIndex);
+        Assert.Equal(ExecutionRegionPhase.End, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Concurrent, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.ZeroOrMore, region.Cardinality);
+        Assert.Null(region.SourceStart);
+        Assert.Null(region.SourceLength);
+    }
+
+    private static void SetProperty(
+        Type declaringType,
+        object target,
+        string name,
+        object value) =>
+        declaringType.GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .SetValue(target, value);
+
+    private static T GetProperty<T>(Type declaringType, object target, string name) =>
+        Assert.IsType<T>(declaringType
+            .GetProperty(name, BindingFlags.Instance | BindingFlags.NonPublic)!
+            .GetValue(target));
+
     private static ShellBlockSyntax Block(int sourceStart, params ShellSyntaxNode[] statements) =>
         new()
         {
@@ -973,6 +1421,24 @@ public class ShellSyntaxProjectionTests
             SourceStart = sourceStart,
             SourceLength = statements.Length,
             Body = Block(sourceStart, statements),
+        };
+
+    private static ExecutionRegionSyntax ExecutionRegion(
+        ExecutionRegionOrigin origin,
+        int? hostClauseElementIndex,
+        int sourceStart,
+        ShellSyntaxNode statement,
+        ExecutionRegionPhase phase = ExecutionRegionPhase.Main) =>
+        new()
+        {
+            Origin = origin,
+            HostClauseElementIndex = hostClauseElementIndex,
+            Phase = phase,
+            Timing = ExecutionRegionTiming.Synchronous,
+            Cardinality = ExecutionRegionCardinality.Once,
+            SourceStart = sourceStart,
+            SourceLength = 1,
+            Body = Block(sourceStart, statement),
         };
 
     private static Clause ClauseFor(

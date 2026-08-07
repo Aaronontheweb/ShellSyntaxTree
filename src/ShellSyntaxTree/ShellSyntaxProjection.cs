@@ -100,6 +100,7 @@ internal static class ShellSyntaxProjection
         private readonly List<CommandAncestryFrame> _ancestry = new();
         private readonly List<CommandOccurrence> _commands = new();
         private readonly List<Clause> _clauses = new();
+        private bool _structuralContextIsComplete = true;
         private readonly HashSet<ShellSyntaxNode> _visitedNodes =
             new(NodeReferenceComparer.Instance);
         private readonly HashSet<Clause> _visitedClauses =
@@ -138,7 +139,8 @@ internal static class ShellSyntaxProjection
             CommandOccurrenceRole role,
             int structuralDepth,
             bool isRoot = false,
-            int? substitutionChildIndex = null)
+            int? nestedCollectionChildIndex = null,
+            bool isAttachedExecutionRegion = false)
         {
             if (node is null ||
                 !IsValidSpan(node.SourceStart, node.SourceLength) ||
@@ -178,8 +180,14 @@ internal static class ShellSyntaxProjection
                 CommandSubstitutionSyntax substitution =>
                     TryVisitCommandSubstitution(
                         substitution,
-                        substitutionChildIndex,
+                        nestedCollectionChildIndex,
                         nextDepth),
+                ExecutionRegionSyntax executionRegion =>
+                    TryVisitExecutionRegion(
+                        executionRegion,
+                        nestedCollectionChildIndex,
+                        nextDepth,
+                        isAttachedExecutionRegion),
                 _ => false,
             };
 
@@ -224,7 +232,11 @@ internal static class ShellSyntaxProjection
             CommandOccurrenceRole role,
             int structuralDepth)
         {
-            if (simple.Substitutions is null)
+            if (simple.Substitutions is null ||
+                simple.ExecutionRegions is null ||
+                simple.Clause is null ||
+                !IsValidClauseShape(simple.Clause) ||
+                !AreValidAttachedExecutionRegions(simple.Clause, simple.ExecutionRegions))
             {
                 return false;
             }
@@ -237,15 +249,13 @@ internal static class ShellSyntaxProjection
                         substitution,
                         CommandOccurrenceRole.Substitution,
                         structuralDepth,
-                        substitutionChildIndex: index))
+                        nestedCollectionChildIndex: index))
                 {
                     return false;
                 }
             }
 
-            if (simple.Clause is null ||
-                !IsValidClauseShape(simple.Clause) ||
-                !_visitedClauses.Add(simple.Clause))
+            if (!_visitedClauses.Add(simple.Clause))
             {
                 return false;
             }
@@ -269,9 +279,24 @@ internal static class ShellSyntaxProjection
                 EffectiveArguments = effectiveArguments,
                 WorkingDirectory = workingDirectory,
                 Redirects = redirects,
-                IsComplete = facts.IsComplete,
+                IsComplete = facts.IsComplete && _structuralContextIsComplete &&
+                    AreExecutionRegionFactsComplete(simple.ExecutionRegions),
             });
             _clauses.Add(simple.Clause);
+
+            for (var index = 0; index < simple.ExecutionRegions.Count; index++)
+            {
+                if (!TryVisit(
+                        simple.ExecutionRegions[index],
+                        CommandOccurrenceRole.ExecutionRegion,
+                        structuralDepth,
+                        nestedCollectionChildIndex: index,
+                        isAttachedExecutionRegion: true))
+                {
+                    return false;
+                }
+            }
+
             return true;
         }
 
@@ -287,6 +312,30 @@ internal static class ShellSyntaxProjection
                 childIndex,
                 CommandOccurrenceRole.Substitution,
                 structuralDepth);
+
+        private bool TryVisitExecutionRegion(
+            ExecutionRegionSyntax executionRegion,
+            int? childIndex,
+            int structuralDepth,
+            bool isAttachedToSimple)
+        {
+            if (!IsValidExecutionRegion(executionRegion, isAttachedToSimple))
+            {
+                return false;
+            }
+
+            var priorCompleteness = _structuralContextIsComplete;
+            _structuralContextIsComplete &= IsExecutionRegionFactComplete(executionRegion);
+            var succeeded = TryVisitChild(
+                executionRegion,
+                executionRegion.Body,
+                CommandAncestryRegion.ExecutionRegion,
+                childIndex,
+                CommandOccurrenceRole.ExecutionRegion,
+                structuralDepth);
+            _structuralContextIsComplete = priorCompleteness;
+            return succeeded;
+        }
 
         private bool TryVisitPipeline(
             PipelineSyntax pipeline,
@@ -485,7 +534,7 @@ internal static class ShellSyntaxProjection
                 child,
                 role,
                 structuralDepth,
-                substitutionChildIndex: child is CommandSubstitutionSyntax
+                nestedCollectionChildIndex: child is CommandSubstitutionSyntax or ExecutionRegionSyntax
                     ? childIndex
                     : null);
             _ancestry.RemoveAt(_ancestry.Count - 1);
@@ -497,7 +546,71 @@ internal static class ShellSyntaxProjection
                 ConditionLoopSyntax or
                 ConditionalSyntax or
                 GroupSyntax or
-                CommandSubstitutionSyntax;
+                CommandSubstitutionSyntax or
+                ExecutionRegionSyntax;
+
+        private static bool AreValidAttachedExecutionRegions(
+            Clause clause,
+            IReadOnlyList<ExecutionRegionSyntax> executionRegions)
+        {
+            var hostCoordinates = new HashSet<int>();
+            for (var index = 0; index < executionRegions.Count; index++)
+            {
+                var region = executionRegions[index];
+                if (region is null ||
+                    !IsValidExecutionRegion(region, isAttachedToSimple: true) ||
+                    region.HostClauseElementIndex >= clause.Elements.Count ||
+                    !hostCoordinates.Add(region.HostClauseElementIndex!.Value) ||
+                    clause.Elements[region.HostClauseElementIndex.Value].Role !=
+                        ClauseElementRole.Argument ||
+                    clause.Elements[region.HostClauseElementIndex.Value].Kind !=
+                        ArgKind.DynamicSkip)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsValidExecutionRegion(
+            ExecutionRegionSyntax executionRegion,
+            bool isAttachedToSimple) =>
+            executionRegion.Body is not null &&
+            Enum.IsDefined(typeof(ExecutionRegionOrigin), executionRegion.Origin) &&
+            Enum.IsDefined(typeof(ExecutionRegionPhase), executionRegion.Phase) &&
+            Enum.IsDefined(typeof(ExecutionRegionTiming), executionRegion.Timing) &&
+            Enum.IsDefined(
+                typeof(ExecutionRegionCardinality),
+                executionRegion.Cardinality) &&
+            executionRegion.Origin switch
+            {
+                ExecutionRegionOrigin.DirectCall or ExecutionRegionOrigin.DotSource =>
+                    !isAttachedToSimple && executionRegion.HostClauseElementIndex is null,
+                ExecutionRegionOrigin.CommandArgument =>
+                    isAttachedToSimple && executionRegion.HostClauseElementIndex >= 0,
+                _ => false,
+            };
+
+        private static bool AreExecutionRegionFactsComplete(
+            IReadOnlyList<ExecutionRegionSyntax> executionRegions)
+        {
+            for (var index = 0; index < executionRegions.Count; index++)
+            {
+                if (!IsExecutionRegionFactComplete(executionRegions[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsExecutionRegionFactComplete(
+            ExecutionRegionSyntax executionRegion) =>
+            executionRegion.Phase != ExecutionRegionPhase.Unknown &&
+            executionRegion.Timing != ExecutionRegionTiming.Unknown &&
+            executionRegion.Cardinality != ExecutionRegionCardinality.Unknown;
 
         private static bool TryCopyFacts(
             Clause clause,

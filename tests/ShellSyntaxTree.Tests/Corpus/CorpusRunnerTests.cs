@@ -12,6 +12,7 @@ using System.Text.Json.Serialization;
 using ShellSyntaxTree.Internal.Bash.Lexing;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
 using Xunit;
+using Xunit.Sdk;
 
 namespace ShellSyntaxTree.Tests.Corpus;
 
@@ -42,6 +43,210 @@ public class CorpusRunnerTests
         AstAssert.Equal(entry.Expected!, actual, $"{shell}/{fileName}");
         AssertClauseElementInvariants(actual, $"{shell}/{fileName}");
         AssertAuthoredTokenCoverage(shell, actual, $"{shell}/{fileName}");
+    }
+
+    [Fact]
+    public void Executable_corpus_shape_preserves_execution_region_facts()
+    {
+        var hostClause = new Clause
+        {
+            Verb = new VerbChain { Tokens = new[] { "ForEach-Object" } },
+            Elements = new[]
+            {
+                new ClauseElement { Role = ClauseElementRole.Verb },
+                new ClauseElement
+                {
+                    Role = ClauseElementRole.Argument,
+                    Kind = ArgKind.DynamicSkip,
+                },
+            },
+        };
+        var bodyClause = new Clause
+        {
+            Verb = new VerbChain { Tokens = new[] { "Remove-Item" } },
+            Elements = new[] { new ClauseElement { Role = ClauseElementRole.Verb } },
+        };
+        var actual = new ParsedCommand
+        {
+            Clauses = new[] { hostClause, bodyClause },
+            Syntax = new ShellBlockSyntax
+            {
+                Statements = new ShellSyntaxNode[]
+                {
+                    new SimpleCommandSyntax
+                    {
+                        Clause = hostClause,
+                        ExecutionRegions = new[]
+                        {
+                            new ExecutionRegionSyntax
+                            {
+                                Origin = ExecutionRegionOrigin.CommandArgument,
+                                HostClauseElementIndex = 1,
+                                Phase = ExecutionRegionPhase.Process,
+                                Timing = ExecutionRegionTiming.Synchronous,
+                                Cardinality = ExecutionRegionCardinality.OncePerInputObject,
+                                Body = new ShellBlockSyntax
+                                {
+                                    Statements = new ShellSyntaxNode[]
+                                    {
+                                        new SimpleCommandSyntax { Clause = bodyClause },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        };
+        var expected = new ExpectedParsedCommand
+        {
+            Clauses = new List<ExpectedClause>
+            {
+                new()
+                {
+                    Verb = new List<string> { "ForEach-Object" },
+                    Elements = new List<ExpectedClauseElement>
+                    {
+                        new() { Role = ClauseElementRole.Verb },
+                        new()
+                        {
+                            Role = ClauseElementRole.Argument,
+                            Kind = ArgKind.DynamicSkip,
+                        },
+                    },
+                },
+                new() { Verb = new List<string> { "Remove-Item" } },
+            },
+            Syntax = new List<ExpectedSyntaxNode>
+            {
+                new() { Kind = ShellSyntaxKind.Block },
+                new()
+                {
+                    Kind = ShellSyntaxKind.SimpleCommand,
+                    ParentIndex = 0,
+                    Region = CommandAncestryRegion.Root,
+                    ChildIndex = 0,
+                    ClauseIndex = 0,
+                },
+                new()
+                {
+                    Kind = ShellSyntaxKind.ExecutionRegion,
+                    ParentIndex = 1,
+                    Region = CommandAncestryRegion.ExecutionRegion,
+                    ChildIndex = 0,
+                    ExecutionOrigin = ExecutionRegionOrigin.CommandArgument,
+                    HostClauseElementIndex = 1,
+                    ExecutionPhase = ExecutionRegionPhase.Process,
+                    ExecutionTiming = ExecutionRegionTiming.Synchronous,
+                    ExecutionCardinality = ExecutionRegionCardinality.OncePerInputObject,
+                },
+                new()
+                {
+                    Kind = ShellSyntaxKind.Block,
+                    ParentIndex = 2,
+                    Region = CommandAncestryRegion.ExecutionRegion,
+                    ChildIndex = 0,
+                },
+                new()
+                {
+                    Kind = ShellSyntaxKind.SimpleCommand,
+                    ParentIndex = 3,
+                    Region = CommandAncestryRegion.Statement,
+                    ChildIndex = 0,
+                    ClauseIndex = 1,
+                },
+            },
+        };
+
+        AstAssert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void Executable_corpus_rejects_invalid_execution_region_host_coordinates()
+    {
+        Assert.Throws<XunitException>(() => AstAssert.Equal(
+            CreateExpectation(ArgKind.Literal, 1),
+            CreateActual(ArgKind.Literal)));
+        Assert.Throws<XunitException>(() => AstAssert.Equal(
+            CreateExpectation(ArgKind.DynamicSkip, 2),
+            CreateActual(ArgKind.DynamicSkip)));
+        Assert.Throws<XunitException>(() => AstAssert.Equal(
+            CreateExpectation(ArgKind.DynamicSkip, 1, 1),
+            CreateActual(ArgKind.DynamicSkip)));
+
+        static ParsedCommand CreateActual(ArgKind hostKind) => new()
+        {
+            Clauses = new[]
+            {
+                new Clause
+                {
+                    Verb = new VerbChain { Tokens = new[] { "host" } },
+                    Elements = new[]
+                    {
+                        new ClauseElement { Role = ClauseElementRole.Verb },
+                        new ClauseElement
+                        {
+                            Role = ClauseElementRole.Argument,
+                            Kind = hostKind,
+                        },
+                    },
+                },
+            },
+        };
+
+        static ExpectedParsedCommand CreateExpectation(
+            ArgKind hostKind,
+            params int[] coordinates)
+        {
+            var syntax = new List<ExpectedSyntaxNode>
+            {
+                new() { Kind = ShellSyntaxKind.Block },
+                new()
+                {
+                    Kind = ShellSyntaxKind.SimpleCommand,
+                    ParentIndex = 0,
+                    Region = CommandAncestryRegion.Root,
+                    ChildIndex = 0,
+                    ClauseIndex = 0,
+                },
+            };
+            for (var index = 0; index < coordinates.Length; index++)
+            {
+                syntax.Add(new ExpectedSyntaxNode
+                {
+                    Kind = ShellSyntaxKind.ExecutionRegion,
+                    ParentIndex = 1,
+                    Region = CommandAncestryRegion.ExecutionRegion,
+                    ChildIndex = index,
+                    ExecutionOrigin = ExecutionRegionOrigin.CommandArgument,
+                    HostClauseElementIndex = coordinates[index],
+                    ExecutionPhase = ExecutionRegionPhase.Main,
+                    ExecutionTiming = ExecutionRegionTiming.Synchronous,
+                    ExecutionCardinality = ExecutionRegionCardinality.Once,
+                });
+            }
+
+            return new ExpectedParsedCommand
+            {
+                Clauses = new List<ExpectedClause>
+                {
+                    new()
+                    {
+                        Verb = new List<string> { "host" },
+                        Elements = new List<ExpectedClauseElement>
+                        {
+                            new() { Role = ClauseElementRole.Verb },
+                            new()
+                            {
+                                Role = ClauseElementRole.Argument,
+                                Kind = hostKind,
+                            },
+                        },
+                    },
+                },
+                Syntax = syntax,
+            };
+        }
     }
 
     private static void AssertAuthoredTokenCoverage(
@@ -145,7 +350,9 @@ public class CorpusRunnerTests
             ShellBlockSyntax block => block.Statements.Any(
                 child => IsBashForEachStructuralToken(child, token)),
             SimpleCommandSyntax simple => simple.Substitutions.Any(
-                child => IsBashForEachStructuralToken(child, token)),
+                    child => IsBashForEachStructuralToken(child, token)) ||
+                simple.ExecutionRegions.Any(
+                    child => IsBashForEachStructuralToken(child, token)),
             PipelineSyntax pipeline => pipeline.Stages.Any(
                 child => IsBashForEachStructuralToken(child, token)),
             CommandListSyntax list => list.Items.Any(
@@ -166,6 +373,8 @@ public class CorpusRunnerTests
                 IsBashForEachStructuralToken(branch.Body, token),
             CommandSubstitutionSyntax substitution =>
                 IsBashForEachStructuralToken(substitution.Body, token),
+            ExecutionRegionSyntax executionRegion =>
+                IsBashForEachStructuralToken(executionRegion.Body, token),
             _ => false,
         };
     }
@@ -224,7 +433,9 @@ public class CorpusRunnerTests
             ShellBlockSyntax block => block.Statements.Any(
                 child => IsPwshForEachStructuralToken(child, token)),
             SimpleCommandSyntax simple => simple.Substitutions.Any(
-                child => IsPwshForEachStructuralToken(child, token)),
+                    child => IsPwshForEachStructuralToken(child, token)) ||
+                simple.ExecutionRegions.Any(
+                    child => IsPwshForEachStructuralToken(child, token)),
             PipelineSyntax pipeline => pipeline.Stages.Any(
                 child => IsPwshForEachStructuralToken(child, token)),
             CommandListSyntax list => list.Items.Any(
@@ -245,6 +456,8 @@ public class CorpusRunnerTests
                 IsPwshForEachStructuralToken(branch.Body, token),
             CommandSubstitutionSyntax substitution =>
                 IsPwshForEachStructuralToken(substitution.Body, token),
+            ExecutionRegionSyntax executionRegion =>
+                IsPwshForEachStructuralToken(executionRegion.Body, token),
             _ => false,
         };
     }
@@ -318,6 +531,16 @@ public class CorpusRunnerTests
                         substitution, attachedToSimple: true, regions);
                 }
 
+                foreach (var executionRegion in simple.ExecutionRegions)
+                {
+                    CollectStandaloneSubstitutionRegions(
+                        executionRegion, attachedToSimple: false, regions);
+                }
+
+                break;
+            case ExecutionRegionSyntax executionRegion:
+                CollectStandaloneSubstitutionRegions(
+                    executionRegion.Body, attachedToSimple: false, regions);
                 break;
             case ShellBlockSyntax block:
                 foreach (var statement in block.Statements)
@@ -683,6 +906,16 @@ public sealed record ExpectedSyntaxNode
     public int? IterableSourceStart { get; init; }
 
     public int? IterableSourceLength { get; init; }
+
+    public ExecutionRegionOrigin? ExecutionOrigin { get; init; }
+
+    public int? HostClauseElementIndex { get; init; }
+
+    public ExecutionRegionPhase? ExecutionPhase { get; init; }
+
+    public ExecutionRegionTiming? ExecutionTiming { get; init; }
+
+    public ExecutionRegionCardinality? ExecutionCardinality { get; init; }
 }
 
 public sealed record ExpectedCommandOccurrence

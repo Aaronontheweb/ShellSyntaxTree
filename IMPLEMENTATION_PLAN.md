@@ -356,9 +356,12 @@ priorities.
       syntax node with independent origin, phase, timing, and cardinality rather than a
       false shared/isolated scope flag. The inert additive public API skeleton,
       enum/default snapshots, recorded local PowerShell probe evidence, and
-      design-corpus categories are delivered; no parser emits a region yet and
-      automated execution-region oracle coverage remains in task 7.7. Continue in
-      small slices: projection; pinned receiver/parameter binding including
+      design-corpus categories are delivered. The shared projector,
+      compatibility flattener, depth guard, decoded-wrapper cloning, and
+      executable-corpus DTOs now preserve direct and command-owned regions in
+      the locked substitution-host-region order. No parser emits a region yet,
+      and automated execution-region oracle coverage remains in task 7.7.
+      Continue in small slices: pinned receiver/parameter binding including
       ForEach-Object multi-block phases; direct `&` / `.` and synchronous
       current-runspace callbacks; child process/runspace jobs and parallel
       blocks; deferred breakpoint/event/completion actions; then unknown
