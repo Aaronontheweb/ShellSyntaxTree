@@ -58,6 +58,8 @@ public enum CommandOccurrenceRole
     Branch,
     /// <summary>A substitution command.</summary>
     Substitution,
+    /// <summary>A command inside an execution-bearing region.</summary>
+    ExecutionRegion,
 }
 
 /// <summary>One compositional structural ancestor of a command occurrence.</summary>
@@ -102,6 +104,8 @@ public enum CommandAncestryRegion
     Branch,
     /// <summary>A command substitution.</summary>
     Substitution,
+    /// <summary>An execution-bearing region.</summary>
+    ExecutionRegion,
 }
 
 /// <summary>A bounded effective value at one authored clause-element coordinate.</summary>

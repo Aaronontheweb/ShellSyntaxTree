@@ -10,6 +10,14 @@
 - [x] 1.8 Update `PROJECT_CONTEXT.md` and `IMPLEMENTATION_PLAN.md` with the accepted v0.3 scope and delivery slices.
 - [x] 1.9 Add a paired Bash and PowerShell design corpus that records current behavior, desired structure, command occurrences, bounded values, redirect facts, compatibility projections, and security invariants.
 - [ ] 1.10 Promote each design case into the executable corpus as its production parser slice lands.
+- [x] 1.11 Correct the PowerShell script-block boundary and lock the additive
+  execution-region node, origin/phase/timing/cardinality facts, authored-versus-semantic
+  ordering, command projection, and independent shell-state analysis contract
+  against local PowerShell 7.6.4 oracles.
+- [x] 1.12 Expand the PowerShell design corpus with direct call/dot-source,
+  synchronous callback, binder phase, local/remote invocation, child
+  process/runspace, initialization, deferred action, proved data, and unknown
+  receiver cases before production implementation.
 
 ## 2. Resolver Provenance Correction and Shared Preparation
 
@@ -44,6 +52,12 @@
   - [x] 3.13a Promote the Bash ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, and hidden-execution cases into its executable corpus.
   - [x] 3.13b Promote the PowerShell ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, expression-boundary, and hidden-execution cases into its executable corpus.
   - [x] 3.13c Promote expanding, literal, tab-stripped, multiple, and malformed Bash heredoc cases with full structural expectations into the executable corpus.
+- [x] 3.14 Add `ExecutionRegionSyntax`, its four discriminant enums,
+  `SimpleCommandSyntax.ExecutionRegions`, and appended occurrence/ancestry enum
+  members to the public API and snapshot without changing existing enum values.
+- [ ] 3.15 Extend the structural projector, compatibility flattener, depth
+  validation, cloning, and corpus DTOs so direct and command-owned execution
+  regions emit every body command exactly once in the locked order.
 
 ## 4. Explicit Redirect Semantics
 
@@ -167,6 +181,28 @@
     pipeline, alias/cmdlet/native, redirect, and adversarial matrices remain in
     tasks 7.5-7.7.
 - [ ] 7.5 Cover aliases, cmdlets, native commands, nested loops, pipelines, script blocks, and wrapper boundaries.
+  - [ ] 7.5a Implement the version-pinned PowerShell 7 script-block receiver and
+    parameter-binding catalog, including aliases, supported module-qualified
+    identities, parameter abbreviations/inline values, positional binding,
+    parameter sets, `ScriptBlock[]`, and ForEach-Object Begin/Process/End
+    assignment.
+  - [ ] 7.5b Implement direct `& {}` and `. {}` plus synchronous current-runspace
+    regions for ForEach-Object, Where-Object, Measure-Command, Trace-Command,
+    in-process Invoke-Command, and New-Module with shell-specific state flow.
+  - [ ] 7.5c Implement Start-Job and initialization, ForEach-Object -Parallel,
+    remote/session Invoke-Command, `-AsJob`, and pinned Start-ThreadJob child
+    process/runspace boundaries conservatively.
+  - [ ] 7.5d Implement deferred breakpoint, event, and argument-completion action
+    regions with trigger-time unknown state and zero-or-more cardinality.
+  - [ ] 7.5e Keep proved non-executing script-block data opaque; over-approximate
+    unknown receivers/bindings as unknown incomplete regions; fail atomically
+    on unsupported interiors or state transfers.
+  - [ ] 7.5f Pin authored projection order separately from semantic phase order,
+    exact host element coordinates, nested regions, wrappers, pipelines, loops,
+    and the 16-container depth boundary.
+  - [ ] 7.5g Either implement a bounded leading `param(...)` declaration and
+    direct-block argument-binding grammar or retain explicit atomic-failure
+    cases for both direct operators and realistic argument completers.
 - [ ] 7.6 Add adversarial cases for object-valued iterables, mutation, dynamic invocation, splatting, and cap overflow.
 - [ ] 7.7 Add PowerShell corpus entries, live `pwsh` oracle coverage, and Netclaw integration cases.
   - Add case-specific `PwshInitialStateMode` support to `PwshCorpusTool` before

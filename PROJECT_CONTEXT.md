@@ -82,6 +82,12 @@ zero-native-deps .NET parser sized to what security gates actually need.
 - Add a library-owned command-occurrence projection for security consumers so
   every potentially executable iterator, condition, branch, substitution, and
   body command is evaluated exactly once.
+- Add typed PowerShell execution regions for direct call/dot-source blocks,
+  synchronous callbacks, jobs/parallel runspaces, initialization, and deferred
+  actions. Public origin/phase/timing/cardinality facts remain separate from
+  shell-specific variable, location, command-resolution, runspace, and process
+  state analysis; proved script-block data stays opaque and unknown receivers
+  conservatively expose incomplete bodies.
 - Add fixed, non-executing value and state analysis: at most 32 candidates, at
   most 16 structural container levels, and the existing wrapper depth of 5.
 - Deliver Bash `for ... in` and PowerShell `foreach` first, then the locked

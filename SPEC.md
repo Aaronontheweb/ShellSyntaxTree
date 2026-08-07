@@ -178,9 +178,14 @@ public sealed record ConditionLoopSyntax : ShellSyntaxNode { ... }
 public sealed record ConditionalSyntax : ShellSyntaxNode { ... }
 public sealed record ConditionalBranchSyntax : ShellSyntaxNode { ... }
 public sealed record CommandSubstitutionSyntax : ShellSyntaxNode { ... }
+public sealed record ExecutionRegionSyntax : ShellSyntaxNode { ... }
 public enum ShellSyntaxKind { ... }
 public enum ShellGroupKind { ... }
 public enum ConditionLoopKind { ... }
+public enum ExecutionRegionOrigin { ... }
+public enum ExecutionRegionPhase { ... }
+public enum ExecutionRegionTiming { ... }
+public enum ExecutionRegionCardinality { ... }
 
 // v0.3 authorization and bounded-analysis projections — see §3.
 public sealed record CommandOccurrence { ... }
@@ -346,7 +351,9 @@ positional argument: the retained v0.2 `Arg.IsFlag` contract recognizes only
 an ASCII `-`, so normalizing the authored `Raw` spelling would either lose
 provenance or require a breaking API change. Unsupported module-qualified
 cmdlets are likewise rejected inside structural regions, not only in a flat
-command; the existing module-qualified `Invoke-Expression` exception remains.
+command. The existing module-qualified `Invoke-Expression` exception and the
+version-pinned PowerShell execution-region receiver catalog are the only
+specified exceptions.
 
 For a successful result, every authored simple command appears once in
 `Syntax`, once in `Commands`, and once in `Clauses`, with all three projections
@@ -389,6 +396,7 @@ public enum ShellSyntaxKind
     Conditional,
     ConditionalBranch,
     CommandSubstitution,
+    ExecutionRegion,
 }
 
 public sealed record ShellBlockSyntax : ShellSyntaxNode
@@ -402,6 +410,7 @@ public sealed record SimpleCommandSyntax : ShellSyntaxNode
     public override ShellSyntaxKind Kind => ShellSyntaxKind.SimpleCommand;
     public Clause Clause { get; init; } = new();
     public IReadOnlyList<CommandSubstitutionSyntax> Substitutions { get; init; } = [];
+    public IReadOnlyList<ExecutionRegionSyntax> ExecutionRegions { get; init; } = [];
 }
 
 public sealed record PipelineSyntax : ShellSyntaxNode
@@ -492,6 +501,54 @@ public sealed record CommandSubstitutionSyntax : ShellSyntaxNode
     public override ShellSyntaxKind Kind => ShellSyntaxKind.CommandSubstitution;
     public ShellBlockSyntax Body { get; init; } = new();
 }
+
+public sealed record ExecutionRegionSyntax : ShellSyntaxNode
+{
+    public override ShellSyntaxKind Kind => ShellSyntaxKind.ExecutionRegion;
+    public ExecutionRegionOrigin Origin { get; init; }
+    public int? HostClauseElementIndex { get; init; }
+    public ExecutionRegionPhase Phase { get; init; }
+    public ExecutionRegionTiming Timing { get; init; }
+    public ExecutionRegionCardinality Cardinality { get; init; }
+    public ShellBlockSyntax Body { get; init; } = new();
+}
+
+public enum ExecutionRegionOrigin
+{
+    Unknown,
+    DirectCall,
+    DotSource,
+    CommandArgument,
+}
+
+public enum ExecutionRegionPhase
+{
+    Unknown,
+    Main,
+    Initialization,
+    Begin,
+    Process,
+    End,
+    Filter,
+    Action,
+    Completion,
+}
+
+public enum ExecutionRegionTiming
+{
+    Unknown,
+    Synchronous,
+    Concurrent,
+    Deferred,
+}
+
+public enum ExecutionRegionCardinality
+{
+    Unknown,
+    Once,
+    OncePerInputObject,
+    ZeroOrMore,
+}
 ```
 
 `ForEachSyntax` shares proved execution structure only. `Iterable.Raw` keeps
@@ -527,6 +584,7 @@ public enum CommandOccurrenceRole
     LoopBody,
     Branch,
     Substitution,
+    ExecutionRegion,
 }
 
 public sealed record CommandAncestryFrame
@@ -550,6 +608,7 @@ public enum CommandAncestryRegion
     Condition,
     Branch,
     Substitution,
+    ExecutionRegion,
 }
 
 public sealed record EffectiveArgument
@@ -596,10 +655,32 @@ preserves nesting: a substitution inside an inner simple command belongs to
 that inner command, not to the outer command or a side table. `Clause` remains
 the unchanged v0.2 compatibility leaf and retains the authored dynamic value.
 
+`SimpleCommandSyntax.ExecutionRegions` owns each completely delimited body
+that a proved or conservatively unknown command binding may execute. The
+unchanged host `Clause` retains its authored script-block `DynamicSkip`
+argument. A direct PowerShell `& {}` or `. {}` region appears as a statement,
+carries `Origin=DirectCall` or `Origin=DotSource`, has
+`HostClauseElementIndex=null`, and creates no synthetic occurrence for the
+invocation operator. A command-owned region carries `Origin=CommandArgument`
+and the non-negative index of its script-block token in the host
+`Clause.Elements`. Consumers use `Origin`, rather than reparsing source text,
+to distinguish the different direct-invocation state semantics.
+
+Execution-region origin, phase, timing, and cardinality are independent
+structural facts. Attached regions retain authored script-block order even when a
+shell-specific analyzer schedules Begin/Process/End or initialization/main in
+another semantic order. `Synchronous`, `Concurrent`, and `Deferred` do not
+claim variable, cwd, command-resolution, runspace, or process scope. Those
+dimensions remain shell-specific analysis because PowerShell can isolate
+ordinary variable assignment while sharing location. Unknown enum values fail
+closed.
+
 The canonical `Commands` and compatibility `Clauses` projections use these
 deterministic ordering rules: disjoint executable regions follow authored
 source order; an enclosed substitution precedes its containing command;
-nested substitutions are emitted innermost first; and nodes without comparable
+nested substitutions are emitted innermost first; a command-owned execution
+region follows its host and sibling regions retain authored order; and nodes
+without comparable
 outer source spans use their containing structural collection order. Thus
 `rm "$(find /tmp)"` projects `find`, then `rm`, exactly once each.
 Each substitution ancestry frame uses `Region=Substitution` and its authored
@@ -612,13 +693,14 @@ next node on the path. The root block uses `Root`; non-root blocks and command
 lists use `Statement`; pipelines use `PipelineStage`; groups use `GroupBody`;
 foreach nodes use `Iterator` or `LoopBody`; condition loops use `Condition` or
 `LoopBody`; conditionals use `Branch`; conditional-branch nodes use
-`Condition` or `Branch`; and command substitutions use `Substitution`.
+`Condition` or `Branch`; command substitutions use `Substitution`; and
+execution regions use `ExecutionRegion`.
 Repeated children use their zero-based authored index. The `else` child uses
 the branch count, placing it after every condition/body pair. Frame source
 ranges belong to the ancestor. Blocks, command lists, and groups retain the
 incoming immediate role; pipeline stages, iterator/body regions,
-condition/body regions, branches, and substitutions replace it with their
-nearer execution role.
+condition/body regions, branches, substitutions, and execution regions replace
+it with their nearer execution role.
 
 Projection accepts only a parser-owned tree: a syntax-node or `Clause`
 reference cannot appear at two authored positions, node and fragment spans are
@@ -647,7 +729,8 @@ The parser does not execute commands, inspect runtime variables, enumerate the
 filesystem, or truncate an over-limit set and call it complete. A result with
 33 or more candidates becomes `Unknown`. Structural depth starts at zero for
 the root and increments on foreach loops, condition loops, conditionals,
-groups, and command substitutions; blocks, lists, pipelines, branches, and
+groups, command substitutions, and execution regions; blocks, lists,
+pipelines, branches, and
 simple-command leaves do not independently increment it. Exceeding 16
 structural containers or 5 decoded-command wrapper recursions makes the entire
 result unparseable.

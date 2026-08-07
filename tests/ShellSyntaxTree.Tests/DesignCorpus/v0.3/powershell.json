@@ -126,21 +126,23 @@
       }
     },
     {
-      "id": "pwsh-call-operator-script-block-gated",
-      "concern": "Invoked script block is not treated as an ordinary opaque argument",
+      "id": "pwsh-call-operator-script-block-region",
+      "concern": "Direct call-operator script block exposes its body without a synthetic host command",
       "input": "& { Remove-Item target.txt }",
-      "current": { "isUnparseable": false },
+      "current": { "isUnparseable": true },
       "desired": {
-        "isUnparseable": true,
         "syntax": [
           { "id": "root", "kind": "Block", "slot": "Root" },
-          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+          { "id": "region", "kind": "ExecutionRegion", "parent": "root", "slot": "Statement", "executionOrigin": "DirectCall", "executionPhase": "Main", "executionTiming": "Synchronous", "executionCardinality": "Once" },
+          { "id": "body", "kind": "Block", "parent": "region", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
         ],
-        "commands": [],
-        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
-        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
-      },
-      "compatibilityProjectionLanded": true
+        "commands": [
+          { "authoredVerb": "Remove-Item", "immediateRole": "ExecutionRegion", "ancestry": ["root", "region", "body"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Remove-Item"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "NoSyntheticOperator"]
+      }
     },
     {
       "id": "pwsh-standalone-subexpression-is-not-invocation",
@@ -443,7 +445,9 @@
           { "id": "pipe", "kind": "Pipeline", "parent": "root", "slot": "Statement" },
           { "id": "get", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 0 },
           { "id": "foreachAlias", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 1 },
-          { "id": "scriptBlock", "kind": "OpaqueArgument", "parent": "foreachAlias", "slot": "Argument" }
+          { "id": "process", "kind": "ExecutionRegion", "parent": "foreachAlias", "slot": "ExecutionRegion", "hostClauseElementIndex": 1, "executionOrigin": "CommandArgument", "executionPhase": "Process", "executionTiming": "Synchronous", "executionCardinality": "OncePerInputObject" },
+          { "id": "processBody", "kind": "Block", "parent": "process", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "processBody", "slot": "Statement", "commandIndex": 2 }
         ],
         "commands": [
           { "authoredVerb": "Get-ChildItem", "immediateRole": "PipelineStage", "ancestry": ["root", "pipe"], "isComplete": true },
@@ -456,12 +460,21 @@
             "effectiveValues": [
               { "sourceElement": "{ Remove-Item $_ }", "kind": "Unknown", "isPolicySensitive": true }
             ]
+          },
+          {
+            "authoredVerb": "Remove-Item",
+            "immediateRole": "ExecutionRegion",
+            "ancestry": ["root", "pipe", "process", "processBody"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$_", "kind": "Unknown", "isPolicySensitive": true }
+            ]
           }
         ],
-        "compatibility": { "verbs": ["Get-ChildItem", "foreach"], "preservesAuthoredDynamicValues": true },
-        "securityInvariants": ["ContextualKeywordNotControlFlow", "OpaqueDataNotExecuted", "UnknownPolicyValueFailsClosed"]
+        "compatibility": { "verbs": ["Get-ChildItem", "foreach", "Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["ContextualKeywordNotControlFlow", "AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
       },
-      "notes": "ShellSyntaxTree does not assume that a ForEach-Object script-block argument executes as an independently authorized shell command."
+      "notes": "The foreach alias remains a pipeline command, but its known Process script block is a typed execution region."
     },
     {
       "id": "pwsh-malformed-foreach-missing-body",
@@ -2151,6 +2164,347 @@
         },
         "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
         "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "ShellSpecificOptionSemantics"]
+      }
+    },
+    {
+      "id": "pwsh-dot-source-script-block-region",
+      "concern": "Direct dot-source script block exposes a current-scope body without a synthetic host command",
+      "input": ". { Get-Location }",
+      "current": { "isUnparseable": true },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "region", "kind": "ExecutionRegion", "parent": "root", "slot": "Statement", "executionOrigin": "DotSource", "executionPhase": "Main", "executionTiming": "Synchronous", "executionCardinality": "Once" },
+          { "id": "body", "kind": "Block", "parent": "region", "slot": "Body" },
+          { "id": "getLocation", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "Get-Location", "immediateRole": "ExecutionRegion", "ancestry": ["root", "region", "body"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Get-Location"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "pwsh-script-block-proved-data",
+      "concern": "Canonical Write-Output consumes a script block as data rather than executing its contents",
+      "input": "Write-Output { Remove-Item target.txt }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "data", "kind": "OpaqueArgument", "parent": "write", "slot": "Argument" }
+        ],
+        "commands": [
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted"]
+      }
+    },
+    {
+      "id": "pwsh-script-block-unknown-receiver",
+      "concern": "Unknown receiver over-approximates a script-block argument as executable",
+      "input": "Invoke-Custom { Remove-Item target.txt }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "host", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "region", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 1, "executionOrigin": "CommandArgument", "executionPhase": "Unknown", "executionTiming": "Unknown", "executionCardinality": "Unknown" },
+          { "id": "body", "kind": "Block", "parent": "region", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Invoke-Custom", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": false },
+          { "authoredVerb": "Remove-Item", "immediateRole": "ExecutionRegion", "ancestry": ["root", "region", "body"], "isComplete": false }
+        ],
+        "compatibility": { "verbs": ["Invoke-Custom", "Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "StateJoinConservative"]
+      }
+    },
+    {
+      "id": "pwsh-where-object-filter-region",
+      "concern": "Where-Object FilterScript executes once per pipeline input object",
+      "input": "Get-ChildItem | Where-Object -FilterScript { Test-Path $_ }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "pipe", "kind": "Pipeline", "parent": "root", "slot": "Statement" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 0 },
+          { "id": "host", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 1 },
+          { "id": "filter", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 2, "executionOrigin": "CommandArgument", "executionPhase": "Filter", "executionTiming": "Synchronous", "executionCardinality": "OncePerInputObject" },
+          { "id": "body", "kind": "Block", "parent": "filter", "slot": "Body" },
+          { "id": "test", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 2 }
+        ],
+        "commands": [
+          { "authoredVerb": "Get-ChildItem", "immediateRole": "PipelineStage", "ancestry": ["root", "pipe"], "isComplete": true },
+          { "authoredVerb": "Where-Object", "immediateRole": "PipelineStage", "ancestry": ["root", "pipe"], "isComplete": true },
+          { "authoredVerb": "Test-Path", "immediateRole": "ExecutionRegion", "ancestry": ["root", "pipe", "filter", "body"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Get-ChildItem", "Where-Object", "Test-Path"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-object-authored-versus-phase-order",
+      "concern": "ForEach-Object retains authored script-block order while exposing semantic phases",
+      "input": "ForEach-Object -End { Write-Output end } -Begin { Write-Output begin } -Process { Write-Output process }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "host", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "end", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 2, "executionOrigin": "CommandArgument", "executionPhase": "End", "executionTiming": "Synchronous", "executionCardinality": "Once" },
+          { "id": "endBody", "kind": "Block", "parent": "end", "slot": "Body" },
+          { "id": "endWrite", "kind": "SimpleCommand", "parent": "endBody", "slot": "Statement", "commandIndex": 1 },
+          { "id": "begin", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 4, "executionOrigin": "CommandArgument", "executionPhase": "Begin", "executionTiming": "Synchronous", "executionCardinality": "Once" },
+          { "id": "beginBody", "kind": "Block", "parent": "begin", "slot": "Body" },
+          { "id": "beginWrite", "kind": "SimpleCommand", "parent": "beginBody", "slot": "Statement", "commandIndex": 2 },
+          { "id": "process", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 6, "executionOrigin": "CommandArgument", "executionPhase": "Process", "executionTiming": "Synchronous", "executionCardinality": "OncePerInputObject" },
+          { "id": "processBody", "kind": "Block", "parent": "process", "slot": "Body" },
+          { "id": "processWrite", "kind": "SimpleCommand", "parent": "processBody", "slot": "Statement", "commandIndex": 3 }
+        ],
+        "commands": [
+          { "authoredVerb": "ForEach-Object", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true },
+          { "authoredVerb": "Write-Output", "immediateRole": "ExecutionRegion", "ancestry": ["root", "end", "endBody"], "isComplete": true },
+          { "authoredVerb": "Write-Output", "immediateRole": "ExecutionRegion", "ancestry": ["root", "begin", "beginBody"], "isComplete": true },
+          { "authoredVerb": "Write-Output", "immediateRole": "ExecutionRegion", "ancestry": ["root", "process", "processBody"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["ForEach-Object", "Write-Output", "Write-Output", "Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "pwsh-invoke-command-local-region",
+      "concern": "Local Invoke-Command exposes a synchronous main execution region",
+      "input": "Invoke-Command -ScriptBlock { Get-Item child.txt }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "host", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "main", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 2, "executionOrigin": "CommandArgument", "executionPhase": "Main", "executionTiming": "Synchronous", "executionCardinality": "Once" },
+          { "id": "body", "kind": "Block", "parent": "main", "slot": "Body" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Invoke-Command", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true },
+          { "authoredVerb": "Get-Item", "immediateRole": "ExecutionRegion", "ancestry": ["root", "main", "body"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Invoke-Command", "Get-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative"]
+      }
+    },
+    {
+      "id": "pwsh-invoke-command-remote-region",
+      "concern": "Remote Invoke-Command exposes its body while withholding unproved remote state",
+      "input": "Invoke-Command -ComputerName server -ScriptBlock { Get-Item child.txt }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "host", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "main", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 4, "executionOrigin": "CommandArgument", "executionPhase": "Main", "executionTiming": "Synchronous", "executionCardinality": "Once" },
+          { "id": "body", "kind": "Block", "parent": "main", "slot": "Body" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Invoke-Command", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true },
+          { "authoredVerb": "Get-Item", "immediateRole": "ExecutionRegion", "ancestry": ["root", "main", "body"], "isComplete": false }
+        ],
+        "compatibility": { "verbs": ["Invoke-Command", "Get-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "StateJoinConservative"]
+      }
+    },
+    {
+      "id": "pwsh-start-job-initialization-and-main",
+      "concern": "Start-Job exposes authored main and initialization blocks while analysis schedules initialization first",
+      "input": "Start-Job -ScriptBlock { Write-Output main } -InitializationScript { Write-Output init }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "host", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "main", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 2, "executionOrigin": "CommandArgument", "executionPhase": "Main", "executionTiming": "Concurrent", "executionCardinality": "Once" },
+          { "id": "mainBody", "kind": "Block", "parent": "main", "slot": "Body" },
+          { "id": "mainWrite", "kind": "SimpleCommand", "parent": "mainBody", "slot": "Statement", "commandIndex": 1 },
+          { "id": "init", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 4, "executionOrigin": "CommandArgument", "executionPhase": "Initialization", "executionTiming": "Concurrent", "executionCardinality": "Once" },
+          { "id": "initBody", "kind": "Block", "parent": "init", "slot": "Body" },
+          { "id": "initWrite", "kind": "SimpleCommand", "parent": "initBody", "slot": "Statement", "commandIndex": 2 }
+        ],
+        "commands": [
+          { "authoredVerb": "Start-Job", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true },
+          { "authoredVerb": "Write-Output", "immediateRole": "ExecutionRegion", "ancestry": ["root", "main", "mainBody"], "isComplete": true },
+          { "authoredVerb": "Write-Output", "immediateRole": "ExecutionRegion", "ancestry": ["root", "init", "initBody"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Start-Job", "Write-Output", "Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "pwsh-foreach-object-parallel-region",
+      "concern": "ForEach-Object Parallel exposes a concurrent child-runspace process region",
+      "input": "Get-ChildItem | ForEach-Object -Parallel { Remove-Item $_ }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "pipe", "kind": "Pipeline", "parent": "root", "slot": "Statement" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 0 },
+          { "id": "host", "kind": "SimpleCommand", "parent": "pipe", "slot": "Stage", "commandIndex": 1 },
+          { "id": "parallel", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 2, "executionOrigin": "CommandArgument", "executionPhase": "Process", "executionTiming": "Concurrent", "executionCardinality": "OncePerInputObject" },
+          { "id": "body", "kind": "Block", "parent": "parallel", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 2 }
+        ],
+        "commands": [
+          { "authoredVerb": "Get-ChildItem", "immediateRole": "PipelineStage", "ancestry": ["root", "pipe"], "isComplete": true },
+          { "authoredVerb": "ForEach-Object", "immediateRole": "PipelineStage", "ancestry": ["root", "pipe"], "isComplete": true },
+          { "authoredVerb": "Remove-Item", "immediateRole": "ExecutionRegion", "ancestry": ["root", "pipe", "parallel", "body"], "isComplete": false }
+        ],
+        "compatibility": { "verbs": ["Get-ChildItem", "ForEach-Object", "Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "StateJoinConservative"]
+      }
+    },
+    {
+      "id": "pwsh-event-action-deferred-region",
+      "concern": "Event action is visible at registration but executes only on a later trigger",
+      "input": "Register-EngineEvent -SourceIdentifier ready -Action { Remove-Item marker.txt }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "host", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "action", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 4, "executionOrigin": "CommandArgument", "executionPhase": "Action", "executionTiming": "Deferred", "executionCardinality": "ZeroOrMore" },
+          { "id": "body", "kind": "Block", "parent": "action", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Register-EngineEvent", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true },
+          { "authoredVerb": "Remove-Item", "immediateRole": "ExecutionRegion", "ancestry": ["root", "action", "body"], "isComplete": false }
+        ],
+        "compatibility": { "verbs": ["Register-EngineEvent", "Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-argument-completer-deferred-region",
+      "concern": "Argument completer body is deferred until completion and remains authorization-visible",
+      "input": "Register-ArgumentCompleter -CommandName tool -ScriptBlock { Write-Output candidate }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "host", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "completion", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 4, "executionOrigin": "CommandArgument", "executionPhase": "Completion", "executionTiming": "Deferred", "executionCardinality": "ZeroOrMore" },
+          { "id": "body", "kind": "Block", "parent": "completion", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Register-ArgumentCompleter", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true },
+          { "authoredVerb": "Write-Output", "immediateRole": "ExecutionRegion", "ancestry": ["root", "completion", "body"], "isComplete": false }
+        ],
+        "compatibility": { "verbs": ["Register-ArgumentCompleter", "Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-new-module-initialization-region",
+      "concern": "New-Module script block is immediate module initialization rather than opaque data",
+      "input": "New-Module -ScriptBlock { Write-Output initialized }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "host", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
+          { "id": "init", "kind": "ExecutionRegion", "parent": "host", "slot": "ExecutionRegion", "hostClauseElementIndex": 2, "executionOrigin": "CommandArgument", "executionPhase": "Initialization", "executionTiming": "Synchronous", "executionCardinality": "Once" },
+          { "id": "body", "kind": "Block", "parent": "init", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "New-Module", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true },
+          { "authoredVerb": "Write-Output", "immediateRole": "ExecutionRegion", "ancestry": ["root", "init", "body"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["New-Module", "Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative"]
+      }
+    },
+    {
+      "id": "pwsh-invoke-command-local-asjob-invalid-parameter-set",
+      "concern": "In-process Invoke-Command never acquires invented concurrent semantics from an invalid AsJob combination",
+      "input": "Invoke-Command -ScriptBlock { Get-Date } -AsJob",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed", "ShellSpecificOptionSemantics"]
+      },
+      "notes": "PowerShell 7.6.4 Get-Command metadata places -NoNewScope in the InProcess parameter set and -AsJob only in non-local parameter sets."
+    },
+    {
+      "id": "pwsh-direct-call-trailing-arguments-fail-closed",
+      "concern": "Direct call-operator block arguments remain atomic until parameter binding is modeled",
+      "input": "& { Write-Output $args } alpha",
+      "current": { "isUnparseable": true },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-dot-source-trailing-arguments-fail-closed",
+      "concern": "Dot-source block arguments remain atomic until parameter binding is modeled",
+      "input": ". { Write-Output $args } alpha",
+      "current": { "isUnparseable": true },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-execution-region-param-header-fail-closed",
+      "concern": "A leading param declaration keeps the complete argument-completer region atomic until declaration grammar lands",
+      "input": "Register-ArgumentCompleter -CommandName tool -ScriptBlock { param($commandName) Write-Output $commandName }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
       }
     }
   ]

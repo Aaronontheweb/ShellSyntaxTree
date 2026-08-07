@@ -62,6 +62,27 @@ public class V03DesignCorpusTests
                 Assert.Contains(file.Cases,
                     designCase => designCase.PowerShellInitialStateMode
                         == PwshInitialStateMode.IsolatedNonInteractiveNoProfile);
+
+                var regions = file.Cases
+                    .SelectMany(designCase => designCase.Desired.Syntax)
+                    .Where(node => node.Kind == DesignSyntaxKind.ExecutionRegion)
+                    .ToArray();
+                Assert.NotEmpty(regions);
+                Assert.All(
+                    Enum.GetValues<DesignExecutionRegionOrigin>()
+                        .Where(origin => origin != DesignExecutionRegionOrigin.Unknown),
+                    origin => Assert.Contains(regions, node => node.ExecutionOrigin == origin));
+                Assert.All(
+                    Enum.GetValues<DesignExecutionRegionPhase>(),
+                    phase => Assert.Contains(regions, node => node.ExecutionPhase == phase));
+                Assert.All(
+                    Enum.GetValues<DesignExecutionRegionTiming>(),
+                    timing => Assert.Contains(regions, node => node.ExecutionTiming == timing));
+                Assert.All(
+                    Enum.GetValues<DesignExecutionRegionCardinality>(),
+                    cardinality => Assert.Contains(
+                        regions,
+                        node => node.ExecutionCardinality == cardinality));
             }
             else
             {
@@ -148,6 +169,33 @@ public class V03DesignCorpusTests
             {
                 Assert.Equal(DesignSyntaxKind.SimpleCommand, node.Kind);
                 Assert.InRange(node.CommandIndex.Value, 0, desired.Commands.Count - 1);
+            }
+
+            if (node.Kind == DesignSyntaxKind.ExecutionRegion)
+            {
+                Assert.NotNull(node.ExecutionOrigin);
+                Assert.NotEqual(DesignExecutionRegionOrigin.Unknown, node.ExecutionOrigin);
+                Assert.NotNull(node.ExecutionPhase);
+                Assert.NotNull(node.ExecutionTiming);
+                Assert.NotNull(node.ExecutionCardinality);
+                if (node.Parent is not null &&
+                    nodes[node.Parent].Kind == DesignSyntaxKind.SimpleCommand)
+                {
+                    Assert.NotNull(node.HostClauseElementIndex);
+                    Assert.True(node.HostClauseElementIndex >= 0);
+                }
+                else
+                {
+                    Assert.Null(node.HostClauseElementIndex);
+                }
+            }
+            else
+            {
+                Assert.Null(node.HostClauseElementIndex);
+                Assert.Null(node.ExecutionOrigin);
+                Assert.Null(node.ExecutionPhase);
+                Assert.Null(node.ExecutionTiming);
+                Assert.Null(node.ExecutionCardinality);
             }
         }
 
@@ -528,6 +576,16 @@ public sealed record DesignSyntaxExpectation
     public string? Binding { get; init; }
 
     public int? CommandIndex { get; init; }
+
+    public int? HostClauseElementIndex { get; init; }
+
+    public DesignExecutionRegionOrigin? ExecutionOrigin { get; init; }
+
+    public DesignExecutionRegionPhase? ExecutionPhase { get; init; }
+
+    public DesignExecutionRegionTiming? ExecutionTiming { get; init; }
+
+    public DesignExecutionRegionCardinality? ExecutionCardinality { get; init; }
 }
 
 public sealed record DesignCommandExpectation
@@ -696,6 +754,7 @@ public enum DesignSyntaxKind
     ConditionLoop,
     Conditional,
     CommandSubstitution,
+    ExecutionRegion,
     Group,
     SimpleCommand,
     OpaqueArgument,
@@ -713,6 +772,7 @@ public enum DesignSyntaxSlot
     Else,
     Stage,
     Substitution,
+    ExecutionRegion,
     Argument,
 }
 
@@ -725,6 +785,44 @@ public enum DesignCommandRole
     LoopBody,
     Branch,
     Substitution,
+    ExecutionRegion,
+}
+
+public enum DesignExecutionRegionPhase
+{
+    Unknown,
+    Main,
+    Initialization,
+    Begin,
+    Process,
+    End,
+    Filter,
+    Action,
+    Completion,
+}
+
+public enum DesignExecutionRegionOrigin
+{
+    Unknown,
+    DirectCall,
+    DotSource,
+    CommandArgument,
+}
+
+public enum DesignExecutionRegionTiming
+{
+    Unknown,
+    Synchronous,
+    Concurrent,
+    Deferred,
+}
+
+public enum DesignExecutionRegionCardinality
+{
+    Unknown,
+    Once,
+    OncePerInputObject,
+    ZeroOrMore,
 }
 
 public enum DesignValueKind

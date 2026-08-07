@@ -351,6 +351,24 @@ priorities.
       call-operator, dynamic-identity, and host-wrapper positions, with
       current-scope state propagation and bounded expression rejection pinned
       by the 372-entry executable corpus.
+- [ ] Deliver typed PowerShell script-block execution regions before calling
+      tasks 7.5-7.7 complete. The corrected contract adds an execution-region
+      syntax node with independent origin, phase, timing, and cardinality rather than a
+      false shared/isolated scope flag. The inert additive public API skeleton,
+      enum/default snapshots, recorded local PowerShell probe evidence, and
+      design-corpus categories are delivered; no parser emits a region yet and
+      automated execution-region oracle coverage remains in task 7.7. Continue in
+      small slices: projection; pinned receiver/parameter binding including
+      ForEach-Object multi-block phases; direct `&` / `.` and synchronous
+      current-runspace callbacks; child process/runspace jobs and parallel
+      blocks; deferred breakpoint/event/completion actions; then unknown
+      receiver and nested/adversarial matrices. Preserve script blocks proved
+      to be data as opaque values, expose ambiguous bodies with incomplete
+      facts, and fail atomically when any potentially executable interior is
+      unsupported. Local PowerShell 7.6.4 probes pin variable-versus-location
+      independence, semantic phase order, child process/runspace boundaries,
+      registration-versus-trigger timing, and the fact that the in-process
+      `Invoke-Command` parameter set does not support `-AsJob`.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.

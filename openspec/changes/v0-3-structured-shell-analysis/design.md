@@ -25,6 +25,9 @@ incomplete executable regions never become authorization evidence.
 - Represent supported nested command structure for Bash and PowerShell.
 - Expose every command that may execute without requiring consumers to walk an
   evolving syntax-node hierarchy.
+- Represent direct, callback, job, parallel, initialization, and deferred
+  PowerShell script-block execution without treating proved script-block data
+  as code.
 - Resolve constrained loop values and shell state only when bounded proof is
   possible.
 - Distinguish static redirect operations from dynamic redirect targets.
@@ -41,6 +44,8 @@ incomplete executable regions never become authorization evidence.
 - Unify the Bash and PowerShell lexers or introduce a shared parser base class.
 - Treat Bash and PowerShell constructs as equivalent when their scoping,
   expansion, pipeline, or expression semantics differ.
+- Collapse PowerShell variable, working-directory, command-resolution,
+  runspace, and process propagation into one shared/isolated scope flag.
 - Make every construct named by issue #71 part of the first implementation
   slice.
 - Classify URL-like arguments or environment assignments as harmless without
@@ -328,6 +333,84 @@ opaque/dynamic value but cannot retain a nested executable tree. A substitution
 nested inside an inner command belongs to that inner simple command; it is not
 promoted to a sibling or stored in a side table.
 
+Execution-bearing script blocks bound to that command are owned separately by
+an authored-order `ExecutionRegions` collection. The unchanged `Clause` keeps
+the script-block token as an opaque `DynamicSkip` argument for compatibility;
+the execution-region node records why and how the block may run. A script block
+proved to be data, such as the argument to canonical `Write-Output` in a
+constrained command-resolution context, remains only the opaque argument and
+does not gain a region.
+
+### Model PowerShell execution regions without a false scope union
+
+PowerShell script blocks are values whose receiver determines whether, when,
+how often, and where they execute. The former contract treated every ordinary
+script-block argument as inert. That is correct for `Write-Output { ... }` but
+incorrect for `ForEach-Object`, `Where-Object`, `Invoke-Command`, jobs,
+module initialization, event actions, breakpoints, and argument completers.
+It also made `& { ... }` unparseable even though its body is statically
+delimited.
+
+Stable v0.3 adds one `ExecutionRegionSyntax` node to the closed syntax family.
+It exposes independent origin, phase, timing, and cardinality discriminants,
+an optional owning `ClauseElement` coordinate, and the recursively parsed body.
+The region may be attached to `SimpleCommandSyntax.ExecutionRegions` or appear
+directly as a statement for `& {}` and `. {}`. Direct invocation operators are
+shell syntax and do not create synthetic command occurrences; a command-owned
+region retains both its host occurrence and every body occurrence.
+`ExecutionRegionOrigin` distinguishes `DirectCall`, `DotSource`, and
+`CommandArgument`, so consumers do not need source text to recover state-significant
+invocation syntax.
+
+The public node deliberately omits one `Scope` or `Environment` enum. Local
+PowerShell 7.6.4 probes demonstrate that these are independent dimensions:
+
+| Construct | Ordinary variable assignment | Location | Timing / cardinality |
+|---|---|---|---|
+| `& { ... }` | child scope; exit assignment isolated | shared | synchronous / once |
+| `. { ... }` | shared current scope | shared | synchronous / once |
+| `ForEach-Object { ... }` | shared current runspace | shared | synchronous / once per input |
+| `Where-Object { ... }` | shared current runspace | shared | synchronous / once per input |
+| local `Invoke-Command { ... }` | child scope unless `-NoNewScope` | shared | synchronous / once |
+| `Measure-Command { ... }` / `Trace-Command -Expression { ... }` | shared current scope | shared | synchronous / once |
+| `Start-Job { ... }` | child process state | inherited initial location; exit isolated | concurrent / once |
+| `ForEach-Object -Parallel { ... }` | child runspace state | inherited initial location; exit isolated | concurrent / once per input |
+| event, breakpoint, completion actions | trigger-time state | trigger-time state | deferred / zero or more |
+
+The shell-specific analyzer owns inbound state, exit propagation, phase
+scheduling, success/failure partitions, and target/runspace differences.
+Occurrence facts expose the effective result. This keeps the public structural
+API narrow while avoiding the false claim that variables and location always
+share one boundary.
+
+`SimpleCommandSyntax.ExecutionRegions` preserves authored script-block order.
+The analyzer separately applies semantic phase order. PowerShell's binder can
+assign Begin, Process, and End roles to multiple `ForEach-Object` blocks even
+when parameter or positional order does not match runtime phase order. The
+region's `HostClauseElementIndex` is therefore a correlation coordinate, not
+an execution-order index.
+
+The pinned PowerShell 7 catalog covers direct call and dot-source blocks;
+`ForEach-Object` Begin, Process, End, RemainingScripts, and Parallel;
+`Where-Object -FilterScript`; `Invoke-Command -ScriptBlock`;
+`Measure-Command -Expression`; `Trace-Command -Expression`; `Start-Job`
+ScriptBlock and InitializationScript; `New-Module -ScriptBlock`;
+`Set-PSBreakpoint -Action`; `Register-ObjectEvent -Action`;
+`Register-EngineEvent -Action`; and `Register-ArgumentCompleter -ScriptBlock`.
+The optional inbox `Start-ThreadJob` command is complete only under a pinned
+module baseline. Aliases, supported module-qualified spellings, static call
+operator spellings, parameter abbreviations/inline values, positional binding,
+parameter sets, and `ScriptBlock[]` binding use the same static catalog.
+
+An unknown receiver or ambiguous binding is over-approximated as an execution
+region with unknown facts. Its body commands remain visible and affected
+occurrences and following observable state are incomplete. This can prompt for
+a block that runtime ultimately treats as data, but it cannot silently omit a
+block that a custom advanced function executes. If the interior cannot be
+parsed completely, the whole result is unparseable. Canonical receivers proved
+not to execute the bound block remain opaque data and do not require the body
+grammar to parse.
+
 New structural nodes preserve their complete source range when it can be mapped
 exactly. Expanded wrapper content retains the current nullable-span rule rather
 than inventing offsets into escaped or encoded outer text.
@@ -339,7 +422,7 @@ not one entry per predicted runtime iteration. Each occurrence carries its
 `Clause`, immediate structural role, compositional ancestry suitable for
 analysis and diagnostics, and an explicit completeness fact. Immediate roles
 include at least ordinary, pipeline stage, condition, iterator, loop body,
-branch, and substitution; ancestry frames retain every outer role, such as a
+branch, substitution, and execution region; ancestry frames retain every outer role, such as a
 pipeline stage nested inside a loop body. The final names are locked with the
 public API review.
 
@@ -362,13 +445,16 @@ projection exposes a discovered subset.
 
 For a fully parseable result, `ParsedCommand.Clauses` contains every authored
 simple command occurrence in source order, including nested iterator,
-condition, branch, body, and substitution commands. It does not invent
+condition, branch, body, substitution, and execution-region commands. It does not invent
 compound operators across structural boundaries. Existing `Clause.Operator`
 values are retained only for actual authored relationships.
 
 Projection order is deterministic. Disjoint executable regions follow authored
 source order. An enclosed substitution precedes its containing simple command,
-and nested substitutions are emitted innermost first. When wrapper decoding
+and nested substitutions are emitted innermost first. A command-owned
+execution region follows its host occurrence, and sibling regions retain
+authored script-block order even when semantic phases execute in another order.
+When wrapper decoding
 makes outer source spans unavailable, containing structural collection order
 is the tie-breaker. The occurrence and compatibility projections use the same
 order.
@@ -599,8 +685,8 @@ parameter dashes. Stable v0.3 rejects those tokens atomically. The locked v0.2
 an alternate dash as positional is unsafe and normalizing it would destroy
 authored provenance. The structural coordinator also reapplies the existing
 module-qualified-cmdlet prohibition to every simple-command segment; the
-module-qualified `Invoke-Expression` wrapper remains the sole specified
-exception.
+module-qualified `Invoke-Expression` wrapper and version-pinned
+execution-region receiver catalog are the specified exceptions.
 
 The PowerShell structural parser clones its compatibility location-attribution
 context while parsing a loop iterator and body. This prevents a structurally
@@ -750,7 +836,9 @@ corpus remains sanitized under the existing PII audit.
   partial syntax diagnostic-only.
 - **[Scope grows to every script construct]** -> Treat heredocs, process
   substitution, background lists, C-style loops, arithmetic, definitions, and
-  `.ps1` files as separately gated slices.
+  `.ps1` files as separately gated slices. The PowerShell script-block catalog
+  is finite and version-pinned; unknown receivers over-approximate one authored
+  body rather than becoming a general expression evaluator.
 - **[Candidate combinations become expensive]** -> Apply a small fixed cap and
   collapse the complete fact to `Unknown` before combinatorial growth.
 
@@ -818,6 +906,12 @@ into the release specifications before production types are added.
    Process substitution, single-`&` background lists, Bash `case`, PowerShell
    `switch`, arithmetic/C-style loops, implicit Bash positional-parameter
    loops, and function/definition bodies remain independently gated.
+7. PowerShell direct and command-bound script blocks use the additive
+   `ExecutionRegionSyntax` contract. Origin, phase, timing, and cardinality are public;
+   state propagation remains shell-specific and multi-dimensional. The pinned
+   PowerShell 7 receiver/binding catalog distinguishes proved execution from
+   proved data. Unknown receivers expose a conservatively executable body with
+   incomplete facts rather than silently treating it as data.
 
 On every unparseable result, `Commands` and the v0.2 `Clauses` projection are
 empty. `Syntax` may contain a partial diagnostic tree, but it cannot be used as
@@ -858,6 +952,7 @@ public enum ShellSyntaxKind
     Conditional,
     ConditionalBranch,
     CommandSubstitution,
+    ExecutionRegion,
 }
 
 public sealed record ShellBlockSyntax : ShellSyntaxNode
@@ -871,6 +966,7 @@ public sealed record SimpleCommandSyntax : ShellSyntaxNode
     public override ShellSyntaxKind Kind => ShellSyntaxKind.SimpleCommand;
     public Clause Clause { get; init; } = new();
     public IReadOnlyList<CommandSubstitutionSyntax> Substitutions { get; init; } = [];
+    public IReadOnlyList<ExecutionRegionSyntax> ExecutionRegions { get; init; } = [];
 }
 
 public sealed record PipelineSyntax : ShellSyntaxNode
@@ -961,6 +1057,54 @@ public sealed record CommandSubstitutionSyntax : ShellSyntaxNode
     public override ShellSyntaxKind Kind => ShellSyntaxKind.CommandSubstitution;
     public ShellBlockSyntax Body { get; init; } = new();
 }
+
+public sealed record ExecutionRegionSyntax : ShellSyntaxNode
+{
+    public override ShellSyntaxKind Kind => ShellSyntaxKind.ExecutionRegion;
+    public ExecutionRegionOrigin Origin { get; init; }
+    public int? HostClauseElementIndex { get; init; }
+    public ExecutionRegionPhase Phase { get; init; }
+    public ExecutionRegionTiming Timing { get; init; }
+    public ExecutionRegionCardinality Cardinality { get; init; }
+    public ShellBlockSyntax Body { get; init; } = new();
+}
+
+public enum ExecutionRegionOrigin
+{
+    Unknown,
+    DirectCall,
+    DotSource,
+    CommandArgument,
+}
+
+public enum ExecutionRegionPhase
+{
+    Unknown,
+    Main,
+    Initialization,
+    Begin,
+    Process,
+    End,
+    Filter,
+    Action,
+    Completion,
+}
+
+public enum ExecutionRegionTiming
+{
+    Unknown,
+    Synchronous,
+    Concurrent,
+    Deferred,
+}
+
+public enum ExecutionRegionCardinality
+{
+    Unknown,
+    Once,
+    OncePerInputObject,
+    ZeroOrMore,
+}
 ```
 
 `ForEachSyntax` shares only proved execution structure. `Iterable.Raw` preserves
@@ -981,6 +1125,24 @@ implementation fail compilation without adding to the public contract; every
 library-owned sealed node implements it internally. Later library versions may
 add derived records, so authorization code still needs a default fail-closed
 type-switch arm.
+
+`ExecutionRegionSyntax` is the structural relationship between an authored
+body and its activation. `HostClauseElementIndex` is null for direct `& {}` or
+`. {}` statements and is the non-negative index into the owning
+`SimpleCommandSyntax.Clause.Elements` for a proved command argument binding.
+The node's source range covers the direct invocation or the bound script-block
+token; `Body` covers the recursively parsed interior. Attached regions are
+stored in authored source order. `Phase` lets the shell-specific analyzer apply
+Begin/Process/End and initialization/main schedules without rewriting the tree.
+
+`Timing=Synchronous` means the body completes as part of the containing
+invocation, `Concurrent` means instances or the containing continuation may
+overlap, and `Deferred` means registration and later trigger are distinct.
+`Cardinality=Once` means one activation per proved host invocation,
+`OncePerInputObject` is the pipeline callback relationship, and `ZeroOrMore`
+is an externally triggered callback. These facts do not specify variable,
+location, command-resolution, runspace, or process propagation. Consumers use
+occurrence analysis for those facts and fail closed on unknown enum values.
 
 ### Command occurrence and bounded values
 
@@ -1006,6 +1168,7 @@ public enum CommandOccurrenceRole
     LoopBody,
     Branch,
     Substitution,
+    ExecutionRegion,
 }
 
 public sealed record CommandAncestryFrame
@@ -1029,6 +1192,7 @@ public enum CommandAncestryRegion
     Condition,
     Branch,
     Substitution,
+    ExecutionRegion,
 }
 
 public sealed record EffectiveArgument
@@ -1442,11 +1606,12 @@ finite domain is limited to literal scalar and array elements whose PowerShell
 conversion and argument boundaries are completely specified.
 
 The current PowerShell lexer emits a balanced `{ ... }` as one `ScriptBlock`
-token. The first slice can preserve that behavior for ordinary command
-arguments while recursively tokenizing the interior only after the structural
-parser has proved that the token is the body of a recognized statement. The
-recursive call carries the body's absolute source offset so direct-source
-child spans still index `ParsedCommand.Source`.
+token. The structural parser recursively tokenizes the interior after it proves
+that the token is a statement body, a direct call/dot-source body, a script
+block bound to a cataloged execution-bearing parameter, or a conservative
+unknown-receiver execution region. A cataloged non-executing data argument
+remains opaque. The recursive call carries the body's absolute source offset so
+direct-source child spans still index `ParsedCommand.Source`.
 
 ### Candidate PowerShell recursive-descent flow
 
@@ -1460,6 +1625,12 @@ internal sealed class PwshStructuralParser
         if (_tokens.AtStatementKeywordFollowedBy("foreach", "("))
         {
             return ParseForeach();
+        }
+
+        if (_tokens.AtDirectScriptBlockInvocation("&") ||
+            _tokens.AtDirectScriptBlockInvocation("."))
+        {
+            return ParseDirectExecutionRegion();
         }
 
         return ParseExistingPipeline();
@@ -1486,11 +1657,12 @@ internal sealed class PwshStructuralParser
 ```
 
 `ParseExistingPipeline` adapts the current `SplitIntoSegments` and
-`BuildSegment` logic. A `ScriptBlock` token remains an opaque `DynamicSkip`
-argument everywhere the enclosing grammar does not explicitly own that block
-as a statement body. This avoids accidentally executing or authorizing the
-contents of `ForEach-Object { ... }`, arbitrary script-block arguments, or a
-dynamic call operator.
+`BuildSegment` logic. After leaf binding it classifies each `ScriptBlock`
+argument against the pinned execution catalog. Proved data remains an opaque
+`DynamicSkip`; proved executable binding creates a typed region; unknown
+receiver/binding creates an unknown incomplete region. A dynamic call operator
+whose block value is not authored inline remains incomplete because no body is
+available.
 
 `condition_pipeline` is limited to a pipeline that the existing command parser
 can delimit completely. Pure literal and comparison expressions may be
@@ -1504,14 +1676,16 @@ complete command discovery makes the whole result unparseable.
 | Completely delimited `$()` in a supported word, call-operator dynamic identity, redirect, foreach expression, double-quoted string, or expandable here-string | Inner commands visible; produced value `Unknown`; current-scope state propagates |
 | Standalone `$()` expression statement | Inner commands visible; no outer invocation is invented |
 | `& $(...)` dynamic invocation | Inner commands visible, followed by one incomplete dynamic outer occurrence |
-| `& { ... }` script-block invocation | Whole result unparseable until body, scope, and state propagation are modeled |
+| `& { ... }` and `. { ... }` direct script-block invocation | Typed synchronous region; body commands visible; no synthetic host occurrence |
 | Single-quoted, literal-here-string, or backtick-escaped `$()` text | Literal/opaque data; no invented substitution occurrence |
 | Execution-bearing `@()` / `@{}` outside a completely modeled foreach literal expression | Whole result unparseable until complete command discovery is modeled |
 | `foreach ($name in expression) { ... }` for literal scalar, literal array, or fully delimited pipeline iterables | Supported |
 | `while (condition_pipeline) { ... }` | Supported |
 | `if` / `elseif` / `else` with fully delimited condition pipelines | Supported |
 | Pipeline-produced iterator objects | Iterator commands visible; produced values `Unknown` |
-| `ForEach-Object` / `foreach` alias script blocks and ordinary script-block arguments | Existing opaque argument; no invented child execution |
+| Cataloged executing script-block arguments | Typed origin/phase/timing/cardinality region; host and body commands visible |
+| Cataloged non-executing script-block data | Existing opaque argument; no invented child execution |
+| Unknown receiver or ambiguous script-block binding | Unknown region; body visible; affected state and occurrences incomplete |
 | `do`, `switch`, functions, definitions, class/type bodies, or execution-bearing expressions outside the locked subset | Deferred; whole result unparseable when execution may be hidden |
 
 PowerShell `$()` is a value-producing subexpression, not an invocation.
@@ -1522,8 +1696,9 @@ subexpression followed by command-style arguments is unparseable. Bash command
 word formation deliberately differs; a substitution in Bash command-name
 position makes the whole result unparseable after diagnostic discovery rather
 than changing the PowerShell-specific `VerbChain.IsDynamic` contract.
-Call-operator script-block invocation remains unparseable; an ordinary
-script-block argument remains non-executing opaque data.
+Direct call-operator and dot-source script blocks lower to execution regions
+without synthetic host occurrences. Command-owned blocks use the pinned
+receiver/binding catalog; only proved data remains non-executing opaque data.
 
 ### Candidate internal nodes and lowering pipeline
 
@@ -1610,6 +1785,9 @@ lattice. Executable-aware interpretation still occurs only in the consumer.
 | PowerShell `foreach` at statement position followed by `(` | `PwshForEachNode` | Iterator and body occurrences exposed |
 | PowerShell `foreach` in a pipeline command slot | Existing pipeline/simple-command path | Alias or command semantics preserved |
 | PowerShell statement body `ScriptBlock` | Interior recursively parsed with adjusted spans | Every body command exposed |
-| PowerShell script block used as an ordinary argument | Existing opaque argument | `DynamicSkip`; contents are not invented as executed commands |
+| Direct `& {}` / `. {}` script block | Standalone execution-region statement | Body commands exposed; no synthetic operator occurrence |
+| PowerShell script block bound to a cataloged executing parameter | Host simple command plus attached execution region | Host and every body command exposed |
+| PowerShell script block bound to a cataloged data parameter | Existing opaque argument | `DynamicSkip`; contents are not invented as executed commands |
+| Unknown receiver or ambiguous script-block binding | Host plus unknown execution region | Body visible; affected occurrences/state incomplete |
 | Candidate cap or state-join overflow | Structure remains parseable | Affected effective fact becomes `Unknown` |
 | Any executable region is skipped or cannot be delimited | Partial diagnostic tree allowed | `IsUnparseable=true`; `Commands` and `Clauses` empty |

@@ -274,10 +274,12 @@ statement_sep    := ";" | "&&" | "||" | NEWLINE
 statement        := pipeline
 pipeline         := pipeline_element ("|" pipeline_element)*
 pipeline_element := static_invocation | dynamic_invocation
+                  | direct_script_block_invocation
                   | supported_subexpression | grouped_pipeline
 static_invocation := call_op? command_name arg* redirect*
 dynamic_invocation := call_op dynamic_command_name arg* redirect*
 call_op          := "&"                        // call operator at verb position
+direct_script_block_invocation := ("&" | ".") script_block
 command_name     := cmdlet | native_word          // statically identified;
                                                 // excludes variables,
                                                 // quoted expressions, and $()
@@ -286,7 +288,8 @@ parameter        := "-" param_name (":" value)?     // -Name value | -Name:value
                   | "-" param_name                   // switch parameter
                   | "--"                              // end-of-parameters marker
 value            := word | quoted_string | here_string
-                  | script_block         // { ... }   -> DynamicSkip Arg
+                  | script_block         // DynamicSkip Arg plus a proved,
+                                         // unknown, or absent execution region
                   | supported_subexpression // $( ... ) -> child commands + DynamicSkip Arg
                   | array_expression     // @( ... )  -> DynamicSkip Arg
                   | hash_literal         // @{ ... }  -> DynamicSkip Arg
@@ -321,7 +324,10 @@ quoted_string    := single_quoted | double_quoted
 - Backtick `` ` `` followed by a newline is a line continuation (treated as
   whitespace) — the PowerShell analog of bash `\` + newline.
 - `&` at verb position is the **call operator** (`& git status`, `& $exe`,
-  `& { ... }`). A *trailing* `&` (a PowerShell background job) marks
+  `& { ... }`). A direct `& { ... }` is a child-scope execution region; direct
+  `. { ... }` is a current-scope dot-source execution region. Neither operator
+  becomes a synthetic command occurrence. Dot-sourcing a file remains
+  unparseable because the file contents are unavailable. A *trailing* `&` (a PowerShell background job) marks
   `IsUnparseable` (§11).
 - Under v0.2 a variable, subexpression, quoted string, or script block at
   command position could be retained as a dynamic clause. Stable v0.3 aligns
@@ -354,8 +360,10 @@ quoted_string    := single_quoted | double_quoted
   v0.2 each was one opaque `DynamicSkip` arg. Stable v0.3 recursively parses
   every completely delimited executable `$()` in a supported value position
   and exposes its commands while retaining the containing authored
-  `DynamicSkip` leaf. Ordinary script-block literals remain non-executing
-  opaque values. An `@()` or `@{}` value with execution-bearing content is
+  `DynamicSkip` leaf. Script blocks are classified after command and parameter
+  binding: cataloged execution-bearing bindings create typed regions,
+  cataloged data bindings remain opaque, and unknown receivers create unknown
+  incomplete regions with visible bodies. An `@()` or `@{}` value with execution-bearing content is
   unparseable until that expression form has complete command discovery;
   a non-executing literal form may remain an opaque value.
 - Under v0.2, control-flow keywords fall outside the grammar. Stable v0.3 owns
@@ -369,8 +377,11 @@ PowerShell retains a statement-versus-pipeline distinction. `foreach` is a
 language keyword only at statement position when followed by `(`;
 `Get-ChildItem | foreach { ... }` and
 `Write-Output x | foreach ($_)` remain command/alias syntax. An ordinary
-script-block or bounded non-executing parenthesized argument remains opaque; it
-is not reinterpreted as a loop body. `&&` and `||` join pipelines, not
+bounded non-executing parenthesized argument remains opaque. A script-block
+argument is classified by its proved receiver and parameter binding: executing
+bindings create regions, proved data remains opaque, and unknown receivers
+create unknown incomplete regions. It is not reinterpreted as a loop body.
+`&&` and `||` join pipelines, not
 control-flow statements, so
 they cannot precede or follow `foreach`; `;` and newline remain legal statement
 terminators.
@@ -404,15 +415,17 @@ foreach_expression   := literal_value
                       | supported_subexpression
 literal_array        := "@(" literal_value ("," literal_value)* ")"
 script_block_body    := "{" pwsh_script(stop = "}") "}"
+direct_execution_region := ("&" | ".") script_block_body
 ```
 
 Literal scalar and literal-array iterables may produce exact or finite string
 domains. A pipeline iterable exposes every producing command with role
 `Iterator`, but its object values remain `Unknown`; the parser does not predict
-PowerShell object-to-string conversion. The body is recursively parsed only
-after the structural grammar proves that the `ScriptBlock` token is the body
-of a recognized statement. An ordinary script-block argument remains one
-opaque `DynamicSkip` value and does not invent child execution.
+PowerShell object-to-string conversion. A body is recursively parsed after the
+structural grammar proves that the `ScriptBlock` token is a statement body,
+direct execution region, cataloged execution-bearing argument, or conservative
+unknown-receiver region. A proved non-executing script-block argument remains
+one opaque `DynamicSkip` value and does not invent child execution.
 
 Publishing those exact or finite values also requires
 `PwshInitialStateMode.IsolatedNonInteractiveNoProfile`. The default `Unknown`
@@ -488,9 +501,69 @@ command substitution in Bash command-name position contributes to the command
 word, so stable v0.3 makes that runtime-dependent identity unparseable rather
 than inventing a static or PowerShell-style dynamic clause.
 
-`& { ... }` executes a script block and remains unparseable in stable v0.3
-until its body, scope, and state propagation are modeled. This differs from an
-ordinary script-block argument, which remains a non-executing opaque value.
+### Script-block execution regions
+
+`& { ... }` and `. { ... }` are direct execution regions. Their bodies are
+recursively parsed and no synthetic outer command occurrence is created for
+the invocation operator. Their typed origins are `DirectCall` and `DotSource`
+respectively, so consumers never need to reparse source text to distinguish
+their state behavior. `&` executes once synchronously in a child
+variable/command scope while sharing runspace location; `.` executes once
+synchronously in the current scope. Dot-sourcing a file remains unparseable
+because the parser does not read `.ps1` contents.
+
+A script block passed to a command remains an authored `DynamicSkip` argument
+on the host `Clause`. After canonical command and parameter binding, a proved
+execution-bearing block additionally creates an attached
+`ExecutionRegionSyntax`; a proved data block does not. An unknown receiver or
+ambiguous binding conservatively creates an unknown incomplete region so every
+body command remains visible. If that body cannot be parsed completely, the
+whole result is unparseable.
+
+The version-pinned PowerShell 7 catalog covers:
+
+| Receiver / parameter | Phase | Timing | Cardinality | State boundary |
+|---|---|---|---|---|
+| direct `& {}` | Main | Synchronous | Once | child variables/commands; shared location |
+| direct `. {}` | Main | Synchronous | Once | current scope and location |
+| `ForEach-Object -Begin` | Begin | Synchronous | Once | current runspace |
+| `ForEach-Object -Process` / `-RemainingScripts` | Process, with binder-assigned Begin/End where applicable | Synchronous | OncePerInputObject | current runspace |
+| `ForEach-Object -End` | End | Synchronous | Once | current runspace |
+| `ForEach-Object -Parallel` | Process | Concurrent | OncePerInputObject | child runspace; exit isolated |
+| `Where-Object -FilterScript` | Filter | Synchronous | OncePerInputObject | current runspace |
+| in-process `Invoke-Command -ScriptBlock` | Main | Synchronous | Once | child scope unless `-NoNewScope`; shared location |
+| remote/session/SSH/VM/container `Invoke-Command` | Main | proved from complete parameter set | Unknown unless targets are proved | remote/child state; exit isolated |
+| `Measure-Command -Expression`, `Trace-Command -Expression` | Main | Synchronous | Once | current scope and location |
+| `Start-Job -InitializationScript` | Initialization | Concurrent | Once | child process before Main |
+| `Start-Job -ScriptBlock` | Main | Concurrent | Once | child process; exit isolated |
+| `New-Module -ScriptBlock` | Initialization | Synchronous | Once | module state; current-runspace effects analyzed separately |
+| `Set-PSBreakpoint -Action`, event `-Action` | Action | Deferred | ZeroOrMore | trigger-time state Unknown without proof |
+| `Register-ArgumentCompleter -ScriptBlock` | Completion | Deferred | ZeroOrMore | completion-time state Unknown without proof |
+
+The optional inbox `Microsoft.PowerShell.ThreadJob\Start-ThreadJob` follows
+the initialization/main child-runspace model only when the caller's pinned
+module baseline proves that identity. Otherwise it follows the unknown
+receiver rule.
+
+Aliases, supported module-qualified spellings, static call-operator spellings,
+parameter abbreviations and inline values, positional binding, parameter-set
+selection, and `ScriptBlock[]` binding resolve through the same static catalog.
+PowerShell's special multiple-script-block binding for `ForEach-Object` assigns
+Begin, Process, and End phases semantically; authored syntax and occurrence
+projection remain in source order while the analyzer schedules phases in
+runtime order.
+
+`ExecutionRegionTiming` and `ExecutionRegionCardinality` are not scope facts.
+Variable, location, command-resolution, runspace, and process propagation are
+analyzed independently. Deferred actions remain authorization-visible at
+registration, but relative paths use trigger-time Unknown cwd unless another
+proof exists. A constrained canonical `Write-Output { Remove-Item x }`
+remains opaque data and does not invent a `Remove-Item` occurrence.
+
+A leading `param(...)` declaration inside any execution region remains outside
+the stable-v0.3 body grammar and makes the whole parse unparseable. This
+deliberately limits realistic argument-completer and directly invoked blocks
+until parameter declaration and block-argument binding are modeled together.
 
 `condition_pipeline` is limited to a pipeline the existing parser can delimit
 completely. A subexpression, member invocation, script block, or other form
@@ -566,8 +639,10 @@ The `PwshLexer` produces tokens consumed by `PwshCommandParser`. Token kinds
 - **Continuation** — backtick + newline. Treated as whitespace.
 - **Comment** — `#` line comment to end-of-line, or `<# ... #>` block
   comment. Dropped by the significant-token filter.
-- **ScriptBlock** — a balanced `{ ... }` region, emitted whole. Parser →
-  `DynamicSkip` arg.
+- **ScriptBlock** — a balanced `{ ... }` region, emitted whole. Command
+  arguments retain a `DynamicSkip` compatibility arg. Structural binding may
+  additionally recurse into it as a direct, cataloged, or conservative unknown
+  execution region; proved data remains opaque.
 - **Subexpression** — a balanced `$( ... )`, `@( ... )`, or `@{ ... }`
   region, emitted whole. The v0.3 structural parser recursively lowers
   supported `$()` regions and retains the outer compatibility arg as
@@ -941,7 +1016,7 @@ classifies as a path for canonical FileVerbs. Per-cmdlet overrides:
 | `New-Item` | positional 0 = path |
 | `Set-Content`, `Add-Content` | positional 0 = path; `-Value` is content |
 | `Select-String` | positional 0 = **pattern**, rest = paths (mirrors bash `grep`) |
-| `ForEach-Object`, `Where-Object` | positional 0 is typically a script block → `DynamicSkip`; no path positionals |
+| `ForEach-Object`, `Where-Object` | positional script blocks remain `DynamicSkip` compatibility args and additionally bind typed execution regions; no path positionals |
 
 The default for a canonical FileVerb with no override is "all non-flag
 positionals are paths," exactly as `SPEC.md` §7.
@@ -1174,10 +1249,13 @@ supported executable `$()` interior into `SimpleCommandSyntax.Substitutions`.
 Execution-bearing `@()` / `@{}` forms that cannot be completely discovered
 make the whole result unparseable. Splatting `@var` remains `DynamicSkip`.
 The `--%` stop-parsing token makes the pipeline-element remainder one
-`DynamicSkip` arg. An ordinary script-block argument remains non-executing
-opaque data: `gci | ? { ... } | rm` is a clean three-clause pipeline whose
-middle clause carries an opaque arg; consumers decide whether that command
-interprets the block.
+`DynamicSkip` arg. Script-block arguments additionally pass through the §4
+receiver/binding catalog. Thus `gci | ? { Test-Path $_ } | rm` retains a
+three-clause compatibility pipeline, and the middle clause owns a Filter
+execution region whose body commands are projected. A canonical receiver
+proved to consume a block as data retains only the opaque arg. An unknown
+receiver retains an unknown incomplete region rather than asking consumers to
+decide whether hidden commands execute.
 
 PowerShell `$()` runs in the current runspace scope. A `Set-Location` inside a
 subexpression affects later inner commands, the containing command after value
@@ -1313,13 +1391,17 @@ following binding and command-resolution proof and makes location attribution
 dynamic for every following relative path. The same rule applies to `iex`, a
 static call-operator spelling, and the supported module-qualified spelling.
 
-The dot-source invocation operator and unsupported module-qualified cmdlets
-are unparseable rather than being exposed under a misleading raw verb. This
+The dot-source invocation operator remains unparseable except for one inline,
+completely delimited script block. Dot-sourced files/dynamic values and
+unsupported module-qualified cmdlets are unparseable rather than being exposed
+under a misleading raw verb. This
 validation applies independently to every simple command inside structural
 lists, pipelines, loops, groups, and substitutions, including built-in
 cmdlets such as `Tee-Object` whose verb is not in the approved-verb table. The
-one supported module-qualified wrapper remains
-`Microsoft.PowerShell.Utility\Invoke-Expression`. A quoted string is a command
+supported module-qualified exceptions are
+`Microsoft.PowerShell.Utility\Invoke-Expression` and the version-pinned §4
+execution-region receiver catalog under its constrained command-resolution
+contract. A quoted string is a command
 identity only when preceded by the call operator `&`; otherwise it is an
 unsupported expression. Any dynamic command identity invalidates following
 location attribution because it can resolve to current-scope code that calls
@@ -1347,8 +1429,11 @@ in **`SPEC.md` §11**.
 4. **Block / trap / data keywords** — `param`, `begin`, `process`, `end`,
    `dynamicparam`, `trap`, `data`, `try`, `catch`, `finally`.
 5. **Statement keywords leading a statement** — `return`, `throw`, `break`,
-   `continue`, `exit` (including `exit 0`), `using`, `hidden`, and the
-   dot-source operator `.` used as a statement.
+   `continue`, `exit` (including `exit 0`), `using`, and `hidden`. The
+   call and dot-source operators support only one completely delimited inline
+   script block. `& { ... } arg` and `. { ... } arg` remain unparseable until
+   block-argument binding is modeled. `. ./script.ps1` and a dynamic dot-source
+   target remain unparseable because their executable content is unavailable.
 6. **Trailing `&` background-job operator** — a `&` at the end of a pipeline
    (not at verb position). `& git status` is the call operator and parses;
    `git status &` is a background job and does not.
