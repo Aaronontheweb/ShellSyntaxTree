@@ -1,0 +1,10 @@
+{
+  "name": "V03 foreach provider mutation gated",
+  "input": "foreach ($x in 1) { Set-Item Alias:wipe Remove-Item }; wipe file.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell foreach state mutation or dynamic invocation is not supported in this structural slice"
+  },
+  "notes": "Alias, function, variable, and environment provider writes are runspace mutation.",
+  "oracleExpectation": "OutOfScope"
+}

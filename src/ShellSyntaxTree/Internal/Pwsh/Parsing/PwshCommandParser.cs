@@ -283,11 +283,10 @@ internal static partial class PwshCommandParser
                 {
                     // `foreach (` is the loop keyword; `foreach {` is the
                     // ForEach-Object alias (§6.3 collision rule).
+                    // The structural coordinator owns the supported statement
+                    // form and rejects malformed headers atomically.
                     if (NextSignificantIsOpenParen(tokens, i))
-                    {
-                        reason = "control-flow keyword 'foreach' is not supported in v0.2";
-                        return true;
-                    }
+                        continue;
                 }
                 else
                 {

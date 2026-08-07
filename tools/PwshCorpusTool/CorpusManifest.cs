@@ -26,6 +26,7 @@ internal sealed record ManifestEntry(
     bool IncludeElements = false,
     bool IncludeStructure = false,
     bool IncludeOptionalAssertions = false,
+    bool IncludeV03Assertions = false,
     string? DisplayName = null)
 {
     /// <summary>Explicit display name when supplied; otherwise derived from the slug.</summary>
@@ -62,6 +63,16 @@ internal static class CorpusManifest
 
     private static ManifestEntry S(string slug, string input, string notes) =>
         new(slug, input, notes, false, ManifestTransform.None, IncludeStructure: true);
+
+    private static ManifestEntry V(string slug, string input, string notes) =>
+        new(
+            slug,
+            input,
+            notes,
+            false,
+            ManifestTransform.None,
+            IncludeStructure: true,
+            IncludeV03Assertions: true);
 
     private static ManifestEntry A(string slug, string name, string input, string notes) =>
         new(
@@ -815,5 +826,67 @@ internal static class CorpusManifest
         S("v03_substitution_dash_command_identity",
             "Write-Output $(-foo)",
             "A dash-leading word remains an executable identity when it is not a unary expression operand."),
+
+        // ---- v0.3 foreach structure ----
+        V("v03_foreach_literal_array",
+            "foreach ($f in @('a.txt', 'b.txt')) { Remove-Item -LiteralPath $f }",
+            "A static array exposes the loop body while binding-dependent facts remain incomplete."),
+        V("v03_foreach_pipeline_iterator",
+            "foreach ($f in Get-ChildItem C:\\input) { Remove-Item -LiteralPath $f }",
+            "Iterator commands and loop-body commands remain distinct authored regions."),
+        V("v03_foreach_subexpression_iterator",
+            "foreach ($f in $(Get-ChildItem C:\\input)) { Write-Output $f }",
+            "A direct subexpression keeps substitution role inside iterator ancestry."),
+        V("v03_foreach_body_pipeline",
+            "foreach ($f in @('a', 'b')) { Write-Output $f | Sort-Object }",
+            "Pipeline-stage roles remain nested beneath loop-body ancestry."),
+        V("v03_foreach_parenthesized_alias",
+            "Write-Output x | foreach ($_)",
+            "Foreach in a pipeline command slot remains an alias with an opaque argument."),
+        V("v03_foreach_call_operator_alias",
+            "& foreach ($x)",
+            "Foreach after a call operator remains an alias rather than a loop keyword."),
+        V("v03_foreach_numeric_pipeline_alias",
+            "Write-Output x | foreach (1)",
+            "A non-executing numeric argument does not turn a pipeline alias into a loop."),
+        V("v03_foreach_numeric_call_operator_alias",
+            "& foreach (1)",
+            "A non-executing numeric argument after the call operator remains opaque."),
+        V("v03_foreach_semicolon_boundary",
+            "Get-Date; foreach ($x in 1) { Write-Output $x }; Get-Process",
+            "A semicolon legally terminates statements around foreach."),
+        V("v03_foreach_child_host_isolation",
+            "pwsh -Command 'foreach ($x in 1) { Write-Output $x }'; Get-Date",
+            "A loop in an isolated child host does not taint the outer continuation."),
+        V("v03_foreach_following_and_or_pipeline",
+            "foreach ($x in 1) { Write-Output $x }; Get-Date && Get-Process",
+            "A separate pipeline chain may follow a foreach statement terminator."),
+        E("v03_foreach_chain_boundary_gated",
+            "Get-Date && foreach ($x in 1) { Write-Output $x }",
+            "PowerShell rejects foreach as an and/or pipeline operand."),
+        Oos("v03_foreach_dynamic_iterable_gated",
+            "foreach ($x in $items) { Write-Output $x }",
+            "Ambient iterable variables remain outside the bounded structural slice."),
+        Oos("v03_foreach_body_mutation_gated",
+            "foreach ($x in 1) { Set-Variable x 2 }",
+            "Body mutation fails closed until PowerShell abstract state is modeled."),
+        Oos("v03_foreach_alias_mutation_gated",
+            "foreach ($x in 1) { Set-Alias wipe Remove-Item }; wipe file.txt",
+            "Command-resolution mutation cannot leave a post-loop command marked complete."),
+        Oos("v03_foreach_iterator_module_mutation_gated",
+            "foreach ($x in Import-Module ./commands.psm1) { Write-Output $x }; Invoke-Thing",
+            "Iterator module mutation fails closed before later command resolution can be trusted."),
+        Oos("v03_foreach_provider_mutation_gated",
+            "foreach ($x in 1) { Set-Item Alias:wipe Remove-Item }; wipe file.txt",
+            "Alias, function, variable, and environment provider writes are runspace mutation."),
+        Oos("v03_foreach_quoted_alias_mutation_gated",
+            "foreach ($x in 1) { Set-Item 'Alias:wipe' Remove-Item }; wipe file.txt",
+            "Quoted provider paths use decoded provenance and cannot bypass mutation gating."),
+        Oos("v03_foreach_quoted_environment_mutation_gated",
+            "foreach ($x in 1) { Set-Item \"Env:PATH\" C:\\tools }; tool",
+            "A quoted environment provider write can change later command resolution."),
+        Oos("v03_foreach_provider_qualified_iterator_mutation_gated",
+            "foreach ($x in $(Set-Item 'Microsoft.PowerShell.Core\\Alias::wipe' Remove-Item; wipe victim)) { }",
+            "Provider-qualified iterator mutation cannot publish a later alias invocation as complete."),
     };
 }

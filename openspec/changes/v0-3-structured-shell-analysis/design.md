@@ -1297,14 +1297,22 @@ evidence.
 PowerShell retains its statement-versus-pipeline distinction and contextual
 keyword rules. In particular, `foreach` is a language keyword only at a
 statement position when followed by `(`; `Get-ChildItem | foreach { ... }`
-continues to treat `foreach` as command or alias syntax.
+and `Write-Output x | foreach ($_)` continue to treat `foreach` as command or
+alias syntax when the parenthesized argument is proved non-executing. `&&` and
+`||` join pipelines rather than arbitrary control-flow
+statements, so only `;` and newline terminate a statement around `foreach`.
 
 ```text
-pwsh_script(stop)    := pwsh_statement (statement_sep pwsh_statement)*
+pwsh_script(stop)    := pwsh_statement (statement_terminator pwsh_statement)*
 pwsh_statement       := pwsh_foreach
                       | pwsh_while
                       | pwsh_if
-                      | pwsh_pipeline
+                      | pwsh_and_or
+
+statement_terminator := ";" | NEWLINE
+pwsh_and_or           := pwsh_pipeline
+                        (("&&" | "||") pwsh_pipeline)*
+pwsh_pipeline         := pipeline_element ("|" pipeline_element)*
 
 pwsh_foreach         := "foreach" "(" variable "in" foreach_expression ")"
                         script_block_body

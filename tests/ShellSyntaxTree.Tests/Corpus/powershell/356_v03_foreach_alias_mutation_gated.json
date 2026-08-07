@@ -1,0 +1,10 @@
+{
+  "name": "V03 foreach alias mutation gated",
+  "input": "foreach ($x in 1) { Set-Alias wipe Remove-Item }; wipe file.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell foreach state mutation or dynamic invocation is not supported in this structural slice"
+  },
+  "notes": "Command-resolution mutation cannot leave a post-loop command marked complete.",
+  "oracleExpectation": "OutOfScope"
+}

@@ -3,7 +3,7 @@
   "input": "foreach ($f in 1, 2, 3) { Write-Output $f }",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "control-flow keyword \u0027foreach\u0027 is not supported in v0.2"
+    "unparseableReasonContains": "unsupported PowerShell foreach literal-list expression"
   },
   "notes": "A foreach loop (keyword followed by \u0027(\u0027).",
   "oracleExpectation": "OutOfScope"

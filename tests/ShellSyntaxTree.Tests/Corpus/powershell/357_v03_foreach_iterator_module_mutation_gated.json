@@ -1,0 +1,10 @@
+{
+  "name": "V03 foreach iterator module mutation gated",
+  "input": "foreach ($x in Import-Module ./commands.psm1) { Write-Output $x }; Invoke-Thing",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell foreach state mutation or dynamic invocation is not supported in this structural slice"
+  },
+  "notes": "Iterator module mutation fails closed before later command resolution can be trusted.",
+  "oracleExpectation": "OutOfScope"
+}

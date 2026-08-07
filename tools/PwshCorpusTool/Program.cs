@@ -78,7 +78,7 @@ int Generate(string outputDir)
             entry.IncludeElements,
             entry.IncludeStructure,
             entry.IncludeOptionalAssertions,
-            includeV03Assertions: false);
+            entry.IncludeV03Assertions);
         var fileName = $"{index:D3}_{entry.Slug}.json";
         File.WriteAllText(Path.Combine(outputDir, fileName), json);
         index++;

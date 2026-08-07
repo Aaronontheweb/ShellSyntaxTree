@@ -1,0 +1,9 @@
+{
+  "name": "V03 foreach chain boundary gated",
+  "input": "Get-Date \u0026\u0026 foreach ($x in 1) { Write-Output $x }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "a PowerShell foreach statement requires a statement boundary"
+  },
+  "notes": "PowerShell rejects foreach as an and/or pipeline operand."
+}

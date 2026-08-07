@@ -109,6 +109,7 @@ public class CorpusRunnerTests
                      || pwshDirectSegments.Contains(pwshSegment)
                      || isRedirectOperator
                      || isRedirectTarget) &&
+                    !IsPwshForEachStructuralToken(parsed.Syntax, token) &&
                     !standaloneSubstitutions.Any(region =>
                         region.Start <= token.SourceStart &&
                         region.Start + region.Length >=
@@ -202,6 +203,81 @@ public class CorpusRunnerTests
              token.SourceStart >= iterableEnd && tokenEnd == bodyStart ||
              string.Equals(token.Value, "done", StringComparison.Ordinal) &&
              token.SourceStart == bodyEnd && tokenEnd == loopEnd);
+    }
+
+    private static bool IsPwshForEachStructuralToken(
+        ShellSyntaxNode node,
+        PwshToken token)
+    {
+        if (node is ForEachSyntax forEach &&
+            IsPwshForEachStructuralToken(forEach, token))
+        {
+            return true;
+        }
+
+        return node switch
+        {
+            ShellBlockSyntax block => block.Statements.Any(
+                child => IsPwshForEachStructuralToken(child, token)),
+            SimpleCommandSyntax simple => simple.Substitutions.Any(
+                child => IsPwshForEachStructuralToken(child, token)),
+            PipelineSyntax pipeline => pipeline.Stages.Any(
+                child => IsPwshForEachStructuralToken(child, token)),
+            CommandListSyntax list => list.Items.Any(
+                item => IsPwshForEachStructuralToken(item.Command, token)),
+            GroupSyntax group => IsPwshForEachStructuralToken(group.Body, token),
+            ForEachSyntax nested =>
+                IsPwshForEachStructuralToken(nested.IteratorCommands, token) ||
+                IsPwshForEachStructuralToken(nested.Body, token),
+            ConditionLoopSyntax loop =>
+                IsPwshForEachStructuralToken(loop.Condition, token) ||
+                IsPwshForEachStructuralToken(loop.Body, token),
+            ConditionalSyntax conditional => conditional.Branches.Any(
+                    branch => IsPwshForEachStructuralToken(branch, token)) ||
+                conditional.Else is not null &&
+                IsPwshForEachStructuralToken(conditional.Else, token),
+            ConditionalBranchSyntax branch =>
+                IsPwshForEachStructuralToken(branch.Condition, token) ||
+                IsPwshForEachStructuralToken(branch.Body, token),
+            CommandSubstitutionSyntax substitution =>
+                IsPwshForEachStructuralToken(substitution.Body, token),
+            _ => false,
+        };
+    }
+
+    private static bool IsPwshForEachStructuralToken(
+        ForEachSyntax forEach,
+        PwshToken token)
+    {
+        if (forEach.SourceStart is null || forEach.SourceLength is null ||
+            forEach.Binding.Source.SourceStart is null ||
+            forEach.Binding.Source.SourceLength is null ||
+            forEach.Iterable.SourceStart is null ||
+            forEach.Iterable.SourceLength is null ||
+            forEach.Body.SourceStart is null || forEach.Body.SourceLength is null)
+        {
+            return false;
+        }
+
+        var tokenEnd = token.SourceStart + token.SourceLength;
+        var bindingStart = forEach.Binding.Source.SourceStart.Value;
+        var bindingEnd = bindingStart + forEach.Binding.Source.SourceLength.Value;
+        var iterableStart = forEach.Iterable.SourceStart.Value;
+        var iterableEnd = iterableStart + forEach.Iterable.SourceLength.Value;
+        var bodyStart = forEach.Body.SourceStart.Value;
+        var bodyEnd = bodyStart + forEach.Body.SourceLength.Value;
+        if (token.SourceStart >= iterableStart && tokenEnd <= iterableEnd ||
+            token.SourceStart == bindingStart && tokenEnd == bindingEnd ||
+            token.SourceStart == bodyStart - 1 && tokenEnd == bodyEnd + 1)
+        {
+            return true;
+        }
+
+        return token.Kind == PwshTokenKind.Word &&
+            (string.Equals(token.Value, "foreach", StringComparison.OrdinalIgnoreCase) &&
+             token.SourceStart == forEach.SourceStart ||
+             string.Equals(token.Value, "in", StringComparison.OrdinalIgnoreCase) &&
+             token.SourceStart >= bindingEnd && tokenEnd <= iterableStart);
     }
 
     private static IReadOnlyList<SourceRegion> StandaloneSubstitutionRegions(

@@ -1,0 +1,10 @@
+{
+  "name": "V03 foreach dynamic iterable gated",
+  "input": "foreach ($x in $items) { Write-Output $x }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "dynamic PowerShell foreach iterables are not supported"
+  },
+  "notes": "Ambient iterable variables remain outside the bounded structural slice.",
+  "oracleExpectation": "OutOfScope"
+}

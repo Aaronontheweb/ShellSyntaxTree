@@ -256,7 +256,7 @@ priorities.
       roles, ancestry, completeness, nullable decoded spans, compatibility
       operators, and exact shared `Clause` identity. The strict DTO rejects
       unknown fields and always requires unparseable projections to be empty.
-      The PowerShell manifest now owns all 341 entries and round-trips exactly;
+      The PowerShell manifest now owns all 361 entries and round-trips exactly;
       explicit false/null assertions remain opt-in and generator-preserved.
 - [x] Deliver the first Bash `$()` substitution slice for supported
       simple-command arguments and redirect targets. Direct tests and corpus
@@ -303,12 +303,25 @@ priorities.
       transfers, and occurrence-specific redirect values remain fail closed.
       Next add the Netclaw approval matrix before calling the Bash consumer
       integration complete.
-- [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
-      Netclaw approval-matrix cases. The simple-command slice is delivered for
+- [ ] Complete PowerShell `foreach` value and state analysis and add the
+      Netclaw approval-matrix cases. The structural slice now preserves literal
+      scalar/array and executable iterator forms, recursively parses bodies,
+      projects iterator and loop-body ancestry, survives decoded wrappers, and
+      fails closed on dynamic iterables, iterator/body state or
+      command-resolution mutation, malformed boundaries, and depth overflow.
+      Loop-body and current-scope post-loop occurrences intentionally remain
+      incomplete; isolated child-host loops do not taint their outer continuation.
+      Before publishing exact or finite values, add an explicit PowerShell
+      initial-runspace contract and wrapper-state metadata: ambient typed,
+      read-only, scoped, alias, function, and module state can change binding
+      assignment and command resolution, while child hosts inherit no fresh
+      state guarantee unless their own invocation proves it. Expand the design
+      corpus for cardinality, mutation, separators, wrappers, redirects, and
+      transition caps before tasks 7.3-7.7. The simple-command slice is delivered for
       ordinary, adjacent, quoted, here-string, redirect, standalone,
       call-operator, dynamic-identity, and host-wrapper positions, with
       current-scope state propagation and bounded expression rejection pinned
-      by the 341-entry executable corpus.
+      by the 361-entry executable corpus.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.
