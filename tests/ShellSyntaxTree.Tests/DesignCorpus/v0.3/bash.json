@@ -175,6 +175,7 @@
     },
     {
       "id": "bash-for-literal-finite",
+      "compatibilityProjectionLanded": true,
       "concern": "Finite literal loop binding",
       "input": "for f in a.txt b.txt; do rm -- \"$f\"; done",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },
@@ -202,6 +203,7 @@
     },
     {
       "id": "bash-for-static-glob",
+      "compatibilityProjectionLanded": true,
       "concern": "Bounded glob without filesystem enumeration",
       "input": "for f in /tmp/*.txt; do rm -- \"$f\"; done",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },
@@ -229,6 +231,7 @@
     },
     {
       "id": "bash-for-dynamic-glob-root",
+      "compatibilityProjectionLanded": true,
       "concern": "Dynamic glob covering directory",
       "input": "for f in \"$DIR\"/*.txt; do rm -- \"$f\"; done",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },
@@ -256,6 +259,7 @@
     },
     {
       "id": "bash-for-command-substitution-iterator",
+      "compatibilityProjectionLanded": true,
       "concern": "Executable iterator with unknown produced values",
       "input": "for f in $(find /tmp -type f); do rm -- \"$f\"; done",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },
@@ -288,6 +292,7 @@
     },
     {
       "id": "bash-for-native-option-injection",
+      "compatibilityProjectionLanded": true,
       "concern": "Finite value can change native option parsing",
       "input": "for f in -rf /tmp/x; do rm \"$f\"; done",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },
@@ -315,6 +320,7 @@
     },
     {
       "id": "bash-nested-for-cross-product",
+      "compatibilityProjectionLanded": true,
       "concern": "Bounded nested-loop value combination",
       "input": "for d in a b; do for f in x y; do echo \"$d/$f\"; done; done",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },
@@ -344,6 +350,7 @@
     },
     {
       "id": "bash-for-body-pipeline",
+      "compatibilityProjectionLanded": true,
       "concern": "Command roles compose with loop and pipeline ancestry",
       "input": "for f in a b; do printf '%s\\n' \"$f\" | sort; done",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },
@@ -375,6 +382,7 @@
     },
     {
       "id": "bash-malformed-for-missing-done",
+      "compatibilityProjectionLanded": true,
       "concern": "Incomplete delimiter safe-fail",
       "input": "for f in a b; do rm -- \"$f\"",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },
@@ -532,6 +540,7 @@
     },
     {
       "id": "bash-for-candidate-cap-32",
+      "compatibilityProjectionLanded": true,
       "concern": "Finite candidate domain at the fixed cap",
       "input": "for f in v01 v02 v03 v04 v05 v06 v07 v08 v09 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 v21 v22 v23 v24 v25 v26 v27 v28 v29 v30 v31 v32; do printf '%s\\n' \"$f\"; done",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },
@@ -559,6 +568,7 @@
     },
     {
       "id": "bash-for-candidate-overflow-33",
+      "compatibilityProjectionLanded": true,
       "concern": "Candidate overflow collapses instead of truncating",
       "input": "for f in v01 v02 v03 v04 v05 v06 v07 v08 v09 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 v21 v22 v23 v24 v25 v26 v27 v28 v29 v30 v31 v32 v33; do printf '%s\\n' \"$f\"; done",
       "current": { "isUnparseable": true, "reasonContains": "'for'" },

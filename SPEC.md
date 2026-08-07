@@ -1070,9 +1070,11 @@ discovered subset.
 The lexer produces tokens consumed by the parser. Token kinds:
 
 - **WORD** — sequence of non-whitespace, non-operator, non-quote chars.
-  Example: `git`, `/etc/foo`, `--force`, `~/path`, `$VAR`. Simple
-  parameter expansion `${VAR}` (no `//` slash) is absorbed into a Word
-  token; the resolver in §8 decides `Kind`.
+  Example: `git`, `/etc/foo`, `--force`, `~/path`, `$VAR`. A braced
+  parameter is absorbed only when its body is a simple shell identifier,
+  positional parameter, or special parameter. Parameter operators are
+  unparseable because their operands can contain hidden execution; the
+  resolver in §8 decides `Kind` for accepted simple forms.
 - **QUOTED_STRING** — single- or double-quoted string. The lexer strips
   the quote delimiters from the token value. Example: `"hello world"`
   becomes the token value `hello world`.
@@ -1096,8 +1098,9 @@ The lexer produces tokens consumed by the parser. Token kinds:
   Expanding-heredoc substitutions use the same opaque fragment semantics but
   remain attached to the delimiter token rather than entering the ordinary
   command-token stream.
-- **UNPARSEABLE_SENTINEL** — `$((expr))` arithmetic expansion or
-  `${var//pat/repl}` complex parameter expansion. The lexer skips past
+- **UNPARSEABLE_SENTINEL** — `$((expr))` arithmetic expansion or any
+  operator-bearing parameter expansion such as `${var:-$(cmd)}` or
+  `${var//pat/repl}`. The lexer skips past
   the matching close (`))` or `}` respectively) and emits a sentinel
   whose reason names the rejected construct. The parser consumes this
   token by setting outer `ParsedCommand.IsUnparseable = true` (see §11).
@@ -1729,8 +1732,9 @@ Conditions that produce `IsUnparseable = true`:
 - Process substitution (`<(cmd)`, `>(cmd)`).
 - Arithmetic expansion `$((expr))` (per §1 non-goal; lexer emits an
   UNPARSEABLE_SENTINEL token; parser sets the outer flag).
-- Complex parameter expansion `${var//pat/repl}` (per §1 non-goal; same
-  mechanism).
+- Operator-bearing parameter expansion such as `${var:-$(cmd)}` or
+  `${var//pat/repl}` (per §1 non-goal; same mechanism). Only simple braced
+  identifiers, positional parameters, and special parameters are accepted.
 - Recursion depth exceeded on `bash -c` chains (>5 levels).
 
 **Diagnostic precedence.** When multiple conditions could fire on a

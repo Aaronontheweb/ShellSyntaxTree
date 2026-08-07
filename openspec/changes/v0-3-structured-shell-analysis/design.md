@@ -422,6 +422,16 @@ scope-isolated groups do not leak state. Branches join their possible exit
 states; loops include the zero-iteration path unless shell semantics prove at
 least one iteration.
 
+Implementation must run this as a structure-aware abstract-state pass over the
+proved syntax tree, not by exposing the compatibility parser's mutable
+parse-order cwd attribution. Parse order is not execution-state order for
+pipelines or conditional lists, and one symbolic loop-body parse cannot prove
+the cwd of later iterations. The compatibility attribution path remains a
+v0.2 leaf-construction detail. Until the abstract pass lands, loop cwd mutation
+fails closed, recognized shell-state mutation before or inside a loop fails
+closed, nested reuse of an active Bash binding name fails closed, and
+occurrence `WorkingDirectory` stays `Unknown`.
+
 Bash command substitution executes in an isolated subshell state. State changes
 affect later commands inside that substitution but never the containing command
 or following outer commands. PowerShell `$()` evaluates in the current runspace

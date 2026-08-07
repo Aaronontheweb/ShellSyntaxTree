@@ -33,7 +33,8 @@ internal static class CorpusJson
         bool outOfScope,
         bool includeElements,
         bool includeStructure,
-        bool includeOptionalAssertions)
+        bool includeOptionalAssertions,
+        bool includeV03Assertions)
     {
         var obj = new JsonObject
         {
@@ -43,7 +44,8 @@ internal static class CorpusJson
                 parsed,
                 includeElements,
                 includeStructure,
-                includeOptionalAssertions),
+                includeOptionalAssertions,
+                includeV03Assertions),
             ["notes"] = notes,
         };
 
@@ -59,7 +61,8 @@ internal static class CorpusJson
         ParsedCommand parsed,
         bool includeElements,
         bool includeStructure,
-        bool includeOptionalAssertions)
+        bool includeOptionalAssertions,
+        bool includeV03Assertions)
     {
         var expected = new JsonObject { ["isUnparseable"] = parsed.IsUnparseable };
         if (parsed.IsUnparseable)
@@ -77,14 +80,16 @@ internal static class CorpusJson
         expected["clauses"] = clauses;
         if (includeStructure)
         {
-            expected["syntax"] = BuildSyntax(parsed);
-            expected["commands"] = BuildCommands(parsed);
+            expected["syntax"] = BuildSyntax(parsed, includeV03Assertions);
+            expected["commands"] = BuildCommands(parsed, includeV03Assertions);
         }
 
         return expected;
     }
 
-    private static JsonArray BuildSyntax(ParsedCommand parsed)
+    private static JsonArray BuildSyntax(
+        ParsedCommand parsed,
+        bool includeV03Assertions)
     {
         var nodes = new JsonArray();
         AppendSyntax(
@@ -95,6 +100,7 @@ internal static class CorpusJson
             listOperator: null,
             parsed,
             nodes,
+            includeV03Assertions,
             isRootBlock: true);
         return nodes;
     }
@@ -107,6 +113,7 @@ internal static class CorpusJson
         CompoundOperator? listOperator,
         ParsedCommand parsed,
         JsonArray nodes,
+        bool includeV03Assertions,
         bool isRootBlock = false)
     {
         if (node.Kind == ShellSyntaxKind.Unknown)
@@ -117,8 +124,9 @@ internal static class CorpusJson
 
         var currentIndex = nodes.Count;
         var clause = (node as SimpleCommandSyntax)?.Clause;
+        var forEachNode = node as ForEachSyntax;
         var clauseIndex = clause is null ? (int?)null : FindClauseIndex(parsed, clause);
-        nodes.Add(new JsonObject
+        var syntax = new JsonObject
         {
             ["kind"] = node.Kind.ToString(),
             ["parentIndex"] = JsonValue.Create(parentIndex),
@@ -129,7 +137,19 @@ internal static class CorpusJson
             ["clauseIndex"] = JsonValue.Create(clauseIndex),
             ["groupKind"] = (node as GroupSyntax)?.GroupKind.ToString(),
             ["listOperator"] = listOperator?.ToString(),
-        });
+        };
+        if (includeV03Assertions && forEachNode is not null)
+        {
+            syntax["bindingName"] = forEachNode.Binding.Name;
+            syntax["bindingRaw"] = forEachNode.Binding.Source.Raw;
+            syntax["bindingSourceStart"] = forEachNode.Binding.Source.SourceStart;
+            syntax["bindingSourceLength"] = forEachNode.Binding.Source.SourceLength;
+            syntax["iterableRaw"] = forEachNode.Iterable.Raw;
+            syntax["iterableSourceStart"] = forEachNode.Iterable.SourceStart;
+            syntax["iterableSourceLength"] = forEachNode.Iterable.SourceLength;
+        }
+
+        nodes.Add(syntax);
 
         switch (node)
         {
@@ -146,7 +166,8 @@ internal static class CorpusJson
                         index,
                         listOperator: null,
                         parsed,
-                        nodes);
+                        nodes,
+                        includeV03Assertions);
                 }
 
                 break;
@@ -160,7 +181,8 @@ internal static class CorpusJson
                         index,
                         listOperator: null,
                         parsed,
-                        nodes);
+                        nodes,
+                        includeV03Assertions);
                 }
 
                 break;
@@ -174,7 +196,8 @@ internal static class CorpusJson
                         index,
                         listOperator: null,
                         parsed,
-                        nodes);
+                        nodes,
+                        includeV03Assertions);
                 }
 
                 break;
@@ -188,7 +211,8 @@ internal static class CorpusJson
                         index,
                         list.Items[index].Operator,
                         parsed,
-                        nodes);
+                        nodes,
+                        includeV03Assertions);
                 }
 
                 break;
@@ -200,7 +224,8 @@ internal static class CorpusJson
                     childIndex: null,
                     listOperator: null,
                     parsed,
-                    nodes);
+                    nodes,
+                    includeV03Assertions);
                 break;
             case ForEachSyntax forEach:
                 AppendSyntax(
@@ -210,7 +235,8 @@ internal static class CorpusJson
                     childIndex: null,
                     listOperator: null,
                     parsed,
-                    nodes);
+                    nodes,
+                    includeV03Assertions);
                 AppendSyntax(
                     forEach.Body,
                     currentIndex,
@@ -218,7 +244,8 @@ internal static class CorpusJson
                     childIndex: null,
                     listOperator: null,
                     parsed,
-                    nodes);
+                    nodes,
+                    includeV03Assertions);
                 break;
             case ConditionLoopSyntax loop:
                 AppendSyntax(
@@ -228,7 +255,8 @@ internal static class CorpusJson
                     childIndex: null,
                     listOperator: null,
                     parsed,
-                    nodes);
+                    nodes,
+                    includeV03Assertions);
                 AppendSyntax(
                     loop.Body,
                     currentIndex,
@@ -236,7 +264,8 @@ internal static class CorpusJson
                     childIndex: null,
                     listOperator: null,
                     parsed,
-                    nodes);
+                    nodes,
+                    includeV03Assertions);
                 break;
             case ConditionalSyntax conditional:
                 for (var index = 0; index < conditional.Branches.Count; index++)
@@ -248,7 +277,8 @@ internal static class CorpusJson
                         index,
                         listOperator: null,
                         parsed,
-                        nodes);
+                        nodes,
+                        includeV03Assertions);
                 }
 
                 if (conditional.Else is not null)
@@ -260,7 +290,8 @@ internal static class CorpusJson
                         conditional.Branches.Count,
                         listOperator: null,
                         parsed,
-                        nodes);
+                        nodes,
+                        includeV03Assertions);
                 }
 
                 break;
@@ -272,7 +303,8 @@ internal static class CorpusJson
                     childIndex: null,
                     listOperator: null,
                     parsed,
-                    nodes);
+                    nodes,
+                    includeV03Assertions);
                 AppendSyntax(
                     branch.Body,
                     currentIndex,
@@ -280,7 +312,8 @@ internal static class CorpusJson
                     childIndex: null,
                     listOperator: null,
                     parsed,
-                    nodes);
+                    nodes,
+                    includeV03Assertions);
                 break;
             case CommandSubstitutionSyntax substitution:
                 AppendSyntax(
@@ -290,7 +323,8 @@ internal static class CorpusJson
                     childIndex,
                     listOperator: null,
                     parsed,
-                    nodes);
+                    nodes,
+                    includeV03Assertions);
                 break;
             default:
                 throw new InvalidOperationException(
@@ -298,7 +332,9 @@ internal static class CorpusJson
         }
     }
 
-    private static JsonArray BuildCommands(ParsedCommand parsed)
+    private static JsonArray BuildCommands(
+        ParsedCommand parsed,
+        bool includeV03Assertions)
     {
         var commands = new JsonArray();
         foreach (var command in parsed.Commands)
@@ -329,16 +365,50 @@ internal static class CorpusJson
                 });
             }
 
-            commands.Add(new JsonObject
+            var commandJson = new JsonObject
             {
                 ["clauseIndex"] = FindClauseIndex(parsed, command.Clause),
                 ["immediateRole"] = command.ImmediateRole.ToString(),
                 ["isComplete"] = command.IsComplete,
                 ["ancestry"] = ancestry,
-            });
+            };
+            if (includeV03Assertions)
+            {
+                var effectiveArguments = new JsonArray();
+                foreach (var effective in command.EffectiveArguments)
+                {
+                    effectiveArguments.Add(new JsonObject
+                    {
+                        ["clauseElementIndex"] = effective.ClauseElementIndex,
+                        ["value"] = BuildValueDomain(effective.Value),
+                    });
+                }
+
+                commandJson["effectiveArguments"] = effectiveArguments;
+                commandJson["workingDirectory"] = BuildValueDomain(command.WorkingDirectory);
+            }
+
+            commands.Add(commandJson);
         }
 
         return commands;
+    }
+
+    private static JsonObject BuildValueDomain(ShellValueDomain domain)
+    {
+        var values = new JsonArray();
+        foreach (var value in domain.Values)
+        {
+            values.Add(value);
+        }
+
+        return new JsonObject
+        {
+            ["kind"] = domain.Kind.ToString(),
+            ["values"] = values,
+            ["pattern"] = domain.Pattern,
+            ["coveringDirectory"] = domain.CoveringDirectory,
+        };
     }
 
     private static int FindClauseIndex(ParsedCommand parsed, Clause clause)

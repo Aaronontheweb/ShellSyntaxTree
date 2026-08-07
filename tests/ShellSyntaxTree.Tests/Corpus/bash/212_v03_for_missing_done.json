@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash malformed for-in missing done",
+  "input": "for f in a b; do echo \"$f\"",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "Bash for-in loop is missing 'done'"
+  },
+  "notes": "Malformed loop syntax fails atomically without partial compatibility or structural projections."
+}

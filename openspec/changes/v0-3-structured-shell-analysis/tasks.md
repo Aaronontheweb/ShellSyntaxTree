@@ -68,11 +68,18 @@
 
 ## 6. Bash For-In Vertical Slice
 
-- [ ] 6.1 Parse Bash `for name in literal...; do ...; done` into the locked structural nodes.
-- [ ] 6.2 Emit condition-free loop-body occurrences and conservative compatibility clauses.
-- [ ] 6.3 Derive exact and finite literal binding domains within the locked candidate cap.
-- [ ] 6.4 Substitute a bounded binding only where Bash quoting proves argument boundaries.
+- [x] 6.1 Parse Bash `for name in literal...; do ...; done` into the locked structural nodes.
+- [x] 6.2 Emit condition-free loop-body occurrences and conservative compatibility clauses.
+- [x] 6.3 Derive exact and finite literal binding domains within the locked candidate cap.
+- [x] 6.4 Substitute a bounded binding only where Bash quoting proves argument boundaries.
 - [ ] 6.5 Propagate and conservatively join cwd and supported binding state across zero-or-more loop execution.
+  - The first static-value slice deliberately leaves occurrence cwd Unknown
+    and rejects loop shell-state mutation, nested active-binding reuse, or
+    loops reached after recognized prior shell-state mutation. A separate
+    structure-aware abstract-state pass is required
+    before enabling cwd-changing bodies;
+    mutable parse-order attribution is unsound across pipelines, `&&` / `||`,
+    substitutions, and repeated iterations.
 - [ ] 6.6 Cover empty iterables, separators, multiline bodies, redirects, pipelines, nested loops, and wrapper boundaries.
 - [ ] 6.7 Add adversarial cases for option injection, mutation, unquoted expansion, indirect expansion, substitutions, and cap overflow.
 - [ ] 6.8 Add sanitized Bash corpus entries and Netclaw allow/prompt/deny integration cases.

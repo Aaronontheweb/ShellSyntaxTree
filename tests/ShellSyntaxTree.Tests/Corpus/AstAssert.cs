@@ -165,7 +165,14 @@ internal static class AstAssert
                 wanted.SourceLength != observed.SourceLength ||
                 wanted.ClauseIndex != observed.ClauseIndex ||
                 wanted.GroupKind != observed.GroupKind ||
-                wanted.ListOperator != observed.ListOperator)
+                wanted.ListOperator != observed.ListOperator ||
+                wanted.BindingName != observed.BindingName ||
+                wanted.BindingRaw != observed.BindingRaw ||
+                wanted.BindingSourceStart != observed.BindingSourceStart ||
+                wanted.BindingSourceLength != observed.BindingSourceLength ||
+                wanted.IterableRaw != observed.IterableRaw ||
+                wanted.IterableSourceStart != observed.IterableSourceStart ||
+                wanted.IterableSourceLength != observed.IterableSourceLength)
             {
                 throw new XunitException(
                     prefix + $"syntax[{index}]: expected={Summarize(wanted)}, "
@@ -357,6 +364,60 @@ internal static class AstAssert
                         prefix + $"commands[{index}].ancestry[{frameIndex}] differs");
                 }
             }
+
+            if (wanted.EffectiveArguments is not null)
+            {
+                if (wanted.EffectiveArguments.Count != observed.EffectiveArguments.Count)
+                {
+                    throw new XunitException(
+                        prefix + $"commands[{index}].effectiveArguments.count differs");
+                }
+
+                for (var effectiveIndex = 0;
+                     effectiveIndex < wanted.EffectiveArguments.Count;
+                     effectiveIndex++)
+                {
+                    var expectedEffective = wanted.EffectiveArguments[effectiveIndex];
+                    var actualEffective = observed.EffectiveArguments[effectiveIndex];
+                    if (expectedEffective.ClauseElementIndex != actualEffective.ClauseElementIndex)
+                    {
+                        throw new XunitException(
+                            prefix + $"commands[{index}].effectiveArguments[{effectiveIndex}].clauseElementIndex differs");
+                    }
+
+                    AssertValueDomainEqual(
+                        expectedEffective.Value,
+                        actualEffective.Value,
+                        prefix + $"commands[{index}].effectiveArguments[{effectiveIndex}].value");
+                }
+            }
+
+            if (wanted.WorkingDirectory is not null)
+            {
+                AssertValueDomainEqual(
+                    wanted.WorkingDirectory,
+                    observed.WorkingDirectory,
+                    prefix + $"commands[{index}].workingDirectory");
+            }
+        }
+    }
+
+    private static void AssertValueDomainEqual(
+        ExpectedValueDomain expected,
+        ShellValueDomain actual,
+        string path)
+    {
+        var expectedValues = expected.Values ?? new List<string>();
+        if (expected.Kind != actual.Kind ||
+            !expectedValues.SequenceEqual(actual.Values) ||
+            expected.Pattern != actual.Pattern ||
+            expected.CoveringDirectory != actual.CoveringDirectory)
+        {
+            throw new XunitException(
+                $"{path}: expected={expected.Kind}[{string.Join(",", expectedValues)}] "
+                + $"pattern={expected.Pattern}, covering={expected.CoveringDirectory}; "
+                + $"actual={actual.Kind}[{string.Join(",", actual.Values)}] "
+                + $"pattern={actual.Pattern}, covering={actual.CoveringDirectory}");
         }
     }
 
@@ -376,6 +437,7 @@ internal static class AstAssert
         }
 
         var clause = (node as SimpleCommandSyntax)?.Clause;
+        var forEachNode = node as ForEachSyntax;
         int? clauseIndex = clause is null ? null : FindClauseIndex(clauses, clause);
         var currentIndex = nodes.Count;
         nodes.Add(new ActualSyntaxNode(
@@ -388,6 +450,13 @@ internal static class AstAssert
             clauseIndex,
             (node as GroupSyntax)?.GroupKind,
             listOperator,
+            forEachNode?.Binding.Name,
+            forEachNode?.Binding.Source.Raw,
+            forEachNode?.Binding.Source.SourceStart,
+            forEachNode?.Binding.Source.SourceLength,
+            forEachNode?.Iterable.Raw,
+            forEachNode?.Iterable.SourceStart,
+            forEachNode?.Iterable.SourceLength,
             clause));
 
         switch (node)
@@ -573,12 +642,14 @@ internal static class AstAssert
     private static string Summarize(ExpectedSyntaxNode node) =>
         $"{{kind={node.Kind}, parent={node.ParentIndex}, region={node.Region}, "
         + $"child={node.ChildIndex}, span={node.SourceStart}:{node.SourceLength}, "
-        + $"clause={node.ClauseIndex}, group={node.GroupKind}, listOp={node.ListOperator}}}";
+        + $"clause={node.ClauseIndex}, group={node.GroupKind}, listOp={node.ListOperator}, "
+        + $"binding={node.BindingName}, iterable={node.IterableRaw}}}";
 
     private static string Summarize(ActualSyntaxNode node) =>
         $"{{kind={node.Kind}, parent={node.ParentIndex}, region={node.Region}, "
         + $"child={node.ChildIndex}, span={node.SourceStart}:{node.SourceLength}, "
-        + $"clause={node.ClauseIndex}, group={node.GroupKind}, listOp={node.ListOperator}}}";
+        + $"clause={node.ClauseIndex}, group={node.GroupKind}, listOp={node.ListOperator}, "
+        + $"binding={node.BindingName}, iterable={node.IterableRaw}}}";
 
     private sealed record ActualSyntaxNode(
         ShellSyntaxKind Kind,
@@ -590,6 +661,13 @@ internal static class AstAssert
         int? ClauseIndex,
         ShellGroupKind? GroupKind,
         CompoundOperator? ListOperator,
+        string? BindingName,
+        string? BindingRaw,
+        int? BindingSourceStart,
+        int? BindingSourceLength,
+        string? IterableRaw,
+        int? IterableSourceStart,
+        int? IterableSourceLength,
         Clause? Clause);
 
     private static void AssertClauseEqual(ExpectedClause expected, Clause actual, string path)

@@ -395,7 +395,8 @@ internal static partial class BashCommandParser
 
             if (nextIsVerbSlot
                 && t.Kind == BashTokenKind.Word
-                && BashVerbs.ControlFlowKeywords.Contains(t.Value))
+                && BashVerbs.ControlFlowKeywords.Contains(t.Value)
+                && t.Value is not ("for" or "do" or "done"))
             {
                 reason = $"control-flow keyword '{t.Value}' is not supported in v0.1";
                 return true;
@@ -558,6 +559,7 @@ internal static partial class BashCommandParser
                 // Path evidence wins before the lexical verb heuristic.
                 // The argument pass uses the same classifier.
                 if (fileVerbCarveout
+                    || BashVerbs.ControlFlowKeywords.Contains(t.Value)
                     || BashResolver.LooksLikePath(t.Value)
                     || !BashVerbs.IsVerbLikeToken(t))
                 {

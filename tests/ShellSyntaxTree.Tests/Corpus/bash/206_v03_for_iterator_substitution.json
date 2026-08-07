@@ -1,0 +1,69 @@
+{
+  "name": "v0.3 Bash for-in iterator substitution",
+  "input": "for f in $(find /tmp -type f); do rm -- \"$f\"; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["find"],
+        "args": [
+          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp", "isFlag": false },
+          { "raw": "-type", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": true },
+          { "raw": "f", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": false }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": ["rm"],
+        "args": [
+          { "raw": "--", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": true },
+          { "raw": "\"$f\"", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false }
+        ],
+        "redirects": []
+      }
+    ],
+    "syntax": [
+      { "kind": "Block", "parentIndex": null, "region": "Unknown", "childIndex": null, "sourceStart": 0, "sourceLength": 50, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "ForEach", "parentIndex": 0, "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 50, "clauseIndex": null, "groupKind": null, "listOperator": null, "bindingName": "f", "bindingRaw": "f", "bindingSourceStart": 4, "bindingSourceLength": 1, "iterableRaw": "$(find /tmp -type f)", "iterableSourceStart": 9, "iterableSourceLength": 20 },
+      { "kind": "Block", "parentIndex": 1, "region": "Iterator", "childIndex": null, "sourceStart": 9, "sourceLength": 20, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "CommandSubstitution", "parentIndex": 2, "region": "Statement", "childIndex": 0, "sourceStart": 9, "sourceLength": 20, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "Block", "parentIndex": 3, "region": "Substitution", "childIndex": 0, "sourceStart": 11, "sourceLength": 17, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "SimpleCommand", "parentIndex": 4, "region": "Statement", "childIndex": 0, "sourceStart": 11, "sourceLength": 17, "clauseIndex": 0, "groupKind": null, "listOperator": null },
+      { "kind": "Block", "parentIndex": 1, "region": "LoopBody", "childIndex": null, "sourceStart": 33, "sourceLength": 13, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "SimpleCommand", "parentIndex": 6, "region": "Statement", "childIndex": 0, "sourceStart": 34, "sourceLength": 10, "clauseIndex": 1, "groupKind": null, "listOperator": null }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 50 },
+          { "ancestorKind": "ForEach", "region": "Iterator", "childIndex": null, "sourceStart": 0, "sourceLength": 50 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 9, "sourceLength": 20 },
+          { "ancestorKind": "CommandSubstitution", "region": "Substitution", "childIndex": 0, "sourceStart": 9, "sourceLength": 20 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 11, "sourceLength": 17 }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": { "kind": "Unknown", "values": [], "pattern": null, "coveringDirectory": null }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 50 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 50 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 33, "sourceLength": 13 }
+        ],
+        "effectiveArguments": [
+          { "clauseElementIndex": 2, "value": { "kind": "Unknown", "values": [], "pattern": null, "coveringDirectory": null } }
+        ],
+        "workingDirectory": { "kind": "Unknown", "values": [], "pattern": null, "coveringDirectory": null }
+      }
+    ]
+  },
+  "notes": "The iterator command is visible before the body and its produced binding remains Unknown."
+}
