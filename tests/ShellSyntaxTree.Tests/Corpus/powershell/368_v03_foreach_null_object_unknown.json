@@ -1,0 +1,40 @@
+{
+  "name": "V03 foreach null object unknown",
+  "input": "foreach ($f in @($null)) { Write-Output $f }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["Write-Output"],
+        "args": [
+          { "raw": "$f", "kind": "EnvVar", "isPath": false }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 44 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 44 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 26, "sourceLength": 17 }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Unknown",
+              "values": []
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "An array containing null visits once but proves no string value."
+}

@@ -297,12 +297,17 @@ does not establish this contract. A fixed bootstrap may establish these
 constraints only when it cannot define or mutate loop-bound variables or
 policy-relevant command identities.
 
-The mode does not erase PowerShell's built-in automatic variables. Exact and
-finite binding proofs remain limited to
-ordinary unscoped variable names that do not collide, case-insensitively, with
-automatic, constant, or read-only bindings known to the supported PowerShell
-runtime. Scoped/provider forms such as `$global:x`, `$script:x`, and `$env:X`
-are outside the bounded loop-binding grammar.
+The mode does not erase PowerShell's built-in variable state. Exact and finite
+binding proofs remain limited to ordinary unscoped variable names that do not
+collide, case-insensitively, with automatic, constant, read-only, typed,
+validated, preference, or configuration bindings known to the supported
+PowerShell runtime. A `foreach` assignment to a built-in preference variable
+can coerce an authored string into an enum or reject it, and can change host
+behavior independently of the loop value; it is therefore not an ordinary
+string binding. Documented preference names remain excluded even when they are
+lazy or configuration-dependent and therefore absent from a fresh
+`Get-Variable` inventory. Scoped/provider forms such as `$global:x`, `$script:x`, and
+`$env:X` are outside the bounded loop-binding grammar.
 
 The assertion applies only to the host that the caller actually constrains.
 Current-runspace regions such as `( ... )`, `$()`, and a static

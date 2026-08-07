@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using ShellSyntaxTree.Internal.Pwsh.Verbs;
+using ShellSyntaxTree.Internal.Pwsh.Parsing;
 using ShellSyntaxTree.Tools.PwshCorpus;
 using Xunit;
 using Xunit.Sdk;
@@ -112,6 +113,39 @@ public class PwshOracleTests
                 "PwshAliases is missing live Get-Alias entries (SPEC.POWERSHELL.md §6.3):\n  "
                 + string.Join(", ", gaps));
         }
+    }
+
+    [Fact]
+    public void Foreach_binding_boundary_covers_every_fresh_host_variable()
+    {
+        if (!PwshOracle.IsAvailable())
+        {
+            Console.WriteLine("pwsh not on PATH — the foreach binding gate is skipped locally.");
+            return;
+        }
+
+        var live = PwshOracle.GetVariableNames();
+        Assert.NotNull(live);
+
+        var gaps = live!
+            .Where(IsSimpleLoopBindingName)
+            .Where(PwshForEachValueAnalysis.IsEligibleBindingName)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        Assert.True(
+            gaps.Length == 0,
+            "The isolated foreach binding boundary is missing fresh-host variables: "
+            + string.Join(", ", gaps));
+    }
+
+    private static bool IsSimpleLoopBindingName(string name)
+    {
+        if (name.Length == 0 || name[0] != '_' && !char.IsLetter(name[0]))
+        {
+            return false;
+        }
+
+        return name.Skip(1).All(character => character == '_' || char.IsLetterOrDigit(character));
     }
 
     private static List<(string File, CorpusEntry Entry)> LoadPowershellCorpus()

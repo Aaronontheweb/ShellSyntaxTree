@@ -274,6 +274,21 @@ public class PwshForEachStructuralTests
     }
 
     [Fact]
+    public void Decoded_child_host_pipeline_iterator_stays_visible_without_outer_plan()
+    {
+        var result = ParseIsolated(
+            "pwsh -Command 'foreach ($x in Get-Item C:\\input) " +
+            "{ Write-Output $x }'; Get-Date");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(new[] { "Get-Item", "Write-Output", "Get-Date" },
+            result.Commands.Select(CommandVerb));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[2].IsComplete);
+    }
+
+    [Fact]
     public void Foreach_object_alias_remains_an_opaque_script_block_argument()
     {
         var result = Parse("Get-ChildItem | foreach { Write-Output $_ }");
@@ -298,12 +313,181 @@ public class PwshForEachStructuralTests
         Assert.Contains("nesting depth", overflow.UnparseableReason!);
     }
 
+    [Fact]
+    public void Isolated_literal_scalar_publishes_exact_binding_value()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'a.txt') { Remove-Item -LiteralPath $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal("$f", command.Clause.Elements[effective.ClauseElementIndex].Raw);
+        AssertDomain(effective.Value, ShellValueDomainKind.Exact, "a.txt");
+    }
+
+    [Fact]
+    public void Isolated_literal_array_publishes_distinct_finite_binding_values()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in @('a.txt', 'b.txt', 'a.txt')) { Write-Output $F }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        AssertDomain(
+            Assert.Single(command.EffectiveArguments).Value,
+            ShellValueDomainKind.FiniteSet,
+            "a.txt",
+            "b.txt");
+    }
+
+    [Fact]
+    public void Default_initial_state_withholds_binding_proof()
+    {
+        var result = Parse(
+            "foreach ($f in @('a.txt', 'b.txt')) { Remove-Item -LiteralPath $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.False(command.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Pipeline_objects_remain_unknown_without_making_body_structure_incomplete()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in Get-ChildItem C:\\input) { Write-Output $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(result.Commands[1].EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Nested_distinct_bindings_compose_case_insensitively()
+    {
+        var result = ParseIsolated(
+            "foreach ($outer in 'left') { foreach ($inner in @('a','b')) " +
+            "{ Write-Output \"$OUTER/$Inner\" } }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        AssertDomain(
+            Assert.Single(command.EffectiveArguments).Value,
+            ShellValueDomainKind.FiniteSet,
+            "left/a",
+            "left/b");
+    }
+
+    [Fact]
+    public void Same_name_nested_binding_does_not_restore_outer_parser_frame()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'outer') { foreach ($F in 'inner') " +
+            "{ Write-Output $f }; Write-Output $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.False(command.IsComplete));
+        Assert.All(result.Commands, command => Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind));
+    }
+
+    [Fact]
+    public void Null_and_candidate_overflow_remain_unknown()
+    {
+        var nullResult = ParseIsolated(
+            "foreach ($f in @($null)) { Write-Output $f }");
+        var candidates = string.Join(",", Enumerable.Range(1, 33)
+            .Select(index => $"'v{index:00}'"));
+        var overflow = ParseIsolated(
+            $"foreach ($f in @({candidates})) {{ Write-Output $f }}");
+
+        Assert.False(nullResult.IsUnparseable, nullResult.UnparseableReason);
+        Assert.True(Assert.Single(nullResult.Commands).IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(Assert.Single(nullResult.Commands).EffectiveArguments).Value.Kind);
+        Assert.False(overflow.IsUnparseable, overflow.UnparseableReason);
+        Assert.True(Assert.Single(overflow.Commands).IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(Assert.Single(overflow.Commands).EffectiveArguments).Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("HOME")]
+    [InlineData("home")]
+    [InlineData("PSItem")]
+    [InlineData("EnabledExperimentalFeatures")]
+    [InlineData("PSStyle")]
+    [InlineData("ConfirmPreference")]
+    [InlineData("_")]
+    public void Isolated_reserved_or_stateful_builtin_binding_fails_atomically(string binding)
+    {
+        var result = ParseIsolated(
+            $"foreach (${binding} in @('x')) {{ Write-Output ${binding} }}");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("built-in", result.UnparseableReason!);
+    }
+
+    [Fact]
+    public void Literal_variable_spelling_does_not_receive_effective_binding_value()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'value') { Write-Output '$f' \"`$f\" }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        Assert.Empty(command.EffectiveArguments);
+    }
+
+    [Fact]
+    public void Redirect_binding_stays_incomplete_until_redirect_analysis_lands()
+    {
+        var result = ParseIsolated("foreach ($f in 'out.txt') { Write-Output x > $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.False(Assert.Single(result.Commands).IsComplete);
+    }
+
     private static ParsedCommand Parse(string source) => new PwshParser(
         new PwshParserOptions
         {
             HomeDirectory = "C:/Users/test",
             WorkingDirectory = "C:/work",
         }).Parse(source);
+
+    private static ParsedCommand ParseIsolated(string source) => new PwshParser(
+        new PwshParserOptions
+        {
+            HomeDirectory = "C:/Users/test",
+            WorkingDirectory = "C:/work",
+            InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+        }).Parse(source);
+
+    private static void AssertDomain(
+        ShellValueDomain domain,
+        ShellValueDomainKind kind,
+        params string[] values)
+    {
+        Assert.Equal(kind, domain.Kind);
+        Assert.Equal(values, domain.Values);
+    }
 
     private static string CommandVerb(CommandOccurrence command) => command.Clause.Verb.Joined;
 

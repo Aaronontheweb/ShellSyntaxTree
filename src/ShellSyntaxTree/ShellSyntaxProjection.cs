@@ -30,6 +30,8 @@ internal sealed class CommandOccurrenceFacts
     internal IReadOnlyList<ShellValueElementProvenance> ValueProvenance { get; init; } =
         Array.Empty<ShellValueElementProvenance>();
 
+    internal bool HasCompleteValueProvenance { get; init; }
+
     internal bool IsComplete { get; init; }
 }
 

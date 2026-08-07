@@ -1,0 +1,11 @@
+{
+  "name": "V03 foreach automatic binding gated",
+  "input": "foreach ($HOME in @('x')) { Write-Output $HOME }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "built-in"
+  },
+  "oracleExpectation": "OutOfScope",
+  "notes": "A fresh host still has built-in automatic and read-only variables."
+}

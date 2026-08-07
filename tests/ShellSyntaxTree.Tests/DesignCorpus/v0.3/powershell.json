@@ -886,6 +886,7 @@
     {
       "id": "pwsh-foreach-automatic-variable-collision",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
       "concern": "Fresh process mode does not make automatic read-only variables writable",
       "input": "foreach ($HOME in @('x')) { Write-Output $HOME }",
       "current": { "isUnparseable": false },

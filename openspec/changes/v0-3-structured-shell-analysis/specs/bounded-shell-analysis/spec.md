@@ -185,7 +185,11 @@ MAY establish those constraints only when it cannot define or mutate loop-bound
 variables or policy-relevant command identities. `-NoProfile -NonInteractive`
 alone SHALL NOT satisfy the contract. Exact and finite
 binding analysis SHALL remain limited to ordinary unscoped names that do not
-case-insensitively collide with automatic, constant, or read-only variables.
+case-insensitively collide with automatic, constant, read-only, typed,
+validated, preference, or configuration variables known to the supported
+PowerShell runtime. The preference inventory SHALL include documented lazy and
+configuration-dependent names even when a fresh `Get-Variable` inventory omits
+them.
 Scoped/provider binding forms SHALL fail closed.
 
 Current-runspace groups, `$()`, and static `Invoke-Expression` payloads SHALL
@@ -210,6 +214,11 @@ initial-state assertion.
 - **WHEN** a reused runspace already contains `[int]$f` or a read-only `$f` and parses a loop that assigns string values
 - **THEN** default-mode analysis does not claim the authored strings are the effective loop values
 - **THEN** selecting isolated mode for that reused runspace would violate the caller contract
+
+#### Scenario: Built-in preference binding is not an ordinary string slot
+- **WHEN** isolated-mode PowerShell parses a loop binding named `ConfirmPreference`, `ErrorActionPreference`, or another known built-in preference or configuration variable
+- **THEN** the complete loop region is unparseable
+- **THEN** the analyzer does not assume assignment avoids type coercion, validation, rejection, or host-behavior changes
 
 #### Scenario: Child host does not inherit the parent's assertion
 - **WHEN** isolated-mode PowerShell parses a supported `pwsh -NoProfile -Command` child containing a `foreach`

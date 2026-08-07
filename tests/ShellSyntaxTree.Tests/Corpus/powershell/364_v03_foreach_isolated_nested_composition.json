@@ -1,0 +1,42 @@
+{
+  "name": "V03 foreach isolated nested composition",
+  "input": "foreach ($outer in 'left') { foreach ($inner in @('a','b')) { Write-Output \"$OUTER/$Inner\" } }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["Write-Output"],
+        "args": [
+          { "raw": "\"$OUTER/$Inner\"", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 94 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 94 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 28, "sourceLength": 65 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 29, "sourceLength": 63 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 61, "sourceLength": 30 }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "FiniteSet",
+              "values": ["left/a", "left/b"]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Distinct active bindings compose without evaluating PowerShell expressions."
+}
