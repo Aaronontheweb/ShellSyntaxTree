@@ -1,6 +1,6 @@
 {
   "name": "Iex dynamic location",
-  "input": "Set-Location C:\\safe; iex $code; Remove-Item child.txt",
+  "input": "Set-Location C:\\safe \u0026\u0026 iex $code; Remove-Item child.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -20,7 +20,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "iex"
         ],

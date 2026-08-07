@@ -1,0 +1,63 @@
+{
+  "name": "V03 foreach ordered persistent binding",
+  "input": "foreach ($f in @('a','b','a')) { Write-Output $f }; Write-Output $f",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["Write-Output"],
+        "args": [
+          { "raw": "$f", "kind": "EnvVar", "isPath": false }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["Write-Output"],
+        "args": [
+          { "raw": "$f", "kind": "EnvVar", "isPath": false }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 67 },
+          { "ancestorKind": "CommandList", "region": "Statement", "childIndex": 0, "sourceStart": 0, "sourceLength": 67 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 50 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 32, "sourceLength": 17 }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": { "kind": "FiniteSet", "values": ["a", "b"] }
+          }
+        ],
+        "workingDirectory": { "kind": "Exact", "values": ["C:/work"] }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 67 },
+          { "ancestorKind": "CommandList", "region": "Statement", "childIndex": 1, "sourceStart": 0, "sourceLength": 67 }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": { "kind": "Exact", "values": ["a"] }
+          }
+        ],
+        "workingDirectory": { "kind": "Exact", "values": ["C:/work"] }
+      }
+    ]
+  },
+  "notes": "The internal visit plan retains a,b,a while the body exposes the distinct finite set and the current-scope continuation sees final a."
+}

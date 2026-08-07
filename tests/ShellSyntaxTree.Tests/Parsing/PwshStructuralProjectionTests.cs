@@ -93,12 +93,164 @@ public class PwshStructuralProjectionTests
     [Fact]
     public void Set_location_propagates_out_of_a_current_scope_group()
     {
-        var result = Parse("(Set-Location C:\\sensitive); Remove-Item child.txt");
+        var result = Parse("(Set-Location C:\\sensitive) && Remove-Item child.txt");
 
         var remove = result.Clauses.Last();
         Assert.Contains(
             remove.Args,
             arg => arg.IsCwdAttribution && arg.Resolved == "C:/sensitive");
+    }
+
+    [Fact]
+    public void Set_location_failure_partition_rebases_compatibility_to_incoming_cwd()
+    {
+        var result = Parse("Set-Location C:\\target || Get-Item child.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(
+            ShellValueDomainKind.Exact,
+            result.Commands[1].WorkingDirectory.Kind);
+        Assert.Equal(
+            "C:/work",
+            Assert.Single(result.Commands[1].WorkingDirectory.Values));
+        var clause = result.Clauses[1];
+        Assert.Same(clause, result.Commands[1].Clause);
+        Assert.Contains(clause.Args, argument =>
+            argument.Raw == "child.txt" &&
+            argument.Resolved == "C:/work/child.txt");
+        Assert.Contains(clause.Elements, element =>
+            element.Value == "child.txt" &&
+            element.Resolved == "C:/work/child.txt");
+        Assert.Contains(clause.Args, argument =>
+            argument.IsCwdAttribution && argument.Resolved == "C:/work");
+    }
+
+    [Fact]
+    public void Exact_failure_rebase_preserves_absolute_path_and_rewrites_redirect()
+    {
+        var result = Parse(
+            "Set-Location C:\\target || Get-Item . C:\\work > result.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var clause = result.Clauses[1];
+        Assert.Contains(clause.Args, argument =>
+            argument.Raw == "." && argument.Resolved == "C:/work");
+        Assert.Contains(clause.Args, argument =>
+            argument.Raw == "C:\\work" && argument.Resolved == "C:/work");
+        var redirect = Assert.Single(clause.Redirects);
+        Assert.False(redirect.IsDynamicSkip);
+        Assert.Equal("C:/work/result.txt", redirect.Target);
+    }
+
+    [Theory]
+    [InlineData("pwsh -Command 'Get-Item child.txt > out.txt'")]
+    [InlineData("pwsh -EncodedCommand RwBlAHQALQBJAHQAZQBtACAAYwBoAGkAbABkAC4AdAB4AHQAIAA+ACAAbwB1AHQALgB0AHgAdAA=")]
+    public void Exact_failure_rebase_crosses_decoded_child_host_boundary(string invocation)
+    {
+        var result = Parse($"Set-Location C:\\target || {invocation}");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands[1];
+        var clause = result.Clauses[1];
+        Assert.Same(clause, command.Clause);
+        Assert.Equal(ShellValueDomainKind.Exact, command.WorkingDirectory.Kind);
+        Assert.Equal("C:/work", Assert.Single(command.WorkingDirectory.Values));
+        Assert.Contains(clause.Args, argument =>
+            argument.Raw == "child.txt" &&
+            argument.Resolved == "C:/work/child.txt");
+        Assert.Contains(clause.Elements, element =>
+            element.Value == "child.txt" &&
+            element.Resolved == "C:/work/child.txt");
+        Assert.Contains(clause.Args, argument =>
+            argument.IsCwdAttribution && argument.Resolved == "C:/work");
+        var redirect = Assert.Single(clause.Redirects);
+        Assert.False(redirect.IsDynamicSkip);
+        Assert.Equal("C:/work/out.txt", redirect.Target);
+    }
+
+    [Theory]
+    [InlineData("Get-Item child.txt > out.txt")]
+    [InlineData("pwsh -Command 'Get-Item child.txt > out.txt'")]
+    [InlineData("pwsh -EncodedCommand RwBlAHQALQBJAHQAZQBtACAAYwBoAGkAbABkAC4AdAB4AHQAIAA+ACAAbwB1AHQALgB0AHgAdAA=")]
+    public void Dynamic_provider_failure_promotes_only_static_compatibility_paths(
+        string invocation)
+    {
+        var result = Parse($"Set-Location Alias: || {invocation}");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands[1];
+        var clause = result.Clauses[1];
+        Assert.Same(clause, command.Clause);
+        Assert.Equal(ShellValueDomainKind.Exact, command.WorkingDirectory.Kind);
+        Assert.Equal("C:/work", Assert.Single(command.WorkingDirectory.Values));
+        Assert.Contains(clause.Args, argument =>
+            argument.Raw == "child.txt" &&
+            argument.Kind == ArgKind.Literal &&
+            argument.Resolved == "C:/work/child.txt");
+        Assert.Contains(clause.Elements, element =>
+            element.Value == "out.txt" &&
+            element.Kind == ArgKind.Literal &&
+            element.Resolved == "C:/work/out.txt");
+        var redirect = Assert.Single(clause.Redirects);
+        Assert.False(redirect.IsDynamicSkip);
+        Assert.Equal("C:/work/out.txt", redirect.Target);
+        Assert.False(command.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("Get-Item $name > $out")]
+    [InlineData("pwsh -Command 'Get-Item $name > $out'")]
+    public void Dynamic_provider_failure_does_not_promote_runtime_values(
+        string invocation)
+    {
+        var result = Parse($"Set-Location Alias: || {invocation}");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var clause = result.Clauses[1];
+        Assert.Contains(clause.Args, argument =>
+            argument.Raw == "$name" && argument.Resolved is null);
+        Assert.Contains(clause.Elements, element =>
+            element.Value == "$out" && element.Resolved is null);
+        Assert.True(Assert.Single(clause.Redirects).IsDynamicSkip);
+    }
+
+    [Theory]
+    [InlineData("Get-Item a,b")]
+    [InlineData("pwsh -Command 'Get-Item a,b'")]
+    [InlineData("Remove-Item safe.txt,C:/sensitive.txt")]
+    [InlineData("pwsh -Command 'Remove-Item safe.txt,C:/sensitive.txt'")]
+    [InlineData("Get-Item 'a','b'")]
+    [InlineData("Get-Item \"a\",\"b\"")]
+    [InlineData("pwsh -Command \"Get-Item 'a','b'\"")]
+    [InlineData("pwsh -EncodedCommand RwBlAHQALQBJAHQAZQBtACAAJwBhACcALAAnAGIAJwA=")]
+    [InlineData("Remove-Item 'safe.txt','C:/sensitive.txt'")]
+    public void Dynamic_provider_failure_does_not_collapse_argument_lists_to_one_path(
+        string invocation)
+    {
+        var result = Parse($"Set-Location Alias: || {invocation}");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands[1];
+        Assert.False(command.IsComplete);
+        Assert.DoesNotContain(command.Clause.Args, argument =>
+            argument.Raw.IndexOf(',') >= 0 && argument.Resolved is not null);
+        Assert.DoesNotContain(command.Clause.Elements, element =>
+            element.Value.IndexOf(',') >= 0 && element.Resolved is not null);
+    }
+
+    [Theory]
+    [InlineData("Get-Item 'a,b'")]
+    [InlineData("pwsh -Command \"Get-Item 'a,b'\"")]
+    public void Dynamic_provider_failure_promotes_a_quoted_comma_filename(
+        string invocation)
+    {
+        var result = Parse($"Set-Location Alias: || {invocation}");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands[1];
+        Assert.True(command.IsComplete);
+        Assert.Contains(command.Clause.Args, argument =>
+            argument.Resolved == "C:/work/a,b");
     }
 
     [Theory]
@@ -267,15 +419,15 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
-    public void Invoke_expression_exports_location_changes_to_following_commands()
+    public void Invoke_expression_location_changes_remain_conservative_until_remapping()
     {
         var result = Parse(
-            "iex 'Set-Location C:\\sensitive'; Remove-Item child.txt");
+            "iex 'Set-Location C:\\sensitive' && Remove-Item child.txt");
 
         var remove = result.Clauses.Last();
         Assert.Contains(
             remove.Args,
-            arg => arg.IsCwdAttribution && arg.Resolved == "C:/sensitive");
+            arg => arg.IsCwdAttribution && arg.Kind == ArgKind.DynamicSkip);
     }
 
     [Fact]
@@ -465,7 +617,7 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
-    public void Subexpression_location_changes_propagate_before_outer_resolution()
+    public void Subexpression_location_failure_joins_sanitize_outer_compatibility()
     {
         var result = Parse(
             "Write-Output $(Set-Location C:\\sensitive; Get-Location); Get-Item child.txt");
@@ -473,13 +625,43 @@ public class PwshStructuralProjectionTests
         Assert.False(result.IsUnparseable);
         Assert.Equal(new[] { "Set-Location", "Get-Location", "Write-Output", "Get-Item" },
             result.Commands.Select(CommandVerb));
-        Assert.Contains(result.Clauses[1].Args,
-            argument => argument.IsCwdAttribution && argument.Resolved == "C:/sensitive");
-        Assert.Contains(result.Clauses[2].Args,
-            argument => argument.IsCwdAttribution && argument.Resolved == "C:/sensitive");
+        Assert.All(
+            result.Clauses.Skip(1),
+            clause => Assert.Contains(
+                clause.Args,
+                argument => argument.IsCwdAttribution &&
+                    argument.Kind == ArgKind.DynamicSkip));
         Assert.Contains(result.Clauses[3].Args,
-            argument => argument.Raw == "child.txt" &&
-                argument.Resolved == "C:/sensitive/child.txt");
+            argument => argument.Raw == "child.txt" && argument.Resolved is null);
+        Assert.Equal(
+            "C:/work",
+            Assert.Single(result.Commands[0].WorkingDirectory.Values));
+        Assert.All(
+            result.Commands.Skip(1),
+            command => Assert.Equal(
+                ShellValueDomainKind.Unknown,
+                command.WorkingDirectory.Kind));
+    }
+
+    [Fact]
+    public void Subexpression_and_if_exposes_exact_success_cwd_without_leaking_it_to_outer_flow()
+    {
+        var result = Parse(
+            "Write-Output $(Set-Location C:\\sensitive && Get-Location); Get-Item child.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(4, result.Commands.Count);
+        Assert.Equal(
+            "C:/work",
+            Assert.Single(result.Commands[0].WorkingDirectory.Values));
+        Assert.Equal(
+            "C:/sensitive",
+            Assert.Single(result.Commands[1].WorkingDirectory.Values));
+        Assert.All(
+            result.Commands.Skip(2),
+            command => Assert.Equal(
+                ShellValueDomainKind.Unknown,
+                command.WorkingDirectory.Kind));
     }
 
     [Fact]

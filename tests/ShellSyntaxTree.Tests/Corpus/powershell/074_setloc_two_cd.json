@@ -1,6 +1,6 @@
 {
   "name": "Setloc two cd",
-  "input": "cd C:\\a; cd C:\\b; gci",
+  "input": "cd C:\\a \u0026\u0026 cd C:\\b \u0026\u0026 gci",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -21,7 +21,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "cd"
         ],
@@ -44,7 +44,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "gci"
         ],

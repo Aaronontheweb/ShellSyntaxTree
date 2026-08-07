@@ -318,7 +318,35 @@ proves the complete constrained-host environment, not merely `-NoProfile`.
 Recognized mutation of variables,
 aliases, functions, or modules invalidates later proofs wherever PowerShell
 scope rules make the mutation observable. Cwd-only state changes retain the
-independent initial-runspace assertion.
+independent initial-runspace assertion. A computed `Invoke-Expression` payload
+can mutate every one of those facts in the current runspace; it therefore
+invalidates later binding and command-resolution proofs and makes later cwd
+attribution unknown.
+
+Variable mutation recognition includes argument-vector binding, not only the
+invoked verb. The PowerShell common parameters `-OutVariable` / `-ov`,
+`-PipelineVariable` / `-pv`, `-ErrorVariable` / `-ev`, `-WarningVariable` /
+`-wv`, and `-InformationVariable` / `-iv`, including accepted unambiguous
+prefixes and inline `:` values, invalidate later observing proofs. The same
+rule covers PowerShell 7 variable-writing parameters on `Tee-Object`,
+`Import-LocalizedData`, `Invoke-RestMethod`, and `Invoke-WebRequest`. An opaque
+splat can supply any of those parameter keys and therefore also invalidates
+later proofs. A recognized writer on `Set-Location` composes with its
+success/failure cwd transfer and invalidates bindings on both reachable
+outcomes; location analysis does not bypass argument-vector mutation. This
+check is conservative for a command whose runtime command
+type is unavailable; treating a possible native argument as a writer can
+cause a prompt, but ignoring an advanced-function writer can authorize a stale
+value.
+
+PowerShell also accepts U+2013 EN DASH, U+2014 EM DASH, and U+2015 HORIZONTAL
+BAR as parameter prefixes. Stable v0.3 fails a token beginning with one of
+those alternate dashes atomically rather than exposing it as a literal
+positional argument: the retained v0.2 `Arg.IsFlag` contract recognizes only
+an ASCII `-`, so normalizing the authored `Raw` spelling would either lose
+provenance or require a breaking API change. Unsupported module-qualified
+cmdlets are likewise rejected inside structural regions, not only in a flat
+command; the existing module-qualified `Invoke-Expression` exception remains.
 
 For a successful result, every authored simple command appears once in
 `Syntax`, once in `Commands`, and once in `Clauses`, with all three projections
@@ -695,6 +723,53 @@ variable-derived path that is not independently exact keeps or becomes
 its static resolution. In particular, compatibility projection may not retain
 the configured `$HOME` resolution after a loop binds `HOME`, even though that
 binding is outside the v0.3 supported-name boundary.
+
+#### PowerShell bounded `foreach` state
+
+PowerShell `foreach` analysis owns a case-insensitive persistent binding map;
+the structural parser does not push and restore lexical loop bindings. A proved
+nonempty ordered plan leaves the final assigned value after the loop, including
+when a nested loop reuses the same name. A proved empty plan performs no body
+transition and preserves the incoming binding and cwd. A zero-or-more plan
+joins its zero-iteration entry with every reachable iteration exit. Repeated
+visits to one authored occurrence join effective argument and cwd facts rather
+than selecting a representative visit.
+
+Concrete and fixed-point PowerShell loop visits share the parse-wide 4096
+transition budget. Overflow makes the complete parse unparseable and publishes
+no partial command or compatibility projection.
+
+`Set-Location` is modeled from the complete effective argument vector. Its
+success exit takes the proved filesystem target cwd and its failure exit retains
+the incoming cwd. A successful non-filesystem or unproved target also
+invalidates binding and command-resolution proofs because relative provider
+operations may mutate that state. `&&` consumes only success, `||` only failure, and statement
+sequence consumes their join. The analyzer publishes no finite cwd set, so any
+disagreement becomes `Unknown`. Unsupported location-stack operations,
+state/command-resolution mutation, and dynamic dispatch remain fail closed.
+For provider-capable item mutators, a target that cannot be proved outside the
+Alias, Function, Variable, and Environment providers invalidates binding
+proofs; a dynamic value with a proved filesystem target does not.
+
+PowerShell `$()` and parenthesized groups propagate supported state in the
+current runspace. Decoded child hosts isolate their exit state and do not
+inherit the isolated initial-state assertion unless their own invocation proves
+it. Compatibility parse-time location attribution is cloned for loop iterator
+and body parsing: a proved empty body cannot leak a location change, while a
+possibly reached loop mutation poisons any stale exact compatibility
+attribution rather than choosing one execution path.
+
+After outcome analysis, cwd-dependent compatibility arguments, clause
+elements, redirects, and cwd attribution are rebased to the occurrence's exact
+cwd. When the occurrence cwd is unknown, cwd-dependent resolutions are cleared
+and attribution uses the existing `<dynamic-cwd>` marker. A success-path parse
+location therefore cannot leak into an exact failure continuation. Decoded
+child-host leaves retain their inherited invocation-cwd attribution for this
+projection even though child exit state remains isolated.
+
+Correcting a v0.2 compatibility `Redirect` does not by itself mark the v0.3
+occurrence complete. Occurrence-level redirect value completeness remains
+governed by the explicit redirect analysis contract below.
 
 ### Explicit redirect analysis (v0.3)
 

@@ -145,10 +145,32 @@
     live PowerShell 7.x oracle guards the fresh-host inventory. Decoded
     child hosts, current-runspace wrappers, redirect values, same-name nested
     overwrites, and post-loop state remain conservative for tasks 7.4-7.6.
-- [ ] 7.4 Propagate PowerShell scope and location state according to the locked statement semantics.
+- [x] 7.4 Propagate PowerShell scope and location state according to the locked statement semantics.
+  - The PowerShell-specific abstract-state pass now owns case-insensitive
+    persistent bindings, ordered/empty/zero-or-more execution, occurrence joins,
+    failure-aware `Set-Location`, current-runspace `$()` propagation, child-host
+    isolation, target-aware fail-closed provider mutation, and the shared
+    4096-transition budget. Common and PowerShell 7 command-specific
+    variable-writing parameters, accepted abbreviations and inline values, and
+    opaque splats invalidate later observing proofs; pipeline writers fail
+    atomically until pipeline state propagation is modeled, and specialized
+    `Set-Location` success/failure transfers compose rather than bypass those
+    writer effects. Alternate
+    PowerShell parameter dashes and unsupported module-qualified cmdlets fail
+    structured parses atomically. Computed `Invoke-Expression` payloads poison
+    later current-runspace binding, command-resolution, and cwd facts, and fail
+    atomically when their loop transfer cannot be modeled. Loop parser attribution is
+    cloned so unreachable bodies do not leak and possibly reached location
+    mutation cannot retain a false exact compatibility cwd. Outcome projection
+    rebases exact failure continuations, including decoded child hosts, and
+    sanitizes unknown joins. Broader wrapper,
+    pipeline, alias/cmdlet/native, redirect, and adversarial matrices remain in
+    tasks 7.5-7.7.
 - [ ] 7.5 Cover aliases, cmdlets, native commands, nested loops, pipelines, script blocks, and wrapper boundaries.
 - [ ] 7.6 Add adversarial cases for object-valued iterables, mutation, dynamic invocation, splatting, and cap overflow.
 - [ ] 7.7 Add PowerShell corpus entries, live `pwsh` oracle coverage, and Netclaw integration cases.
+  - Add case-specific `PwshInitialStateMode` support to `PwshCorpusTool` before
+    folding isolated-state entries 362+ into its generated manifest.
 
 ## 8. Proven Shared Analysis Extraction
 

@@ -159,7 +159,6 @@ public class PwshForEachStructuralTests
     }
 
     [Theory]
-    [InlineData("foreach ($x in 1) { Set-Location C:\\other }")]
     [InlineData("foreach ($x in 1) { Push-Location C:\\other }")]
     [InlineData("foreach ($x in 1) { Pop-Location }")]
     [InlineData("foreach ($x in 1) { Set-Variable x 2 }")]
@@ -389,7 +388,7 @@ public class PwshForEachStructuralTests
     }
 
     [Fact]
-    public void Same_name_nested_binding_does_not_restore_outer_parser_frame()
+    public void Same_name_nested_binding_persists_the_inner_assignment()
     {
         var result = ParseIsolated(
             "foreach ($f in 'outer') { foreach ($F in 'inner') " +
@@ -397,10 +396,630 @@ public class PwshForEachStructuralTests
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.Equal(2, result.Commands.Count);
-        Assert.All(result.Commands, command => Assert.False(command.IsComplete));
-        Assert.All(result.Commands, command => Assert.Equal(
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+        Assert.All(result.Commands, command => AssertDomain(
+            Assert.Single(command.EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "inner"));
+    }
+
+    [Fact]
+    public void Ordered_visits_leave_the_last_binding_visible_after_foreach()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in @('a','b','a')) { Write-Output $f }; Write-Output $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        AssertDomain(
+            Assert.Single(result.Commands[0].EffectiveArguments).Value,
+            ShellValueDomainKind.FiniteSet,
+            "a",
+            "b");
+        AssertDomain(
+            Assert.Single(result.Commands[1].EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "a");
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+        Assert.All(result.Commands, command => AssertDomain(
+            command.WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "C:/work"));
+    }
+
+    [Fact]
+    public void Empty_foreach_preserves_cwd_and_does_not_invent_a_binding()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in @()) { Set-Location C:\\other }; Write-Output $f; Get-Date");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(3, result.Commands.Count);
+        Assert.False(result.Commands[0].IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[0].WorkingDirectory.Kind);
+        Assert.False(result.Commands[1].IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(result.Commands[1].EffectiveArguments).Value.Kind);
+        Assert.True(result.Commands[2].IsComplete);
+        AssertDomain(
+            result.Commands[2].WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "C:/work");
+        Assert.DoesNotContain(
+            result.Clauses[2].Args,
+            argument => argument.IsCwdAttribution);
+    }
+
+    [Fact]
+    public void Set_location_success_partition_flows_through_and_if_inside_foreach()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'C:\\target') { Set-Location $f && Get-Item child.txt }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        AssertDomain(
+            result.Commands[0].WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "C:/work");
+        AssertDomain(
+            result.Commands[1].WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "C:/target");
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void Set_location_failure_path_makes_post_loop_cwd_unknown()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'C:\\target') { Set-Location $f }; Get-Item child.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+        Assert.Contains(
+            result.Clauses[1].Args,
+            argument => argument.IsCwdAttribution &&
+                argument.Kind == ArgKind.DynamicSkip);
+        Assert.DoesNotContain(
+            result.Clauses[1].Args,
+            argument => argument.Raw == "child.txt" && argument.Resolved is not null);
+    }
+
+    [Fact]
+    public void Set_location_sequence_sanitizes_false_exact_loop_body_compatibility_path()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'x') { Set-Location C:\\target; Get-Item child.txt }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+        var clause = result.Clauses[1];
+        Assert.Same(clause, result.Commands[1].Clause);
+        Assert.Contains(
+            clause.Args,
+            argument => argument.Raw == "child.txt" && argument.Resolved is null);
+        Assert.Contains(
+            clause.Elements,
+            element => element.Value == "child.txt" && element.Resolved is null);
+        Assert.Contains(
+            clause.Args,
+            argument => argument.IsCwdAttribution &&
+                argument.Kind == ArgKind.DynamicSkip &&
+                argument.Raw == "<dynamic-cwd>");
+    }
+
+    [Fact]
+    public void Unknown_cwd_does_not_clear_an_absolute_compatibility_path()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'x') { Set-Location C:\\target; Get-Item C:\\fixed.txt }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+        Assert.Contains(
+            result.Clauses[1].Args,
+            argument => argument.Raw == "C:\\fixed.txt" &&
+                argument.Resolved == "C:/fixed.txt");
+    }
+
+    [Fact]
+    public void Fixed_point_repeated_value_retains_exact_post_loop_binding()
+    {
+        var values = string.Join(",", Enumerable.Repeat("'same'", 33));
+        var result = ParseIsolated(
+            $"foreach ($f in @({values})) {{ Write-Output $f }}; Write-Output $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => AssertDomain(
+            Assert.Single(command.EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "same"));
+    }
+
+    [Fact]
+    public void Runtime_iterator_uses_zero_or_more_post_loop_binding_state()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in Get-ChildItem C:\\input) { Write-Output $f }; Write-Output $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(3, result.Commands.Count);
+        Assert.All(result.Commands.Skip(1), command => Assert.Equal(
             ShellValueDomainKind.Unknown,
             Assert.Single(command.EffectiveArguments).Value.Kind));
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void Prior_variable_mutation_invalidates_later_binding_proof()
+    {
+        var result = ParseIsolated(
+            "Set-Variable f seeded; foreach ($f in 'value') { Write-Output $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.False(result.Commands[1].IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(result.Commands[1].EffectiveArguments).Value.Kind);
+        AssertDomain(
+            result.Commands[1].WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "C:/work");
+    }
+
+    [Theory]
+    [InlineData("-OutVariable f")]
+    [InlineData("-ov f")]
+    [InlineData("-ov:f")]
+    [InlineData("-ov +f")]
+    [InlineData("-OutV f")]
+    [InlineData("-PipelineVariable f")]
+    [InlineData("-pv f")]
+    [InlineData("-Pi f")]
+    [InlineData("-ErrorVariable f")]
+    [InlineData("-ev f")]
+    [InlineData("-ErrorV f")]
+    [InlineData("-WarningVariable f")]
+    [InlineData("-wv f")]
+    [InlineData("-WarningV f")]
+    [InlineData("-InformationVariable f")]
+    [InlineData("-iv f")]
+    [InlineData("-InformationV f")]
+    public void Common_variable_writer_invalidates_a_proved_binding(
+        string parameter)
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            $"Write-Output C:/sensitive.txt {parameter}; Remove-Item $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Set_location_error_variable_invalidates_failure_continuation()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            "Set-Location Z:/missing -ErrorVariable f || Write-Output $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        AssertDomain(
+            command.WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "C:/work");
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Set_location_out_variable_invalidates_success_continuation()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            "Set-Location C:\\target -OutVariable f && Write-Output $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Theory]
+    [InlineData('\u2013')]
+    [InlineData('\u2014')]
+    [InlineData('\u2015')]
+    public void Alternate_parameter_dash_fails_state_analysis_atomically(char dash)
+    {
+        var writer = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            $"Write-Output C:/sensitive.txt {dash}OutVariable f; Remove-Item $f");
+        var location = ParseIsolated(
+            $"Set-Location {dash}Path C:/target; Get-Item child.txt");
+        var provider = ParseIsolated(
+            $"Set-Item {dash}Path Alias:git {dash}Value Remove-Item; git child.txt");
+
+        Assert.All(new[] { writer, location, provider }, result =>
+        {
+            Assert.True(result.IsUnparseable);
+            Assert.Empty(result.Commands);
+            Assert.Empty(result.Clauses);
+            Assert.Contains($"U+{(int)dash:X4}", result.UnparseableReason);
+        });
+    }
+
+    [Theory]
+    [InlineData("Microsoft.PowerShell.Utility\\Tee-Object -Variable f -InputObject C:/sensitive.txt")]
+    [InlineData("Write-Output C:/sensitive.txt | Microsoft.PowerShell.Utility\\Tee-Object -Variable f")]
+    [InlineData("& 'Microsoft.PowerShell.Utility\\Tee-Object' -Variable f -InputObject C:/sensitive.txt")]
+    [InlineData("Microsoft.PowerShell.Utility\\Set-Variable f C:/sensitive.txt")]
+    [InlineData("Microsoft.PowerShell.Management\\Set-Location C:/sensitive")]
+    public void Unsupported_module_qualified_mutation_fails_structured_parse_atomically(
+        string mutation)
+    {
+        var result = ParseIsolated(
+            $"foreach ($f in 'safe.txt') {{ }}; {mutation}; Remove-Item $f");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("module-qualified cmdlet", result.UnparseableReason);
+    }
+
+    [Theory]
+    [InlineData("Tee-Object -Variable f -InputObject C:/sensitive.txt")]
+    [InlineData("Tee-Object -Vari f -InputObject C:/sensitive.txt")]
+    [InlineData("Tee-Object -Va f -InputObject C:/sensitive.txt")]
+    [InlineData("Tee-Object -V f -InputObject C:/sensitive.txt")]
+    [InlineData("tee -Variable:f -InputObject C:/sensitive.txt")]
+    [InlineData("Import-LocalizedData -BindingVariable f")]
+    [InlineData("Import-LocalizedData -Bind f")]
+    [InlineData("Import-LocalizedData -Bi f")]
+    [InlineData("Import-LocalizedData -Variable f")]
+    [InlineData("Import-LocalizedData -Vari f")]
+    [InlineData("Import-LocalizedData -V f")]
+    [InlineData("Invoke-RestMethod -Uri https://example.invalid -SessionVariable f")]
+    [InlineData("Invoke-RestMethod -Uri https://example.invalid -SV f")]
+    [InlineData("Invoke-RestMethod -Uri https://example.invalid -Se f")]
+    [InlineData("irm -Uri https://example.invalid -SV:f")]
+    [InlineData("Invoke-RestMethod -Uri https://example.invalid -ResponseHeadersVariable f")]
+    [InlineData("Invoke-RestMethod -Uri https://example.invalid -RHV f")]
+    [InlineData("Invoke-RestMethod -Uri https://example.invalid -Resp f")]
+    [InlineData("Invoke-RestMethod -Uri https://example.invalid -StatusCodeVariable f")]
+    [InlineData("Invoke-RestMethod -Uri https://example.invalid -St f")]
+    [InlineData("Invoke-WebRequest -Uri https://example.invalid -SessionVariable f")]
+    [InlineData("Invoke-WebRequest -Uri https://example.invalid -SV f")]
+    [InlineData("Invoke-WebRequest -Uri https://example.invalid -Se f")]
+    [InlineData("iwr -Uri https://example.invalid -SV:f")]
+    public void Command_specific_variable_writer_invalidates_a_proved_binding(
+        string mutation)
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            $"{mutation}; Remove-Item $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Splat_may_supply_a_variable_writer_and_invalidates_a_proved_binding()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            "Write-Output C:/sensitive.txt @params; Remove-Item $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("Write-Output C:/sensitive.txt -OutBuffer 1")]
+    [InlineData("Tee-Object -Verbose -InputObject C:/sensitive.txt")]
+    [InlineData("Import-LocalizedData -BaseDirectory C:/safe")]
+    public void Nonwriting_parameter_does_not_invalidate_a_proved_binding(
+        string commandText)
+    {
+        var result = ParseIsolated(
+            $"foreach ($f in 'safe.txt') {{ }}; {commandText}; Remove-Item $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.True(command.IsComplete);
+        AssertDomain(
+            Assert.Single(command.EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "safe.txt");
+    }
+
+    [Fact]
+    public void Pipeline_variable_writer_fails_the_pipeline_atomically()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            "Write-Output C:/sensitive.txt -PipelineVariable f | Remove-Item $f");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
+    public void Variable_writer_in_current_runspace_substitution_propagates()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            "Write-Output $(Write-Output C:/sensitive.txt -OutVariable f); " +
+            "Remove-Item $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Variable_writer_in_decoded_child_does_not_escape()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            "pwsh -Command 'Write-Output C:/sensitive.txt -OutVariable f'; " +
+            "Remove-Item $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.True(command.IsComplete);
+        AssertDomain(
+            Assert.Single(command.EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "safe.txt");
+    }
+
+    [Theory]
+    [InlineData("Set-Item Alias:foo Remove-Item")]
+    [InlineData("Set-Item 'Alias:\\foo' Remove-Item")]
+    [InlineData("si 'Function:\\foo' { Remove-Item $args }")]
+    [InlineData("Set-Item 'Variable:\\f' seeded")]
+    [InlineData("Set-Item Variable:f seeded")]
+    [InlineData("Set-Item Env:PATH C:\\tools")]
+    [InlineData("Set-Item -Path:Alias:\\foo -Value:Remove-Item")]
+    [InlineData("Set-Item -LiteralPath:Function:\\foo -Value:{ Remove-Item $args }")]
+    [InlineData("Set-Item -Path:Variable:\\f -Value:seeded")]
+    [InlineData("Set-Item -LiteralPath:Env:\\PATH -Value:C:\\tools")]
+    [InlineData("Set-Item -Path @('Alias:\\foo') -Value Remove-Item")]
+    [InlineData("Set-Item -Path $(Write-Output 'Alias:\\foo') -Value Remove-Item")]
+    [InlineData("Set-Item -Path $env:TARGET -Value Remove-Item")]
+    [InlineData("Set-Item -LP $env:TARGET -Value Remove-Item")]
+    [InlineData("Set-Item -LP:$env:TARGET -Value Remove-Item")]
+    [InlineData("Copy-Item -Path C:/safe -Destination @('Alias:\\foo')")]
+    public void Prior_provider_mutation_invalidates_later_binding_proof(string mutation)
+    {
+        var result = ParseIsolated(
+            $"{mutation}; foreach ($f in 'value') {{ foo $f }}");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("Set-Item -LiteralPath C:/safe/file.txt -Value $env:CONTENT")]
+    [InlineData("Set-Item C:/safe/file.txt $env:CONTENT")]
+    [InlineData("Set-Item -LiteralPath C:/safe/file.txt -Value Alias:foo")]
+    [InlineData("Set-Item -LiteralPath:C:/safe/file.txt -Value:Alias:\\foo")]
+    [InlineData("New-Item -Path C:/safe/link -ItemType SymbolicLink -Target $env:TARGET")]
+    [InlineData("New-Item -Path C:/safe/link -ItemType SymbolicLink -Target Alias:\\foo")]
+    [InlineData("New-Item -Path:C:/safe/link -ItemType:SymbolicLink -Target:$env:TARGET")]
+    public void Value_operand_does_not_invalidate_a_proved_filesystem_target(
+        string mutation)
+    {
+        var result = ParseIsolated(
+            $"{mutation}; foreach ($f in 'value') {{ Write-Output $f }}");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.True(result.Commands[1].IsComplete);
+        AssertDomain(
+            Assert.Single(result.Commands[1].EffectiveArguments).Value,
+            ShellValueDomainKind.Exact,
+            "value");
+    }
+
+    [Fact]
+    public void Finite_provider_target_invalidates_commands_after_mutating_visit()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in @('C:/safe','Alias:\\foo')) { " +
+            "Set-Item -LP $f -Value Remove-Item; foo $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(result.Commands[1].EffectiveArguments).Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("Set-Location Alias:; New-Item -Name foo -Value Remove-Item")]
+    [InlineData("Set-Location Function:; New-Item -Name foo -Value Remove-Item")]
+    [InlineData("Set-Location Alias:; Set-Item foo Remove-Item")]
+    [InlineData("Set-Location $env:TARGET; Set-Item foo Remove-Item")]
+    public void Unproved_or_nonfilesystem_location_success_invalidates_later_proofs(
+        string mutation)
+    {
+        var result = ParseIsolated(
+            $"{mutation}; foreach ($f in 'value') {{ foo $f }}");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("Set-Item Alias:git Remove-Item; git child.txt")]
+    [InlineData("Set-Location Alias:; New-Item -Name git -Value Remove-Item; git child.txt")]
+    [InlineData("Set-Location Function:; New-Item -Name git -Value Remove-Item; git child.txt")]
+    [InlineData("Import-PSSession $session -CommandName git -AllowClobber; git child.txt")]
+    [InlineData("Import-Alias aliases.csv -Force; git child.txt")]
+    [InlineData("New-Module -ScriptBlock $script; git child.txt")]
+    public void Observed_command_resolution_mutation_invalidates_plain_continuations(
+        string source)
+    {
+        var result = ParseIsolated(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.False(result.Commands.Last().IsComplete);
+    }
+
+    [Theory]
+    [InlineData("Import-PSSession $session -CommandName git -AllowClobber")]
+    [InlineData("Import-Alias aliases.csv -Force")]
+    [InlineData("New-Module -ScriptBlock $script")]
+    public void Command_resolution_mutation_propagates_through_current_runspace_substitution(
+        string mutation)
+    {
+        var result = ParseIsolated(
+            $"Write-Output $({mutation}); git child.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.False(result.Commands.Last().IsComplete);
+    }
+
+    [Theory]
+    [InlineData("Import-PSSession $session -CommandName git -AllowClobber")]
+    [InlineData("Import-Alias aliases.csv -Force")]
+    [InlineData("New-Module -ScriptBlock $script")]
+    public void Command_resolution_mutation_in_decoded_child_does_not_escape(
+        string mutation)
+    {
+        var result = ParseIsolated(
+            $"pwsh -Command '{mutation}'; git child.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.True(result.Commands.Last().IsComplete);
+    }
+
+    [Theory]
+    [InlineData("Invoke-Expression $code")]
+    [InlineData("iex -Command:$code")]
+    [InlineData("& 'iex' $code")]
+    [InlineData("Microsoft.PowerShell.Utility\\Invoke-Expression $code")]
+    public void Dynamic_invoke_expression_invalidates_current_runspace_state(
+        string invocation)
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { }; " +
+            $"{invocation}; git $f");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Dynamic_invoke_expression_inside_foreach_fails_atomically()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'safe.txt') { Invoke-Expression $code; git $f }");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("state mutation", result.UnparseableReason!);
+    }
+
+    [Fact]
+    public void Nonfilesystem_location_failure_partition_retains_incoming_state()
+    {
+        var result = ParseIsolated(
+            "Set-Location Alias: || Get-Item child.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands.Last();
+        Assert.True(command.IsComplete);
+        AssertDomain(command.WorkingDirectory, ShellValueDomainKind.Exact, "C:/work");
+        Assert.Contains(command.Clause.Args, argument =>
+            argument.Raw == "child.txt" &&
+            argument.Resolved == "C:/work/child.txt");
+    }
+
+    [Fact]
+    public void Prior_directory_stack_mutation_invalidates_binding_and_cwd_proofs()
+    {
+        var result = ParseIsolated(
+            "Push-Location C:\\other; foreach ($f in 'value') { Write-Output $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.False(result.Commands[1].IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(result.Commands[1].EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Pipeline_location_transfer_fails_atomically_until_pipeline_state_is_modeled()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in 'C:\\target') { Set-Location $f | Get-Location }");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
+    public void Nested_concrete_transition_budget_overflow_fails_atomically()
+    {
+        var a = LiteralArray("a", 17);
+        var b = LiteralArray("b", 17);
+        var c = LiteralArray("c", 15);
+        var result = ParseIsolated(
+            $"foreach ($a in {a}) {{ foreach ($b in {b}) {{ " +
+            $"foreach ($c in {c}) {{ Write-Output \"$a$b$c\" }} }} }}");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("exceeded limits", result.UnparseableReason!);
     }
 
     [Fact]
@@ -488,6 +1107,10 @@ public class PwshForEachStructuralTests
         Assert.Equal(kind, domain.Kind);
         Assert.Equal(values, domain.Values);
     }
+
+    private static string LiteralArray(string prefix, int count) =>
+        "@(" + string.Join(",", Enumerable.Range(1, count)
+            .Select(index => $"'{prefix}{index:00}'")) + ")";
 
     private static string CommandVerb(CommandOccurrence command) => command.Clause.Verb.Joined;
 

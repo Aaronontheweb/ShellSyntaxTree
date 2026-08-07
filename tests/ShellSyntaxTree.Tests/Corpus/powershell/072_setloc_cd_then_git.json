@@ -1,6 +1,6 @@
 {
   "name": "Setloc cd then git",
-  "input": "cd C:\\repo; git status",
+  "input": "cd C:\\repo \u0026\u0026 git status",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -21,7 +21,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "git",
           "status"

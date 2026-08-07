@@ -1,6 +1,6 @@
 {
   "name": "Iex inherits location",
-  "input": "Set-Location C:\\a; iex \u0027Remove-Item child.txt\u0027",
+  "input": "Set-Location C:\\a \u0026\u0026 iex \u0027Remove-Item child.txt\u0027",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -20,7 +20,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "Remove-Item"
         ],

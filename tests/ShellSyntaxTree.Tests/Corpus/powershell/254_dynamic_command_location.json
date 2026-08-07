@@ -1,6 +1,6 @@
 {
   "name": "Dynamic command location",
-  "input": "Set-Location C:\\safe; \u0026 \u0022i$part\u0022 $code; Get-Item child.txt",
+  "input": "Set-Location C:\\safe \u0026\u0026 \u0026 \u0022i$part\u0022 $code; Get-Item child.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -20,7 +20,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "i$part"
         ],

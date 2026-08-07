@@ -195,6 +195,18 @@ internal static class PwshLexer
             }
 
             // ---- parameter -Name ----
+            if (IsAlternateParameterDash(c) && IsParameterStart(src, i))
+            {
+                tokens.Add(new PwshToken(
+                    PwshTokenKind.UnparseableSentinel,
+                    src.Slice(i).ToString(),
+                    null,
+                    i,
+                    src.Length - i,
+                    $"PowerShell parameter dash U+{(int)c:X4} is not supported at position {i}"));
+                return tokens;
+            }
+
             if (c == '-' && IsParameterStart(src, i))
             {
                 i = ReadParameter(src, i, tokens);
@@ -1298,6 +1310,9 @@ internal static class PwshLexer
         var c = src[p];
         return IsAsciiLetter(c) || c == '_' || c == '?';
     }
+
+    private static bool IsAlternateParameterDash(char c) =>
+        c is '\u2013' or '\u2014' or '\u2015';
 
     private static int ReadParameter(
         ReadOnlySpan<char> src, int start, List<PwshToken> tokens)

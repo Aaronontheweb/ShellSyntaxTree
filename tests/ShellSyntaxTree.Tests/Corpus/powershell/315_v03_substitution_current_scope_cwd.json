@@ -1,6 +1,6 @@
 {
   "name": "V03 substitution current scope cwd",
-  "input": "Write-Output $(Set-Location C:\\sensitive; Get-Location); Get-Item child.txt",
+  "input": "Write-Output $(Set-Location C:\\sensitive \u0026\u0026 Get-Location); Get-Item child.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -20,7 +20,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "Get-Location"
         ],
@@ -42,15 +42,14 @@
         ],
         "args": [
           {
-            "raw": "$(Set-Location C:\\sensitive; Get-Location)",
+            "raw": "$(Set-Location C:\\sensitive \u0026\u0026 Get-Location)",
             "kind": "DynamicSkip",
             "isPath": false
           },
           {
-            "raw": "C:/sensitive",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/sensitive",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],
@@ -65,14 +64,12 @@
           {
             "raw": "child.txt",
             "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/sensitive/child.txt"
+            "isPath": true
           },
           {
-            "raw": "C:/sensitive",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/sensitive",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],
@@ -86,7 +83,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 75,
+        "sourceLength": 77,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -97,7 +94,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 75,
+        "sourceLength": 77,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -108,7 +105,7 @@
         "region": "Statement",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 55,
+        "sourceLength": 57,
         "clauseIndex": 2,
         "groupKind": null,
         "listOperator": "None"
@@ -119,7 +116,7 @@
         "region": "Substitution",
         "childIndex": 0,
         "sourceStart": 13,
-        "sourceLength": 42,
+        "sourceLength": 44,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -130,7 +127,7 @@
         "region": "Substitution",
         "childIndex": 0,
         "sourceStart": 15,
-        "sourceLength": 39,
+        "sourceLength": 41,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -141,7 +138,7 @@
         "region": "Statement",
         "childIndex": 0,
         "sourceStart": 15,
-        "sourceLength": 39,
+        "sourceLength": 41,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -162,18 +159,18 @@
         "parentIndex": 5,
         "region": "Statement",
         "childIndex": 1,
-        "sourceStart": 42,
+        "sourceStart": 44,
         "sourceLength": 12,
         "clauseIndex": 1,
         "groupKind": null,
-        "listOperator": "Sequence"
+        "listOperator": "AndIf"
       },
       {
         "kind": "SimpleCommand",
         "parentIndex": 1,
         "region": "Statement",
         "childIndex": 1,
-        "sourceStart": 57,
+        "sourceStart": 59,
         "sourceLength": 18,
         "clauseIndex": 3,
         "groupKind": null,
@@ -191,35 +188,35 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 75
+            "sourceLength": 77
           },
           {
             "ancestorKind": "CommandList",
             "region": "Statement",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 75
+            "sourceLength": 77
           },
           {
             "ancestorKind": "CommandSubstitution",
             "region": "Substitution",
             "childIndex": 0,
             "sourceStart": 13,
-            "sourceLength": 42
+            "sourceLength": 44
           },
           {
             "ancestorKind": "Block",
             "region": "Statement",
             "childIndex": 0,
             "sourceStart": 15,
-            "sourceLength": 39
+            "sourceLength": 41
           },
           {
             "ancestorKind": "CommandList",
             "region": "Statement",
             "childIndex": 0,
             "sourceStart": 15,
-            "sourceLength": 39
+            "sourceLength": 41
           }
         ]
       },
@@ -233,35 +230,35 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 75
+            "sourceLength": 77
           },
           {
             "ancestorKind": "CommandList",
             "region": "Statement",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 75
+            "sourceLength": 77
           },
           {
             "ancestorKind": "CommandSubstitution",
             "region": "Substitution",
             "childIndex": 0,
             "sourceStart": 13,
-            "sourceLength": 42
+            "sourceLength": 44
           },
           {
             "ancestorKind": "Block",
             "region": "Statement",
             "childIndex": 0,
             "sourceStart": 15,
-            "sourceLength": 39
+            "sourceLength": 41
           },
           {
             "ancestorKind": "CommandList",
             "region": "Statement",
             "childIndex": 1,
             "sourceStart": 15,
-            "sourceLength": 39
+            "sourceLength": 41
           }
         ]
       },
@@ -275,14 +272,14 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 75
+            "sourceLength": 77
           },
           {
             "ancestorKind": "CommandList",
             "region": "Statement",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 75
+            "sourceLength": 77
           }
         ]
       },
@@ -296,18 +293,18 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 75
+            "sourceLength": 77
           },
           {
             "ancestorKind": "CommandList",
             "region": "Statement",
             "childIndex": 1,
             "sourceStart": 0,
-            "sourceLength": 75
+            "sourceLength": 77
           }
         ]
       }
     ]
   },
-  "notes": "Subexpression location changes affect its consumer and following current-scope commands."
+  "notes": "A subexpression success continuation sees the target while its failure-aware outer join stays unknown."
 }

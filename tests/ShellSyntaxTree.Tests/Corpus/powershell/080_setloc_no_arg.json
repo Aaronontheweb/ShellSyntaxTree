@@ -1,6 +1,6 @@
 {
   "name": "Setloc no arg",
-  "input": "Set-Location; gci",
+  "input": "Set-Location \u0026\u0026 gci",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -13,7 +13,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "gci"
         ],

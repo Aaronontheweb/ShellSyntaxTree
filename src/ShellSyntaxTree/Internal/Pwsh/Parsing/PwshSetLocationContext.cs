@@ -44,4 +44,19 @@ internal sealed class PwshSetLocationContext
         ResolvedCwd = null;
         IsDynamic = true;
     }
+
+    internal PwshSetLocationContext Clone()
+    {
+        var clone = new PwshSetLocationContext();
+        if (IsDynamic)
+        {
+            clone.SetDynamic();
+        }
+        else if (ResolvedCwd is not null)
+        {
+            clone.SetLiteral(ResolvedCwd);
+        }
+
+        return clone;
+    }
 }

@@ -256,8 +256,10 @@ priorities.
       roles, ancestry, completeness, nullable decoded spans, compatibility
       operators, and exact shared `Clause` identity. The strict DTO rejects
       unknown fields and always requires unparseable projections to be empty.
-      The PowerShell manifest now owns all 361 entries and round-trips exactly;
-      explicit false/null assertions remain opt-in and generator-preserved.
+      The PowerShell manifest owns the first 361 entries and round-trips them
+      exactly; isolated-state v0.3 entries 362-372 remain explicitly curated
+      until the generator accepts a case-specific initial-state mode. Explicit
+      false/null assertions remain opt-in and generator-preserved.
 - [x] Deliver the first Bash `$()` substitution slice for supported
       simple-command arguments and redirect targets. Direct tests and corpus
       entries pin multiple and nested ordering, exact ancestry/spans, isolated
@@ -303,7 +305,7 @@ priorities.
       transfers, and occurrence-specific redirect values remain fail closed.
       Next add the Netclaw approval matrix before calling the Bash consumer
       integration complete.
-- [ ] Complete PowerShell `foreach` value and state analysis and add the
+- [ ] Complete PowerShell `foreach` integration and add the
       Netclaw approval-matrix cases. The structural slice now preserves literal
       scalar/array and executable iterator forms, recursively parses bodies,
       projects iterator and loop-body ancestry, survives decoded wrappers, and
@@ -326,15 +328,29 @@ priorities.
       guards a pinned documented preference inventory plus fresh-host built-ins
       with a live PowerShell oracle, composes case-insensitive distinct nested
       bindings, and leaves pipeline
-      objects, null, overflow, wrappers, redirects, same-name overwrites, and
-      post-loop state conservative. Task 7.4 must add ordered persistent scope
-      and location transfers without restoring parser-frame bindings. Expand the
-      design corpus for cardinality, mutation, separators, wrappers, redirects,
-      and transition caps before tasks 7.4-7.7. The simple-command slice is
+      objects, null, overflow, wrappers, and redirects conservative. The
+      PowerShell-specific state pass now owns ordered persistent bindings,
+      same-name overwrites, empty and zero-or-more execution, occurrence joins,
+      failure-aware `Set-Location`, current-runspace subexpressions, child-host
+      isolation, and the shared 4096-transition budget. Parser-frame location
+      attribution is cloned so empty bodies do not leak and possibly reached
+      mutations cannot leave a false exact cwd; outcome projection rebases exact
+      failure continuations and sanitizes unknown joins. The mutation inventory
+      inspects both verbs and parameter binding: common variable writers,
+      PowerShell 7 command-specific writers, accepted abbreviations and inline
+      values, and opaque splats invalidate later observing proofs, including
+      both outcome partitions of specialized `Set-Location` analysis. Alternate
+      binder dashes and unsupported module-qualified cmdlets now fail closed
+      consistently inside structural regions. Computed `Invoke-Expression`
+      invalidates later current-runspace binding, command-resolution, and cwd
+      proofs and fails atomically as an unmodeled loop transfer. Expand the design corpus for
+      aliases, cmdlets/native commands, pipelines, wrappers, redirects, and the
+      remaining adversarial/oracle matrix before tasks 7.5-7.7. The
+      simple-command slice is
       delivered for ordinary, adjacent, quoted, here-string, redirect, standalone,
       call-operator, dynamic-identity, and host-wrapper positions, with
       current-scope state propagation and bounded expression rejection pinned
-      by the 361-entry executable corpus.
+      by the 372-entry executable corpus.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.

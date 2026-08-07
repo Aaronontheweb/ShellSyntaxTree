@@ -1,6 +1,6 @@
 {
   "name": "Setloc relative after literal",
-  "input": "cd C:\\repo; cd sub; gci",
+  "input": "cd C:\\repo \u0026\u0026 cd sub \u0026\u0026 gci",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -21,7 +21,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "cd"
         ],
@@ -44,7 +44,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "gci"
         ],

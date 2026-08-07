@@ -226,7 +226,7 @@
       {
         "clauseIndex": 1,
         "immediateRole": "Substitution",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -268,7 +268,7 @@
       {
         "clauseIndex": 2,
         "immediateRole": "Ordinary",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -289,7 +289,7 @@
       {
         "clauseIndex": 3,
         "immediateRole": "Ordinary",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
