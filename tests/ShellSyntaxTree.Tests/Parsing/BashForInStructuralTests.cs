@@ -752,6 +752,51 @@ public class BashForInStructuralTests
                 frame.Region == CommandAncestryRegion.LoopBody);
     }
 
+    [Fact]
+    public void Newline_separators_and_redirects_compose_inside_a_multiline_loop_body()
+    {
+        const string source = """
+            for f in a b
+            do
+            printf '%s\n' "$f" > out.txt
+            echo done
+            done
+            """;
+
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(new[] { CompoundOperator.None, CompoundOperator.Sequence },
+            result.Clauses.Select(clause => clause.Operator));
+        var redirect = Assert.Single(result.Clauses[0].Redirects);
+        Assert.Equal(RedirectDirection.Out, redirect.Direction);
+        Assert.Equal("/work/out.txt", redirect.Target);
+        Assert.False(redirect.IsDynamicSkip);
+        Assert.False(result.Commands[0].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
+        Assert.All(result.Commands, command =>
+            Assert.Equal(CommandOccurrenceRole.LoopBody, command.ImmediateRole));
+        AssertDomain(
+            Assert.Single(result.Commands[0].EffectiveArguments).Value,
+            ShellValueDomainKind.FiniteSet,
+            "a",
+            "b");
+    }
+
+    [Fact]
+    public void Loop_binding_in_redirect_target_stays_policy_sensitive()
+    {
+        var result = Parse(
+            "for f in a b; do printf '%s' \"$f\" > \"$f.out\"; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        var redirect = Assert.Single(command.Clause.Redirects);
+        Assert.Equal("\"$f.out\"", redirect.Target);
+        Assert.True(redirect.IsDynamicSkip);
+        Assert.False(command.IsComplete);
+    }
+
     [Theory]
     [InlineData("for f in a; do unset f; done")]
     [InlineData("for f in a; do read f; done")]
@@ -824,6 +869,19 @@ public class BashForInStructuralTests
         Assert.True(result.IsUnparseable);
         Assert.Empty(result.Commands);
         Assert.Empty(result.Clauses);
+    }
+
+    [Theory]
+    [InlineData("for f in name; do echo \"${!f}\"; done")]
+    [InlineData("for f in value; do echo \"${f:-fallback}\"; done")]
+    public void Complex_parameter_expansion_in_loop_body_fails_atomically(string source)
+    {
+        var result = Parse(source);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("complex parameter expansion", result.UnparseableReason!);
     }
 
     [Fact]

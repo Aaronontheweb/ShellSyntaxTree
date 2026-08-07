@@ -105,8 +105,14 @@
     physical-path sanitation, and persistent post-loop binding protection are
     implemented. It still rejects every unmodeled shell-state mutation,
     control transfer, nested active-binding reuse, and dynamic dispatch.
-- [ ] 6.6 Cover empty iterables, separators, multiline bodies, redirects, pipelines, nested loops, and wrapper boundaries.
-- [ ] 6.7 Add adversarial cases for option injection, mutation, unquoted expansion, indirect expansion, substitutions, and cap overflow.
+- [x] 6.6 Cover empty iterables, separators, multiline bodies, redirects, pipelines, nested loops, and wrapper boundaries.
+  - Direct tests, executable corpus, and native Bash oracles cover each
+    interaction. Redirect-bearing occurrences remain incomplete until the
+    separately tracked explicit redirect-analysis slice lands.
+- [x] 6.7 Add adversarial cases for option injection, mutation, unquoted expansion, indirect expansion, substitutions, and cap overflow.
+  - The executable corpus includes indirect and parameter-operator rejection,
+    loop-body substitution, and atomic transition-budget overflow; native
+    oracles pin the shell semantics behind the conservative boundaries.
 - [ ] 6.8 Add sanitized Bash corpus entries and Netclaw allow/prompt/deny integration cases.
 
 ## 7. PowerShell Foreach Vertical Slice

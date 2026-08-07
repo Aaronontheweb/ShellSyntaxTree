@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash nested for-in transition budget overflow",
+  "input": "for a in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32; do for b in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32; do for c in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32; do :; done; done; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "Bash structural syntax exceeded limits or contained invalid parser-owned facts"
+  },
+  "notes": "The concrete nested iteration product exceeds the 4096-transition analysis budget, so the result fails atomically with no partial projections."
+}

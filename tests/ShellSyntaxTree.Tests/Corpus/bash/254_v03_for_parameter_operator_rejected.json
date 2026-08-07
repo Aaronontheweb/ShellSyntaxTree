@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in parameter operator rejected",
+  "input": "for f in value; do echo \"${f:-fallback}\"; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "complex parameter expansion is not supported in v0.3"
+  },
+  "notes": "Ordinary parameter operators remain outside the bounded value grammar and fail atomically even when their apparent fallback text is static."
+}

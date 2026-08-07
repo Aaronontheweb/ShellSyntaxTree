@@ -1,0 +1,67 @@
+{
+  "name": "v0.3 Bash for-in body substitution inherits binding",
+  "input": "for f in a b; do printf '%s' \"$(echo \"$f\")\"; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "\"$f\"", "kind": "EnvVar", "isPath": false, "resolved": "__NULL__", "isFlag": false }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": ["printf"],
+        "args": [
+          { "raw": "'%s'", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": false },
+          { "raw": "\"$(echo \"$f\")\"", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false }
+        ],
+        "redirects": []
+      }
+    ],
+    "syntax": [
+      { "kind": "Block", "parentIndex": null, "region": "Unknown", "childIndex": null, "sourceStart": 0, "sourceLength": 49, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "ForEach", "parentIndex": 0, "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 49, "clauseIndex": null, "groupKind": null, "listOperator": null, "bindingName": "f", "bindingRaw": "f", "bindingSourceStart": 4, "bindingSourceLength": 1, "iterableRaw": "a b", "iterableSourceStart": 9, "iterableSourceLength": 3 },
+      { "kind": "Block", "parentIndex": 1, "region": "Iterator", "childIndex": null, "sourceStart": 9, "sourceLength": 3, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "Block", "parentIndex": 1, "region": "LoopBody", "childIndex": null, "sourceStart": 16, "sourceLength": 29, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "SimpleCommand", "parentIndex": 3, "region": "Statement", "childIndex": 0, "sourceStart": 17, "sourceLength": 26, "clauseIndex": 1, "groupKind": null, "listOperator": null },
+      { "kind": "CommandSubstitution", "parentIndex": 4, "region": "Substitution", "childIndex": 0, "sourceStart": 30, "sourceLength": 12, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "Block", "parentIndex": 5, "region": "Substitution", "childIndex": 0, "sourceStart": 32, "sourceLength": 9, "clauseIndex": null, "groupKind": null, "listOperator": null },
+      { "kind": "SimpleCommand", "parentIndex": 6, "region": "Statement", "childIndex": 0, "sourceStart": 32, "sourceLength": 9, "clauseIndex": 0, "groupKind": null, "listOperator": null }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 49 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 49 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 16, "sourceLength": 29 },
+          { "ancestorKind": "CommandSubstitution", "region": "Substitution", "childIndex": 0, "sourceStart": 30, "sourceLength": 12 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 32, "sourceLength": 9 }
+        ],
+        "effectiveArguments": [
+          { "clauseElementIndex": 1, "value": { "kind": "FiniteSet", "values": ["a", "b"], "pattern": null, "coveringDirectory": null } }
+        ],
+        "workingDirectory": { "kind": "Exact", "values": ["/work"], "pattern": null, "coveringDirectory": null }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 49 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 49 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 16, "sourceLength": 29 }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": { "kind": "Exact", "values": ["/work"], "pattern": null, "coveringDirectory": null }
+      }
+    ]
+  },
+  "notes": "The substitution command is visible in authored order, inherits the finite loop binding, and leaves the outer produced argument policy-sensitive."
+}
