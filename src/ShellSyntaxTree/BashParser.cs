@@ -22,7 +22,7 @@ public sealed class BashParser : IShellParser
     /// <summary>
     /// Create a parser with the supplied options.
     /// </summary>
-    /// <param name="options">Resolver knobs (home / working directory).</param>
+    /// <param name="options">Resolver and initial-state analysis options.</param>
     public BashParser(BashParserOptions options)
     {
         if (options is null)

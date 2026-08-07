@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in rejects LINENO binding",
+  "input": "for LINENO in 7; do printf '%s' \"$LINENO\"; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "ordinary-scalar boundary"
+  },
+  "notes": "LINENO remains shell-computed and cannot inherit the authored iterable value."
+}

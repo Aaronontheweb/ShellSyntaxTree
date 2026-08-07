@@ -20,7 +20,7 @@ it SHALL NOT omit the marker and thereby remove a v0.2 consumer's fail-closed
 signal.
 
 #### Scenario: Old consumer sees loop body command
-- **WHEN** Bash fully parses `for f in a b; do rm "$f"; done`
+- **WHEN** isolated-mode Bash fully parses `for f in a b; do rm "$f"; done`
 - **THEN** the compatibility clauses include the authored `rm` command
 - **THEN** its authored variable argument remains conservatively dynamic rather than being silently replaced
 

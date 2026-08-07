@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in rejects PATH binding",
+  "input": "for PATH in /tmp/bin; do git status; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "ordinary-scalar boundary"
+  },
+  "notes": "PATH assignment changes executable identity and is outside bounded loop-variable analysis."
+}

@@ -82,6 +82,15 @@
     compatibility paths and retain `<dynamic-cwd>` after conservative joins.
   - [ ] 6.5c Carry ordered loop binding and cwd state through zero-or-more
     iterations, then remove the temporary loop-mutation rejection.
+    - [x] 6.5c.1 Correct the contract after adversarial review: require an
+      explicit isolated initial-state mode and supported scalar-name boundary;
+      make the analyzer own persistent bindings, parameterized ordered plans,
+      full argument provenance/effective-argv transfer, occurrence-fact joins,
+      and unreachable exit partitions.
+    - [ ] 6.5c.2 Implement that corrected contract and corpus-pin `HOME`,
+      `RANDOM`, `LINENO`, `PATH`, `CDPATH`, `IFS`, 32/33 ordered visits,
+      zero-iteration state, loop-derived `cd` options, nested correlation,
+      wrapped transfers, wrapper mapping, substitutions, and pipelines.
   - The first static-value slice deliberately leaves occurrence cwd Unknown
     and rejects loop shell-state mutation, nested active-binding reuse, or
     loops reached after recognized prior shell-state mutation. A separate

@@ -706,6 +706,76 @@ public class ShellValueOracleTests
     }
 
     [Fact]
+    public void Bash_home_loop_binding_changes_expansion_semantics()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "HOME=/home/original; for HOME in /tmp; do printf '<%s>\\n' \"$HOME/x\"; done");
+
+        Assert.Equal("</tmp/x>", output);
+    }
+
+    [Fact]
+    public void Bash_magic_loop_bindings_do_not_read_back_the_authored_value()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var random = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "for RANDOM in not-a-number; do printf '%s' \"$RANDOM\"; done");
+        var lineNumber = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "for LINENO in 7; do printf '%s' \"$LINENO\"; done");
+
+        Assert.NotEqual("not-a-number", random);
+        Assert.All(random, character => Assert.InRange(character, '0', '9'));
+        Assert.NotEqual("7", lineNumber);
+        Assert.True(int.TryParse(lineNumber, out var parsedLineNumber));
+        Assert.True(parsedLineNumber > 0);
+    }
+
+    [Fact]
+    public void Bash_identity_and_resolution_bindings_change_body_semantics()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "saved_path=$PATH; for PATH in /definitely/missing; do " +
+            "if command -v git >/dev/null; then printf found; else printf missing; fi; done; " +
+            "PATH=$saved_path; " +
+            "for IFS in :; do value=a:b; printf '<%s>\\n' $value; done; " +
+            "root=$(mktemp -d); mkdir -p \"$root/search/child\"; cd \"$root\"; " +
+            "for CDPATH in \"$root/search\"; do cd child >/dev/null && " +
+            "test \"$PWD\" = \"$root/search/child\" && printf cdpath; done");
+
+        Assert.Equal(new[] { "missing<a>", "<b>", "cdpath" }, Lines(output));
+    }
+
+    [Fact]
     public void Bash_globskipdots_can_expand_dot_prefixed_globs_to_parent_traversal()
     {
         if (!IsNativeBashAvailable())

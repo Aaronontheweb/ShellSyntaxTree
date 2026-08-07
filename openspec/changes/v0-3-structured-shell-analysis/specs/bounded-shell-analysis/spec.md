@@ -133,6 +133,41 @@ retain their existing meanings.
 - **THEN** a PSDrive remains unknown without a proved drive-to-provider mapping
 - **THEN** quoted syntax does not turn either target into native-style literal text
 
+### Requirement: Bash loop proofs require an explicit initial-state contract
+`BashParserOptions.InitialStateMode` SHALL default to `Unknown`. A Bash loop
+whose binding semantics depend on an unknown ambient shell SHALL fail closed
+rather than publishing an ordinary-scalar proof.
+
+`IsolatedNonInteractive` SHALL be an explicit caller assertion that the entire
+source runs in a newly spawned non-interactive Bash process, no profile or
+`BASH_ENV` / `ENV` startup content is loaded, and no inherited environment
+entry carries the bound name. The v0.3 bounded grammar SHALL accept only names
+matching `[a-z][a-z0-9_]*`, excluding `auto_resume` and `histchars`, under that
+mode. All other binding names SHALL make the complete loop region unparseable.
+Recognized source-level variable mutation SHALL invalidate isolated mode for
+later scopes that can observe it. A decoded Bash wrapper after `export` SHALL
+not inherit the original isolated assertion; cwd-only mutation SHALL not erase
+the independently proved variable-state mode.
+
+#### Scenario: Unknown ambient variable state fails closed
+- **WHEN** Bash parses `for f in a; do printf '%s' "$f"; done` with the default initial-state mode
+- **THEN** it does not assume that `f` is an ordinary writable scalar
+- **THEN** the complete result is unparseable
+
+#### Scenario: Isolated ordinary scalar is eligible
+- **WHEN** the caller selects `IsolatedNonInteractive` and parses `for f in a; do printf '%s' "$f"; done`
+- **THEN** the bounded loop analyzer may prove `f` exact
+
+#### Scenario: Magic and resolver-sensitive names fail closed
+- **WHEN** isolated-mode Bash parses a loop binding named `HOME`, `RANDOM`, `LINENO`, `PATH`, `CDPATH`, `IFS`, `_`, `auto_resume`, or `histchars`
+- **THEN** the complete loop region is unparseable
+- **THEN** no compatibility path or effective argument is published from an ordinary-scalar assumption
+
+#### Scenario: Outer export invalidates a decoded loop environment
+- **WHEN** isolated-mode Bash parses `export f=ambient; bash -c 'for f in a; do printf %s "$f"; done'`
+- **THEN** the decoded child enters with unknown initial variable state
+- **THEN** the complete result is unparseable rather than publishing an isolated scalar proof
+
 ### Requirement: Shell values use explicit proof domains
 The analysis SHALL classify a policy-relevant shell value as exact, finite,
 bounded symbolic pattern, or unknown, and SHALL NOT present a weaker proof as a
@@ -144,11 +179,11 @@ no values and SHALL contain a non-empty pattern and covering directory. The
 parser SHALL NOT emit any other member combination.
 
 #### Scenario: One literal value
-- **WHEN** a loop binds a variable from the single literal `a.txt`
+- **WHEN** an eligible isolated-mode loop binds a variable from the single literal `a.txt`
 - **THEN** the binding domain is exact with value `a.txt`
 
 #### Scenario: Finite literal values
-- **WHEN** Bash parses `for f in a.txt b.txt; do rm -- "$f"; done`
+- **WHEN** isolated-mode Bash parses `for f in a.txt b.txt; do rm -- "$f"; done`
 - **THEN** the binding domain is the finite set `a.txt`, `b.txt`
 
 #### Scenario: Runtime-produced values
@@ -162,12 +197,12 @@ domain of 32 candidates remains finite; a domain that would contain 33 or more
 becomes unknown rather than being truncated.
 
 #### Scenario: Glob is not enumerated
-- **WHEN** Bash parses `for f in /tmp/*.txt; do rm -- "$f"; done`
+- **WHEN** isolated-mode Bash parses `for f in /tmp/*.txt; do rm -- "$f"; done`
 - **THEN** the parser does not read `/tmp`
 - **THEN** it exposes a pattern with conservative covering directory `/tmp`
 
 #### Scenario: Dynamic glob root is unknown
-- **WHEN** Bash parses `for f in "$ROOT"/*.txt; do rm -- "$f"; done`
+- **WHEN** isolated-mode Bash parses `for f in "$ROOT"/*.txt; do rm -- "$f"; done`
 - **THEN** the dynamic root prevents a static covering-directory proof
 - **THEN** the iterable value is unknown
 
@@ -231,12 +266,12 @@ the shell's binding rules and interpret every native candidate through a
 complete executable-aware grammar before reusing authorization.
 
 #### Scenario: Finite value injects an rm option
-- **WHEN** Bash parses `for f in -rf /tmp/x; do rm "$f"; done`
+- **WHEN** isolated-mode Bash parses `for f in -rf /tmp/x; do rm "$f"; done`
 - **THEN** the finite domain preserves `-rf` and `/tmp/x`
 - **THEN** the parser does not claim that quoting makes `-rf` a non-option
 
 #### Scenario: Explicit option terminator
-- **WHEN** Bash parses `for f in -rf /tmp/x; do rm -- "$f"; done`
+- **WHEN** isolated-mode Bash parses `for f in -rf /tmp/x; do rm -- "$f"; done`
 - **THEN** the authored `--` remains visible before the effective candidate
 - **THEN** the consumer may account for it using rm semantics
 
@@ -273,14 +308,27 @@ Exact and finite Bash `for ... in` domains SHALL be analyzed in authored
 iteration order, including duplicates, within the candidate cap. The analyzer
 SHALL retain independent internal cardinality of `Never`, `OneOrMore`, or
 `ZeroOrMore`; the public finite-set summary SHALL NOT be used as an ordered
-iteration plan. Pattern, unknown, and over-budget domains SHALL use a bounded
+iteration plan. The cap SHALL count ordered concrete iterations, not distinct
+public values. Pattern, unknown, and over-budget domains SHALL use a bounded
 conservative fixed point and SHALL NOT be represented by one arbitrarily
-selected iteration. Every reachable visit to one authored occurrence SHALL
-join its input facts. A transfer such as `break`, `continue`, `return`, `exit`,
-or `exec`, including statically wrapped builtin forms, SHALL make the containing
-region unparseable until the analyzer implements that transfer explicitly.
-`eval`, `source` / `.`, and execution-bearing `trap` SHALL likewise fail closed
-unless all executable regions and transfers are discovered.
+selected iteration. An inner iterable SHALL be evaluated from each current
+outer binding rather than from a flattened public summary.
+
+The analyzer SHALL own loop-variable lifetime and SHALL re-evaluate every
+argument's complete shell-value provenance for each concrete visit. Effective
+argument facts at one authored occurrence SHALL join across reachable visits.
+State transfers such as `cd` SHALL parse the complete effective argv, including
+candidate-derived options and option terminators, rather than substituting only
+an operand. A transfer such as `break`, `continue`, `return`, `exit`, or `exec`,
+including recursively wrapped builtin forms, SHALL make the containing region
+unparseable until the analyzer implements that transfer explicitly. `eval`,
+`source` / `.`, execution-bearing `trap`, and mutation of tracked bindings
+SHALL likewise fail closed unless all executable regions and transfers are
+discovered.
+
+An unreachable success or failure partition SHALL remain unreachable. The
+analyzer SHALL NOT substitute a joined state for a missing `&&` or `||`
+partition merely to publish exact continuation facts.
 
 #### Scenario: Branch-dependent cwd
 - **WHEN** one branch changes cwd to `/a` and another changes cwd to `/b`
@@ -310,14 +358,35 @@ unless all executable regions and transfers are discovered.
 - **THEN** the post-loop state includes the pre-loop possibility
 
 #### Scenario: Proved empty loop does not mutate state
-- **WHEN** Bash parses `for f in; do cd /tmp; done; pwd`
+- **WHEN** isolated-mode Bash parses `for f in; do cd /tmp; done; pwd`
 - **THEN** the internal iteration cardinality is `Never`
 - **THEN** the following `pwd` retains the exact incoming cwd
 
 #### Scenario: Duplicate iteration values retain order
-- **WHEN** Bash parses `for f in a b a; do :; done; printf '%s' "$f"`
+- **WHEN** isolated-mode Bash parses `for f in a b a; do :; done; printf '%s' "$f"`
 - **THEN** the internal iteration plan retains `a`, `b`, `a` in that order
 - **THEN** the following use of `f` has exact effective value `a`
+
+#### Scenario: Ordered cap counts visits rather than distinct values
+- **WHEN** an isolated-mode Bash loop authors the same literal candidate 33 times
+- **THEN** the internal plan exceeds the concrete-iteration cap
+- **THEN** it uses bounded fixed-point analysis instead of treating one distinct public value as one visit
+
+#### Scenario: Loop-derived cd option is rebound from effective argv
+- **WHEN** isolated-mode Bash analyzes `for f in -P /tmp; do cd "$f"; done`
+- **THEN** the first visit treats `-P` as a `cd` option rather than a path operand
+- **THEN** the second visit treats `/tmp` as the operand under the resulting option grammar
+- **THEN** no state transfer reuses the authored `$f` flag classification
+
+#### Scenario: Empty-loop failure continuation is unreachable
+- **WHEN** isolated-mode Bash parses `for f in; do false; done || cat relative.txt`
+- **THEN** the empty loop has only a reachable success exit
+- **THEN** `cat` remains structurally visible but receives no fabricated exact cwd or binding facts from a failure fallback
+
+#### Scenario: Same-name loop binding is not lexical shadowing
+- **WHEN** a nested Bash loop reuses its active outer binding name
+- **THEN** v0.3 either implements the inner assignment as overwriting shell state or makes the whole region unparseable
+- **THEN** it never restores an outer value through parser-frame pop semantics
 
 #### Scenario: Isolated shell scope
 - **WHEN** a supported subshell or scope-isolated group changes cwd
@@ -341,7 +410,7 @@ unless all executable regions and transfers are discovered.
 - **THEN** the following outer `pwd` uses `/outer`
 
 #### Scenario: Decoded Bash wrapper does not inherit an unexported loop binding
-- **WHEN** Bash parses `for f in a; do bash -c 'printf "%s" "$f"'; done`
+- **WHEN** isolated-mode Bash parses `for f in a; do bash -c 'printf "%s" "$f"'; done`
 - **THEN** the decoded child receives no exact effective `f` from the outer loop binding
 - **THEN** a parenthesized subshell remains distinct because it inherits shell bindings while isolating exit state
 

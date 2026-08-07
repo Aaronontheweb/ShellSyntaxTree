@@ -12,6 +12,55 @@ namespace ShellSyntaxTree.Tests.Parsing;
 public class BashForInStructuralTests
 {
     [Fact]
+    public void Default_initial_state_fails_loop_binding_closed()
+    {
+        var result = new BashParser(new BashParserOptions
+        {
+            HomeDirectory = "/home/test",
+            WorkingDirectory = "/work",
+        }).Parse("for f in a; do printf '%s' \"$f\"; done");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("isolated non-interactive initial state", result.UnparseableReason!);
+    }
+
+    [Theory]
+    [InlineData("HOME")]
+    [InlineData("RANDOM")]
+    [InlineData("LINENO")]
+    [InlineData("PATH")]
+    [InlineData("CDPATH")]
+    [InlineData("IFS")]
+    [InlineData("_")]
+    [InlineData("auto_resume")]
+    [InlineData("histchars")]
+    [InlineData("MixedCase")]
+    [InlineData("_private")]
+    public void Nonordinary_loop_binding_names_fail_atomically(string binding)
+    {
+        var result = Parse($"for {binding} in value; do printf '%s' \"${binding}\"; done");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("ordinary-scalar boundary", result.UnparseableReason!);
+    }
+
+    [Theory]
+    [InlineData("f")]
+    [InlineData("file")]
+    [InlineData("file_2")]
+    [InlineData("for")]
+    public void Ordinary_scalar_binding_names_remain_eligible(string binding)
+    {
+        var result = Parse($"for {binding} in value; do printf '%s' \"${binding}\"; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+    }
+
+    [Fact]
     public void Literal_iterable_emits_one_body_occurrence_with_finite_effective_value()
     {
         const string source = "for f in a.txt b.txt; do rm -- \"$f\"; done";
@@ -399,6 +448,29 @@ public class BashForInStructuralTests
             "b");
     }
 
+    [Fact]
+    public void Decoded_loop_fails_after_outer_variable_state_mutation()
+    {
+        var result = Parse(
+            "export f=ambient; bash -c 'for f in a; do printf %s \"$f\"; done'");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("isolated non-interactive initial state", result.UnparseableReason!);
+    }
+
+    [Fact]
+    public void Decoded_nonloop_command_remains_visible_after_outer_export()
+    {
+        var result = Parse("export f=ambient; bash -c 'printf ok'");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(
+            new[] { "export", "printf" },
+            result.Commands.Select(command => command.Clause.Verb.Tokens[0]));
+    }
+
     private static ClauseElement EffectiveValueElement(
         ParsedCommand result,
         EffectiveArgument effective) =>
@@ -409,6 +481,7 @@ public class BashForInStructuralTests
         {
             HomeDirectory = "/home/test",
             WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
         }).Parse(input);
 
     private static string CommandVerb(CommandOccurrence command) => command.Clause.Verb.Joined;

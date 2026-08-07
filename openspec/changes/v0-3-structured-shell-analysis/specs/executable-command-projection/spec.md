@@ -11,7 +11,7 @@ of whether the command is top-level or nested.
 - **THEN** the collection does not predict which branch will run
 
 #### Scenario: Loop body occurrence is not multiplied
-- **WHEN** Bash parses `for f in a b c; do echo "$f"; done`
+- **WHEN** isolated-mode Bash parses `for f in a b c; do echo "$f"; done`
 - **THEN** the authored `echo` command appears once
 - **THEN** its possible effective values are represented by analysis facts rather than three duplicated occurrences
 
@@ -100,7 +100,7 @@ partial command and compatibility result.
 - **THEN** `Remove-Item` is identified as a loop-body occurrence
 
 #### Scenario: Pipeline stage nested in a loop body
-- **WHEN** Bash parses `for f in a b; do printf '%s\n' "$f" | sort; done`
+- **WHEN** isolated-mode Bash parses `for f in a b; do printf '%s\n' "$f" | sort; done`
 - **THEN** `printf` and `sort` have the immediate role pipeline stage
 - **THEN** their ancestry also identifies the enclosing loop body
 
@@ -110,7 +110,7 @@ iterator, substitution, or nested command in the occurrence collection even
 when the produced value is unknown.
 
 #### Scenario: Bash command substitution iterable
-- **WHEN** Bash supports and parses `for f in $(find /tmp -type f); do rm "$f"; done`
+- **WHEN** isolated-mode Bash supports and parses `for f in $(find /tmp -type f); do rm "$f"; done`
 - **THEN** both `find` and `rm` appear in the occurrence collection
 - **THEN** the value produced by `find` is not presented as exact or finite
 
@@ -153,7 +153,7 @@ structural collection. For an embedded simple-command value this is
 the iterator-command collection.
 
 #### Scenario: Iterator precedes body
-- **WHEN** Bash parses `for f in $(find .); do rm "$f"; done`
+- **WHEN** isolated-mode Bash parses `for f in $(find .); do rm "$f"; done`
 - **THEN** the `find` occurrence precedes the `rm` occurrence
 
 #### Scenario: Branches preserve authored order

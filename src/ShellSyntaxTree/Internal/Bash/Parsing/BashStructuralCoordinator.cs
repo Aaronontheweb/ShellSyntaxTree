@@ -115,6 +115,7 @@ internal static partial class BashCommandParser
         private int _subshellDepth;
         private int _loopDepth;
         private bool _hasUnmodeledShellStateMutation;
+        private bool _hasUnmodeledVariableStateMutation;
 
         internal StructuralCoordinator(
             string source,
@@ -126,7 +127,8 @@ internal static partial class BashCommandParser
             int sourceStart,
             int sourceLength,
             BashLoopBindingContext? bindings = null,
-            bool hasUnmodeledShellStateMutation = false)
+            bool hasUnmodeledShellStateMutation = false,
+            bool hasUnmodeledVariableStateMutation = false)
         {
             _source = source;
             _tokens = tokens;
@@ -138,6 +140,7 @@ internal static partial class BashCommandParser
             _sourceLength = sourceLength;
             _bindings = bindings ?? new BashLoopBindingContext();
             _hasUnmodeledShellStateMutation = hasUnmodeledShellStateMutation;
+            _hasUnmodeledVariableStateMutation = hasUnmodeledVariableStateMutation;
         }
 
         internal CommandOccurrenceFacts GetFacts(SimpleCommandSyntax simple) =>
@@ -422,9 +425,12 @@ internal static partial class BashCommandParser
                     return false;
                 }
 
+                var innerOptions = _hasUnmodeledVariableStateMutation
+                    ? _options with { InitialStateMode = BashInitialStateMode.Unknown }
+                    : _options;
                 var innerResult = ParseInternal(
                     innerCommand!,
-                    _options,
+                    innerOptions,
                     _bashCDepth + 1,
                     _structuralDepth + _subshellDepth + _loopDepth + 1,
                     markBashCWrapped: true);
@@ -478,6 +484,7 @@ internal static partial class BashCommandParser
                 {
                     HomeDirectory = _options.HomeDirectory,
                     WorkingDirectory = _attribution.ResolvedCwd,
+                    InitialStateMode = _options.InitialStateMode,
                 };
             }
             else if (_attribution.IsDynamic)
@@ -516,6 +523,8 @@ internal static partial class BashCommandParser
             }
 
             _hasUnmodeledShellStateMutation |= isPotentialStateMutation;
+            _hasUnmodeledVariableStateMutation |=
+                IsPotentialVariableStateMutation(emitted);
 
             if (!TryParseCommandSubstitutions(
                     substitutionFragments,
@@ -593,6 +602,18 @@ internal static partial class BashCommandParser
             }
 
             var bindingToken = _tokens[_position++];
+            if (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive)
+            {
+                error = "Bash for-in requires a proved isolated non-interactive initial state";
+                return false;
+            }
+
+            if (!IsSupportedScalarBinding(bindingToken.Value))
+            {
+                error = "Bash for-in binding is outside the supported ordinary-scalar boundary";
+                return false;
+            }
+
             if (_bindings.Contains(bindingToken.Value))
             {
                 error = "nested Bash for-in binding reuse requires state propagation";
@@ -768,6 +789,7 @@ internal static partial class BashCommandParser
 
             var open = _tokens[_position++];
             var outerMutationState = _hasUnmodeledShellStateMutation;
+            var outerVariableMutationState = _hasUnmodeledVariableStateMutation;
             _attribution.PushForSubshell();
             _subshellDepth++;
             var parsed = TryParseList(
@@ -779,6 +801,7 @@ internal static partial class BashCommandParser
             _subshellDepth--;
             _attribution.PopForSubshell();
             _hasUnmodeledShellStateMutation = outerMutationState;
+            _hasUnmodeledVariableStateMutation = outerVariableMutationState;
 
             if (!parsed)
             {
@@ -885,6 +908,7 @@ internal static partial class BashCommandParser
                 {
                     HomeDirectory = _options.HomeDirectory,
                     WorkingDirectory = _attribution.ResolvedCwd,
+                    InitialStateMode = _options.InitialStateMode,
                 }
                 : _options;
 
@@ -1153,7 +1177,8 @@ internal static partial class BashCommandParser
                 sourceStart,
                 sourceLength,
                 _bindings.Clone(),
-                _hasUnmodeledShellStateMutation);
+                _hasUnmodeledShellStateMutation,
+                _hasUnmodeledVariableStateMutation);
             if (!coordinator.TryParse(out body, out error))
             {
                 return false;
@@ -1356,6 +1381,17 @@ internal static partial class BashCommandParser
             return false;
         }
 
+        private static bool IsPotentialVariableStateMutation(Clause clause)
+        {
+            if (clause.Verb.Tokens.Count > 0 &&
+                clause.Verb.Tokens[0] is "cd" or "chdir" or "pushd" or "popd")
+            {
+                return false;
+            }
+
+            return IsPotentialBindingMutation(clause);
+        }
+
         private static bool IsBashIdentifier(string value)
         {
             if (value.Length == 0 || !IsBashIdentifierStart(value[0]))
@@ -1366,6 +1402,28 @@ internal static partial class BashCommandParser
             for (var index = 1; index < value.Length; index++)
             {
                 if (!IsBashIdentifierContinuation(value[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsSupportedScalarBinding(string value)
+        {
+            if (value.Length == 0 || value[0] < 'a' || value[0] > 'z' ||
+                value is "auto_resume" or "histchars")
+            {
+                return false;
+            }
+
+            for (var index = 1; index < value.Length; index++)
+            {
+                var character = value[index];
+                if ((character < 'a' || character > 'z') &&
+                    (character < '0' || character > '9') &&
+                    character != '_')
                 {
                     return false;
                 }
