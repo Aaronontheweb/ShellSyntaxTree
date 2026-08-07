@@ -400,6 +400,187 @@ internal static class PwshPersistentStateMutation
         return true;
     }
 
+    internal static bool MayEscapeChildScope(
+        Clause clause,
+        IReadOnlyList<EffectiveArgument> effectiveArguments)
+    {
+        var verb = clause.Verb.CanonicalVerb ??
+            (clause.Verb.Tokens.Count == 0 ? null : clause.Verb.Tokens[0]);
+        if (verb is null)
+        {
+            return true;
+        }
+
+        var hasLocalProviderTarget = false;
+        for (var elementIndex = 0; elementIndex < clause.Elements.Count; elementIndex++)
+        {
+            var element = clause.Elements[elementIndex];
+            if (element.Role != ClauseElementRole.Argument)
+            {
+                continue;
+            }
+
+            if (IsOpaqueSplat(element))
+            {
+                return true;
+            }
+
+            if (element.Kind is ArgKind.EnvVar or ArgKind.DynamicSkip &&
+                DynamicArgumentMayEscapeChildScope(elementIndex, effectiveArguments))
+            {
+                return true;
+            }
+
+            if (TryGetParameterName(element, out var parameter))
+            {
+                if (parameter.Equals("Global", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (IsAcceptedPrefix(parameter, "Scope", minimumLength: 1) &&
+                    ScopeMayEscapeChild(clause.Elements, elementIndex))
+                {
+                    return true;
+                }
+            }
+
+            var value = element.Value;
+            if (value.IndexOf("global:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("script:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("Function:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("Environment:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("Env:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                value.IndexOf("$env:", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return true;
+            }
+
+            var isAliasTarget =
+                value.StartsWith("Alias:", StringComparison.OrdinalIgnoreCase);
+            var isVariableTarget =
+                value.StartsWith("Variable:", StringComparison.OrdinalIgnoreCase);
+            if ((isAliasTarget || isVariableTarget) &&
+                !IsProvedChildLocalProviderMutation(
+                    verb,
+                    isAliasTarget,
+                    isVariableTarget))
+            {
+                return true;
+            }
+
+            hasLocalProviderTarget |= isAliasTarget || isVariableTarget;
+        }
+
+        if (HasVariableWritingArgument(verb, clause) ||
+            verb.Equals("Set-Variable", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("New-Variable", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Remove-Variable", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Clear-Variable", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Set-Alias", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("New-Alias", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Import-Alias", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return !hasLocalProviderTarget;
+    }
+
+    private static bool IsProvedChildLocalProviderMutation(
+        string verb,
+        bool isAliasTarget,
+        bool isVariableTarget)
+    {
+        if (verb.Equals("Set-Item", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("New-Item", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return isVariableTarget && !isAliasTarget &&
+            (verb.Equals("Clear-Item", StringComparison.OrdinalIgnoreCase) ||
+             verb.Equals("Set-Content", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool DynamicArgumentMayEscapeChildScope(
+        int elementIndex,
+        IReadOnlyList<EffectiveArgument> effectiveArguments)
+    {
+        foreach (var effective in effectiveArguments)
+        {
+            if (effective.ClauseElementIndex != elementIndex)
+            {
+                continue;
+            }
+
+            if (effective.Value.Kind is not (
+                    ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet) ||
+                effective.Value.Values.Count == 0)
+            {
+                return true;
+            }
+
+            foreach (var value in effective.Value.Values)
+            {
+                if (ValueMayEscapeChildScope(value))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool ValueMayEscapeChildScope(string value) =>
+        value.IndexOf("global:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        value.IndexOf("script:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        value.IndexOf("Function:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        value.IndexOf("Environment:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        value.IndexOf("Env:", StringComparison.OrdinalIgnoreCase) >= 0 ||
+        value.IndexOf("$env:", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    private static bool ScopeMayEscapeChild(
+        IReadOnlyList<ClauseElement> elements,
+        int parameterIndex)
+    {
+        var parameter = elements[parameterIndex].Value;
+        var separator = parameter.IndexOf(':', 1);
+        if (separator < 0)
+        {
+            separator = parameter.IndexOf('=', 1);
+        }
+
+        if (separator >= 0)
+        {
+            return !IsChildLocalScope(parameter.Substring(separator + 1));
+        }
+
+        for (var index = parameterIndex + 1; index < elements.Count; index++)
+        {
+            var value = elements[index];
+            if (value.Role != ClauseElementRole.Argument)
+            {
+                continue;
+            }
+
+            return value.IsFlag || !IsChildLocalScope(value.Value);
+        }
+
+        return true;
+    }
+
+    private static bool IsChildLocalScope(string value)
+    {
+        value = TrimMatchingQuotes(value);
+        return value.Equals("Local", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("Private", StringComparison.OrdinalIgnoreCase) ||
+            value.Equals("0", StringComparison.Ordinal);
+    }
+
     private static bool HasVariableWritingArgument(string verb, Clause clause)
     {
         foreach (var element in clause.Elements)
@@ -801,6 +982,8 @@ internal sealed class PwshForEachValueAnalyzer
     private int _remainingLoopAnalysisTransitions = MaxLoopAnalysisTransitions;
     private long _executionRegionEffectCount;
     private long _nonRegionStateMutationCount;
+    private long _locationStateMutationCount;
+    private long _childScopeEscapeRiskCount;
 
     private PwshForEachValueAnalyzer(
         PwshParserOptions options,
@@ -863,6 +1046,7 @@ internal sealed class PwshForEachValueAnalyzer
             GroupSyntax group => AnalyzeGroup(group, input),
             ForEachSyntax forEach => AnalyzeForEach(forEach, input),
             CommandSubstitutionSyntax substitution => AnalyzeSubstitution(substitution, input),
+            ExecutionRegionSyntax region => AnalyzeExecutionRegion(region, input),
             _ => AnalyzeUnsupportedNode(input),
         };
 
@@ -926,11 +1110,19 @@ internal sealed class PwshForEachValueAnalyzer
         if (location is not null)
         {
             _nonRegionStateMutationCount++;
+            _locationStateMutationCount++;
             if (PwshPersistentStateMutation.TryGetEffect(
                     simple.Clause,
                     effective,
                     out var locationEffectUnknownCwd))
             {
+                if (PwshPersistentStateMutation.MayEscapeChildScope(
+                        simple.Clause,
+                        effective))
+                {
+                    _childScopeEscapeRiskCount++;
+                }
+
                 var flow = location.Value;
                 return ApplyExecutionRegionEffect(simple, new PwshFlowResult(
                     flow.OnSuccess is AnalysisContext success
@@ -947,6 +1139,7 @@ internal sealed class PwshForEachValueAnalyzer
         if (simple.Clause.Verb.IsDynamic)
         {
             _nonRegionStateMutationCount++;
+            _childScopeEscapeRiskCount++;
             return ApplyExecutionRegionEffect(
                 simple,
                 PwshFlowResult.Both(current.Invalidate(unknownCwd: true)));
@@ -958,6 +1151,13 @@ internal sealed class PwshForEachValueAnalyzer
                 out var unknownCwd))
         {
             _nonRegionStateMutationCount++;
+            if (PwshPersistentStateMutation.MayEscapeChildScope(
+                    simple.Clause,
+                    effective))
+            {
+                _childScopeEscapeRiskCount++;
+            }
+
             return ApplyExecutionRegionEffect(
                 simple,
                 PwshFlowResult.Both(current.Invalidate(unknownCwd)));
@@ -1118,6 +1318,8 @@ internal sealed class PwshForEachValueAnalyzer
 
         var executionRegionEffectCount = _executionRegionEffectCount;
         var nonRegionStateMutationCount = _nonRegionStateMutationCount;
+        var locationStateMutationCount = _locationStateMutationCount;
+        var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
         AnalyzeBlock(
             group.Body,
             input.WithoutBindings().Invalidate(
@@ -1125,6 +1327,8 @@ internal sealed class PwshForEachValueAnalyzer
                 invalidateCommandResolution: false));
         _executionRegionEffectCount = executionRegionEffectCount;
         _nonRegionStateMutationCount = nonRegionStateMutationCount;
+        _locationStateMutationCount = locationStateMutationCount;
+        _childScopeEscapeRiskCount = childScopeEscapeRiskCount;
         return PwshFlowResult.Both(input);
     }
 
@@ -1133,6 +1337,78 @@ internal sealed class PwshForEachValueAnalyzer
         AnalysisContext input)
     {
         return AnalyzeBlock(substitution.Body, input);
+    }
+
+    private PwshFlowResult AnalyzeExecutionRegion(
+        ExecutionRegionSyntax region,
+        AnalysisContext input)
+    {
+        var executionRegionEffectCount = _executionRegionEffectCount;
+        var nonRegionStateMutationCount = _nonRegionStateMutationCount;
+        var locationStateMutationCount = _locationStateMutationCount;
+        var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
+        var body = AnalyzeBlock(region.Body, input);
+        var locationMutated = _locationStateMutationCount > locationStateMutationCount;
+        var childScopeMayEscape =
+            _childScopeEscapeRiskCount > childScopeEscapeRiskCount;
+        _executionRegionEffectCount = executionRegionEffectCount + 1;
+        _nonRegionStateMutationCount = nonRegionStateMutationCount;
+        _childScopeEscapeRiskCount = childScopeEscapeRiskCount +
+            (childScopeMayEscape ? 1 : 0);
+
+        if (region.Origin == ExecutionRegionOrigin.DotSource)
+        {
+            return body;
+        }
+
+        if (region.Origin != ExecutionRegionOrigin.DirectCall)
+        {
+            return PwshFlowResult.Both(input.Invalidate(unknownCwd: true));
+        }
+
+        return new PwshFlowResult(
+            RestoreDirectCallExit(
+                body.OnSuccess,
+                input,
+                locationMutated,
+                childScopeMayEscape),
+            RestoreDirectCallExit(
+                body.OnFailure,
+                input,
+                locationMutated,
+                childScopeMayEscape));
+    }
+
+    private static AnalysisContext? RestoreDirectCallExit(
+        AnalysisContext? bodyExit,
+        AnalysisContext input,
+        bool locationMutated,
+        bool childScopeMayEscape)
+    {
+        if (bodyExit is null)
+        {
+            return null;
+        }
+
+        var restored = childScopeMayEscape
+            ? input.Invalidate(unknownCwd: false)
+            : input;
+        if (!locationMutated && string.Equals(
+                bodyExit.Value.WorkingDirectory,
+                input.WorkingDirectory,
+                StringComparison.Ordinal))
+        {
+            return restored;
+        }
+
+        if (bodyExit.Value.WorkingDirectory is string workingDirectory)
+        {
+            return restored.WithCwd(workingDirectory);
+        }
+
+        return locationMutated
+            ? restored.Invalidate(unknownCwd: true)
+            : restored.WithCwd(workingDirectory: null);
     }
 
     private PwshFlowResult AnalyzeForEach(ForEachSyntax forEach, AnalysisContext input)
@@ -1482,6 +1758,10 @@ internal sealed class PwshForEachValueAnalyzer
             CommandSubstitutionSyntax substitution => substitution with
             {
                 Body = RewriteBlock(substitution.Body, facts),
+            },
+            ExecutionRegionSyntax region => region with
+            {
+                Body = RewriteBlock(region.Body, facts),
             },
             _ => node,
         };

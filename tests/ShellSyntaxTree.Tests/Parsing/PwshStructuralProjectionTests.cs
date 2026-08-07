@@ -258,7 +258,6 @@ public class PwshStructuralProjectionTests
     [InlineData("Get-Date | (Get-Process)")]
     [InlineData("Write-Output (Get-Date)")]
     [InlineData("& (Get-Command Get-Date)")]
-    [InlineData("& { Get-Date }")]
     public void Unsupported_execution_bearing_expression_shapes_fail_closed(string source)
     {
         var result = Parse(source);

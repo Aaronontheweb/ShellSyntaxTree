@@ -125,6 +125,7 @@ internal static class CorpusJson
         var currentIndex = nodes.Count;
         var clause = (node as SimpleCommandSyntax)?.Clause;
         var forEachNode = node as ForEachSyntax;
+        var executionRegionNode = node as ExecutionRegionSyntax;
         var clauseIndex = clause is null ? (int?)null : FindClauseIndex(parsed, clause);
         var syntax = new JsonObject
         {
@@ -147,6 +148,16 @@ internal static class CorpusJson
             syntax["iterableRaw"] = forEachNode.Iterable.Raw;
             syntax["iterableSourceStart"] = forEachNode.Iterable.SourceStart;
             syntax["iterableSourceLength"] = forEachNode.Iterable.SourceLength;
+        }
+        if (executionRegionNode is not null)
+        {
+            syntax["executionOrigin"] = executionRegionNode.Origin.ToString();
+            syntax["hostClauseElementIndex"] =
+                JsonValue.Create(executionRegionNode.HostClauseElementIndex);
+            syntax["executionPhase"] = executionRegionNode.Phase.ToString();
+            syntax["executionTiming"] = executionRegionNode.Timing.ToString();
+            syntax["executionCardinality"] =
+                executionRegionNode.Cardinality.ToString();
         }
 
         nodes.Add(syntax);
@@ -178,6 +189,19 @@ internal static class CorpusJson
                         simple.Substitutions[index],
                         currentIndex,
                         CommandAncestryRegion.Substitution,
+                        index,
+                        listOperator: null,
+                        parsed,
+                        nodes,
+                        includeV03Assertions);
+                }
+
+                for (var index = 0; index < simple.ExecutionRegions.Count; index++)
+                {
+                    AppendSyntax(
+                        simple.ExecutionRegions[index],
+                        currentIndex,
+                        CommandAncestryRegion.ExecutionRegion,
                         index,
                         listOperator: null,
                         parsed,
@@ -321,6 +345,17 @@ internal static class CorpusJson
                     currentIndex,
                     CommandAncestryRegion.Substitution,
                     childIndex,
+                    listOperator: null,
+                    parsed,
+                    nodes,
+                    includeV03Assertions);
+                break;
+            case ExecutionRegionSyntax executionRegion:
+                AppendSyntax(
+                    executionRegion.Body,
+                    currentIndex,
+                    CommandAncestryRegion.ExecutionRegion,
+                    childIndex: 0,
                     listOperator: null,
                     parsed,
                     nodes,

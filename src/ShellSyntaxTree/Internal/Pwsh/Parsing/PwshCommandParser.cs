@@ -206,8 +206,14 @@ internal static partial class PwshCommandParser
                     index + 1 < tokens.Count &&
                     tokens[index + 1].Kind == PwshTokenKind.ScriptBlock)
                 {
-                    reason = "call-operator script blocks are not supported in v0.3";
-                    return true;
+                    if (!verbSlot)
+                    {
+                        reason = "a call-operator script block is only supported at command position";
+                        return true;
+                    }
+
+                    verbSlot = false;
+                    continue;
                 }
 
                 verbSlot = token.OperatorText is "&&" or "||" or ";" or "|" or "(" or "&";
@@ -218,8 +224,12 @@ internal static partial class PwshCommandParser
             {
                 if (token.Value == ".")
                 {
-                    reason = "the dot-source invocation operator is not supported in v0.2";
-                    return true;
+                    if (index + 1 >= tokens.Count ||
+                        tokens[index + 1].Kind != PwshTokenKind.ScriptBlock)
+                    {
+                        reason = "the dot-source invocation operator is not supported in v0.2";
+                        return true;
+                    }
                 }
 
                 if (IsUnsupportedModuleQualifiedCmdlet(token.Value))

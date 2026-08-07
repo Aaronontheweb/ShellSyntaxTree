@@ -346,6 +346,11 @@ internal static partial class PwshCommandParser
                 return false;
             }
 
+            if (TryParseDirectExecutionRegion(out command, out error))
+            {
+                return error is null;
+            }
+
             if (IsOperator("("))
             {
                 return TryParseGroup(compatibilityOperator, out command, out error);
@@ -570,6 +575,52 @@ internal static partial class PwshCommandParser
             };
             RegisterFacts(simple, segmentTokens);
             command = simple;
+            return true;
+        }
+
+        private bool TryParseDirectExecutionRegion(
+            out ShellSyntaxNode? command,
+            out string? error)
+        {
+            command = null;
+            error = null;
+            var origin = IsOperator("&")
+                ? ExecutionRegionOrigin.DirectCall
+                : _tokens[_position].Kind == PwshTokenKind.Word &&
+                    _tokens[_position].Value == "."
+                    ? ExecutionRegionOrigin.DotSource
+                    : ExecutionRegionOrigin.Unknown;
+            if (origin == ExecutionRegionOrigin.Unknown ||
+                _position + 1 >= _tokens.Count ||
+                _tokens[_position + 1].Kind != PwshTokenKind.ScriptBlock)
+            {
+                return false;
+            }
+
+            var token = _tokens[_position + 1];
+            var next = _position + 2;
+            if (next < _tokens.Count && !IsStructuralBoundary(_tokens[next]))
+            {
+                error = "direct PowerShell script-block arguments are not supported";
+                return true;
+            }
+
+            if (!TryParseScriptBlockBody(token, out var body, out error))
+            {
+                return true;
+            }
+
+            _position = next;
+            command = new ExecutionRegionSyntax
+            {
+                Origin = origin,
+                Phase = ExecutionRegionPhase.Main,
+                Timing = ExecutionRegionTiming.Synchronous,
+                Cardinality = ExecutionRegionCardinality.Once,
+                Body = body,
+                SourceStart = token.SourceStart,
+                SourceLength = token.SourceLength,
+            };
             return true;
         }
 
