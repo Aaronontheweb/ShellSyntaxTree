@@ -56,7 +56,7 @@ internal static partial class BashCommandParser
             options,
             bashCDepth: 0,
             structuralDepth: 0,
-            markBashCWrapped: false);
+            markBashCWrapped: false).Command;
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ internal static partial class BashCommandParser
     /// fires only on recursive calls (the outer top-level command doesn't
     /// pretend to be wrapped).
     /// </summary>
-    private static ParsedCommand ParseInternal(
+    private static BashParseResult ParseInternal(
         string source,
         BashParserOptions options,
         int bashCDepth,
@@ -457,18 +457,45 @@ internal static partial class BashCommandParser
     {
         public IReadOnlyList<Clause> Clauses { get; }
 
+        public IReadOnlyList<BashPathResolutionSeed> PathResolutions { get; }
+
         public string? Error { get; }
 
-        public ClauseResult(IReadOnlyList<Clause> clauses, string? error)
+        public ClauseResult(
+            IReadOnlyList<Clause> clauses,
+            IReadOnlyList<BashPathResolutionSeed> pathResolutions,
+            string? error)
         {
             Clauses = clauses;
+            PathResolutions = pathResolutions;
             Error = error;
         }
 
-        public static ClauseResult Ok(Clause c) => new(new[] { c }, null);
+        public static ClauseResult Ok(
+            Clause clause,
+            IReadOnlyList<BashPathResolutionSeed> pathResolutions) =>
+            new(new[] { clause }, pathResolutions, null);
 
-        public static ClauseResult Fail(string reason) => new(Array.Empty<Clause>(), reason);
+        public static ClauseResult Fail(string reason) => new(
+            Array.Empty<Clause>(),
+            Array.Empty<BashPathResolutionSeed>(),
+            reason);
     }
+
+    private readonly record struct BashPathResolutionSeed(
+        int ClauseElementIndex,
+        int? ClauseArgumentIndex,
+        ShellValue ResolverValue,
+        ShellResolutionConsumer Consumer,
+        string AuthoredValue);
+
+    private readonly record struct CwdPathDependencySet(
+        Clause Clause,
+        IReadOnlyList<CwdPathDependency> Dependencies);
+
+    private readonly record struct BashParseResult(
+        ParsedCommand Command,
+        IReadOnlyList<CwdPathDependencySet> CwdPathDependencySets);
 
     private static ClauseResult ParseClauseSegment(
         Segment segment, string source, BashParserOptions options, bool workingDirectoryUnknown)
@@ -587,6 +614,7 @@ internal static partial class BashCommandParser
                 out var emptyArgs,
                 out var emptyRedirects,
                 out var emptyElements,
+                out var emptyPathResolutions,
                 out var redirectError);
             if (redirectError is not null)
             {
@@ -602,7 +630,7 @@ internal static partial class BashCommandParser
                 Elements = emptyElements,
                 IsSubshell = false,
                 IsCommandStringWrapped = false,
-            });
+            }, emptyPathResolutions);
         }
 
         if (BashVerbs.ControlFlowKeywords.Contains(verbTokens[0]))
@@ -626,6 +654,7 @@ internal static partial class BashCommandParser
             out var args,
             out var redirects,
             out var elements,
+            out var pathResolutions,
             out var argError);
         if (argError is not null)
         {
@@ -643,7 +672,7 @@ internal static partial class BashCommandParser
             IsCommandStringWrapped = false,
         };
 
-        return ClauseResult.Ok(clause);
+        return ClauseResult.Ok(clause, pathResolutions);
     }
 
     private static bool HasStaticCommandIdentity(BashToken token)
@@ -697,6 +726,7 @@ internal static partial class BashCommandParser
         out IReadOnlyList<Arg> args,
         out IReadOnlyList<Redirect> redirects,
         out IReadOnlyList<ClauseElement> elements,
+        out IReadOnlyList<BashPathResolutionSeed> pathResolutions,
         out string? error)
     {
         ExtractRedirectsAndArgs(
@@ -712,6 +742,7 @@ internal static partial class BashCommandParser
             out args,
             out redirects,
             out elements,
+            out pathResolutions,
             out error);
     }
 
@@ -728,11 +759,13 @@ internal static partial class BashCommandParser
         out IReadOnlyList<Arg> args,
         out IReadOnlyList<Redirect> redirects,
         out IReadOnlyList<ClauseElement> elements,
+        out IReadOnlyList<BashPathResolutionSeed> pathResolutions,
         out string? error)
     {
         var argList = new List<Arg>();
         var redirectList = new List<Redirect>();
         var elementList = new List<ClauseElement>();
+        var pathResolutionList = new List<BashPathResolutionSeed>();
         var positionalIndex = 0;
         var i = start;
         var precedingVerbTokenCount = 0;
@@ -775,6 +808,7 @@ internal static partial class BashCommandParser
                         args = argList;
                         redirects = redirectList;
                         elements = elementList;
+                        pathResolutions = pathResolutionList;
                         return;
                     }
 
@@ -785,6 +819,7 @@ internal static partial class BashCommandParser
                         args = argList;
                         redirects = redirectList;
                         elements = elementList;
+                        pathResolutions = pathResolutionList;
                         return;
                     }
 
@@ -797,7 +832,23 @@ internal static partial class BashCommandParser
                         redirectList,
                         workingDirectoryUnknown,
                         precedingVerbTokenCount,
-                        out var redirectElement);
+                        out var redirectElement,
+                        out var redirectResolverValue);
+                    if (redirectResolverValue is not null &&
+                        (redirectElement.Resolved is not null ||
+                         CanResolveWithKnownCwd(
+                             redirectResolverValue,
+                             options,
+                             ShellResolutionConsumer.BashRedirect)))
+                    {
+                        pathResolutionList.Add(new BashPathResolutionSeed(
+                            elementList.Count,
+                            ClauseArgumentIndex: null,
+                            redirectResolverValue,
+                            ShellResolutionConsumer.BashRedirect,
+                            SourceSlice(source, target)));
+                    }
+
                     elementList.Add(redirectElement);
                     i += 2;
                     continue;
@@ -811,6 +862,7 @@ internal static partial class BashCommandParser
                         args = argList;
                         redirects = redirectList;
                         elements = elementList;
+                        pathResolutions = pathResolutionList;
                         return;
                     }
 
@@ -838,6 +890,7 @@ internal static partial class BashCommandParser
                 args = argList;
                 redirects = redirectList;
                 elements = elementList;
+                pathResolutions = pathResolutionList;
                 return;
             }
 
@@ -882,6 +935,8 @@ internal static partial class BashCommandParser
                             });
 
                             Arg valueArg;
+                            ShellValue? adjacentPathResolverValue = null;
+                            var adjacentPathIsResolvable = false;
                             if (fragmentClassification.HasOpaqueFragment
                                 || (verbKeyForFlagValuePaths is not null
                                     && BashPerVerbRules.ValueOfFlagIsOpaqueCommand(
@@ -906,12 +961,19 @@ internal static partial class BashCommandParser
                                 var adjacentResolverValue = GetResolverValue(
                                     fragmentClassification.ResolverValue,
                                     adjacentValueForResolution);
+                                adjacentPathResolverValue = adjacentResolverValue;
                                 var (adjacentKind, adjacentResolved, adjacentIsPath) = BashResolver.Resolve(
                                     adjacentResolverValue,
                                     adjacentValueIsPath,
                                     options,
                                     workingDirectoryUnknown,
                                     ShellResolutionConsumer.BashArgument);
+                                adjacentPathIsResolvable = adjacentValueIsPath &&
+                                    (adjacentResolved is not null ||
+                                     CanResolveWithKnownCwd(
+                                         adjacentResolverValue,
+                                         options,
+                                         ShellResolutionConsumer.BashArgument));
                                 valueArg = new Arg
                                 {
                                     Raw = fragmentClassification.ValueRaw,
@@ -921,7 +983,19 @@ internal static partial class BashCommandParser
                                 };
                             }
 
+                            var valueArgumentIndex = argList.Count;
                             argList.Add(valueArg);
+                            if (adjacentPathIsResolvable &&
+                                adjacentPathResolverValue is not null)
+                            {
+                                pathResolutionList.Add(new BashPathResolutionSeed(
+                                    elementList.Count,
+                                    valueArgumentIndex,
+                                    adjacentPathResolverValue,
+                                    ShellResolutionConsumer.BashArgument,
+                                    fragmentClassification.ValueRaw));
+                            }
+
                             elementList.Add(CreateCombinedElement(
                                 fragmentClassification,
                                 precedingVerbTokenCount,
@@ -977,6 +1051,7 @@ internal static partial class BashCommandParser
                                     options,
                                     workingDirectoryUnknown,
                                     ShellResolutionConsumer.BashArgument);
+                            var valueArgumentIndex = argList.Count;
                             argList.Add(new Arg
                             {
                                 Raw = rawValuePart,
@@ -984,6 +1059,21 @@ internal static partial class BashCommandParser
                                 Kind = vKind,
                                 IsPath = vIsPath,
                             });
+                            if (valueIsPath &&
+                                (vResolved is not null ||
+                                 CanResolveWithKnownCwd(
+                                     inlineResolverValue,
+                                     options,
+                                     ShellResolutionConsumer.BashArgument)))
+                            {
+                                pathResolutionList.Add(new BashPathResolutionSeed(
+                                    elementList.Count,
+                                    valueArgumentIndex,
+                                    inlineResolverValue,
+                                    ShellResolutionConsumer.BashArgument,
+                                    rawValuePart));
+                            }
+
                             elementList.Add(CreateElement(
                                 source,
                                 t,
@@ -1073,6 +1163,7 @@ internal static partial class BashCommandParser
                                 options,
                                 workingDirectoryUnknown,
                                 ShellResolutionConsumer.BashArgument);
+                        var argumentIndex = argList.Count;
                         argList.Add(new Arg
                         {
                             Raw = sourceRaw,
@@ -1080,6 +1171,21 @@ internal static partial class BashCommandParser
                             Kind = kind,
                             IsPath = isPath,
                         });
+                        if (treatAsPath &&
+                            (resolved is not null ||
+                             CanResolveWithKnownCwd(
+                                 resolverValue,
+                                 options,
+                                 ShellResolutionConsumer.BashArgument)))
+                        {
+                            pathResolutionList.Add(new BashPathResolutionSeed(
+                                elementList.Count,
+                                argumentIndex,
+                                resolverValue,
+                                ShellResolutionConsumer.BashArgument,
+                                sourceRaw));
+                        }
+
                         elementList.Add(CreateElement(
                             source,
                             t,
@@ -1134,6 +1240,7 @@ internal static partial class BashCommandParser
                                 options,
                                 workingDirectoryUnknown,
                                 ShellResolutionConsumer.BashArgument);
+                        var argumentIndex = argList.Count;
                         argList.Add(new Arg
                         {
                             Raw = sourceRaw,
@@ -1141,6 +1248,21 @@ internal static partial class BashCommandParser
                             Kind = kind,
                             IsPath = isPath,
                         });
+                        if (treatAsPath &&
+                            (resolved is not null ||
+                             CanResolveWithKnownCwd(
+                                 resolverValue,
+                                 options,
+                                 ShellResolutionConsumer.BashArgument)))
+                        {
+                            pathResolutionList.Add(new BashPathResolutionSeed(
+                                elementList.Count,
+                                argumentIndex,
+                                resolverValue,
+                                ShellResolutionConsumer.BashArgument,
+                                sourceRaw));
+                        }
+
                         elementList.Add(CreateElement(
                             source,
                             t,
@@ -1193,6 +1315,7 @@ internal static partial class BashCommandParser
         args = argList;
         redirects = redirectList;
         elements = elementList;
+        pathResolutions = pathResolutionList;
         error = null;
     }
 
@@ -1205,8 +1328,10 @@ internal static partial class BashCommandParser
         List<Redirect> redirectList,
         bool workingDirectoryUnknown,
         int precedingVerbTokenCount,
-        out ClauseElement element)
+        out ClauseElement element,
+        out ShellValue? pathResolverValue)
     {
+        pathResolverValue = null;
         if (target.Kind == BashTokenKind.OpaqueSubstitution)
         {
             // Opaque region as redirect target → always DynamicSkip.
@@ -1268,6 +1393,7 @@ internal static partial class BashCommandParser
             options,
             workingDirectoryUnknown,
             ShellResolutionConsumer.BashRedirect);
+        pathResolverValue = resolverValue;
 
         bool isDynamic;
         string redirectTarget;
@@ -1297,6 +1423,17 @@ internal static partial class BashCommandParser
             isPath: isPath,
             resolved: kind == ArgKind.DynamicSkip ? null : resolved);
     }
+
+    private static bool CanResolveWithKnownCwd(
+        ShellValue resolverValue,
+        BashParserOptions options,
+        ShellResolutionConsumer consumer) =>
+        BashResolver.Resolve(
+            resolverValue,
+            treatAsPath: true,
+            options,
+            workingDirectoryUnknown: false,
+            consumer).Resolved is not null;
 
     private static ClauseElement CreateElement(
         string source,

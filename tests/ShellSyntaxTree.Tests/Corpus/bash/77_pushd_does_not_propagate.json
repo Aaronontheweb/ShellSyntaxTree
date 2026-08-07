@@ -1,5 +1,5 @@
 {
-  "name": "cd-attribution: pushd /target && cmd (pushd does not propagate)",
+  "name": "cwd-attribution: pushd /target && cmd marks cwd unknown",
   "input": "pushd /target && cmd",
   "expected": {
     "isUnparseable": false,
@@ -17,12 +17,14 @@
       {
         "operator": "AndIf",
         "verb": ["cmd"],
-        "args": [],
+        "args": [
+          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+        ],
         "redirects": [],
         "isSubshell": false,
         "isCommandStringWrapped": false
       }
     ]
   },
-  "notes": "Locked interpretation #5: pushd parses as a CwdVerb (target IsPath=true) but doesn't propagate attribution. cmd has no synthetic arg."
+  "notes": "pushd mutates the directory stack and cwd, but its resulting directory is not modeled; the following command retains a fail-closed dynamic attribution marker."
 }

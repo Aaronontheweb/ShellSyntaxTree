@@ -1,0 +1,35 @@
+{
+  "name": "v0.3 bare relative cd honors unknown CDPATH semantics",
+  "input": "cd /a && cd sub && pwd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "sub", "kind": "Literal", "isPath": true },
+          { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a", "isCwdAttribution": true }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["pwd"],
+        "args": [
+          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Without an environment contract for CDPATH and cdable_vars, a bare relative cd target and its successful resulting cwd remain unknown."
+}

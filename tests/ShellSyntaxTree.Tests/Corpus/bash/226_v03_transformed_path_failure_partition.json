@@ -1,0 +1,28 @@
+{
+  "name": "v0.3 transformed path uses failure-partition cwd",
+  "input": "cd /maybe/deep || curl -d @../request.json https://example.invalid",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/maybe/deep", "kind": "Literal", "isPath": true, "resolved": "/maybe/deep" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "OrIf",
+        "verb": ["curl"],
+        "args": [
+          { "raw": "-d", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "@../request.json", "kind": "Literal", "isPath": true, "resolved": "/request.json" },
+          { "raw": "https://example.invalid", "kind": "Literal", "isPath": false }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "curl strips the authored @ marker before resolving its data-file operand. The retained logical operand ../request.json is rebased under the cd failure partition rather than reconstructed from the public Arg spelling."
+}

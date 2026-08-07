@@ -1,0 +1,28 @@
+{
+  "name": "v0.3 redirect target after cwd join fails closed",
+  "input": "cd /maybe; printf x > relative.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/maybe", "kind": "Literal", "isPath": true, "resolved": "/maybe" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["printf", "x"],
+        "args": [
+          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+        ],
+        "redirects": [
+          { "direction": "Out", "target": "relative.txt", "isDynamicSkip": true }
+        ]
+      }
+    ]
+  },
+  "notes": "A relative redirect cannot retain one parse-order path after cd success and failure join; both redirect and cwd attribution stay fail closed."
+}

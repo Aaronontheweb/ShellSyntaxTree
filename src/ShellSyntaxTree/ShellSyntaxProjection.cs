@@ -23,8 +23,25 @@ internal sealed class CommandOccurrenceFacts
     internal IReadOnlyList<RedirectAnalysis> Redirects { get; init; } =
         Array.Empty<RedirectAnalysis>();
 
+    internal IReadOnlyList<CwdPathDependency> CwdPathDependencies { get; init; } =
+        Array.Empty<CwdPathDependency>();
+
     internal bool IsComplete { get; init; }
 }
+
+/// <summary>
+/// Retains resolver-owned path provenance and its exact compatibility
+/// coordinates for outcome-sensitive rebasing. Public compatibility DTOs do
+/// not contain enough lexical or executable-specific context to reconstruct
+/// these facts safely later.
+/// </summary>
+internal readonly record struct CwdPathDependency(
+    int ClauseElementIndex,
+    int? ClauseArgumentIndex,
+    bool DependsOnWorkingDirectory,
+    string LogicalValue,
+    string AuthoredValue,
+    string? ParseWorkingDirectory);
 
 /// <summary>One successful projection of a parser-owned syntax tree.</summary>
 internal sealed class ShellProjectionResult

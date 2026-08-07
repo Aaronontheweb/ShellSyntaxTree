@@ -1,5 +1,5 @@
 {
-  "name": "cd-attribution: popd && cmd (popd does not propagate)",
+  "name": "cwd-attribution: popd && cmd marks cwd unknown",
   "input": "popd && cmd",
   "expected": {
     "isUnparseable": false,
@@ -15,12 +15,14 @@
       {
         "operator": "AndIf",
         "verb": ["cmd"],
-        "args": [],
+        "args": [
+          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+        ],
         "redirects": [],
         "isSubshell": false,
         "isCommandStringWrapped": false
       }
     ]
   },
-  "notes": "Locked interpretation #5: popd parses but doesn't propagate. cmd has no attribution arg."
+  "notes": "popd can change cwd to an unmodeled directory-stack entry; the following command retains a fail-closed dynamic marker."
 }

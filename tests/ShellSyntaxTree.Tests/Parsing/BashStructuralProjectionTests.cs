@@ -455,9 +455,263 @@ public class BashStructuralProjectionTests
             },
             result.Clauses.Select(clause => clause.Operator));
         Assert.Contains(result.Clauses[1].Args,
-            argument => argument.IsCwdAttribution && argument.Resolved == "/tmp");
+            argument => argument.IsCwdAttribution &&
+                argument.Kind == ArgKind.DynamicSkip &&
+                argument.Resolved is null);
         Assert.DoesNotContain(result.Clauses[2].Args, argument => argument.IsCwdAttribution);
         Assert.Equal("/work/relative.txt", Assert.Single(result.Clauses[3].Args).Resolved);
+    }
+
+    [Fact]
+    public void Cwd_flow_uses_command_outcomes_instead_of_parse_order()
+    {
+        var sequence = Parse("cd /maybe; cat relative.txt");
+        var andIf = Parse("cd /maybe && cat relative.txt");
+        var orIf = Parse("cd /maybe || cat relative.txt");
+
+        Assert.Equal(ShellValueDomainKind.Unknown, sequence.Commands[1].WorkingDirectory.Kind);
+        Assert.Null(sequence.Clauses[1].Args[0].Resolved);
+        Assert.Null(sequence.Clauses[1].Elements[1].Resolved);
+        Assert.Contains(sequence.Clauses[1].Args, argument =>
+            argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+
+        Assert.Equal("/maybe", Assert.Single(andIf.Commands[1].WorkingDirectory.Values));
+        Assert.Equal("/maybe/relative.txt", andIf.Clauses[1].Args[0].Resolved);
+
+        Assert.Equal("/work", Assert.Single(orIf.Commands[1].WorkingDirectory.Values));
+        Assert.Equal("/work/relative.txt", orIf.Clauses[1].Args[0].Resolved);
+        Assert.DoesNotContain(orIf.Clauses[1].Args, argument => argument.IsCwdAttribution);
+
+        var absolute = Parse("cd /outer && cat /work relative.txt");
+        Assert.Equal("/work", absolute.Clauses[1].Args[0].Resolved);
+        Assert.Equal("/outer/relative.txt", absolute.Clauses[1].Args[1].Resolved);
+    }
+
+    [Fact]
+    public void Cwd_rebasing_uses_resolver_provenance()
+    {
+        var parentTraversal = Parse("cd /maybe/deep; cat ../secret.txt");
+        var homeExpansion = Parse("cd /home/test || cat $HOME/secret.txt");
+        var escapedRelative = Parse(@"cd /maybe; cat \file.txt");
+
+        Assert.Null(parentTraversal.Clauses[1].Args[0].Resolved);
+        Assert.Null(parentTraversal.Clauses[1].Elements[1].Resolved);
+        Assert.Equal("/home/test/secret.txt", homeExpansion.Clauses[1].Args[0].Resolved);
+        Assert.Equal("/home/test/secret.txt", homeExpansion.Clauses[1].Elements[1].Resolved);
+        Assert.Null(escapedRelative.Clauses[1].Args[0].Resolved);
+        Assert.Null(escapedRelative.Clauses[1].Elements[1].Resolved);
+    }
+
+    [Theory]
+    [InlineData("cd /maybe/deep || curl -d @../request.json https://example.invalid", "/request.json")]
+    [InlineData("cd /maybe/deep || curl --data=@../request.json https://example.invalid", "/request.json")]
+    [InlineData("cd /outer/deep && bash -c 'curl -d @../request.json https://example.invalid'", "/outer/request.json")]
+    public void Cwd_rebasing_preserves_per_verb_logical_path_operands(
+        string source,
+        string expected)
+    {
+        var result = Parse(source);
+        var curl = Assert.Single(result.Commands, command => CommandVerb(command) == "curl");
+
+        Assert.Equal(expected, Assert.Single(curl.Clause.Args,
+            argument => argument.IsPath).Resolved);
+        Assert.Equal(expected, Assert.Single(curl.Clause.Elements,
+            element => element.IsPath).Resolved);
+    }
+
+    [Fact]
+    public void Exact_failure_partition_promotes_paths_blocked_only_by_parse_order_cwd()
+    {
+        var argumentOr = Parse("cd \"$TARGET\" || cat rel.txt");
+        var argumentAnd = Parse("cd \"$TARGET\" && cat rel.txt");
+        var redirectOr = Parse("cd \"$TARGET\" || printf x > out.txt");
+        var redirectAnd = Parse("cd \"$TARGET\" && printf x > out.txt");
+        var transformedOr = Parse(
+            "cd \"$TARGET\" || curl --data=@payload.json https://example.invalid");
+
+        var exactArgument = Assert.Single(argumentOr.Clauses[1].Args);
+        Assert.Equal(ArgKind.Literal, exactArgument.Kind);
+        Assert.True(exactArgument.IsPath);
+        Assert.Equal("/work/rel.txt", exactArgument.Resolved);
+        Assert.Equal("/work/rel.txt", argumentOr.Clauses[1].Elements[1].Resolved);
+
+        Assert.Null(argumentAnd.Clauses[1].Args[0].Resolved);
+        Assert.Equal(ArgKind.DynamicSkip, argumentAnd.Clauses[1].Args[0].Kind);
+
+        var exactRedirect = Assert.Single(redirectOr.Clauses[1].Redirects);
+        Assert.False(exactRedirect.IsDynamicSkip);
+        Assert.Equal("/work/out.txt", exactRedirect.Target);
+        var exactRedirectElement = Assert.Single(redirectOr.Clauses[1].Elements,
+            element => element.Role == ClauseElementRole.Redirect);
+        Assert.Equal(ArgKind.Literal, exactRedirectElement.Kind);
+        Assert.True(exactRedirectElement.IsPath);
+        Assert.Equal("/work/out.txt", exactRedirectElement.Resolved);
+
+        Assert.True(Assert.Single(redirectAnd.Clauses[1].Redirects).IsDynamicSkip);
+
+        Assert.Equal("/work/payload.json", Assert.Single(transformedOr.Clauses[1].Args,
+            argument => argument.IsPath).Resolved);
+        Assert.Equal("/work/payload.json", Assert.Single(transformedOr.Clauses[1].Elements,
+            element => element.IsPath).Resolved);
+    }
+
+    [Theory]
+    [InlineData("command command cd /outer && cat relative.txt")]
+    [InlineData("builtin builtin cd /outer && cat relative.txt")]
+    [InlineData("command builtin cd /outer && cat relative.txt")]
+    [InlineData("builtin command cd /outer && cat relative.txt")]
+    public void Nested_dispatch_wrapped_cwd_mutation_fails_closed(string source)
+    {
+        var result = Parse(source);
+
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+        Assert.Null(result.Clauses[1].Args[0].Resolved);
+        Assert.Contains(result.Clauses[1].Args, argument =>
+            argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Theory]
+    [InlineData("command cd /outer && cat relative.txt")]
+    [InlineData("builtin cd /outer && cat relative.txt")]
+    public void Dispatch_wrapped_cwd_mutation_fails_closed(string source)
+    {
+        var result = Parse(source);
+
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+        Assert.Null(result.Clauses[1].Args[0].Resolved);
+        Assert.Contains(result.Clauses[1].Args, argument =>
+            argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Fact]
+    public void Cd_operand_forms_only_publish_exact_cwd_when_lexically_safe()
+    {
+        var cdPath = Parse("cd /a && cd sub && pwd");
+        var explicitRelative = Parse("cd /a && cd ./sub && pwd");
+        var physical = Parse("cd -P /a && pwd");
+        var dashOperand = Parse("cd -- -foo && pwd");
+
+        Assert.Null(cdPath.Clauses[1].Args[0].Resolved);
+        Assert.Equal(ShellValueDomainKind.Unknown, cdPath.Commands[2].WorkingDirectory.Kind);
+        Assert.Equal("/a/sub", Assert.Single(explicitRelative.Commands[2].WorkingDirectory.Values));
+        Assert.Equal(ShellValueDomainKind.Unknown, physical.Commands[1].WorkingDirectory.Kind);
+        Assert.Equal(ShellValueDomainKind.Unknown, dashOperand.Commands[1].WorkingDirectory.Kind);
+    }
+
+    [Theory]
+    [InlineData("cd ~ && pwd", "/home/test")]
+    [InlineData("cd $HOME && pwd", "/home/test")]
+    [InlineData("cd . && pwd", "/work")]
+    [InlineData("cd .. && pwd", "/")]
+    public void Cd_operands_that_bypass_search_retain_exact_cwd(
+        string source,
+        string expected)
+    {
+        var result = Parse(source);
+
+        Assert.Equal(expected, Assert.Single(result.Commands[1].WorkingDirectory.Values));
+        Assert.Equal(expected, Assert.Single(result.Clauses[1].Args).Resolved);
+    }
+
+    [Fact]
+    public void Cd_extended_attribute_option_fails_closed()
+    {
+        var result = Parse("cd -@ /a && pwd");
+
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[1].WorkingDirectory.Kind);
+        Assert.Contains(result.Clauses[1].Args, argument =>
+            argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Theory]
+    [InlineData("> out.txt; cat relative.txt")]
+    [InlineData("> out.txt && cat relative.txt")]
+    [InlineData("> out.txt || cat relative.txt")]
+    public void Redirect_only_commands_preserve_cwd_state(string source)
+    {
+        var result = Parse(source);
+
+        var cat = Assert.Single(result.Commands, command => CommandVerb(command) == "cat");
+        Assert.Equal("/work", Assert.Single(cat.WorkingDirectory.Values));
+        Assert.Equal("/work/relative.txt", result.Clauses[1].Args[0].Resolved);
+        Assert.DoesNotContain(result.Clauses[1].Args, argument =>
+            argument.IsCwdAttribution);
+    }
+
+    [Fact]
+    public void Redirect_paths_follow_the_same_outcome_sensitive_cwd()
+    {
+        var sequence = Parse("cd /maybe; printf x > relative.txt");
+        var andIf = Parse("cd /maybe && printf x > relative.txt");
+
+        var unknownRedirect = Assert.Single(sequence.Clauses[1].Redirects);
+        Assert.True(unknownRedirect.IsDynamicSkip);
+        Assert.Equal("relative.txt", unknownRedirect.Target);
+        Assert.Null(Assert.Single(sequence.Clauses[1].Elements,
+            element => element.Role == ClauseElementRole.Redirect).Resolved);
+
+        Assert.Equal("/maybe/relative.txt",
+            Assert.Single(andIf.Clauses[1].Redirects).Target);
+
+        var quoted = Parse("cd /maybe; printf x > \"relative file.txt\"");
+        var quotedRedirect = Assert.Single(quoted.Clauses[1].Redirects);
+        Assert.True(quotedRedirect.IsDynamicSkip);
+        Assert.Equal("\"relative file.txt\"", quotedRedirect.Target);
+    }
+
+    [Fact]
+    public void Pipeline_options_join_last_stage_state_conservatively()
+    {
+        var result = Parse("printf x | cd /tmp; pwd");
+
+        Assert.All(result.Commands.Take(2), command =>
+            Assert.Equal("/work", Assert.Single(command.WorkingDirectory.Values)));
+        Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[2].WorkingDirectory.Kind);
+        Assert.Contains(result.Clauses[2].Args, argument =>
+            argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Fact]
+    public void Decoded_wrapper_inherits_invocation_cwd_and_isolates_exit_state()
+    {
+        var result = Parse("cd /outer && bash -c 'cd /inner && pwd' && pwd");
+
+        Assert.Equal(new[] { "/work", "/outer", "/inner", "/outer" },
+            result.Commands.Select(command =>
+                Assert.Single(command.WorkingDirectory.Values)));
+        Assert.DoesNotContain(result.Clauses[1].Args, argument =>
+            argument.IsCwdAttribution && argument.Resolved == "/outer");
+        Assert.Contains(result.Clauses[2].Args, argument =>
+            argument.IsCwdAttribution && argument.Resolved == "/inner");
+        Assert.Contains(result.Clauses[3].Args, argument =>
+            argument.IsCwdAttribution && argument.Resolved == "/outer");
+    }
+
+    [Theory]
+    [InlineData("cd /maybe; echo \"$(cat rel.txt)\"")]
+    [InlineData("pushd /maybe && echo \"$(cat rel.txt)\"")]
+    [InlineData("pushd /maybe && bash -c 'cat rel.txt'")]
+    public void Isolated_child_retains_dynamic_cwd_signal(string source)
+    {
+        var result = Parse(source);
+        var cat = Assert.Single(result.Commands, command => CommandVerb(command) == "cat");
+
+        Assert.Equal(ShellValueDomainKind.Unknown, cat.WorkingDirectory.Kind);
+        Assert.Null(Assert.Single(cat.Clause.Args,
+            argument => !argument.IsCwdAttribution).Resolved);
+        Assert.Contains(cat.Clause.Args, argument =>
+            argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Fact]
+    public void Substitution_on_cd_failure_uses_failure_partition_cwd()
+    {
+        var result = Parse("cd /maybe || echo \"$(cat rel.txt)\"");
+        var cat = Assert.Single(result.Commands, command => CommandVerb(command) == "cat");
+
+        Assert.Equal("/work", Assert.Single(cat.WorkingDirectory.Values));
+        Assert.Equal("/work/rel.txt", Assert.Single(cat.Clause.Args).Resolved);
+        Assert.DoesNotContain(cat.Clause.Args, argument => argument.IsCwdAttribution);
     }
 
     [Fact]
@@ -708,7 +962,9 @@ public class BashStructuralProjectionTests
         Assert.Equal(new[] { "cd", "pwd", "cat", "cat" },
             result.Commands.Select(CommandVerb));
         Assert.Contains(result.Clauses[1].Args,
-            argument => argument.IsCwdAttribution && argument.Resolved == "/tmp");
+            argument => argument.IsCwdAttribution &&
+                argument.Kind == ArgKind.DynamicSkip &&
+                argument.Resolved is null);
         Assert.DoesNotContain(result.Clauses[2].Args,
             argument => argument.IsCwdAttribution);
         Assert.Equal("/work/relative.txt", Assert.Single(result.Clauses[3].Args).Resolved);

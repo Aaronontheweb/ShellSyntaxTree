@@ -17,12 +17,14 @@
       {
         "operator": "AndIf",
         "verb": ["cmd"],
-        "args": [],
+        "args": [
+          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+        ],
         "redirects": [],
         "isSubshell": false,
         "isCommandStringWrapped": false
       }
     ]
   },
-  "notes": "`cd -` swaps to previous dir; we don't track that, so cd has only the dash flag (no non-flag positional). Attribution stays unset; cmd receives no synthetic arg."
+  "notes": "`cd -` swaps to an untracked previous directory, so a successful continuation receives the fail-closed dynamic cwd marker."
 }

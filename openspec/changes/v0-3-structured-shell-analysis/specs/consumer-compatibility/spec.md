@@ -47,6 +47,22 @@ signal.
 - **THEN** the clause contains a synthetic `<dynamic-cwd>` `DynamicSkip` attribution argument with `Resolved=null`
 - **THEN** no synthetic cwd-attribution argument selects one possible exact path
 
+#### Scenario: Cwd rebasing preserves resolver-owned operand semantics
+- **WHEN** an executable-specific rule transforms an authored path operand such as curl `@../request.json`
+- **THEN** outcome-sensitive cwd rebasing uses the retained logical resolver operand rather than reconstructing it from `Arg.Raw` or `ClauseElement.Value`
+- **THEN** split and equals-form options update their exact corresponding Arg and ClauseElement coordinates
+- **THEN** decoded wrappers retain the same resolver provenance while inheriting their invocation cwd
+
+#### Scenario: Exact outcome partition recovers a cwd-blocked path
+- **WHEN** parse-order attribution initially makes a relative argument or redirect dynamic, but outcome analysis later proves its execution cwd exact
+- **THEN** retained path-slot provenance permits an exact compatibility path without rescanning decoded text
+- **THEN** a sibling partition whose cwd remains unknown keeps the operand dynamic
+
+#### Scenario: Dynamic redirect preserves authored target spelling
+- **WHEN** a quoted relative redirect target becomes dynamic after cwd outcomes join
+- **THEN** its compatibility `Redirect.Target` retains the target-only authored spelling including quotes
+- **THEN** the redirect is marked `IsDynamicSkip=true` and its ClauseElement exact resolution is cleared
+
 ### Requirement: Unparseable results are never authorization evidence
 When `ParsedCommand.IsUnparseable=true`, `Commands` and `Clauses` SHALL be
 empty. `Syntax` MAY contain partial diagnostic evidence, and the consumer guide

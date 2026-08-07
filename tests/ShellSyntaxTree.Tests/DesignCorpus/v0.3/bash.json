@@ -198,7 +198,7 @@
     {
       "id": "bash-joined-cwd-compatibility-fails-closed",
       "concern": "Joined cwd clears false path resolution but preserves the dynamic attribution signal",
-      "compatibilityProjectionLanded": false,
+      "compatibilityProjectionLanded": true,
       "input": "cd /maybe; cat relative.txt",
       "current": {
         "isUnparseable": false,
