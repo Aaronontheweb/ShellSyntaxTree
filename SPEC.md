@@ -490,6 +490,30 @@ zero-based `ChildIndex` in the structural collection that owns the
 `CommandSubstitutionSyntax`. For a simple command this is its `Substitutions`
 collection; for an iterator it is the containing iterator-command collection.
 
+Each ancestry frame describes the relationship from its `AncestorKind` to the
+next node on the path. The root block uses `Root`; non-root blocks and command
+lists use `Statement`; pipelines use `PipelineStage`; groups use `GroupBody`;
+foreach nodes use `Iterator` or `LoopBody`; condition loops use `Condition` or
+`LoopBody`; conditionals use `Branch`; conditional-branch nodes use
+`Condition` or `Branch`; and command substitutions use `Substitution`.
+Repeated children use their zero-based authored index. The `else` child uses
+the branch count, placing it after every condition/body pair. Frame source
+ranges belong to the ancestor. Blocks, command lists, and groups retain the
+incoming immediate role; pipeline stages, iterator/body regions,
+condition/body regions, branches, and substitutions replace it with their
+nearer execution role.
+
+Projection accepts only a parser-owned tree: a syntax-node or `Clause`
+reference cannot appear at two authored positions, node and fragment spans are
+either both unavailable or a non-negative start/length pair, and structural
+enum values consumed by the projector must be known. Empty blocks remain
+valid, but empty pipelines, command lists, and conditionals are malformed.
+Joined value domains, effective-argument coordinates, cwd facts, redirect
+coordinates, redirect shapes, and heredoc facts must satisfy their contracts.
+Any violation discards the partial `Commands` and `Clauses` collections and
+makes the outer parse unparseable; it is never published as a complete
+occurrence.
+
 `EffectiveArgument.ClauseElementIndex` is a stable authored coordinate. The
 analysis never mutates a compatibility `Arg` to hold loop-specific values.
 An occurrence can be structurally complete while one effective value remains

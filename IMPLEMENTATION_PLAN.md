@@ -223,8 +223,19 @@ priorities.
       and assembly-only closure mechanism. Until the projection passes land,
       `Syntax` is an empty block and `Commands` is empty, so early use remains
       fail-closed while v0.2 `Clauses` behavior is unchanged.
-- [ ] Add the structural and command-occurrence projections for the existing
-      grammar before enabling any control-flow construct.
+- [x] Add the parser-owned structural projector and conservative compatibility
+      flattener. It walks every syntax shape in deterministic authored order,
+      assigns immediate roles and compositional ancestry, preserves the exact
+      `Clause` instance and its authored operator, joins parser-owned analysis
+      facts without mutating compatibility leaves, and discards every partial
+      projection on malformed, aliased, cyclic, or over-depth structure or
+      invalid joined facts. Direct tests pin ordering, branch and pipeline
+      precedence, ancestry coordinates, reference identity, span and enum
+      validity, value/redirect invariants, safe defaults, copied collections,
+      and the 16-container bound.
+- [ ] Adapt the existing Bash and PowerShell grammars to emit the structural
+      and command-occurrence projections before enabling any control-flow
+      construct.
 - [ ] Deliver paired Bash and PowerShell `$()` substitution slices for all
       locked executable value positions, including ordering, ancestry,
       shell-specific cwd propagation, literal/escaped boundaries, dynamic
