@@ -68,6 +68,11 @@ partial command and compatibility result.
 - **THEN** projection fails closed
 - **THEN** the occurrence is not published with `IsComplete=true`
 
+#### Scenario: Dynamic Bash command string remains incomplete
+- **WHEN** Bash parses a `bash` or `sh` clause with dynamic wrapper-control input, decoded or combined command-string options, or an expanding quoted body that does not match the complete literal exactly-one wrapper production
+- **THEN** the existing outer compatibility leaf remains visible with direct source provenance
+- **THEN** its command occurrence has `IsComplete=false` because no hidden command-string body was discovered
+
 #### Scenario: While condition and body roles
 - **WHEN** Bash parses `while curl URL; do sleep 1; done`
 - **THEN** `curl` is identified as a condition occurrence
