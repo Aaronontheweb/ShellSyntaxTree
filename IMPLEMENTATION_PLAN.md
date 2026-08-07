@@ -378,17 +378,24 @@ priorities.
       incomplete unless its separate module-baseline proof is supplied. Local
       `Invoke-Command -AsJob`, ambiguous prefixes, malformed value binding,
       unproved identities, and unknown receivers retain unknown/incomplete
-      facts. Module-qualified identities are catalogued, but the parser keeps
-      rejecting those forms atomically until the region-emission slice can
-      expose every body command. The first direct-operator sub-slice now handles
+      facts. Supported catalog-owned module qualifications now pass structural
+      admission because every possible body remains visible; the occurrence
+      analyzer still withholds typed receiver facts after an observed command-
+      resolution mutation unless the authored module qualification proves the
+      identity independently. The first direct-operator sub-slice now handles
       currently supported command interiors in typed synchronous `& {}` and
       `. {}` regions without synthetic host commands. It isolates ordinary
       direct-call binding and command-resolution exit mutation, invalidates
       explicitly escaping scope/provider mutation, carries shared location
       outcomes, and keeps block arguments and leading `param()` declarations
-      atomic. Ordinary assignment state transfer remains an atomic task 7.5b
-      follow-up; task 7.5b is not complete. Continue with synchronous current-runspace callbacks;
-      child process/runspace jobs and parallel
+      atomic. `Measure-Command -Expression` and `Trace-Command -Expression`
+      now form the first command-owned vertical slice: their Main regions are
+      synchronous/once, execute against current-scope state, downgrade across
+      conflicting loop visits, and are pinned by live PowerShell probes for
+      current-scope, opaque-data, shadowed-command, and module-qualified
+      behavior. Ordinary assignment state transfer remains an atomic task 7.5b
+      follow-up; task 7.5b is not complete. Continue with `ForEach-Object`,
+      `Where-Object`, and in-process `Invoke-Command`; child process/runspace jobs and parallel
       blocks; deferred breakpoint/event/completion actions; then unknown
       receiver and nested/adversarial matrices. Preserve script blocks proved
       to be data as opaque values, expose ambiguous bodies with incomplete
