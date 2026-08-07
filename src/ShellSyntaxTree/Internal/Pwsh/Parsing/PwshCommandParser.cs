@@ -254,8 +254,14 @@ internal static partial class PwshCommandParser
         }
 
         var separator = command.LastIndexOf('\\');
-        return separator > 0 && separator + 1 < command.Length
-            && PwshApprovedVerbs.IsCmdletShaped(command.Substring(separator + 1));
+        if (separator <= 0 || separator + 1 >= command.Length)
+        {
+            return false;
+        }
+
+        var commandName = command.Substring(separator + 1);
+        return PwshApprovedVerbs.IsCmdletShaped(commandName) ||
+            PwshAliases.IsKnownCanonical(commandName);
     }
 
     private static bool TryDetectKeywordAnomaly(IReadOnlyList<PwshToken> tokens, out string? reason)
@@ -533,7 +539,8 @@ internal static partial class PwshCommandParser
             var recursion = TryRecurseIntoPwsh(
                 body, start, classified, source, effectiveOptions,
                 workingDirectoryUnknown, recursionDepth,
-                structuralDepth, segment, markWrapped, out var recursionResult);
+                structuralDepth, segment, markWrapped, attribution,
+                out var recursionResult);
             if (recursion)
             {
                 return recursionResult;
@@ -1962,6 +1969,7 @@ internal static partial class PwshCommandParser
         int structuralDepth,
         Segment segment,
         bool markWrapped,
+        PwshSetLocationContext attribution,
         out BuildResult result)
     {
         result = default;
@@ -2089,6 +2097,15 @@ internal static partial class PwshCommandParser
             {
                 childLocation = new PwshSetLocationContext();
                 childLocation.SetDynamic();
+            }
+            else if (attribution.HasAttribution &&
+                     redirectOptions.WorkingDirectory is not null)
+            {
+                // The child inherits the invocation cwd even though its exit
+                // state is isolated. Keep that parse provenance so outcome
+                // projection can correct a failure-only continuation.
+                childLocation = new PwshSetLocationContext();
+                childLocation.SetLiteral(redirectOptions.WorkingDirectory);
             }
 
             var innerParsed = ParseInternal(

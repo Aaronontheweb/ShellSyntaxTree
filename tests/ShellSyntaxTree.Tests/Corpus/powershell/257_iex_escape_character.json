@@ -1,6 +1,6 @@
 {
   "name": "Iex escape character",
-  "input": "Set-Location C:\\safe; iex \u0022S\u0060et-Location C:\\evil\u0022; Get-Item child.txt",
+  "input": "Set-Location C:\\safe \u0026\u0026 iex \u0022S\u0060et-Location C:\\evil\u0022; Get-Item child.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -20,7 +20,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "S\u001Bt-Location"
         ],
@@ -51,14 +51,12 @@
           {
             "raw": "child.txt",
             "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/safe/child.txt"
+            "isPath": true
           },
           {
-            "raw": "C:/safe",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/safe",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

@@ -452,6 +452,25 @@ Recognized variable, alias, function, or module mutation invalidates later
 proofs in every observing scope; cwd-only mutation retains the independent
 initial-state assertion.
 
+Mutation is recognized from the effective parameter vector as well as the
+verb. Common parameter writers `-OutVariable` / `-ov`, `-PipelineVariable` /
+`-pv`, `-ErrorVariable` / `-ev`, `-WarningVariable` / `-wv`, and
+`-InformationVariable` / `-iv` invalidate later observing proofs, including
+accepted unambiguous prefixes such as `-OutV` and `-PipelineV` and inline forms
+such as `-ov:name`. Command-specific writers include `Tee-Object -Variable`,
+`Import-LocalizedData -BindingVariable` / `-Variable`,
+`Invoke-RestMethod -SessionVariable` / `-SV`, `-ResponseHeadersVariable` /
+`-RHV`, and `-StatusCodeVariable`, plus `Invoke-WebRequest -SessionVariable` /
+`-SV`; their accepted unambiguous prefixes have the same effect. An opaque
+splat may supply any such parameter and is therefore a possible mutation.
+Because command type and custom advanced-function metadata are runtime facts,
+an otherwise unclassified command carrying one of the common writer forms is
+treated conservatively rather than assumed native.
+When `Set-Location` carries a recognized writer, the writer effect composes
+with both its success and failure cwd outcomes. In particular, a failure-gated
+continuation after `-ErrorVariable` cannot retain a proved prior value merely
+because location analysis selected the failure partition.
+
 A completely delimited `$()` used as an ordinary word, dynamic command
 identity after `&`, redirect value, foreach expression, double-quoted interpolation, or
 expandable here-string is recursively parsed as a command substitution. Its
@@ -483,6 +502,35 @@ PowerShell scope and location state remain shell-specific. Grouping `( ... )`
 does not isolate location. Branch exits retain an exact cwd only when every
 supported alternative agrees; disagreement becomes `Unknown`. Loop exits
 include the zero-iteration state. The parser does not publish a finite cwd set.
+
+`foreach` assignments use a case-insensitive persistent binding map rather than
+lexical push/pop restoration. A proved nonempty ordered iterable leaves its
+last assigned value after the loop; a same-name nested loop overwrites that
+value. A proved empty iterable performs no body transition and preserves the
+incoming binding and location. A zero-or-more iterable joins the zero path with
+all reachable iteration exits. Repeated visits join facts for each authored
+occurrence, and all concrete or fixed-point visits share the parse-wide 4096
+transition budget.
+
+`Set-Location` has separate success and failure transfers: success takes the
+proved filesystem target location, while failure retains the incoming location.
+A successful non-filesystem or unproved target invalidates binding and
+command-resolution proofs in addition to making cwd unknown. `&&`
+continues from success, `||` from failure, and statement sequence consumes
+their join. `$()` and parenthesized groups share current-runspace state;
+decoded child hosts isolate their exit state. Unsupported directory-stack or
+state/command-resolution mutations, including `Import-Alias`,
+`Import-PSSession`, and `New-Module`, remain fail
+closed. Provider-capable item
+mutators invalidate binding proofs when their target provider is not proved;
+dynamic values alone do not invalidate a proved filesystem target. Loop parsing uses cloned
+compatibility attribution so an unreachable body cannot leak a parse-time
+location, and a possibly reached mutation cannot leave a false exact path.
+Outcome projection also rebases cwd-dependent compatibility arguments, clause
+elements, redirects, and attribution to an exact occurrence cwd. Unknown joins
+clear those resolutions and retain the `<dynamic-cwd>` marker. Decoded child
+hosts retain inherited invocation-cwd attribution on their compatibility
+leaves while isolating child exit state.
 
 Stable v0.3 continues to defer `do`, `switch`, functions, definitions,
 class/type bodies, and arbitrary execution-bearing expressions outside the
@@ -774,6 +822,14 @@ the values those parameters consume do **not** advance the index. So in
 
 The colon form `-Name:value` (§5) always binds — `-Name` is value-binding,
 `value` its value — regardless of the tables below.
+
+PowerShell accepts U+2013 EN DASH, U+2014 EM DASH, and U+2015 HORIZONTAL BAR
+in place of the leading ASCII parameter dash. Stable v0.3 deliberately fails
+those forms atomically. The retained v0.2 `Arg.IsFlag` member derives from an
+ASCII `-` in verbatim `Arg.Raw`; treating an alternate dash as a positional
+literal is unsafe, while normalizing `Raw` would violate source provenance.
+Support therefore requires a later additive representation that can preserve
+both facts.
 
 #### 6.5.2 The binding tables
 
@@ -1126,8 +1182,12 @@ interprets the block.
 PowerShell `$()` runs in the current runspace scope. A `Set-Location` inside a
 subexpression affects later inner commands, the containing command after value
 evaluation, and following outer commands. Unknown location mutations propagate
-as unknown. This differs from Bash command substitution, whose state is
-isolated from the containing shell.
+as unknown. Because `Set-Location` can fail, an ungated statement sequence also
+joins the prior location; a success-gated `&&` continuation may use the proved
+new location. The v0.2 compatibility leaf remains authored evidence, while the
+v0.3 occurrence analysis is the failure-aware security fact and sanitizes stale
+exact compatibility attribution. This differs from Bash command substitution,
+whose state is isolated from the containing shell.
 
 `OpaqueRegionScanner` is grammar-agnostic but escapes on backslash; the
 PowerShell script-block, array, and hash paths give it a backtick-escape mode
@@ -1247,12 +1307,17 @@ missing payloads, and ambiguous parameter binding set
 `ParsedCommand.IsUnparseable = true`; an incoming pipeline is dynamic even
 when an explicit literal argument also appears. These rules prevent a clean,
 persistently approvable `Invoke-Expression` clause from hiding runtime code.
-Because computed code can call `Set-Location` in the current scope, a direct
-dynamic payload also makes location attribution dynamic for every following
-relative path.
+Because computed code can mutate variables, aliases, functions, modules, and
+location in the current scope, a direct dynamic payload invalidates every
+following binding and command-resolution proof and makes location attribution
+dynamic for every following relative path. The same rule applies to `iex`, a
+static call-operator spelling, and the supported module-qualified spelling.
 
 The dot-source invocation operator and unsupported module-qualified cmdlets
-are unparseable rather than being exposed under a misleading raw verb. The
+are unparseable rather than being exposed under a misleading raw verb. This
+validation applies independently to every simple command inside structural
+lists, pipelines, loops, groups, and substitutions, including built-in
+cmdlets such as `Tee-Object` whose verb is not in the approved-verb table. The
 one supported module-qualified wrapper remains
 `Microsoft.PowerShell.Utility\Invoke-Expression`. A quoted string is a command
 identity only when preceded by the call operator `&`; otherwise it is an

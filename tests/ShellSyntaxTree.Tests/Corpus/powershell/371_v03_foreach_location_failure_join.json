@@ -1,0 +1,59 @@
+{
+  "name": "V03 foreach location failure join",
+  "input": "foreach ($d in @('C:\\a', 'C:\\b')) { Set-Location $d }; Get-ChildItem file.txt",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["Set-Location"],
+        "args": [
+          { "raw": "$d", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["Get-ChildItem"],
+        "args": [
+          { "raw": "file.txt", "kind": "DynamicSkip", "isPath": false },
+          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 77 },
+          { "ancestorKind": "CommandList", "region": "Statement", "childIndex": 0, "sourceStart": 0, "sourceLength": 77 },
+          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 53 },
+          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 35, "sourceLength": 17 }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": { "kind": "FiniteSet", "values": ["C:\\a", "C:\\b"] }
+          }
+        ],
+        "workingDirectory": { "kind": "Unknown", "values": [] }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 77 },
+          { "ancestorKind": "CommandList", "region": "Statement", "childIndex": 1, "sourceStart": 0, "sourceLength": 77 }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": { "kind": "Unknown", "values": [] }
+      }
+    ]
+  },
+  "notes": "Every candidate is evaluated, but Set-Location failure and divergent successful targets force the body-input join and continuation cwd to Unknown."
+}

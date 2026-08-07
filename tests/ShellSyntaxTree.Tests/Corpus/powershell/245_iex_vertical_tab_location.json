@@ -1,6 +1,6 @@
 {
   "name": "Iex vertical tab location",
-  "input": "Set-Location C:\\safe; iex \u0022Set-Location\u0060vC:\\evil\u0022; Remove-Item child.txt",
+  "input": "Set-Location C:\\safe \u0026\u0026 iex \u0022Set-Location\u0060vC:\\evil\u0022 \u0026\u0026 Remove-Item child.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -20,7 +20,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "Set-Location"
         ],
@@ -43,7 +43,7 @@
         "isCommandStringWrapped": true
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "Remove-Item"
         ],
@@ -51,14 +51,12 @@
           {
             "raw": "child.txt",
             "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/evil/child.txt"
+            "isPath": true
           },
           {
-            "raw": "C:/evil",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/evil",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

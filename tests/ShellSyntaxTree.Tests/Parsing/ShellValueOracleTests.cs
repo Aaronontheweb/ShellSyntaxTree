@@ -946,6 +946,41 @@ public class ShellValueOracleTests
             Lines(output));
     }
 
+    [Fact]
+    public void PowerShell_variable_writer_parameters_overwrite_existing_bindings()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$f='safe'; Write-Output sensitive -OutV f | Out-Null; \"out=<$f>\"; " +
+            "$f='safe'; Write-Output pipeline -Pi f | ForEach-Object { \"pipeline=<$f>\" }; " +
+            "$f='safe'; Tee-Object -V f -InputObject tee | Out-Null; \"tee=<$f>\"; " +
+            "$f='safe'; Write-Output inline -ov:f | Out-Null; \"inline=<$f>\"; " +
+            "$f='safe'; Write-Output en \u2013OutVariable f | Out-Null; \"en=<$f>\"; " +
+            "$f='safe'; Write-Output em \u2014OutVariable f | Out-Null; \"em=<$f>\"; " +
+            "$f='safe'; Write-Output bar \u2015OutVariable f | Out-Null; \"bar=<$f>\"");
+
+        Assert.Equal(
+            new[]
+            {
+                "out=<sensitive>",
+                "pipeline=<pipeline>",
+                "tee=<tee>",
+                "inline=<inline>",
+                "en=<en>",
+                "em=<em>",
+                "bar=<bar>",
+            },
+            Lines(output));
+    }
+
     private static bool IsAvailable(string executable)
     {
         try

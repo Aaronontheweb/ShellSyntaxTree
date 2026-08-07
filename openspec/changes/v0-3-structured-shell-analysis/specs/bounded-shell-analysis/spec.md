@@ -201,6 +201,61 @@ Recognized variable, alias, function, or module mutation SHALL invalidate later 
 every observing scope; cwd-only mutation SHALL retain the independent
 initial-state assertion.
 
+#### Scenario: Computed Invoke-Expression invalidates current-runspace state
+- **WHEN** isolated-mode PowerShell parses `foreach ($f in 'safe.txt') { }; Invoke-Expression $code; git $f`
+- **THEN** the computed payload remains an incomplete occurrence
+- **THEN** the later `git` occurrence has Unknown working directory and effective `$f` value and is incomplete because the payload can mutate location, variables, aliases, functions, or modules
+- **THEN** the canonical alias, static call-operator spelling, and supported module-qualified spelling have the same effect
+- **WHEN** a computed `Invoke-Expression` occurs inside a bounded `foreach` region whose transfer cannot be modeled
+- **THEN** the complete parse fails atomically rather than retaining stale loop state
+
+#### Scenario: Unproved item-provider target invalidates binding proofs
+- **WHEN** isolated-mode PowerShell parses `Set-Item -Path @('Alias:\\foo') -Value Remove-Item; foreach ($f in 'x') { foo $f }`
+- **THEN** the array target is not treated as a proved filesystem path
+- **THEN** the later command identity and loop value are incomplete
+- **WHEN** the target is a proved filesystem path and only `-Value` is dynamic
+- **THEN** the value alone does not invalidate independent binding proofs
+
+#### Scenario: Observed alias mutation invalidates an ordinary continuation
+- **WHEN** isolated-mode PowerShell parses `Set-Item Alias:git Remove-Item; git child.txt`
+- **THEN** the second command occurrence is incomplete because authored identity `git` is no longer proved
+- **THEN** this invalidation applies without requiring the command to be inside or after a loop
+- **THEN** default ambient-state uncertainty alone does not retroactively make every v0.2 ordinary command incomplete
+
+#### Scenario: Imported session proxies invalidate command identity
+- **WHEN** PowerShell parses `Import-PSSession $session -CommandName git -AllowClobber; git child.txt`
+- **THEN** the later `git` occurrence is incomplete
+- **THEN** current-runspace substitutions propagate that invalidation
+- **THEN** a decoded child host isolates it from the parent continuation
+- **WHEN** PowerShell uses `New-Module` to export a function into the current session
+- **THEN** the same invalidation and scope-isolation rules apply
+- **WHEN** PowerShell uses `Import-Alias` to load aliases into the current session
+- **THEN** the same invalidation and scope-isolation rules apply
+
+#### Scenario: Variable-writing parameters invalidate a proved binding
+- **WHEN** isolated-mode PowerShell parses `foreach ($f in 'safe.txt') { }; Write-Output C:/sensitive.txt -OutVariable f; Remove-Item $f`
+- **THEN** the final occurrence is incomplete and its effective `$f` value is Unknown rather than `safe.txt`
+- **THEN** common-parameter aliases, accepted unambiguous prefixes, inline values, command-specific PowerShell 7 variable writers, and opaque splats have the same conservative effect
+- **WHEN** `-PipelineVariable f` may affect a downstream pipeline stage before pipeline state propagation is fully modeled
+- **THEN** the pipeline fails atomically rather than exposing a stale exact value
+- **WHEN** the writer executes in a current-runspace substitution
+- **THEN** its invalidation propagates to the outer continuation
+- **WHEN** the writer executes in a decoded child host
+- **THEN** its exit mutation does not escape into the parent continuation
+- **WHEN** `Set-Location` carries a recognized writer such as `-ErrorVariable f`
+- **THEN** writer invalidation composes with both reachable location outcomes, including a failure-gated continuation
+
+#### Scenario: Alternate parameter dashes fail closed
+- **WHEN** PowerShell source uses U+2013, U+2014, or U+2015 before `OutVariable`, `Path`, or another parameter name
+- **THEN** the complete parse is unparseable with empty authorization projections
+- **THEN** cwd, provider mutation, and variable-binding analysis never treats the runtime parameter as a literal positional argument
+
+#### Scenario: Module-qualified mutation inside structured source fails closed
+- **WHEN** a loop continuation or pipeline invokes an unsupported module-qualified cmdlet such as `Microsoft.PowerShell.Utility\Tee-Object -Variable f`
+- **THEN** the complete parse is unparseable with empty authorization projections
+- **THEN** quoted call-operator spelling and built-in cmdlets with unapproved verbs cannot bypass the same rule
+- **THEN** `Microsoft.PowerShell.Utility\Invoke-Expression` remains the one separately modeled module-qualified wrapper
+
 #### Scenario: Unknown ambient PowerShell state withholds a finite proof
 - **WHEN** default-mode PowerShell parses `foreach ($f in @('a','b')) { Remove-Item -LiteralPath $f }`
 - **THEN** the loop structure and body command may remain visible
@@ -444,6 +499,18 @@ partition merely to publish exact continuation facts.
 - **THEN** the internal iteration plan retains `a`, `b`, `a` in that order
 - **THEN** the following use of `f` has exact effective value `a`
 
+#### Scenario: PowerShell duplicate values leave the final assignment
+- **WHEN** isolated-mode PowerShell parses `foreach ($f in @('a','b','a')) { Write-Output $f }; Write-Output $f`
+- **THEN** the body occurrence joins effective values `a` and `b`
+- **THEN** the following use of `f` has exact effective value `a`
+- **THEN** binding-name comparison is case-insensitive
+
+#### Scenario: Empty PowerShell loop performs no state transition
+- **WHEN** isolated-mode PowerShell parses `foreach ($f in @()) { Set-Location C:\\tmp }; Get-Location`
+- **THEN** the body remains structurally visible with conservative occurrence facts
+- **THEN** no body state transfer occurs
+- **THEN** the following command retains the exact incoming location and binding state
+
 #### Scenario: Ordered cap counts visits rather than distinct values
 - **WHEN** an isolated-mode Bash loop authors the same literal candidate 33 times
 - **THEN** the internal plan exceeds the concrete-iteration cap
@@ -453,6 +520,7 @@ partition merely to publish exact continuation facts.
 - **WHEN** nested concrete loops require more than 4096 total body transitions
 - **THEN** the complete parse is unparseable
 - **THEN** no partial occurrence or compatibility projection is published
+- **THEN** the same parse-wide limit applies independently to Bash and PowerShell analysis
 
 #### Scenario: Loop-derived cd option is rebound from effective argv
 - **WHEN** isolated-mode Bash analyzes `for f in -P /tmp; do cd "$f"; done`
@@ -513,10 +581,33 @@ partition merely to publish exact continuation facts.
 - **THEN** the decoded child receives no exact effective `f` from the outer loop binding
 - **THEN** a parenthesized subshell remains distinct because it inherits shell bindings while isolating exit state
 
-#### Scenario: PowerShell subexpression cwd propagates
-- **WHEN** PowerShell parses `Write-Output $(Set-Location /tmp; Get-Location); Get-Item relative.txt`
-- **THEN** `Get-Location`, `Write-Output`, and `Get-Item` use `/tmp`
-- **THEN** the analyzer does not restore the pre-subexpression cwd
+#### Scenario: PowerShell subexpression cwd propagation is failure aware
+- **WHEN** PowerShell parses `Write-Output $(Set-Location /tmp && Get-Location); Get-Item relative.txt`
+- **THEN** `Get-Location` uses `/tmp` on the success-only continuation
+- **THEN** `Write-Output` and `Get-Item` have unknown cwd because the subexpression may exit with the prior location when `Set-Location` fails
+- **THEN** the analyzer does not select either the pre-subexpression or successful cwd as a fallback
+
+#### Scenario: PowerShell foreach location exit joins success and failure
+- **WHEN** isolated-mode PowerShell parses `foreach ($d in @('C:\\a','C:\\b')) { Set-Location $d }; Get-Item relative.txt`
+- **THEN** each successful visit uses its effective target location
+- **THEN** each failure visit retains its incoming location
+- **THEN** the post-loop occurrence has unknown cwd and no false exact relative-path resolution
+
+#### Scenario: PowerShell provider location changes relative mutation semantics
+- **WHEN** isolated-mode PowerShell parses `Set-Location Alias:; New-Item -Name foo -Value Remove-Item; foreach ($f in 'x') { foo $f }`
+- **THEN** the successful provider-location transfer invalidates binding and command-resolution proofs
+- **THEN** the later loop command is incomplete
+- **WHEN** a command is reached only through `Set-Location Alias: || ...`
+- **THEN** that failure-only occurrence retains the incoming filesystem cwd and state
+
+#### Scenario: PowerShell exact failure continuation rebases compatibility paths
+- **WHEN** PowerShell parses `Set-Location C:\\target || Get-Item child.txt` from `C:\\work`
+- **THEN** the `Get-Item` occurrence has exact cwd `C:\\work`
+- **THEN** its cwd-dependent compatibility argument, clause element, and attribution are rebased to `C:\\work`
+- **THEN** no resolution derived from `C:\\target` survives on the failure continuation
+- **THEN** the same rules apply inside a decoded child host while child exit state remains isolated
+- **THEN** an unquoted comma-separated argument remains incomplete rather than being collapsed into one path
+- **THEN** a fully quoted comma filename may still be promoted as one literal value
 
 #### Scenario: Unknown PowerShell subexpression mutation propagates
 - **WHEN** a PowerShell subexpression changes location to an unknown value

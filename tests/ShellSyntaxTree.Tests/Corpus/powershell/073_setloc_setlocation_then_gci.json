@@ -1,6 +1,6 @@
 {
   "name": "Setloc setlocation then gci",
-  "input": "Set-Location C:\\src; Get-ChildItem",
+  "input": "Set-Location C:\\src \u0026\u0026 Get-ChildItem",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -20,7 +20,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "Get-ChildItem"
         ],

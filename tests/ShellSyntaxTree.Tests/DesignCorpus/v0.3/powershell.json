@@ -188,9 +188,9 @@
     },
     {
       "id": "pwsh-command-substitution-current-scope-cwd",
-      "concern": "PowerShell subexpression location changes propagate to the consumer and continuation",
+      "concern": "PowerShell subexpression location changes propagate with failure-aware joins",
       "compatibilityProjectionLanded": true,
-      "input": "Write-Output $(Set-Location /tmp; Get-Location); Get-Item relative.txt",
+      "input": "Write-Output $(Set-Location /tmp && Get-Location); Get-Item relative.txt",
       "current": { "isUnparseable": false },
       "desired": {
         "syntax": [
@@ -206,8 +206,8 @@
         "commands": [
           { "authoredVerb": "Set-Location", "immediateRole": "Substitution", "ancestry": ["root", "list", "sub", "subBody"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "C:/work" } },
           { "authoredVerb": "Get-Location", "immediateRole": "Substitution", "ancestry": ["root", "list", "sub", "subBody"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/tmp" } },
-          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/tmp" } },
-          { "authoredVerb": "Get-Item", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/tmp" } }
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Unknown" } },
+          { "authoredVerb": "Get-Item", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Unknown" } }
         ],
         "compatibility": { "verbs": ["Set-Location", "Get-Location", "Write-Output", "Get-Item"], "preservesAuthoredDynamicValues": true },
         "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "NoSyntheticOperator"]
@@ -703,6 +703,7 @@
     {
       "id": "pwsh-foreach-empty-iterable-preserves-cwd",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
       "concern": "A proved empty array performs no body state transition",
       "input": "foreach ($f in @()) { Set-Location C:\\tmp }; Get-Location",
       "current": { "isUnparseable": true, "reasonContains": "state mutation" },
@@ -716,13 +717,101 @@
           { "id": "get", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 1 }
         ],
         "commands": [
-          { "authoredVerb": "Set-Location", "immediateRole": "LoopBody", "ancestry": ["root", "list", "loop", "body"], "isComplete": true, "workingDirectory": { "kind": "Unknown" } },
+          { "authoredVerb": "Set-Location", "immediateRole": "LoopBody", "ancestry": ["root", "list", "loop", "body"], "isComplete": false, "workingDirectory": { "kind": "Unknown" } },
           { "authoredVerb": "Get-Location", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "C:/work" } }
         ],
         "compatibility": { "verbs": ["Set-Location", "Get-Location"], "preservesAuthoredDynamicValues": false },
         "securityInvariants": ["AllCommandsVisible", "StateJoinConservative"]
       },
       "notes": "The body remains structurally visible, but the Never iteration plan contributes no location mutation."
+    },
+    {
+      "id": "pwsh-variable-writer-invalidates-proved-binding",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "PowerShell parameter binding can overwrite a proved loop value without using a mutation verb",
+      "input": "foreach ($f in 'safe.txt') { }; Write-Output C:/sensitive.txt -OutVariable f; Remove-Item $f",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "loop", "kind": "ForEach", "parent": "list", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "writer", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 0 },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true },
+          { "authoredVerb": "Remove-Item", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": false, "effectiveValues": [{ "sourceElement": "$f", "kind": "Unknown", "isPolicySensitive": true }] }
+        ],
+        "compatibility": { "verbs": ["Write-Output", "Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "StateJoinConservative"]
+      },
+      "notes": "Aliases, accepted prefixes, inline values, command-specific writers, and splats share the same invalidation rule; current-runspace writers propagate, Set-Location composes the writer with both cwd outcomes, and decoded child-host writers remain isolated."
+    },
+    {
+      "id": "pwsh-alternate-parameter-dash-gated",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "A PowerShell-compatible alternate dash cannot turn a runtime parameter into a parser literal",
+      "input": "foreach ($f in 'safe.txt') { }; Write-Output C:/sensitive.txt \u2013OutVariable f; Remove-Item $f",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Argument" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed", "StateJoinConservative"]
+      },
+      "notes": "U+2013, U+2014, and U+2015 are runtime parameter dashes but fail closed until an additive typed representation can preserve Raw and flag identity together."
+    },
+    {
+      "id": "pwsh-structured-module-qualified-mutation-gated",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "Structural parsing cannot skip the existing module-qualified-cmdlet prohibition",
+      "input": "foreach ($f in 'safe.txt') { }; Write-Output C:/sensitive.txt | Microsoft.PowerShell.Utility\\Tee-Object -Variable f; Remove-Item $f",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed", "StateJoinConservative"]
+      },
+      "notes": "The one separately modeled module-qualified Invoke-Expression spelling remains supported."
+    },
+    {
+      "id": "pwsh-dynamic-invoke-expression-invalidates-current-state",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "Computed Invoke-Expression code can mutate every tracked current-runspace fact",
+      "input": "foreach ($f in 'safe.txt') { }; Invoke-Expression $code; git $f",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "loop", "kind": "ForEach", "parent": "list", "slot": "Statement", "binding": "f" },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "iex", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 0 },
+          { "id": "git", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Invoke-Expression", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": false, "effectiveValues": [{ "sourceElement": "$code", "kind": "Unknown", "isPolicySensitive": true }] },
+          { "authoredVerb": "git", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": false, "workingDirectory": { "kind": "Unknown" }, "effectiveValues": [{ "sourceElement": "$f", "kind": "Unknown", "isPolicySensitive": true }] }
+        ],
+        "compatibility": { "verbs": ["Invoke-Expression", "git"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "StateJoinConservative"]
+      },
+      "notes": "The same invalidation applies to iex, static call-operator spelling, and the supported module-qualified spelling; inside an unmodeled loop transfer the parse fails atomically."
     },
     {
       "id": "pwsh-foreach-duplicate-order-controls-final-binding",
@@ -904,6 +993,7 @@
     {
       "id": "pwsh-foreach-transition-budget-overflow",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
       "concern": "Nested concrete visits fail atomically above the parse-wide transition budget",
       "input": "foreach ($a in @('a01','a02','a03','a04','a05','a06','a07','a08','a09','a10','a11','a12','a13','a14','a15','a16','a17')) { foreach ($b in @('b01','b02','b03','b04','b05','b06','b07','b08','b09','b10','b11','b12','b13','b14','b15','b16','b17')) { foreach ($c in @('c01','c02','c03','c04','c05','c06','c07','c08','c09','c10','c11','c12','c13','c14','c15')) { Write-Output \"$a$b$c\" } } }",
       "current": { "isUnparseable": false },
@@ -964,6 +1054,7 @@
     {
       "id": "pwsh-foreach-location-failure-aware-join",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
       "concern": "Loop exit joins failure and divergent successful location state",
       "input": "foreach ($d in @('C:\\a', 'C:\\b')) { Set-Location $d }; Get-ChildItem file.txt",
       "current": { "isUnparseable": true, "reasonContains": "state mutation" },

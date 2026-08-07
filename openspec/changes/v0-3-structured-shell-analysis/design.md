@@ -452,7 +452,10 @@ state. A decoded child `pwsh` host starts at `Unknown` unless its own invocation
 independently proves the complete constrained-host contract. Recognized
 variable, alias,
 function, or module mutation invalidates every later observing proof; a cwd-only
-transfer preserves the independent initial-runspace assertion.
+transfer preserves the independent initial-runspace assertion. A computed
+`Invoke-Expression` can perform any of those mutations in the current runspace,
+so it invalidates later bindings and command resolution and makes cwd unknown;
+inside an unmodeled loop transfer it fails the complete region atomically.
 
 Effective values are shell facts, not executable semantics. The analysis must
 preserve both the authored shell classification and each proved effective
@@ -549,6 +552,70 @@ same-name inner loop overwrites rather than restoring the outer value. The
 first v0.3 pass may keep active same-name nesting unparseable, but it cannot use
 push/pop shadowing or unconditional parser-time persistence.
 
+PowerShell uses a separate shell-specific state implementation with the same
+abstract-state invariants. Its binding keys are case-insensitive; an ordered
+nonempty `foreach` leaves the final assigned value, a proved empty loop performs
+no body transition, and a same-name nested loop overwrites rather than restores
+the outer binding. `Set-Location` partitions success at the proved target from
+failure at the incoming cwd, so `&&`, `||`, and statement sequencing remain
+failure-aware. A successful non-filesystem or unproved location invalidates
+binding and command-resolution state because relative provider operations can
+mutate aliases, functions, variables, or environment state; its failure
+partition retains the incoming state. PowerShell concrete and fixed-point visits consume the same
+parse-wide 4096-transition budget as Bash without sharing lexer or scope code.
+Provider-capable item mutators invalidate binding proofs when a scalar, array,
+subexpression, or variable target cannot be proved outside a mutable state
+provider. Target-position tracking avoids treating a dynamic value as a state
+target when the filesystem path itself is proved.
+An independent observed-mutation bit invalidates command identity for every
+later ordinary or loop occurrence. It is not inferred merely from the default
+ambient-state mode, preserving compatibility for an ordinary command when no
+mutation was observed.
+The PowerShell 7 mutation inventory includes `Import-Alias` and
+`Import-PSSession` because they can clobber existing command names, and
+`New-Module` because it can immediately export functions into the current session. Legacy PSSnapin
+commands are not added to the PowerShell 7 contract when the runtime does not
+expose them.
+
+Mutation recognition also consumes the authored argument vector. PowerShell
+common parameters `OutVariable`, `PipelineVariable`, `ErrorVariable`,
+`WarningVariable`, and `InformationVariable`, their documented aliases, their
+accepted unambiguous prefixes, and inline values can overwrite a proved
+binding even when the verb itself is nonmutating. The PowerShell 7 inventory
+also includes the variable-writing parameters of `Tee-Object`,
+`Import-LocalizedData`, `Invoke-RestMethod`, and `Invoke-WebRequest`. An opaque
+splat can provide those keys and is conservatively a possible mutation. The
+analysis does not assume an unclassified command is native because a custom
+advanced function can accept the common parameters; a false-negative stale
+binding would be an approval-scope error, while the conservative false
+positive is recoverable by prompting.
+The variable-writer transfer is composed after `Set-Location` partitions its
+success and failure cwd outcomes, preventing the specialized location transfer
+from bypassing argument-vector mutation on either continuation.
+
+PowerShell's binder also accepts U+2013, U+2014, and U+2015 as leading
+parameter dashes. Stable v0.3 rejects those tokens atomically. The locked v0.2
+`Arg.IsFlag` derives from an ASCII-leading verbatim `Raw`, so silently treating
+an alternate dash as positional is unsafe and normalizing it would destroy
+authored provenance. The structural coordinator also reapplies the existing
+module-qualified-cmdlet prohibition to every simple-command segment; the
+module-qualified `Invoke-Expression` wrapper remains the sole specified
+exception.
+
+The PowerShell structural parser clones its compatibility location-attribution
+context while parsing a loop iterator and body. This prevents a structurally
+present but unreachable body from changing following v0.2 leaves. If the body
+may execute and mutate location, the compatibility context is made dynamic;
+the occurrence analyzer then supplies the authoritative exact-or-unknown cwd
+facts. Outcome projection rebases cwd-dependent compatibility arguments,
+elements, redirects, and attribution when that occurrence cwd is exact. An
+unknown occurrence cwd clears those resolutions and retains the dynamic-cwd
+marker, so a parse location taken from the success partition cannot leak into
+an exact failure continuation. Decoded child-host compatibility leaves carry
+the inherited invocation-cwd attribution needed by that projection, while the
+child's exit state remains isolated. General extraction of state primitives
+waits until both language passes are complete and compared under task 8.1.
+
 Parser-owned side facts retain each argument's complete `ShellValue` fragment
 sequence. For every concrete visit, the analyzer re-evaluates all arguments
 from the current binding map, accumulates effective domains by authored element
@@ -600,6 +667,10 @@ existing `Raw="<dynamic-cwd>"`, `Kind=DynamicSkip`, `Resolved=null`,
 signal merely because no exact cwd can be published. This is a security
 correction allowed by the compatibility contract, not an invitation to rewrite
 authored operands with analyzed loop values.
+
+An exact-cwd correction to the v0.2 compatibility `Redirect` does not imply
+that occurrence-level redirect analysis is complete. That independent fact
+remains conservative until its redirect provenance is published and joined.
 
 ### Model redirect operation and target independently
 

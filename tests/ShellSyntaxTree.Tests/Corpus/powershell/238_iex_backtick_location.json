@@ -1,6 +1,6 @@
 {
   "name": "Iex backtick location",
-  "input": "Set-Location C:\\safe; iex Write-Output\u0060 ok\u0060nSet-Location\u0060 C:\\evil; Remove-Item child.txt",
+  "input": "Set-Location C:\\safe \u0026\u0026 iex Write-Output\u0060 ok\u0060nSet-Location\u0060 C:\\evil \u0026\u0026 Remove-Item child.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -20,7 +20,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "Write-Output"
         ],
@@ -65,7 +65,7 @@
         "isCommandStringWrapped": true
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "Remove-Item"
         ],
@@ -73,14 +73,12 @@
           {
             "raw": "child.txt",
             "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/evil/child.txt"
+            "isPath": true
           },
           {
-            "raw": "C:/evil",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/evil",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

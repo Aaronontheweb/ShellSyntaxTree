@@ -230,6 +230,18 @@ public class PwshLexerTests
         Assert.Equal(PwshTokenKind.Word, tokens[2].Kind);
     }
 
+    [Theory]
+    [InlineData('\u2013')]
+    [InlineData('\u2014')]
+    [InlineData('\u2015')]
+    public void Alternate_PowerShell_parameter_dash_fails_closed(char dash)
+    {
+        var token = Assert.Single(Significant($"{dash}OutVariable"));
+
+        Assert.Equal(PwshTokenKind.UnparseableSentinel, token.Kind);
+        Assert.Contains($"U+{(int)dash:X4}", token.UnparseableReason);
+    }
+
     [Fact]
     public void Colon_form_parameter_keeps_its_value()
     {

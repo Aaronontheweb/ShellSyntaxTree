@@ -179,8 +179,8 @@
           }
         ],
         "workingDirectory": {
-          "kind": "Unknown",
-          "values": [],
+          "kind": "Exact",
+          "values": ["C:/work"],
           "pattern": null,
           "coveringDirectory": null
         }
@@ -207,8 +207,8 @@
         ],
         "effectiveArguments": [],
         "workingDirectory": {
-          "kind": "Unknown",
-          "values": [],
+          "kind": "Exact",
+          "values": ["C:/work"],
           "pattern": null,
           "coveringDirectory": null
         }
@@ -235,8 +235,8 @@
         ],
         "effectiveArguments": [],
         "workingDirectory": {
-          "kind": "Unknown",
-          "values": [],
+          "kind": "Exact",
+          "values": ["C:/work"],
           "pattern": null,
           "coveringDirectory": null
         }

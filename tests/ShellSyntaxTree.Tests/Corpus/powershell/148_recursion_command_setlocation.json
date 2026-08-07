@@ -1,6 +1,6 @@
 {
   "name": "Recursion command setlocation",
-  "input": "pwsh -Command \u0022cd C:\\x; gci\u0022",
+  "input": "pwsh -Command \u0022cd C:\\x \u0026\u0026 gci\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -22,17 +22,16 @@
         "isCommandStringWrapped": true
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "gci"
         ],
         "canonicalVerb": "Get-ChildItem",
         "args": [
           {
-            "raw": "C:/x",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/x",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

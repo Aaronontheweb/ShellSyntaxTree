@@ -145,12 +145,18 @@ internal static partial class PwshCommandParser
                 SourceLength = bodyToken.SourceStart + bodyToken.SourceLength -
                     start.SourceStart,
             };
-            _forEachPlans.Add(
-                forEach,
-                PwshForEachValueAnalysis.CapturePlan(
-                    bindingName,
-                    iterableTokens,
-                    isLiteralIterable));
+            var plan = PwshForEachValueAnalysis.CapturePlan(
+                bindingName,
+                iterableTokens,
+                isLiteralIterable);
+            _forEachPlans.Add(forEach, plan);
+            if (ContainsSetLocation(iteratorCommands) ||
+                plan.Cardinality != PwshIterationCardinality.Never &&
+                ContainsSetLocation(body))
+            {
+                _attribution.SetDynamic();
+            }
+
             command = forEach;
             error = null;
             return true;
@@ -278,7 +284,7 @@ internal static partial class PwshCommandParser
                 _recursionDepth,
                 _structuralDepth + _groupDepth + 1,
                 _markWrapped,
-                _attribution,
+                _attribution.Clone(),
                 sourceStart,
                 sourceLength,
                 CompoundOperator.None,
@@ -335,7 +341,7 @@ internal static partial class PwshCommandParser
                 _recursionDepth,
                 _structuralDepth + _groupDepth + 1,
                 _markWrapped,
-                _attribution,
+                _attribution.Clone(),
                 sourceStart,
                 sourceLength,
                 CompoundOperator.None,
@@ -429,46 +435,16 @@ internal static partial class PwshCommandParser
         }
 
         private static bool IsUnsupportedForEachStateVerb(string verb) =>
-            verb.Equals("Set-Location", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Push-Location", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Pop-Location", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Set-Variable", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("New-Variable", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Remove-Variable", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Clear-Variable", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Set-Alias", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("New-Alias", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Remove-Alias", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Import-Module", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Remove-Module", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("New-PSDrive", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Remove-PSDrive", StringComparison.OrdinalIgnoreCase) ||
-            verb.Equals("Set-StrictMode", StringComparison.OrdinalIgnoreCase);
+            PwshPersistentStateMutation.IsUnsupportedForEachStateVerb(verb);
 
-        private static bool IsProviderStateMutation(string verb, Clause clause)
+        private static bool ContainsSetLocation(ShellSyntaxNode node)
         {
-            if (!verb.Equals("Set-Item", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("New-Item", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("Remove-Item", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("Rename-Item", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("Move-Item", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("Copy-Item", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("Clear-Item", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("Set-Content", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("Add-Content", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("Clear-Content", StringComparison.OrdinalIgnoreCase) &&
-                !verb.Equals("Remove-Content", StringComparison.OrdinalIgnoreCase))
+            foreach (var clause in EnumerateClauses(node))
             {
-                return false;
-            }
-
-            foreach (var element in clause.Elements)
-            {
-                if (element.Role == ClauseElementRole.Argument &&
-                    (IsMutableStateProviderPath(element.Value) ||
-                     IsMutableStateProviderPath(element.Raw) ||
-                     element.Resolved is not null &&
-                     IsMutableStateProviderPath(element.Resolved)))
+                var verb = clause.Verb.CanonicalVerb ??
+                    (clause.Verb.Tokens.Count == 0 ? null : clause.Verb.Tokens[0]);
+                if (verb is not null &&
+                    verb.Equals("Set-Location", StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
                 }
@@ -477,16 +453,8 @@ internal static partial class PwshCommandParser
             return false;
         }
 
-        private static bool IsMutableStateProviderPath(string value)
-        {
-            var providerStart = value.LastIndexOf('\\') + 1;
-            var providerPath = value.Substring(providerStart);
-            return providerPath.StartsWith("Alias:", StringComparison.OrdinalIgnoreCase) ||
-                providerPath.StartsWith("Function:", StringComparison.OrdinalIgnoreCase) ||
-                providerPath.StartsWith("Variable:", StringComparison.OrdinalIgnoreCase) ||
-                providerPath.StartsWith("Environment:", StringComparison.OrdinalIgnoreCase) ||
-                providerPath.StartsWith("Env:", StringComparison.OrdinalIgnoreCase);
-        }
+        private static bool IsProviderStateMutation(string verb, Clause clause)
+            => PwshPersistentStateMutation.IsProviderStateMutation(verb, clause);
 
         private static IEnumerable<Clause> EnumerateClauses(ShellSyntaxNode node)
         {

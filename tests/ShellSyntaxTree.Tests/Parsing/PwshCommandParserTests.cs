@@ -459,7 +459,7 @@ public class PwshCommandParserTests
     [Fact]
     public void Set_location_attributes_cwd_to_subsequent_clauses()
     {
-        var result = Parse("cd C:\\repo; git status");
+        var result = Parse("cd C:\\repo && git status");
         var attribution = result.Clauses[1].Args.Single(a => a.IsCwdAttribution);
         Assert.True(attribution.IsPath);
         Assert.Equal("C:/repo", attribution.Resolved);
@@ -487,7 +487,7 @@ public class PwshCommandParserTests
     {
         // PowerShell ( ) is a grouping operator, not a subshell — attribution
         // propagates through it (§9 rule 4).
-        var result = Parse("(cd C:\\sensitive); Remove-Item *");
+        var result = Parse("(cd C:\\sensitive) && Remove-Item *");
         var rm = result.Clauses.Last();
         Assert.Contains(rm.Args, a => a.IsCwdAttribution && a.Resolved == "C:/sensitive");
     }
@@ -707,14 +707,16 @@ public class PwshCommandParserTests
     }
 
     [Fact]
-    public void Backtick_newline_payload_updates_outer_location()
+    public void Backtick_newline_payload_keeps_outer_location_conservative_until_remapping()
     {
         var result = Parse(
-            "Set-Location C:\\safe; iex Write-Output` ok`nSet-Location` C:\\evil; Remove-Item child.txt");
+            "Set-Location C:\\safe && iex Write-Output` ok`nSet-Location` C:\\evil && Remove-Item child.txt");
         var remove = result.Clauses.Last();
 
         Assert.Contains(remove.Args,
-            a => a.Raw == "child.txt" && a.Resolved == "C:/evil/child.txt");
+            a => a.Raw == "child.txt" && a.Resolved is null);
+        Assert.Contains(remove.Args,
+            a => a.IsCwdAttribution && a.Kind == ArgKind.DynamicSkip);
     }
 
     [Theory]
@@ -729,14 +731,16 @@ public class PwshCommandParserTests
     }
 
     [Fact]
-    public void Decoded_vertical_tab_location_change_updates_outer_location()
+    public void Decoded_vertical_tab_location_keeps_outer_state_conservative_until_remapping()
     {
         var result = Parse(
-            "Set-Location C:\\safe; iex \"Set-Location`vC:\\evil\"; Remove-Item child.txt");
+            "Set-Location C:\\safe && iex \"Set-Location`vC:\\evil\" && Remove-Item child.txt");
         var remove = result.Clauses.Last();
 
         Assert.Contains(remove.Args,
-            a => a.Raw == "child.txt" && a.Resolved == "C:/evil/child.txt");
+            a => a.Raw == "child.txt" && a.Resolved is null);
+        Assert.Contains(remove.Args,
+            a => a.IsCwdAttribution && a.Kind == ArgKind.DynamicSkip);
     }
 
     [Fact]
@@ -868,11 +872,15 @@ public class PwshCommandParserTests
     public void Escape_character_does_not_create_set_location_identity()
     {
         var result = Parse(
-            "Set-Location C:\\safe; iex \"S`et-Location C:\\evil\"; Get-Item child.txt");
+            "Set-Location C:\\safe && iex \"S`et-Location C:\\evil\"; Get-Item child.txt");
         var item = result.Clauses.Last();
 
+        Assert.DoesNotContain(
+            result.Clauses,
+            clause => clause.Verb.CanonicalVerb == "Set-Location" &&
+                !ReferenceEquals(clause, result.Clauses[0]));
         Assert.Contains(item.Args,
-            a => a.Raw == "child.txt" && a.Resolved == "C:/safe/child.txt");
+            a => a.Raw == "child.txt" && a.Resolved is null);
     }
 
     [Theory]
@@ -887,7 +895,7 @@ public class PwshCommandParserTests
     [Fact]
     public void Invoke_expression_inherits_the_current_location()
     {
-        var result = Parse("Set-Location C:\\a; iex 'Remove-Item child.txt'");
+        var result = Parse("Set-Location C:\\a && iex 'Remove-Item child.txt'");
         var remove = result.Clauses.Last();
 
         Assert.Equal("Remove-Item", remove.Verb.Tokens[0]);
@@ -895,22 +903,22 @@ public class PwshCommandParserTests
     }
 
     [Fact]
-    public void Invoke_expression_exports_location_changes_to_outer_clauses()
+    public void Invoke_expression_location_changes_remain_conservative_until_remapping()
     {
         var result = Parse(
-            "Set-Location C:\\a; iex 'Set-Location C:\\b; Remove-Item child.txt'; Get-ChildItem child.txt");
+            "Set-Location C:\\a && iex 'Set-Location C:\\b && Remove-Item child.txt' && Get-ChildItem child.txt");
 
         Assert.Contains(result.Clauses[2].Args,
-            a => a.Raw == "child.txt" && a.Resolved == "C:/b/child.txt");
+            a => a.Raw == "child.txt" && a.Resolved is null);
         Assert.Contains(result.Clauses[3].Args,
-            a => a.Raw == "child.txt" && a.Resolved == "C:/b/child.txt");
+            a => a.Raw == "child.txt" && a.Resolved is null);
     }
 
     [Fact]
     public void Dynamic_invoke_expression_invalidates_following_location()
     {
         var result = Parse(
-            "Set-Location C:\\safe; Invoke-Expression $code; Remove-Item child.txt");
+            "Set-Location C:\\safe && Invoke-Expression $code; Remove-Item child.txt");
         var remove = result.Clauses.Last();
         var child = Assert.Single(remove.Args, a => a.Raw == "child.txt");
 
@@ -939,7 +947,7 @@ public class PwshCommandParserTests
     public void Child_pwsh_inherits_exact_invocation_location()
     {
         var result = Parse(
-            "Set-Location C:\\a; pwsh -Command 'Get-Item child.txt'");
+            "Set-Location C:\\a && pwsh -Command 'Get-Item child.txt'");
         var child = result.Clauses.Last();
 
         Assert.Contains(child.Args,

@@ -41,28 +41,35 @@ internal static partial class PwshCommandParser
         }
 
         var incompleteForEachClauses = CollectIncompleteForEachClauses(syntax);
+        var initialWorkingDirectory = sharedLocation?.IsDynamic == true
+            ? null
+            : sharedLocation?.ResolvedCwd ??
+              options.WorkingDirectory ??
+              Environment.CurrentDirectory;
         if (!PwshForEachValueAnalyzer.TryAnalyze(
                 syntax,
                 options,
+                initialWorkingDirectory,
                 coordinator.GetFacts,
                 coordinator.GetForEachPlan,
                 incompleteForEachClauses,
+                out var analyzedSyntax,
                 out var analyzedFacts) ||
             !ShellSyntaxProjection.TryProject(
-                syntax,
+                analyzedSyntax,
                 analyzedFacts,
                 out var projection))
         {
             return StructuralFailure(
                 source,
                 "PowerShell structural syntax exceeded limits or contained invalid parser-owned facts",
-                syntax);
+                analyzedSyntax);
         }
 
         return new ParsedCommand
         {
             Source = source,
-            Syntax = syntax,
+            Syntax = analyzedSyntax,
             Commands = projection.Commands,
             Clauses = projection.Clauses,
         };
@@ -410,6 +417,11 @@ internal static partial class PwshCommandParser
             }
 
             CollapseSafeForEachCommandArgument(segmentTokens, compatibilityOperator);
+
+            if (TryDetectUnsupportedInvocationShape(segmentTokens, out error))
+            {
+                return false;
+            }
 
             if (_insideCommandSubstitution)
             {

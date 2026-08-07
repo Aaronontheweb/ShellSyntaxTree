@@ -1,6 +1,6 @@
 {
   "name": "Setloc tilde",
-  "input": "cd ~; gci",
+  "input": "cd ~ \u0026\u0026 gci",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -21,17 +21,16 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "gci"
         ],
         "canonicalVerb": "Get-ChildItem",
         "args": [
           {
-            "raw": "C:/Users/user",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/Users/user",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

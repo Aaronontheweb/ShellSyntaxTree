@@ -1,6 +1,6 @@
 {
   "name": "Setloc path param",
-  "input": "Set-Location -Path C:\\proj; rm temp.txt",
+  "input": "Set-Location -Path C:\\proj \u0026\u0026 rm temp.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -25,7 +25,7 @@
         "redirects": []
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "rm"
         ],

@@ -1,6 +1,6 @@
 {
   "name": "Iex exports location",
-  "input": "iex \u0027Set-Location C:\\b\u0027; Remove-Item child.txt",
+  "input": "iex \u0027Set-Location C:\\b\u0027 \u0026\u0026 Remove-Item child.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -21,7 +21,7 @@
         "isCommandStringWrapped": true
       },
       {
-        "operator": "Sequence",
+        "operator": "AndIf",
         "verb": [
           "Remove-Item"
         ],
@@ -29,14 +29,12 @@
           {
             "raw": "child.txt",
             "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/b/child.txt"
+            "isPath": true
           },
           {
-            "raw": "C:/b",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/b",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],
