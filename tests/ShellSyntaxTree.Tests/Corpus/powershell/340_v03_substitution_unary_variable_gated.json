@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution unary variable gated",
+  "input": "Write-Output $(-$x)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "A sign applied to a variable is an expression rather than a sign-leading command name.",
+  "oracleExpectation": "OutOfScope"
+}

@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution hex literal gated",
+  "input": "Write-Output $(0x10)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "PowerShell hexadecimal literals are not fabricated into commands.",
+  "oracleExpectation": "OutOfScope"
+}

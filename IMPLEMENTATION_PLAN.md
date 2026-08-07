@@ -256,7 +256,7 @@ priorities.
       roles, ancestry, completeness, nullable decoded spans, compatibility
       operators, and exact shared `Clause` identity. The strict DTO rejects
       unknown fields and always requires unparseable projections to be empty.
-      The PowerShell manifest now owns all 310 entries and round-trips exactly;
+      The PowerShell manifest now owns all 341 entries and round-trips exactly;
       explicit false/null assertions remain opt-in and generator-preserved.
 - [x] Deliver the first Bash `$()` substitution slice for supported
       simple-command arguments and redirect targets. Direct tests and corpus
@@ -267,10 +267,12 @@ priorities.
       and malformed interiors.
 - [ ] Extend Bash substitution discovery to iterables and expanding heredoc
       bodies, then add the corresponding Netclaw approval-matrix cases.
-- [ ] Deliver the PowerShell `$()` substitution slice for every locked value
-      and expression position, including current-scope state propagation,
-      literal boundaries, incomplete dynamic identities, executable corpus,
-      and Netclaw cases.
+- [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
+      Netclaw approval-matrix cases. The simple-command slice is delivered for
+      ordinary, adjacent, quoted, here-string, redirect, standalone,
+      call-operator, dynamic-identity, and host-wrapper positions, with
+      current-scope state propagation and bounded expression rejection pinned
+      by the 341-entry executable corpus.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.

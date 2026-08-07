@@ -1,0 +1,313 @@
+{
+  "name": "V03 substitution dynamic cwd poisoning",
+  "input": "Write-Output $(Set-Location $target; Get-Item child.txt); Get-Item sibling.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "$target",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Item"
+        ],
+        "args": [
+          {
+            "raw": "child.txt",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "$(Set-Location $target; Get-Item child.txt)",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Item"
+        ],
+        "args": [
+          {
+            "raw": "sibling.txt",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 78,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 78,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 56,
+        "clauseIndex": 2,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "CommandSubstitution",
+        "parentIndex": 2,
+        "region": "Substitution",
+        "childIndex": 0,
+        "sourceStart": 13,
+        "sourceLength": 43,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 3,
+        "region": "Substitution",
+        "childIndex": 0,
+        "sourceStart": 15,
+        "sourceLength": 40,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 4,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 15,
+        "sourceLength": 40,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 5,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 15,
+        "sourceLength": 20,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 5,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 37,
+        "sourceLength": 18,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 58,
+        "sourceLength": 20,
+        "clauseIndex": 3,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 78
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 78
+          },
+          {
+            "ancestorKind": "CommandSubstitution",
+            "region": "Substitution",
+            "childIndex": 0,
+            "sourceStart": 13,
+            "sourceLength": 43
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 15,
+            "sourceLength": 40
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 15,
+            "sourceLength": 40
+          }
+        ]
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 78
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 78
+          },
+          {
+            "ancestorKind": "CommandSubstitution",
+            "region": "Substitution",
+            "childIndex": 0,
+            "sourceStart": 13,
+            "sourceLength": 43
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 15,
+            "sourceLength": 40
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 15,
+            "sourceLength": 40
+          }
+        ]
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 78
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 78
+          }
+        ]
+      },
+      {
+        "clauseIndex": 3,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 78
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 78
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Unknown current-scope location changes poison inner, consumer, and continuation attribution."
+}

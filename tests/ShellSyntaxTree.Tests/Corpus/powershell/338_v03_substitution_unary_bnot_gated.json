@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution unary bnot gated",
+  "input": "Write-Output $(-bnot 1)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "Unary bitwise negation is an expression and cannot produce a command occurrence.",
+  "oracleExpectation": "OutOfScope"
+}

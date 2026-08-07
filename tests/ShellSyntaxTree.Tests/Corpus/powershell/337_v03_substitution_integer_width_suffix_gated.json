@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution integer width suffix gated",
+  "input": "Write-Output $(0x10s)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "PowerShell integer-width suffixes produce numeric values rather than executable identities.",
+  "oracleExpectation": "OutOfScope"
+}

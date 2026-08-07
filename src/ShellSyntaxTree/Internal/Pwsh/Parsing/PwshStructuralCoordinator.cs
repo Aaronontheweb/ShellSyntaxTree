@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
+using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Pwsh.Parsing;
 
@@ -17,6 +18,7 @@ internal static partial class PwshCommandParser
         IReadOnlyList<PwshToken> tokens,
         PwshParserOptions options,
         int recursionDepth,
+        int structuralDepth,
         bool markWrapped,
         PwshSetLocationContext? sharedLocation)
     {
@@ -25,8 +27,13 @@ internal static partial class PwshCommandParser
             tokens,
             options,
             recursionDepth,
+            structuralDepth,
             markWrapped,
-            sharedLocation);
+            sharedLocation,
+            sourceStart: 0,
+            source.Length,
+            CompoundOperator.None,
+            insideCommandSubstitution: false);
         if (!coordinator.TryParse(out var syntax, out var error))
         {
             return StructuralFailure(source, error, syntax);
@@ -36,7 +43,7 @@ internal static partial class PwshCommandParser
                 syntax,
                 simple => new CommandOccurrenceFacts
                 {
-                    IsComplete = IsStructurallyComplete(simple.Clause),
+                    IsComplete = IsStructurallyComplete(simple),
                 },
                 out var projection))
         {
@@ -74,8 +81,13 @@ internal static partial class PwshCommandParser
         private readonly IReadOnlyList<PwshToken> _tokens;
         private readonly PwshParserOptions _options;
         private readonly int _recursionDepth;
+        private readonly int _structuralDepth;
         private readonly bool _markWrapped;
         private readonly PwshSetLocationContext _attribution;
+        private readonly int _sourceStart;
+        private readonly int _sourceLength;
+        private readonly CompoundOperator _firstCompatibilityOperator;
+        private readonly bool _insideCommandSubstitution;
         private int _position;
         private int _groupDepth;
 
@@ -84,15 +96,25 @@ internal static partial class PwshCommandParser
             IReadOnlyList<PwshToken> tokens,
             PwshParserOptions options,
             int recursionDepth,
+            int structuralDepth,
             bool markWrapped,
-            PwshSetLocationContext? sharedLocation)
+            PwshSetLocationContext? sharedLocation,
+            int sourceStart,
+            int sourceLength,
+            CompoundOperator firstCompatibilityOperator,
+            bool insideCommandSubstitution)
         {
             _source = source;
             _tokens = tokens;
             _options = options;
             _recursionDepth = recursionDepth;
+            _structuralDepth = structuralDepth;
             _markWrapped = markWrapped;
             _attribution = sharedLocation ?? new PwshSetLocationContext();
+            _sourceStart = sourceStart;
+            _sourceLength = sourceLength;
+            _firstCompatibilityOperator = firstCompatibilityOperator;
+            _insideCommandSubstitution = insideCommandSubstitution;
         }
 
         internal bool TryParse(out ShellBlockSyntax syntax, out string? error)
@@ -102,14 +124,14 @@ internal static partial class PwshCommandParser
             {
                 syntax = new ShellBlockSyntax
                 {
-                    SourceStart = 0,
-                    SourceLength = _source.Length,
+                    SourceStart = _sourceStart,
+                    SourceLength = _sourceLength,
                 };
                 error = null;
                 return true;
             }
 
-            if (!TryParseList(CompoundOperator.None, out var command, out error) ||
+            if (!TryParseList(_firstCompatibilityOperator, out var command, out error) ||
                 command is null)
             {
                 syntax = new ShellBlockSyntax();
@@ -129,8 +151,8 @@ internal static partial class PwshCommandParser
             syntax = new ShellBlockSyntax
             {
                 Statements = new[] { command },
-                SourceStart = 0,
-                SourceLength = _source.Length,
+                SourceStart = _sourceStart,
+                SourceLength = _sourceLength,
             };
             return true;
         }
@@ -345,6 +367,69 @@ internal static partial class PwshCommandParser
                 return false;
             }
 
+            if (_insideCommandSubstitution)
+            {
+                var firstSegmentToken = segmentTokens[0];
+                var lastSegmentToken = segmentTokens[segmentTokens.Count - 1];
+                var segmentSource = _source.Substring(
+                    firstSegmentToken.SourceStart,
+                    lastSegmentToken.SourceStart + lastSegmentToken.SourceLength -
+                        firstSegmentToken.SourceStart);
+                if (IsUnsupportedSubstitutionBody(segmentSource, segmentTokens))
+                {
+                    error = "unsupported PowerShell expression statement in subexpression";
+                    return false;
+                }
+
+                if (segmentTokens[0].Kind == PwshTokenKind.Parameter)
+                {
+                    // PowerShell permits dash-leading native command names.
+                    // At statement position this token is the executable, not
+                    // a parameter waiting for a missing command.
+                    segmentTokens[0] = segmentTokens[0] with { Kind = PwshTokenKind.Word };
+                }
+            }
+
+            if (!TryValidateOpaqueExpressions(segmentTokens, out error))
+            {
+                return false;
+            }
+
+            if (!TryCollectCommandSubstitutions(
+                    segmentTokens,
+                    out var substitutionFragments,
+                    out error))
+            {
+                return false;
+            }
+
+            var hasCallOperator = segmentTokens[0].Kind == PwshTokenKind.Operator &&
+                segmentTokens[0].OperatorText == "&";
+            var firstIsDirectSubstitution = substitutionFragments.Count > 0 &&
+                IsDirectCommandSubstitution(segmentTokens[0], substitutionFragments[0]);
+            if (!hasCallOperator && firstIsDirectSubstitution)
+            {
+                if (segmentTokens.Count != 1 || substitutionFragments.Count != 1)
+                {
+                    error = "a standalone PowerShell subexpression cannot have command-style arguments";
+                    return false;
+                }
+
+                return TryParseStandaloneSubstitution(
+                    substitutionFragments[0],
+                    compatibilityOperator,
+                    out command,
+                    out error);
+            }
+
+            if (!TryParseCommandSubstitutions(
+                    substitutionFragments,
+                    out var substitutions,
+                    out error))
+            {
+                return false;
+            }
+
             var effectiveOptions = _options;
             var workingDirectoryUnknown = false;
             if (_attribution.HasAttribution && !_attribution.IsDynamic)
@@ -373,6 +458,7 @@ internal static partial class PwshCommandParser
                 effectiveOptions,
                 workingDirectoryUnknown,
                 _recursionDepth,
+                _structuralDepth + _groupDepth,
                 _markWrapped,
                 _attribution);
             if (built.Error is not null)
@@ -383,6 +469,12 @@ internal static partial class PwshCommandParser
 
             if (built.Syntax is not null)
             {
+                if (substitutions.Count > 0)
+                {
+                    error = "PowerShell wrapper recursion cannot retain parent-scope substitutions safely";
+                    return false;
+                }
+
                 command = built.Syntax;
                 return true;
             }
@@ -405,6 +497,7 @@ internal static partial class PwshCommandParser
             command = new SimpleCommandSyntax
             {
                 Clause = clause,
+                Substitutions = substitutions,
                 SourceStart = first.SourceStart,
                 SourceLength = last.SourceStart + last.SourceLength - first.SourceStart,
             };
@@ -416,7 +509,8 @@ internal static partial class PwshCommandParser
             out ShellSyntaxNode? command,
             out string? error)
         {
-            if (_groupDepth >= ShellAnalysisLimits.MaxStructuralNesting)
+            if (_structuralDepth + _groupDepth >=
+                ShellAnalysisLimits.MaxStructuralNesting)
             {
                 command = null;
                 error = "PowerShell structural nesting depth exceeded (>16)";
@@ -441,7 +535,7 @@ internal static partial class PwshCommandParser
             if (_position == _tokens.Count || !IsOperator(")"))
             {
                 command = null;
-                error = $"unbalanced '(' grouping at position {_source.Length}";
+                error = $"unbalanced '(' grouping at position {_sourceStart + _sourceLength}";
                 return false;
             }
 
@@ -524,6 +618,598 @@ internal static partial class PwshCommandParser
             _position < _tokens.Count &&
             _tokens[_position].Kind == PwshTokenKind.Operator &&
             string.Equals(_tokens[_position].OperatorText, value, StringComparison.Ordinal);
+
+        private bool TryCollectCommandSubstitutions(
+            IReadOnlyList<PwshToken> tokens,
+            out IReadOnlyList<ShellValueFragment> substitutions,
+            out string? error)
+        {
+            var discovered = new List<ShellValueFragment>();
+            foreach (var token in tokens)
+            {
+                if (token.ResolverValue is null)
+                {
+                    continue;
+                }
+
+                foreach (var fragment in token.ResolverValue.Fragments)
+                {
+                    if (fragment.Kind != ShellValueFragmentKind.Opaque ||
+                        fragment.OpaqueCause != ShellOpaqueCause.PowerShellSubexpression)
+                    {
+                        continue;
+                    }
+
+                    if (fragment.SourceStart is null || fragment.SourceLength is null ||
+                        fragment.SourceLength < 3 ||
+                        fragment.SourceStart < _sourceStart ||
+                        fragment.SourceStart + fragment.SourceLength >
+                            _sourceStart + _sourceLength)
+                    {
+                        substitutions = Array.Empty<ShellValueFragment>();
+                        error = "PowerShell subexpression has invalid source provenance";
+                        return false;
+                    }
+
+                    var raw = _source.Substring(
+                        fragment.SourceStart.Value,
+                        fragment.SourceLength.Value);
+                    if (!raw.StartsWith("$(", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    if (raw[raw.Length - 1] != ')')
+                    {
+                        substitutions = Array.Empty<ShellValueFragment>();
+                        error = "unsupported PowerShell subexpression provenance";
+                        return false;
+                    }
+
+                    discovered.Add(fragment);
+                }
+            }
+
+            substitutions = discovered;
+            error = null;
+            return true;
+        }
+
+        private static bool IsUnsupportedSubstitutionBody(
+            string source,
+            IReadOnlyList<PwshToken> tokens)
+        {
+            var hasCallOperator = tokens[0].Kind == PwshTokenKind.Operator &&
+                tokens[0].OperatorText == "&";
+            if (hasCallOperator)
+            {
+                return false;
+            }
+
+            var value = tokens[0].Value;
+            if (value.Length == 0)
+            {
+                return false;
+            }
+
+            var trimmed = source.TrimStart();
+            if (trimmed.StartsWith(",", StringComparison.Ordinal) ||
+                trimmed.StartsWith("!", StringComparison.Ordinal) ||
+                trimmed.StartsWith("++", StringComparison.Ordinal) ||
+                trimmed.StartsWith("--", StringComparison.Ordinal) ||
+                StartsWithUnarySignExpression(trimmed) ||
+                StartsWithUnaryExpressionOperator(trimmed) ||
+                trimmed.StartsWith("@", StringComparison.Ordinal) ||
+                trimmed.StartsWith("{", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (tokens[0].Kind == PwshTokenKind.Word &&
+                value[0] == '$' && !value.StartsWith("$(", StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            if (tokens[0].Kind is not PwshTokenKind.Word and not PwshTokenKind.Parameter)
+            {
+                return false;
+            }
+
+            return IsNumericExpressionWord(value);
+        }
+
+        private static bool StartsWithUnaryExpressionOperator(string value)
+        {
+            foreach (var unaryOperator in new[] { "-not", "-bnot", "-join", "-split" })
+            {
+                if (value.StartsWith(unaryOperator, StringComparison.OrdinalIgnoreCase) &&
+                    (value.Length == unaryOperator.Length ||
+                     char.IsWhiteSpace(value[unaryOperator.Length])))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool StartsWithUnarySignExpression(string value) =>
+            value.Length > 1 && value[0] is '+' or '-' &&
+            value[1] is '$' or '[' or '(' or '\'' or '"' or '@' or '{';
+
+        private static bool IsNumericExpressionWord(string value)
+        {
+            var index = value[0] is '+' or '-' ? 1 : 0;
+            if (index == value.Length || !char.IsDigit(value[index]))
+            {
+                return false;
+            }
+
+            if (index + 1 < value.Length && value[index] == '0' &&
+                value[index + 1] is 'x' or 'X' or 'b' or 'B')
+            {
+                var isHex = value[index + 1] is 'x' or 'X';
+                index += 2;
+                var digitStart = index;
+                while (index < value.Length && (value[index] == '_' ||
+                       isHex && Uri.IsHexDigit(value[index]) ||
+                       !isHex && value[index] is '0' or '1'))
+                {
+                    index++;
+                }
+
+                return index > digitStart && IsNumericSuffix(value.Substring(index));
+            }
+
+            var hasExponent = false;
+            while (index < value.Length)
+            {
+                var character = value[index];
+                if (char.IsDigit(character) || character is '_' or '.')
+                {
+                    index++;
+                    continue;
+                }
+
+                if (!hasExponent && character is 'e' or 'E')
+                {
+                    hasExponent = true;
+                    index++;
+                    if (index < value.Length && value[index] is '+' or '-')
+                    {
+                        index++;
+                    }
+
+                    continue;
+                }
+
+                break;
+            }
+
+            var suffix = value.Substring(index);
+            if (suffix.Length > 0 && suffix[0] is '+' or '-' or '*' or '/' or '%')
+            {
+                return true;
+            }
+
+            return IsNumericSuffix(suffix);
+        }
+
+        private static bool IsNumericSuffix(string suffix) =>
+            suffix.Length == 0 || suffix.Equals("d", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("l", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("u", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("ul", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("lu", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("n", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("s", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("us", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("y", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("uy", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("kb", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("mb", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("gb", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("tb", StringComparison.OrdinalIgnoreCase) ||
+            suffix.Equals("pb", StringComparison.OrdinalIgnoreCase);
+
+        private bool TryValidateOpaqueExpressions(
+            IReadOnlyList<PwshToken> tokens,
+            out string? error)
+        {
+            foreach (var token in tokens)
+            {
+                if (token.ResolverValue is null)
+                {
+                    continue;
+                }
+
+                foreach (var fragment in token.ResolverValue.Fragments)
+                {
+                    if (fragment.Kind != ShellValueFragmentKind.Opaque ||
+                        fragment.OpaqueCause != ShellOpaqueCause.PowerShellSubexpression ||
+                        fragment.SourceStart is null || fragment.SourceLength is null)
+                    {
+                        continue;
+                    }
+
+                    var fragmentEnd = fragment.SourceStart.Value +
+                        fragment.SourceLength.Value;
+                    if (fragmentEnd < _sourceStart + _sourceLength &&
+                        _source[fragmentEnd] is '.' or '[')
+                    {
+                        error = "PowerShell expression suffix after subexpression is not supported";
+                        return false;
+                    }
+
+                    var raw = _source.Substring(
+                        fragment.SourceStart.Value,
+                        fragment.SourceLength.Value);
+                    if (raw.StartsWith("@(", StringComparison.Ordinal) &&
+                        !IsLiteralArrayExpression(raw) ||
+                        raw.StartsWith("@{", StringComparison.Ordinal) &&
+                        !IsLiteralHashExpression(raw))
+                    {
+                        error = "execution-bearing PowerShell @() or @{} expressions are not supported";
+                        return false;
+                    }
+                }
+            }
+
+            error = null;
+            return true;
+        }
+
+        private static bool IsLiteralArrayExpression(string raw)
+        {
+            var index = 2;
+            var end = raw.Length - 1;
+            SkipExpressionWhitespace(raw, ref index, end);
+            if (index == end)
+            {
+                return true;
+            }
+
+            while (index < end)
+            {
+                if (!TryReadLiteralExpressionValue(raw, ref index, end))
+                {
+                    return false;
+                }
+
+                SkipExpressionWhitespace(raw, ref index, end);
+                if (index == end)
+                {
+                    return true;
+                }
+
+                if (raw[index] != ',')
+                {
+                    return false;
+                }
+
+                index++;
+                SkipExpressionWhitespace(raw, ref index, end);
+            }
+
+            return false;
+        }
+
+        private static bool IsLiteralHashExpression(string raw)
+        {
+            var index = 2;
+            var end = raw.Length - 1;
+            SkipExpressionWhitespace(raw, ref index, end);
+            if (index == end)
+            {
+                return true;
+            }
+
+            while (index < end)
+            {
+                if (!TryReadLiteralHashKey(raw, ref index, end))
+                {
+                    return false;
+                }
+
+                SkipExpressionWhitespace(raw, ref index, end);
+                if (index >= end || raw[index] != '=')
+                {
+                    return false;
+                }
+
+                index++;
+                SkipExpressionWhitespace(raw, ref index, end);
+                if (!TryReadLiteralExpressionValue(raw, ref index, end))
+                {
+                    return false;
+                }
+
+                SkipExpressionWhitespace(raw, ref index, end);
+                if (index == end)
+                {
+                    return true;
+                }
+
+                if (raw[index] != ';')
+                {
+                    return false;
+                }
+
+                index++;
+                SkipExpressionWhitespace(raw, ref index, end);
+            }
+
+            return false;
+        }
+
+        private static bool TryReadLiteralHashKey(string raw, ref int index, int end)
+        {
+            if (index < end && raw[index] is '\'' or '"')
+            {
+                return TryReadQuotedLiteral(raw, ref index, end);
+            }
+
+            var start = index;
+            while (index < end &&
+                   (raw[index] == '_' || raw[index] == '-' ||
+                    char.IsLetterOrDigit(raw[index])))
+            {
+                index++;
+            }
+
+            return index > start;
+        }
+
+        private static bool TryReadLiteralExpressionValue(
+            string raw,
+            ref int index,
+            int end)
+        {
+            if (index >= end)
+            {
+                return false;
+            }
+
+            if (raw[index] is '\'' or '"')
+            {
+                return TryReadQuotedLiteral(raw, ref index, end);
+            }
+
+            foreach (var literal in new[] { "$true", "$false", "$null" })
+            {
+                if (index + literal.Length <= end &&
+                    string.Compare(
+                        raw,
+                        index,
+                        literal,
+                        0,
+                        literal.Length,
+                        StringComparison.OrdinalIgnoreCase) == 0)
+                {
+                    index += literal.Length;
+                    return true;
+                }
+            }
+
+            var start = index;
+            if (raw[index] is '+' or '-')
+            {
+                index++;
+            }
+
+            var hasDigit = false;
+            while (index < end && (char.IsDigit(raw[index]) || raw[index] == '.'))
+            {
+                hasDigit |= char.IsDigit(raw[index]);
+                index++;
+            }
+
+            return hasDigit && index > start;
+        }
+
+        private static bool TryReadQuotedLiteral(string raw, ref int index, int end)
+        {
+            var quote = raw[index++];
+            while (index < end)
+            {
+                if (quote == '"' && raw[index] == '`' && index + 1 < end)
+                {
+                    index += 2;
+                    continue;
+                }
+
+                if (raw[index] != quote)
+                {
+                    if (quote == '"' && raw[index] == '$' && index + 1 < end &&
+                        raw[index + 1] == '(')
+                    {
+                        return false;
+                    }
+
+                    index++;
+                    continue;
+                }
+
+                if (quote == '\'' && index + 1 < end && raw[index + 1] == '\'')
+                {
+                    index += 2;
+                    continue;
+                }
+
+                index++;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static void SkipExpressionWhitespace(string raw, ref int index, int end)
+        {
+            while (index < end && char.IsWhiteSpace(raw[index]))
+            {
+                index++;
+            }
+        }
+
+        private static bool IsDirectCommandSubstitution(
+            PwshToken token,
+            ShellValueFragment substitution) =>
+            token.Kind == PwshTokenKind.Subexpression &&
+            substitution.SourceStart == token.SourceStart &&
+            substitution.SourceLength == token.SourceLength;
+
+        private bool TryParseStandaloneSubstitution(
+            ShellValueFragment fragment,
+            CompoundOperator compatibilityOperator,
+            out ShellSyntaxNode? command,
+            out string? error)
+        {
+            if (!TryParseSubstitutionBody(
+                    fragment,
+                    compatibilityOperator,
+                    out var body,
+                    out error))
+            {
+                command = null;
+                return false;
+            }
+
+            command = new CommandSubstitutionSyntax
+            {
+                Body = body,
+                SourceStart = fragment.SourceStart,
+                SourceLength = fragment.SourceLength,
+            };
+            return true;
+        }
+
+        private bool TryParseCommandSubstitutions(
+            IReadOnlyList<ShellValueFragment> fragments,
+            out IReadOnlyList<CommandSubstitutionSyntax> substitutions,
+            out string? error)
+        {
+            if (fragments.Count == 0)
+            {
+                substitutions = Array.Empty<CommandSubstitutionSyntax>();
+                error = null;
+                return true;
+            }
+
+            if (_structuralDepth + _groupDepth + 1 >
+                ShellAnalysisLimits.MaxStructuralNesting)
+            {
+                substitutions = Array.Empty<CommandSubstitutionSyntax>();
+                error = "PowerShell structural nesting depth exceeded (>16)";
+                return false;
+            }
+
+            var parsed = new List<CommandSubstitutionSyntax>(fragments.Count);
+            foreach (var fragment in fragments)
+            {
+                if (!TryParseSubstitutionBody(
+                        fragment,
+                        CompoundOperator.None,
+                        out var body,
+                        out error))
+                {
+                    substitutions = Array.Empty<CommandSubstitutionSyntax>();
+                    return false;
+                }
+
+                parsed.Add(new CommandSubstitutionSyntax
+                {
+                    Body = body,
+                    SourceStart = fragment.SourceStart,
+                    SourceLength = fragment.SourceLength,
+                });
+            }
+
+            substitutions = parsed;
+            error = null;
+            return true;
+        }
+
+        private bool TryParseSubstitutionBody(
+            ShellValueFragment fragment,
+            CompoundOperator firstCompatibilityOperator,
+            out ShellBlockSyntax body,
+            out string? error)
+        {
+            var sourceStart = fragment.SourceStart!.Value + 2;
+            var sourceLength = fragment.SourceLength!.Value - 3;
+            var source = _source.Substring(sourceStart, sourceLength);
+            var relativeTokens = PwshLexer.Tokenize(source);
+            foreach (var token in relativeTokens)
+            {
+                if (token.Kind == PwshTokenKind.UnparseableSentinel)
+                {
+                    body = new ShellBlockSyntax();
+                    error = token.UnparseableReason;
+                    return false;
+                }
+            }
+
+            var significant = FilterSignificant(relativeTokens);
+            if (TryDetectAnomaly(significant, out error))
+            {
+                body = new ShellBlockSyntax();
+                return false;
+            }
+
+            var shifted = ShiftTokens(significant, sourceStart);
+            var coordinator = new StructuralCoordinator(
+                _source,
+                shifted,
+                _options,
+                _recursionDepth,
+                _structuralDepth + _groupDepth + 1,
+                _markWrapped,
+                _attribution,
+                sourceStart,
+                sourceLength,
+                firstCompatibilityOperator,
+                insideCommandSubstitution: true);
+            return coordinator.TryParse(out body, out error);
+        }
+    }
+
+    private static IReadOnlyList<PwshToken> ShiftTokens(
+        IReadOnlyList<PwshToken> tokens,
+        int sourceOffset)
+    {
+        var shifted = new PwshToken[tokens.Count];
+        for (var index = 0; index < tokens.Count; index++)
+        {
+            var token = tokens[index];
+            shifted[index] = token with
+            {
+                SourceStart = token.SourceStart + sourceOffset,
+                ResolverValue = ShiftValue(token.ResolverValue, sourceOffset),
+            };
+        }
+
+        return shifted;
+    }
+
+    private static ShellValue? ShiftValue(ShellValue? value, int sourceOffset)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var fragments = new ShellValueFragment[value.Fragments.Count];
+        for (var index = 0; index < value.Fragments.Count; index++)
+        {
+            var fragment = value.Fragments[index];
+            fragments[index] = fragment with
+            {
+                SourceStart = fragment.SourceStart + sourceOffset,
+            };
+        }
+
+        return new ShellValue(value.Decoded, fragments);
     }
 
     private static bool IsStructuralBoundary(PwshToken token) =>
@@ -857,8 +1543,9 @@ internal static partial class PwshCommandParser
         Raw = source.Raw,
     };
 
-    private static bool IsStructurallyComplete(Clause clause)
+    private static bool IsStructurallyComplete(SimpleCommandSyntax simple)
     {
+        var clause = simple.Clause;
         if (clause.Redirects.Count > 0 ||
             clause.Verb.IsDynamic ||
             clause.Verb.Tokens.Count == 0)
@@ -874,8 +1561,7 @@ internal static partial class PwshCommandParser
         foreach (var element in clause.Elements)
         {
             if (element.Kind == ArgKind.DynamicSkip &&
-                (element.Raw.IndexOf("$(", StringComparison.Ordinal) >= 0 ||
-                 element.Raw.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
+                (element.Raw.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
                  element.Raw.IndexOf("@{", StringComparison.Ordinal) >= 0))
             {
                 return false;

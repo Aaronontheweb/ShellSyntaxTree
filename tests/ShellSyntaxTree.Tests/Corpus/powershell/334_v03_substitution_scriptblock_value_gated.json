@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution scriptblock value gated",
+  "input": "Write-Output $({ Get-Date })",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "A script-block value is not executed merely by occupying subexpression statement position.",
+  "oracleExpectation": "OutOfScope"
+}

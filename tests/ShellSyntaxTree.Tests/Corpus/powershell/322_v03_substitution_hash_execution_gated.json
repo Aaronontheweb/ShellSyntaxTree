@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution hash execution gated",
+  "input": "Write-Output @{ value = $(Get-Date) }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "execution-bearing PowerShell @() or @{} expressions are not supported"
+  },
+  "notes": "Execution-bearing hash literals fail closed instead of hiding their command.",
+  "oracleExpectation": "OutOfScope"
+}

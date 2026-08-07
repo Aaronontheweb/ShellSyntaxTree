@@ -1047,9 +1047,16 @@ pipeline elements within a statement, not separate statements.
 
 ### Opaque regions
 
-Script blocks `{ ... }`, subexpressions `$( ... )`, array subexpressions
-`@( ... )`, and hash literals `@{ ... }` are bounded by the shared
-`OpaqueRegionScanner` and emitted as single tokens. The compatibility parser
+Script blocks `{ ... }`, array subexpressions `@( ... )`, and hash literals
+`@{ ... }` are bounded by the shared `OpaqueRegionScanner`. PowerShell command
+subexpressions `$( ... )` use a specialized scanner that understands nested
+subexpressions, quoted regions, backtick escapes, line and block comments, and
+the shared structural-depth cap. Direct `$()` bodies recognize line comments
+only at PowerShell word boundaries. A `$()` discovered while decoding an expandable
+string or here-string rejects comment-bearing interiors conservatively because
+the parent quoting context changes whether PowerShell can close the region.
+Here-strings nested inside `$()` remain an unsupported grammar boundary. Each
+bounded region is emitted as one token. The compatibility parser
 retains each as one `Arg { Kind=DynamicSkip, IsPath=false, Resolved=null }`,
 `Raw` being the verbatim region slice. Stable v0.3 additionally parses every
 supported executable `$()` interior into `SimpleCommandSyntax.Substitutions`.
@@ -1067,9 +1074,10 @@ evaluation, and following outer commands. Unknown location mutations propagate
 as unknown. This differs from Bash command substitution, whose state is
 isolated from the containing shell.
 
-`OpaqueRegionScanner` is grammar-agnostic but escapes on backslash; for
-PowerShell it is given a backtick-escape mode so `` { `} } `` scans
-correctly.
+`OpaqueRegionScanner` is grammar-agnostic but escapes on backslash; the
+PowerShell script-block, array, and hash paths give it a backtick-escape mode
+so `` { `} } `` scans correctly. The specialized `$()` scanner applies the
+same backtick behavior directly.
 
 ### `pwsh -Command` recursion
 
@@ -1496,8 +1504,9 @@ testable step; most are a single PR.
    binding tables, §6.5), `PwshPerVerbRules` (§7).
 3. **`PwshLexer`** (`Internal/Pwsh/Lexing/`) — quoting, backtick escape,
    `$var` / `$env:` / `${name}`, parameters, stream redirects, statement
-   separators, comments; opaque regions via the shared `OpaqueRegionScanner`
-   (with the backtick-escape mode). Heavy unit tests.
+   separators, comments; script-block/array/hash regions via the shared
+   `OpaqueRegionScanner` (with the backtick-escape mode), and `$()` via its
+   specialized scanner. Heavy unit tests.
 4. **`PwshCommandParser` core** — pipeline / statement splitting, verb-chain
    extraction, the §6.5 parameter-binding decision, args & parameters,
    redirects, `VerbChain.IsDynamic` for dynamic command names.

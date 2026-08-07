@@ -1,15 +1,26 @@
 {
-  "name": "Dynamic subexpression arg",
-  "input": "Get-Content $(Get-Location)",
+  "name": "V03 substitution redirect",
+  "input": "Get-Content \u003E $(Join-Path C:\\temp out.txt)",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
         "verb": [
-          "Get-Location"
+          "Join-Path"
         ],
-        "args": [],
+        "args": [
+          {
+            "raw": "C:\\temp",
+            "kind": "DynamicSkip",
+            "isPath": false
+          },
+          {
+            "raw": "out.txt",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
         "redirects": []
       },
       {
@@ -17,14 +28,14 @@
         "verb": [
           "Get-Content"
         ],
-        "args": [
+        "args": [],
+        "redirects": [
           {
-            "raw": "$(Get-Location)",
-            "kind": "DynamicSkip",
-            "isPath": false
+            "direction": "Out",
+            "target": "$(Join-Path C:\\temp out.txt)",
+            "isDynamicSkip": true
           }
-        ],
-        "redirects": []
+        ]
       }
     ],
     "syntax": [
@@ -34,7 +45,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceLength": 42,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -45,7 +56,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceLength": 42,
         "clauseIndex": 1,
         "groupKind": null,
         "listOperator": null
@@ -55,8 +66,8 @@
         "parentIndex": 1,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 12,
-        "sourceLength": 15,
+        "sourceStart": 14,
+        "sourceLength": 28,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -66,8 +77,8 @@
         "parentIndex": 2,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": 16,
+        "sourceLength": 25,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -77,8 +88,8 @@
         "parentIndex": 3,
         "region": "Statement",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": 16,
+        "sourceLength": 25,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -95,39 +106,39 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 42
           },
           {
             "ancestorKind": "CommandSubstitution",
             "region": "Substitution",
             "childIndex": 0,
-            "sourceStart": 12,
-            "sourceLength": 15
+            "sourceStart": 14,
+            "sourceLength": 28
           },
           {
             "ancestorKind": "Block",
             "region": "Statement",
             "childIndex": 0,
-            "sourceStart": 14,
-            "sourceLength": 12
+            "sourceStart": 16,
+            "sourceLength": 25
           }
         ]
       },
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 42
           }
         ]
       }
     ]
   },
-  "notes": "A $( ) subexpression argument is opaque DynamicSkip."
+  "notes": "A redirect subexpression is visible while the outer redirect remains incomplete."
 }

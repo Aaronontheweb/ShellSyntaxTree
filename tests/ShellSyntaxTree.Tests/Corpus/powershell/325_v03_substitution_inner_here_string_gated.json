@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution inner here string gated",
+  "input": "Write-Output $(Write-Output @\u0022\nvalue\n\u0022@)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "here-strings inside PowerShell subexpressions are not supported"
+  },
+  "notes": "Here-strings nested inside a subexpression remain a conservative grammar boundary.",
+  "oracleExpectation": "OutOfScope"
+}

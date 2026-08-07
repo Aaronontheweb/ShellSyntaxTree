@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution later expression gated",
+  "input": "Write-Output $(Get-Date; 1kb)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "Every statement in a subexpression is checked for the command-versus-expression boundary.",
+  "oracleExpectation": "OutOfScope"
+}

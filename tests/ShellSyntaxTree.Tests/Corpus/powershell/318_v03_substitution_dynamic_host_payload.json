@@ -1,13 +1,13 @@
 {
-  "name": "Dynamic subexpression arg",
-  "input": "Get-Content $(Get-Location)",
+  "name": "V03 substitution dynamic host payload",
+  "input": "pwsh -Command \u0022Write-Output $(Get-Date)\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
         "verb": [
-          "Get-Location"
+          "Get-Date"
         ],
         "args": [],
         "redirects": []
@@ -15,11 +15,16 @@
       {
         "operator": "None",
         "verb": [
-          "Get-Content"
+          "pwsh"
         ],
         "args": [
           {
-            "raw": "$(Get-Location)",
+            "raw": "-Command",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0022Write-Output $(Get-Date)\u0022",
             "kind": "DynamicSkip",
             "isPath": false
           }
@@ -34,7 +39,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceLength": 40,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -45,7 +50,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceLength": 40,
         "clauseIndex": 1,
         "groupKind": null,
         "listOperator": null
@@ -55,8 +60,8 @@
         "parentIndex": 1,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 12,
-        "sourceLength": 15,
+        "sourceStart": 28,
+        "sourceLength": 11,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -66,8 +71,8 @@
         "parentIndex": 2,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": 30,
+        "sourceLength": 8,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -77,8 +82,8 @@
         "parentIndex": 3,
         "region": "Statement",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": 30,
+        "sourceLength": 8,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -95,39 +100,39 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 40
           },
           {
             "ancestorKind": "CommandSubstitution",
             "region": "Substitution",
             "childIndex": 0,
-            "sourceStart": 12,
-            "sourceLength": 15
+            "sourceStart": 28,
+            "sourceLength": 11
           },
           {
             "ancestorKind": "Block",
             "region": "Statement",
             "childIndex": 0,
-            "sourceStart": 14,
-            "sourceLength": 12
+            "sourceStart": 30,
+            "sourceLength": 8
           }
         ]
       },
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 40
           }
         ]
       }
     ]
   },
-  "notes": "A $( ) subexpression argument is opaque DynamicSkip."
+  "notes": "Parent-scope expansion remains visible beside an incomplete outer pwsh host."
 }

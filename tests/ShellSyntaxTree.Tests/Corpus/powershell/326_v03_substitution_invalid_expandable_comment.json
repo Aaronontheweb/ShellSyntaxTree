@@ -1,0 +1,9 @@
+{
+  "name": "V03 substitution invalid expandable comment",
+  "input": "Write-Output \u0022$($(Write-Output x)# )\nGet-Date)\u0022",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "comments inside expandable PowerShell subexpressions are not supported"
+  },
+  "notes": "Real PowerShell rejects comment termination inside this expandable-string subexpression."
+}

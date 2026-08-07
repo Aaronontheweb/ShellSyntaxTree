@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution statement array gated",
+  "input": "Write-Output $(@(1,2,3))",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "A literal array at statement position is data rather than an executable identity.",
+  "oracleExpectation": "OutOfScope"
+}

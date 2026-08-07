@@ -1,0 +1,211 @@
+{
+  "name": "V03 substitution direct comment boundary",
+  "input": "Write-Output $(Write-Output \u0027x\u0027# )\nGet-Date)",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "\u0027x\u0027",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Date"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "$(Write-Output \u0027x\u0027# )\nGet-Date)",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 44,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 44,
+        "clauseIndex": 2,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandSubstitution",
+        "parentIndex": 1,
+        "region": "Substitution",
+        "childIndex": 0,
+        "sourceStart": 13,
+        "sourceLength": 31,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 2,
+        "region": "Substitution",
+        "childIndex": 0,
+        "sourceStart": 15,
+        "sourceLength": 28,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 15,
+        "sourceLength": 28,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 4,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 15,
+        "sourceLength": 16,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 4,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 35,
+        "sourceLength": 8,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 44
+          },
+          {
+            "ancestorKind": "CommandSubstitution",
+            "region": "Substitution",
+            "childIndex": 0,
+            "sourceStart": 13,
+            "sourceLength": 31
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 15,
+            "sourceLength": 28
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 15,
+            "sourceLength": 28
+          }
+        ]
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Substitution",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 44
+          },
+          {
+            "ancestorKind": "CommandSubstitution",
+            "region": "Substitution",
+            "childIndex": 0,
+            "sourceStart": 13,
+            "sourceLength": 31
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 15,
+            "sourceLength": 28
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 15,
+            "sourceLength": 28
+          }
+        ]
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 44
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "A comment after a closed quoted argument cannot terminate the containing subexpression."
+}

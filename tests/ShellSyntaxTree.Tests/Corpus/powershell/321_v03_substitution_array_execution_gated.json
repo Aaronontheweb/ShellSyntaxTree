@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution array execution gated",
+  "input": "Write-Output @(Get-Date)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "execution-bearing PowerShell @() or @{} expressions are not supported"
+  },
+  "notes": "Execution-bearing array subexpressions fail closed until their expression grammar is modeled.",
+  "oracleExpectation": "OutOfScope"
+}

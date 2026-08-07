@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution unary join gated",
+  "input": "Write-Output $(-join @(\u0027a\u0027,\u0027b\u0027))",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "Unary expression operators remain outside the command grammar.",
+  "oracleExpectation": "OutOfScope"
+}

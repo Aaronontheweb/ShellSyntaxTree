@@ -558,10 +558,11 @@ public class PwshCommandParserTests
     }
 
     [Fact]
-    public void Inner_unparseable_command_propagates_to_the_outer()
+    public void Expanding_host_payload_remains_an_incomplete_outer_command()
     {
         var result = Parse("pwsh -Command \"foreach ($x in $y) { $x }\"");
-        Assert.True(result.IsUnparseable);
+        Assert.False(result.IsUnparseable);
+        Assert.False(Assert.Single(result.Commands).IsComplete);
     }
 
     [Theory]
@@ -624,7 +625,6 @@ public class PwshCommandParserTests
     [InlineData("Invoke-Expression $code", "$code")]
     [InlineData("iex \"Remove-$noun C:\\x\"", "\"Remove-$noun C:\\x\"")]
     [InlineData("iex \"Remove-$é C:\\x\"", "\"Remove-$é C:\\x\"")]
-    [InlineData("iex $(Get-Content script.ps1)", "$(Get-Content script.ps1)")]
     [InlineData("iex ('Get-' + 'Date')", "('Get-' + 'Date')")]
     [InlineData("Invoke-Expression Write-Output,OTHER", "Write-Output,OTHER")]
     public void Invoke_expression_computed_payload_is_one_dynamic_arg(
@@ -639,6 +639,17 @@ public class PwshCommandParserTests
         Assert.Equal(ArgKind.DynamicSkip, arg.Kind);
         Assert.False(arg.IsPath);
         Assert.Null(arg.Resolved);
+    }
+
+    [Fact]
+    public void Invoke_expression_subexpression_payload_exposes_parent_command()
+    {
+        var result = Parse("iex $(Get-Content script.ps1)");
+
+        Assert.Equal(new[] { "Get-Content", "iex" },
+            result.Commands.Select(command => command.Clause.Verb.Joined));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
     }
 
     [Theory]

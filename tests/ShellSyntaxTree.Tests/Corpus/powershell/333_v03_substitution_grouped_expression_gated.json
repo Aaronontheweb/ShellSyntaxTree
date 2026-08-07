@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution grouped expression gated",
+  "input": "Write-Output $((1kb))",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "Grouping cannot bypass expression rejection inside a subexpression.",
+  "oracleExpectation": "OutOfScope"
+}
