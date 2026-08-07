@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in rejects underscore binding",
+  "input": "for _ in exact; do printf '%s' \"$_\"; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "ordinary-scalar boundary"
+  },
+  "notes": "The Bash-owned underscore parameter is not an ordinary scalar binding."
+}

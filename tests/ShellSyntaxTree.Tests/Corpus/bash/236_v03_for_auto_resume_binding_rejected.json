@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in rejects auto_resume binding",
+  "input": "for auto_resume in exact; do printf '%s' \"$auto_resume\"; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "ordinary-scalar boundary"
+  },
+  "notes": "The lowercase Bash-owned auto_resume variable is explicitly outside the supported scalar boundary."
+}

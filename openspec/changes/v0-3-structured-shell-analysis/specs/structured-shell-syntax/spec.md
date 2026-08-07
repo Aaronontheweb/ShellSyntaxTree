@@ -106,13 +106,13 @@ loop as a typed loop node with its binding name, authored iterable expression,
 and nested body block.
 
 #### Scenario: Literal Bash loop
-- **WHEN** Bash parses `for f in a.txt b.txt; do rm -- "$f"; done`
+- **WHEN** isolated-mode Bash parses `for f in a.txt b.txt; do rm -- "$f"; done`
 - **THEN** the root contains one loop node binding `f`
 - **THEN** the iterable preserves `a.txt` and `b.txt` in source order
 - **THEN** the body contains one simple command for `rm -- "$f"`
 
 #### Scenario: Nested Bash loop
-- **WHEN** Bash parses `for d in a b; do for f in x y; do echo "$d/$f"; done; done`
+- **WHEN** isolated-mode Bash parses `for d in a b; do for f in x y; do echo "$d/$f"; done; done`
 - **THEN** the outer loop body contains the inner loop node
 - **THEN** the `echo` command remains nested beneath both loops
 
@@ -159,7 +159,7 @@ Each direct-source structural node SHALL carry a source range into
 content SHALL report an unavailable outer range unless an exact mapping exists.
 
 #### Scenario: Direct loop span
-- **WHEN** Bash parses a direct `for` loop
+- **WHEN** isolated-mode Bash parses a direct supported `for` loop
 - **THEN** the loop range starts at `for` and ends after `done`
 
 #### Scenario: Decoded wrapper span

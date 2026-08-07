@@ -30,6 +30,7 @@ public class BashCommandParserTests
         {
             HomeDirectory = "/home/test",
             WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
         });
         return parser.Parse(input);
     }

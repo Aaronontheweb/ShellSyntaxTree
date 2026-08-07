@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in rejects HOME binding",
+  "input": "for HOME in /tmp; do cat \"$HOME/x\"; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "ordinary-scalar boundary"
+  },
+  "notes": "Binding HOME must not retain the configured compatibility home path or publish ordinary-scalar effective facts."
+}

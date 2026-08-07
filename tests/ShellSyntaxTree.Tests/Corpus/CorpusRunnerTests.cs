@@ -466,6 +466,7 @@ public class CorpusRunnerTests
         {
             HomeDirectory = "/home/test",
             WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
         }),
         "powershell" => new PwshParser(new PwshParserOptions
         {

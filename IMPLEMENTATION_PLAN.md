@@ -295,7 +295,19 @@ priorities.
       remaining loop cases and Netclaw approval matrix after implementation.
       The non-loop state engine is now implemented for lists, pipelines,
       substitutions, subshells, and decoded wrappers; loop iteration state and
-      removal of the temporary mutation rejection remain next.
+      removal of the temporary mutation rejection remain next. An adversarial
+      pre-implementation review halted the first loop-state draft: parser-time
+      binding frames could not model zero-iteration persistence, correlated
+      nested iterables, special Bash variables, or candidate-derived `cd`
+      options. The corrected contract now requires an explicit
+      `BashInitialStateMode`, a conservative supported scalar-name boundary,
+      analyzer-owned persistent bindings, parameterized ordered plans, complete
+      argument provenance/effective-argv transfer, occurrence-fact joins, and
+      unreachable flow partitions. Implement that contract before enabling any
+      cwd-changing loop body. Corpus-pin `HOME`, `RANDOM`, `LINENO`, `PATH`,
+      `CDPATH`, `IFS`, 32/33 ordered visits, zero iterations, nested
+      correlation, wrapped transfers, wrapper mapping, substitutions, and
+      pipelines in the same vertical slice.
 - [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
       Netclaw approval-matrix cases. The simple-command slice is delivered for
       ordinary, adjacent, quoted, here-string, redirect, standalone,

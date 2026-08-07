@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash decoded for-in rejects outer exported state",
+  "input": "export f=ambient; bash -c 'for f in a; do printf %s \"$f\"; done'",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "isolated non-interactive initial state"
+  },
+  "notes": "A decoded wrapper cannot reuse isolated loop assumptions after the outer source changes inherited variable state."
+}

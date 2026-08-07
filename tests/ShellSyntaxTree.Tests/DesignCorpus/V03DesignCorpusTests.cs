@@ -405,6 +405,7 @@ public class V03DesignCorpusTests
         {
             HomeDirectory = "/home/test",
             WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
         }),
         DesignShell.PowerShell => new PwshParser(new PwshParserOptions
         {

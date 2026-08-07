@@ -1081,6 +1081,7 @@ public class BashStructuralProjectionTests
         {
             HomeDirectory = "/home/test",
             WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
         });
         return parser.Parse(input);
     }

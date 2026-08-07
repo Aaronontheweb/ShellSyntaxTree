@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in rejects RANDOM binding",
+  "input": "for RANDOM in 7; do printf '%s' \"$RANDOM\"; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "ordinary-scalar boundary"
+  },
+  "notes": "RANDOM has Bash-owned read semantics and cannot inherit an ordinary scalar proof."
+}

@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in rejects IFS binding",
+  "input": "for IFS in x; do printf '%s' \"$IFS\"; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "ordinary-scalar boundary"
+  },
+  "notes": "IFS changes shell splitting semantics and is outside bounded loop-variable analysis."
+}

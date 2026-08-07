@@ -169,6 +169,35 @@ are:
    scope, cwd, or redirects. A structurally complete occurrence may still have
    an unknown value; those are separate facts.
 
+Bash loop-variable proofs also require an execution-environment assertion.
+`BashInitialStateMode.Unknown` is the safe default and makes a bounded `for`
+region unparseable: the parser cannot discover whether an ambient variable is
+readonly, integer-valued, a nameref, exported, or shell-owned. Select
+`IsolatedNonInteractive` only when the same component that calls the parser
+also enforces all of these execution conditions:
+
+- the source is the complete input to a newly spawned non-interactive Bash;
+- no profile, `BASH_ENV`, or `ENV` startup content can run; and
+- no inherited environment entry carries a loop-bound name.
+
+```csharp
+var parser = new BashParser(new BashParserOptions
+{
+    WorkingDirectory = workingDirectory,
+    InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
+});
+```
+
+Do not select the mode merely because a command *looks* self-contained. A
+consumer that parses under isolated assumptions but executes in a reused or
+startup-scripted shell has invalidated the authorization proof. Stable v0.3
+also fails uppercase, underscore-prefixed, and Bash-owned lowercase loop names
+closed; `HOME`, `RANDOM`, `LINENO`, `PATH`, `CDPATH`, and `IFS` are intentionally
+outside the first bounded scalar grammar. The parser also downgrades a decoded
+`bash -c` child's initial state after a preceding variable mutation such as
+`export`; resolver-only option cloning for an exact cwd retains the independent
+variable-state assertion.
+
 Heredoc and Bash here-string bodies are stdin data, not implicit child commands
 or filesystem paths. Authorize any command substitutions surfaced from an
 expanding heredoc as normal occurrences, then let executable-specific policy

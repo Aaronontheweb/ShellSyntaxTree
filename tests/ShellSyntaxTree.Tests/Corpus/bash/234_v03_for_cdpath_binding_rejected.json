@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash for-in rejects CDPATH binding",
+  "input": "for CDPATH in /tmp; do cd child; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "ordinary-scalar boundary"
+  },
+  "notes": "CDPATH changes cd operand resolution and is outside bounded loop-variable analysis."
+}

@@ -30,6 +30,7 @@ var bashParser = new BashParser(new BashParserOptions
 {
     HomeDirectory = "/home/test",
     WorkingDirectory = "/work",
+    InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
 });
 
 if (args.Length == 0)

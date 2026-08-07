@@ -190,12 +190,20 @@ public class PublicApiSnapshotTests
         // object-initializer shape stays source-compatible with v0.1.
         AssertInitProperty(t, "HomeDirectory", typeof(string), nullable: true);
         AssertInitProperty(t, "WorkingDirectory", typeof(string), nullable: true);
+        AssertInitProperty(t, "InitialStateMode", typeof(BashInitialStateMode));
 
         var declaredProps = DeclaredInstanceProps(t)
             .Where(p => p.Name != "EqualityContract")
             .Select(p => p.Name)
             .ToArray();
-        Assert.Empty(declaredProps);
+        Assert.Equal(new[] { "InitialStateMode" }, declaredProps);
+    }
+
+    [Fact]
+    public void BashInitialStateMode_has_expected_values()
+    {
+        Assert.Equal(0, (int)BashInitialStateMode.Unknown);
+        Assert.Equal(1, (int)BashInitialStateMode.IsolatedNonInteractive);
     }
 
     // -------- PwshParserOptions --------
@@ -492,6 +500,7 @@ public class PublicApiSnapshotTests
             nameof(Arg),
             nameof(ArgKind),
             nameof(BashParser),
+            nameof(BashInitialStateMode),
             nameof(BashParserOptions),
             nameof(Clause),
             nameof(ClauseElement),

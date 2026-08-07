@@ -406,6 +406,23 @@ shell rules prove the resulting argument boundary. Unquoted Bash expansion,
 PowerShell object-valued pipelines, indirect expansion, mutation, and
 cross-product explosion remain unknown until separately specified.
 
+Bash loop binding also requires a proved initial shell-variable environment.
+`BashParserOptions.InitialStateMode` defaults to `Unknown`; bounded Bash loop
+analysis is unavailable in that mode because an ambient binding may be
+readonly, integer-valued, a nameref, exported, or otherwise stateful.
+`IsolatedNonInteractive` is a caller assertion that the complete source runs in
+a new non-interactive Bash process without profile, `BASH_ENV`, or `ENV`
+startup content and without an inherited entry for the bound name. The v0.3
+positive grammar is deliberately limited to lowercase ordinary scalar names
+matching `[a-z][a-z0-9_]*`, excluding `auto_resume` and `histchars`. Names
+outside that boundary fail the whole loop region closed. This excludes Bash
+magic and identity-sensitive bindings including `RANDOM`, `LINENO`, `HOME`,
+`PATH`, `CDPATH`, and `IFS` without attempting an incomplete denylist.
+Recognized source-level variable mutation invalidates isolated mode in every
+later scope that can observe it. A decoded `bash -c` after `export` therefore
+enters with `Unknown` initial variable state, while a cwd-only transfer retains
+the caller's variable-state assertion.
+
 Effective values are shell facts, not executable semantics. The analysis must
 preserve both the authored shell classification and each proved effective
 value. PowerShell does not retroactively turn a string value such as `-Force`
@@ -457,6 +474,11 @@ visible to later inner occurrences but do not leak on wrapper exit. This v0.3
 occurrence rule corrects the old compatibility attribution shortcut without
 requiring v0.2 leaves to invent a new exact path.
 
+Decoded-wrapper cloning must remap every parser-owned loop plan and argument
+provenance fact to the cloned syntax/Clause references. Losing a side-table
+entry is not permission to analyze one representative iteration; the wrapper
+region fails closed if the mapping cannot be proved complete.
+
 Exact and finite Bash `for ... in` domains are analyzed in authored iteration
 order within the 32-candidate cap. Each iteration consumes the joined reachable
 state from the preceding iteration, and the loop exit joins every reachable
@@ -471,13 +493,38 @@ wrapped builtin forms such as `builtin break` and `command exit`. `eval`,
 unless every executable region and state transfer is discovered.
 
 The internal loop plan is distinct from the public value-domain summary. It
-retains ordered per-word candidates including duplicates and a cardinality of
-`Never`, `OneOrMore`, or `ZeroOrMore`. Thus `a b a` has a final exact binding of
-`a`, while an explicit empty iterable has no body transition at all. All
-reachable visits to one authored body occurrence join their input facts. If an
-ordered iteration sequence exceeds the candidate budget, the analyzer uses a
-bounded fixed point and widening; it does not select the last retained distinct
-candidate as the post-loop binding.
+retains an executable word plan parameterized by the incoming analyzer binding
+map, plus a cardinality of `Never`, `OneOrMore`, or `ZeroOrMore`. Evaluating the
+plan preserves every concrete candidate in authored order, including
+duplicates. Thus `a b a` has a final exact binding of `a`, while an explicit
+empty iterable has no body transition and preserves the incoming binding. All
+reachable visits to one authored body occurrence join their input facts. The
+32-candidate cap applies to ordered iterations, not distinct public values: 33
+authored `a` words use a bounded fixed point and widening rather than selecting
+one retained value. An inner iterable is re-evaluated for each concrete outer
+binding so nested correlation is not flattened before execution-state
+analysis.
+
+The analyzer, not the structural parser, owns the variable map and binding
+lifetime. Bash loop assignment is not lexical scope: a nonempty loop leaves the
+last value after `done`, zero iterations preserve the incoming value, and a
+same-name inner loop overwrites rather than restoring the outer value. The
+first v0.3 pass may keep active same-name nesting unparseable, but it cannot use
+push/pop shadowing or unconditional parser-time persistence.
+
+Parser-owned side facts retain each argument's complete `ShellValue` fragment
+sequence. For every concrete visit, the analyzer re-evaluates all arguments
+from the current binding map, accumulates effective domains by authored element
+coordinate, and applies state-transfer grammar to the effective argv. This is
+required for `cd "$f"`: a candidate may be `-P`, `--`, `-`, or an operand even
+though the authored expansion was not lexed as an option. Operand-only string
+substitution is not an acceptable shortcut.
+
+An unreachable success or failure partition stays unreachable. `&&` and `||`
+must not replace a missing input partition with `JoinedState` to manufacture
+facts for a structurally present but unreachable continuation. Such commands
+remain projected with conservative facts. This is required before the analyzer
+can expose the one-sided success result of an explicit empty loop.
 
 Bash pipeline stages enter from the same pipeline input state. Ordinary stage
 state does not leak, but the analyzer cannot assume the last stage is isolated

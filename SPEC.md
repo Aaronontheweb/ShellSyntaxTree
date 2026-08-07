@@ -107,10 +107,20 @@ public sealed class PwshParser : IShellParser
 /// (added v0.2.0). HomeDirectory / WorkingDirectory live here.</summary>
 public abstract record ShellParserOptions { ... }
 
+/// <summary>Declares which ambient Bash variable facts the caller can prove.</summary>
+public enum BashInitialStateMode
+{
+    Unknown,
+    IsolatedNonInteractive,
+}
+
 /// <summary>Configuration knobs for BashParser. As of v0.2.0 a sealed
 /// record deriving from ShellParserOptions; the v0.1 object-initializer
 /// shape is unchanged.</summary>
-public sealed record BashParserOptions : ShellParserOptions;
+public sealed record BashParserOptions : ShellParserOptions
+{
+    public BashInitialStateMode InitialStateMode { get; init; }
+}
 
 /// <summary>Configuration knobs for PwshParser (v0.2.0). Empty — the
 /// resolver knobs live on ShellParserOptions.</summary>
@@ -229,6 +239,36 @@ public sealed record ParsedCommand
     public string? UnparseableReason { get; init; }
 }
 ```
+
+`BashInitialStateMode.Unknown` is the default. In this mode the parser does
+not publish bounded loop-variable facts: an ambient shell may already have
+made the binding readonly, integer-valued, a nameref, exported, or otherwise
+semantically significant. A Bash loop whose safety depends on such a binding
+is therefore unparseable rather than being analyzed as an ordinary scalar.
+
+`BashInitialStateMode.IsolatedNonInteractive` is an explicit caller assertion,
+not a parser discovery. It means the complete source is executed by a newly
+spawned non-interactive Bash process, no profile or `BASH_ENV` / `ENV` startup
+content is loaded, and no inherited environment entry carries the loop-bound
+name. A consumer may select this mode only when its execution path enforces
+those conditions. Supplying this option while executing in a reused,
+interactive, startup-scripted, or uncontrolled environment invalidates the
+analysis.
+
+Recognized variable-state mutation in the analyzed source invalidates isolated
+mode for every later region that can observe it. In particular, a decoded
+`bash -c` child after `export` is analyzed with unknown initial variable state;
+the option is not blindly copied into the child. Cwd-only state changes retain
+the caller's initial-variable assertion.
+
+Even in isolated mode, the v0.3 bounded loop grammar accepts only ordinary
+lowercase scalar binding names matching `[a-z][a-z0-9_]*`, excluding
+`auto_resume` and `histchars`. `_`, uppercase names, and every name outside
+that boundary fail the complete loop region closed. This deliberately excludes
+Bash magic variables and resolver- or executable-identity-sensitive names such
+as `RANDOM`, `LINENO`, `HOME`, `PATH`, `CDPATH`, and `IFS`. The boundary is
+extend-only: a later version may add a proved variable-state model or
+additional explicitly reviewed ordinary names.
 
 For a successful result, every authored simple command appears once in
 `Syntax`, once in `Commands`, and once in `Clauses`, with all three projections
@@ -533,6 +573,76 @@ groups, and command substitutions; blocks, lists, pipelines, branches, and
 simple-command leaves do not independently increment it. Exceeding 16
 structural containers or 5 decoded-command wrapper recursions makes the entire
 result unparseable.
+
+#### Bash bounded loop state
+
+Loop bindings are analyzer-owned shell state; they are not lexical parser
+frames. A nonempty Bash loop leaves its final assigned value visible after
+`done`, a loop that executes zero times preserves the incoming value, and a
+same-name nested loop does not restore an outer value. v0.3 may continue to
+reject nested active-name reuse until that overwrite behavior is implemented;
+it must never model the construct as lexical shadowing.
+
+The Bash front end retains every iterable word and every resolver-relevant
+argument fragment as parser-owned internal provenance. The abstract-state pass
+then evaluates the iterable once from its incoming variable state and creates
+one of these internal plans:
+
+- `Never` for an explicit empty iterable;
+- an ordered, duplicate-preserving sequence for at most 32 concrete
+  iterations; or
+- `ZeroOrMore` / `OneOrMore` fixed-point analysis when cardinality or an
+  ordered sequence is not bounded.
+
+The public `FiniteSet` is only a value summary. It is never used as an
+iteration plan: `a b a` performs three state transitions and leaves an exact
+final binding of `a`; 33 authored values use widening even when every value is
+the same. An iterable that depends on an outer binding is evaluated separately
+for each concrete outer visit so correlated nested state is not flattened into
+an artificial cross-product.
+
+Each concrete iteration assigns its candidate into the analyzer variable map,
+re-evaluates the complete effective argument vector for every body occurrence,
+and carries the joined reachable cwd and variable state into the next
+iteration. This re-evaluation includes state-transfer option grammar. For
+example, a loop-derived `cd` argument may become `-P`, `--`, `-`, or an
+operand; the analyzer may not substitute only an operand string while retaining
+authored flag classification. Effective argument facts at one authored
+occurrence join the values from every reachable visit.
+
+Bash flow retains separate reachable success and failure states. `&&` analyzes
+only a reachable success continuation, `||` only a reachable failure
+continuation, and sequence operators consume their join. A missing partition
+is unreachable and must not be replaced with the joined input merely to
+populate exact facts. Structurally present but unreachable commands remain in
+the syntax/occurrence projection with conservative facts. An empty loop exits
+successfully without a body transition; a known nonempty loop exposes the
+final body's exit status; a zero-or-more loop joins its zero path with every
+reachable normal exit. Bounded fixed-point analysis widens differing cwd or
+variable values to `Unknown` rather than selecting one path.
+
+`cd` and `chdir` use the effective argument vector for the current visit.
+`pushd` and `popd` may be recognized only with unknown success cwd until the
+directory stack is modeled. Variable mutators (`read`, `unset`, `printf -v`,
+`export`, `declare`, and equivalents), `eval`, `source` / `.`, and
+execution-bearing `trap` make the complete loop region unparseable. The same is
+true for `break`, `continue`, `return`, `exit`, and `exec` until their transfers
+are implemented. Recognition recursively unwraps statically proved `command`
+and `builtin` dispatch; a wrapper must not bypass the rejection.
+
+Substitutions and subshells inherit the current variable/cwd state but discard
+their state changes on exit. Decoded Bash command wrappers inherit invocation
+cwd but no loop binding unless export is separately proved. Pipeline stages
+enter from the same pipeline input; possible `lastpipe` leakage joins the full
+cwd and variable state, independently of conservative `pipefail` exit
+partitioning.
+
+Compatibility arguments always retain authored loop-variable spelling. A
+variable-derived path that is not independently exact keeps or becomes
+`DynamicSkip`, and a relative path whose reachable visit cwds disagree loses
+its static resolution. In particular, compatibility projection may not retain
+the configured `$HOME` resolution after a loop binds `HOME`, even though that
+binding is outside the v0.3 supported-name boundary.
 
 ### Explicit redirect analysis (v0.3)
 
@@ -1035,12 +1145,17 @@ bash_else            := "else" bash_script(stop = "fi")
 
 list_sep             := ";" | NEWLINE
 list_terminator      := ";" | NEWLINE+
-binding_name         := shell_identifier
+binding_name         := supported_scalar_binding
+supported_scalar_binding := [a-z][a-z0-9_]*
+                            except "auto_resume" and "histchars"
 iterable_word        := word | quoted_string | supported_substitution
 ```
 
 The supported stable-v0.3 set is the existing simple-command grammar plus
-`for name in words`, `while` / `until`, and `if` / `elif` / `else`. Every fully
+`for name in words`, `while` / `until`, and `if` / `elif` / `else`. Bash
+accepts additional shell identifiers as loop variables, but this bounded
+grammar fails them closed for the initial-state reasons specified in §2.
+Every fully
 delimited `$()` command substitution in a supported simple-command argument,
 redirect value, iterable, or expanding heredoc body is recursively parsed and
 exposes its inner commands; its produced value remains `Unknown`. A nested
