@@ -77,7 +77,16 @@ be sufficient authorization evidence.
 ### Requirement: Source order is deterministic
 The occurrence collection SHALL be ordered by authored command occurrence,
 including commands nested in headers and bodies, with a documented tie-breaker
-for enclosing and enclosed regions.
+for enclosing and enclosed regions. Disjoint executable regions SHALL follow
+authored source order. An enclosed substitution SHALL precede its containing
+simple command. Nested substitutions SHALL be emitted innermost first. When
+decoded wrapper content has no comparable outer spans, the containing
+structural collection order SHALL be used. `ParsedCommand.Clauses` SHALL use
+the same ordering. A substitution ancestry frame SHALL use
+`Region=Substitution` and the authored zero-based child index in its containing
+structural collection. For an embedded simple-command value this is
+`SimpleCommandSyntax.Substitutions`; for a direct iterator substitution this is
+the iterator-command collection.
 
 #### Scenario: Iterator precedes body
 - **WHEN** Bash parses `for f in $(find .); do rm "$f"; done`
@@ -87,6 +96,27 @@ for enclosing and enclosed regions.
 - **WHEN** PowerShell parses an `if` statement with then and else commands
 - **THEN** condition commands precede then-body commands
 - **THEN** then-body commands precede else-body commands in the projection
+
+#### Scenario: Ordinary command substitution precedes its consumer
+- **WHEN** Bash parses `rm "$(find /tmp)"`
+- **THEN** `find` precedes `rm` in both command and compatibility projections
+- **THEN** each command appears exactly once
+
+#### Scenario: Multiple substitutions preserve authored order
+- **WHEN** one command contains two sibling substitutions
+- **THEN** commands from the first substitution precede commands from the second
+- **THEN** the containing command follows both substitutions
+- **THEN** the sibling substitution frames use child indices zero and one
+
+#### Scenario: Nested substitutions are innermost first
+- **WHEN** a substitution contains a command with another substitution
+- **THEN** the innermost command precedes its containing substitution command
+- **THEN** both precede the outermost containing command
+
+#### Scenario: PowerShell expression output is not a command
+- **WHEN** standalone PowerShell `$()` produces text shaped like a command name
+- **THEN** the occurrence collection contains its inner commands only
+- **THEN** an outer command occurrence exists only when the call operator invokes that value
 
 ### Requirement: Command discovery is library-owned
 Security consumers SHALL be able to enumerate every potentially executable

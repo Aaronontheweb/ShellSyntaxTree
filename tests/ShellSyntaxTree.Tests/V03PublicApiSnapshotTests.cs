@@ -61,7 +61,9 @@ public class V03PublicApiSnapshotTests
         AssertNode(
             new SimpleCommandSyntax(),
             ShellSyntaxKind.SimpleCommand,
-            (nameof(SimpleCommandSyntax.Clause), typeof(Clause)));
+            (nameof(SimpleCommandSyntax.Clause), typeof(Clause)),
+            (nameof(SimpleCommandSyntax.Substitutions),
+                typeof(IReadOnlyList<CommandSubstitutionSyntax>)));
         AssertNode(
             new PipelineSyntax(),
             ShellSyntaxKind.Pipeline,
@@ -105,6 +107,8 @@ public class V03PublicApiSnapshotTests
 
         var simple = new SimpleCommandSyntax();
         Assert.NotNull(simple.Clause);
+        Assert.NotNull(simple.Substitutions);
+        Assert.Empty(simple.Substitutions);
         Assert.Empty(new ShellBlockSyntax().Statements);
         Assert.Empty(new PipelineSyntax().Stages);
         Assert.Empty(new CommandListSyntax().Items);

@@ -28,12 +28,77 @@ conditional branch, and command substitution nodes.
 ### Requirement: Simple-command nodes preserve existing leaves
 A simple-command syntax node SHALL expose the existing `Clause` facts rather
 than replacing `VerbChain`, `Arg`, `Redirect`, or `ClauseElement` with a second
-incompatible leaf model.
+incompatible leaf model. It SHALL also own an authored-order collection of
+completely delimited command substitutions evaluated for its words and
+redirects, including expanding heredoc bodies. Nested substitutions SHALL
+remain attached to the nearest containing simple command; they SHALL NOT be
+promoted to unrelated siblings or stored only in a side table.
 
 #### Scenario: Clause provenance survives structural wrapping
 - **WHEN** Bash parses `git -C /repo status > status.txt`
 - **THEN** the simple-command node exposes the existing verb, arguments, redirect, and ordered elements
 - **THEN** their raw values and source spans retain the v0.2 meanings
+
+#### Scenario: Substitution remains attached to its containing command
+- **WHEN** Bash parses `rm "$(find /tmp)"`
+- **THEN** the `rm` simple-command node retains its unchanged dynamic compatibility argument
+- **THEN** its substitutions contain a command-substitution node whose body contains `find`
+
+#### Scenario: Nested substitutions preserve parentage
+- **WHEN** a supported shell parses a command substitution inside another substitution
+- **THEN** the inner substitution belongs to the simple command inside the outer substitution
+- **THEN** the inner substitution is not flattened into the outer command's substitution collection
+
+### Requirement: Executable substitution boundaries are accounted for
+Stable v0.3 SHALL recursively parse every completely delimited Bash `$()` or
+PowerShell `$()` that can execute while forming a supported simple-command
+argument word, redirect value, iterator, expanding heredoc or here-string, or
+PowerShell call-operator dynamic identity. The produced value SHALL remain
+unknown unless separately proved. If an executable substitution interior
+cannot be completely parsed, the whole result SHALL be unparseable.
+
+Bash legacy backtick substitution and execution-bearing PowerShell `@()` or
+`@{}` forms outside the locked literal-foreach subset SHALL remain unparseable
+until their distinct semantics have complete command discovery. Literal or
+escaped substitution-looking text SHALL NOT create syntax or occurrences.
+
+#### Scenario: Bash literal substitution spelling
+- **WHEN** Bash parses single-quoted or backslash-escaped `$()` text
+- **THEN** no substitution node or command occurrence is created for that text
+
+#### Scenario: PowerShell literal substitution spelling
+- **WHEN** PowerShell parses single-quoted, literal-here-string, or backtick-escaped `$()` text
+- **THEN** no substitution node or command occurrence is created for that text
+
+#### Scenario: Expandable value executes a substitution
+- **WHEN** either shell parses a supported `$()` inside an expandable quoted value or redirect target
+- **THEN** every inner command is exposed before the containing command
+- **THEN** an unsupported inner executable region makes the whole result unparseable
+
+#### Scenario: Dynamic identity contains a substitution
+- **WHEN** PowerShell `&` dynamic invocation contains supported executable `$()` syntax
+- **THEN** every inner command remains visible
+- **THEN** the containing dynamic command occurrence remains incomplete or the whole result is unparseable
+
+#### Scenario: Bash command-name substitution remains gated
+- **WHEN** Bash command-name formation contains executable `$()` syntax
+- **THEN** the whole result is unparseable because the outer command identity is runtime-dependent
+- **THEN** diagnostic syntax may retain the substitution but command and compatibility projections are empty
+
+#### Scenario: Standalone PowerShell subexpression is not invocation
+- **WHEN** PowerShell parses `$(Write-Output Get-Date)` as an expression statement
+- **THEN** `Write-Output` is exposed as a substitution command
+- **THEN** no outer `Get-Date` command is invented from the produced string
+
+#### Scenario: PowerShell call operator invokes subexpression output
+- **WHEN** PowerShell parses `& $(Write-Output Get-Date)`
+- **THEN** `Write-Output` is exposed before one incomplete dynamic outer invocation
+- **THEN** the produced string is not assumed to equal a static command identity
+
+#### Scenario: PowerShell call operator script block remains gated
+- **WHEN** PowerShell encounters `& { Remove-Item target.txt }`
+- **THEN** the whole result is unparseable until script-block execution semantics are modeled
+- **THEN** the body is not treated as an ordinary opaque argument
 
 ### Requirement: Bash for-in loops preserve header and body structure
 The Bash parser SHALL represent a supported `for name in words; do body; done`

@@ -79,6 +79,13 @@ public sealed record SimpleCommandSyntax : ShellSyntaxNode
 
     /// <summary>Gets the shared simple-command leaf.</summary>
     public Clause Clause { get; init; } = new();
+
+    /// <summary>
+    /// Gets executable command substitutions evaluated for this command's
+    /// authored words and redirects, in source order.
+    /// </summary>
+    public IReadOnlyList<CommandSubstitutionSyntax> Substitutions { get; init; } =
+        Array.Empty<CommandSubstitutionSyntax>();
 }
 
 /// <summary>An ordered pipeline.</summary>

@@ -225,12 +225,22 @@ priorities.
       fail-closed while v0.2 `Clauses` behavior is unchanged.
 - [ ] Add the structural and command-occurrence projections for the existing
       grammar before enabling any control-flow construct.
+- [ ] Deliver paired Bash and PowerShell `$()` substitution slices for all
+      locked executable value positions, including ordering, ancestry,
+      shell-specific cwd propagation, literal/escaped boundaries, dynamic
+      identities, fail-closed negatives, executable corpus, and Netclaw cases.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.
 - [ ] Preserve the existing Bash heredoc grammar, fix quoted-delimiter
       adjacency, expose body/delimiter/expansion/completeness facts, and add a
       separately tested Bash `<<<` here-string redirect slice.
+- [ ] Near the end of v0.3 delivery, expand the Web sample with curated complex
+      Bash and PowerShell inputs and deterministic Mermaid views of syntax,
+      occurrences, compatibility clauses, ancestry, redirects, and fail-closed
+      outcomes. Keep visualization downstream of the canonical projection so
+      it cannot become a second command-discovery implementation; snapshot the
+      rendering, escape arbitrary shell labels, and emit no raw HTML.
 
 ---
 

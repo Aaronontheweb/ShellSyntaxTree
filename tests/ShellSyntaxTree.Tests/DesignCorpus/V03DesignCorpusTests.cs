@@ -172,6 +172,11 @@ public class V03DesignCorpusTests
                 ValidateValue(shell, designCase.Id, value);
             }
 
+            if (command.WorkingDirectory is not null)
+            {
+                ValidateWorkingDirectory(designCase.Id, command.WorkingDirectory);
+            }
+
             foreach (var redirect in command.Redirects)
             {
                 Assert.True(redirect.IsPathRelevant == (redirect.Operation is
@@ -357,6 +362,20 @@ public class V03DesignCorpusTests
         }
     }
 
+    private static void ValidateWorkingDirectory(
+        string caseId,
+        DesignWorkingDirectoryExpectation workingDirectory)
+    {
+        if (workingDirectory.Kind == DesignValueKind.Exact)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(workingDirectory.Value));
+            return;
+        }
+
+        Assert.Equal(DesignValueKind.Unknown, workingDirectory.Kind);
+        Assert.Null(workingDirectory.Value);
+    }
+
     private static IShellParser CreateParser(DesignShell shell) => shell switch
     {
         DesignShell.Bash => new BashParser(new BashParserOptions
@@ -482,7 +501,16 @@ public sealed record DesignCommandExpectation
 
     public IReadOnlyList<DesignValueExpectation> EffectiveValues { get; init; } = [];
 
+    public DesignWorkingDirectoryExpectation? WorkingDirectory { get; init; }
+
     public IReadOnlyList<DesignRedirectExpectation> Redirects { get; init; } = [];
+}
+
+public sealed record DesignWorkingDirectoryExpectation
+{
+    public DesignValueKind Kind { get; init; }
+
+    public string? Value { get; init; }
 }
 
 public sealed record DesignValueExpectation
@@ -609,6 +637,7 @@ public enum DesignSyntaxKind
     ForEach,
     ConditionLoop,
     Conditional,
+    CommandSubstitution,
     SimpleCommand,
     OpaqueArgument,
     Unsupported,
@@ -624,6 +653,7 @@ public enum DesignSyntaxSlot
     Then,
     Else,
     Stage,
+    Substitution,
     Argument,
 }
 

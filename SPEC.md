@@ -284,6 +284,7 @@ public sealed record SimpleCommandSyntax : ShellSyntaxNode
 {
     public override ShellSyntaxKind Kind => ShellSyntaxKind.SimpleCommand;
     public Clause Clause { get; init; } = new();
+    public IReadOnlyList<CommandSubstitutionSyntax> Substitutions { get; init; } = [];
 }
 
 public sealed record PipelineSyntax : ShellSyntaxNode
@@ -470,6 +471,24 @@ public static class ShellAnalysisLimits
 not one per predicted runtime iteration. `Ancestry` is ordered outermost to
 innermost, excludes the simple-command leaf, and retains every enclosing
 execution relation. `ImmediateRole` describes the nearest relation.
+
+`SimpleCommandSyntax.Substitutions` owns each completely delimited executable
+command substitution evaluated for that command's authored words and redirects,
+including an expanding heredoc body. The collection is in authored order and
+preserves nesting: a substitution inside an inner simple command belongs to
+that inner command, not to the outer command or a side table. `Clause` remains
+the unchanged v0.2 compatibility leaf and retains the authored dynamic value.
+
+The canonical `Commands` and compatibility `Clauses` projections use these
+deterministic ordering rules: disjoint executable regions follow authored
+source order; an enclosed substitution precedes its containing command;
+nested substitutions are emitted innermost first; and nodes without comparable
+outer source spans use their containing structural collection order. Thus
+`rm "$(find /tmp)"` projects `find`, then `rm`, exactly once each.
+Each substitution ancestry frame uses `Region=Substitution` and its authored
+zero-based `ChildIndex` in the structural collection that owns the
+`CommandSubstitutionSyntax`. For a simple command this is its `Substitutions`
+collection; for an iterator it is the containing iterator-command collection.
 
 `EffectiveArgument.ClauseElementIndex` is a stable authored coordinate. The
 analysis never mutates a compatibility `Arg` to hold loop-specific values.
@@ -753,7 +772,8 @@ public sealed record VerbChain
     /// <summary>
     /// True when the clause's command name is a dynamic token the parser
     /// cannot statically identify — `& $exe`, `& "tool-$name"`,
-    /// `& { ... }` (added v0.2.0).
+    /// or supported `& $(Get-Thing)` (added v0.2.0). An unsupported
+    /// executable identity expression makes the whole result unparseable.
     /// Always false for bash clauses. See SPEC.POWERSHELL.md §3.
     /// </summary>
     public bool IsDynamic { get; init; }
@@ -894,13 +914,19 @@ verb_chain      := verb_like_word (FW_pair? verb_like_word)*
                                      // the first path-shaped or non-verb-like
                                      // token. For
                                      // word_0 ∈ FileVerbs, exactly 1 token.
-arg             := word | flag | quoted_string
+verb_like_word  := static word satisfying §6.1; the initial command-name
+                   element contains no supported_substitution
+arg             := word | flag | quoted_string | supported_substitution
 flag            := "-" letter+ | "--" word
 redirect        := redirect_op target
 redirect_op     := ">" | ">>" | "<" | "2>" | "2>>"
-target          := word | quoted_string
-word            := non-whitespace, non-operator characters
+target          := word | quoted_string | supported_substitution
+supported_substitution := "$(" command ")"
+word            := non-whitespace, non-operator fragments; may contain
+                   supported_substitution children in v0.3
 quoted_string   := single-quoted | double-quoted
+                   // double-quoted values may contain supported_substitution;
+                   // single-quoted and escaped spellings remain literal
 ```
 
 **Notes:**
@@ -975,11 +1001,22 @@ iterable_word        := word | quoted_string | supported_substitution
 ```
 
 The supported stable-v0.3 set is the existing simple-command grammar plus
-`for name in words`, `while` / `until`, and `if` / `elif` / `else`. A fully
-delimited command substitution in a supported iterable exposes its inner
-commands but produces an `Unknown` value. A Bash path-shaped glob may produce
-a `Pattern` only when its exact static covering directory is proved without
-filesystem enumeration. Bash `<<<` is a non-path `HereString` redirect.
+`for name in words`, `while` / `until`, and `if` / `elif` / `else`. Every fully
+delimited `$()` command substitution in a supported simple-command argument,
+redirect value, iterable, or expanding heredoc body is recursively parsed and
+exposes its inner commands; its produced value remains `Unknown`. A nested
+substitution is recursively attached to the nearest containing simple command.
+Legacy backtick substitution becomes unparseable in v0.3 until its distinct
+escape and nesting rules can be mapped without guessing. A Bash path-shaped
+glob may produce a `Pattern` only when its exact static covering directory is
+proved without filesystem enumeration. Bash `<<<` is a non-path `HereString`
+redirect.
+
+A `$()` fragment in Bash command-name position leaves the outer command
+identity runtime-dependent. Stable v0.3 makes the whole result unparseable
+rather than changing the v0.2 `VerbChain.IsDynamic` contract, which remains
+PowerShell-specific. Diagnostic `Syntax` may retain the discovered substitution,
+but `Commands` and `Clauses` are empty.
 
 Missing `do`, `done`, `then`, or `fi`; an unsupported substitution whose
 commands cannot all be discovered; or any skipped executable region makes the
@@ -1622,8 +1659,10 @@ When the parser cannot produce a clean AST:
 
 1. **Set `ParsedCommand.IsUnparseable = true`.**
 2. **Set `UnparseableReason`** to a human-readable diagnostic.
-3. **Return whatever clauses were successfully parsed** in `Clauses`. May
-   be empty.
+3. **Return empty `Commands` and `Clauses`.** `Syntax` may retain partial
+   diagnostic structure, but it is never authorization evidence. Historical
+   v0.1/v0.2 parsers could retain partial clauses; v0.3 deliberately closes
+   that subset-authorization hazard.
 4. **Never throw** on well-formed input strings (only throw on null).
 
 Conditions that produce `IsUnparseable = true`:

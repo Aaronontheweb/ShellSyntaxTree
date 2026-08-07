@@ -30,6 +30,24 @@ a pipeline stage and still carries the enclosing loop-body context. Likewise,
 `isComplete` describes command discovery and structure, not value precision; a
 complete occurrence may contain an `Unknown` effective value.
 
+Executable substitutions embedded in a simple command are structural children
+of that command. Projection order is security-significant: substitutions
+precede their containing command, sibling substitutions retain authored order,
+and nested substitutions are innermost first. The unchanged compatibility leaf
+still records the authored opaque or dynamic operand.
+
+Substitution cases also record shell-specific working-directory facts. Bash
+state changes remain isolated to the substitution, while PowerShell `$()`
+changes runspace location before the containing command executes. Literal and
+escaped substitution-looking text has no child commands. The executable corpus
+will add the full quoted, redirect, dynamic-identity, malformed, and depth-limit
+matrix as each shell's substitution slice lands.
+
+PowerShell cases distinguish a standalone `$()` expression from `& $(...)`.
+The former exposes only commands inside the subexpression; the latter also has
+one incomplete dynamic invocation. Rendering or authorization must never turn
+subexpression output text into a synthetic command.
+
 The v0.3 contract fixes the candidate cap at 32. Each shell has a case at the
 cap and a 33-value overflow case that collapses to `Unknown` rather than
 publishing a truncated finite set. Supported heredocs and Bash here strings

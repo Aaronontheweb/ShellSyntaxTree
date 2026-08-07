@@ -2,6 +2,209 @@
   "shell": "PowerShell",
   "cases": [
     {
+      "id": "pwsh-simple-command-substitution",
+      "concern": "Subexpression command is attached to its containing simple command",
+      "input": "Remove-Item $(Get-Item target.txt)",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "$(Get-Item target.txt)", "kind": "DynamicSkip", "isPath": false }
+      },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 1 },
+          { "id": "sub", "kind": "CommandSubstitution", "parent": "remove", "slot": "Substitution" },
+          { "id": "subBody", "kind": "Block", "parent": "sub", "slot": "Body" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "Get-Item", "immediateRole": "Substitution", "ancestry": ["root", "sub", "subBody"], "isComplete": true },
+          {
+            "authoredVerb": "Remove-Item",
+            "immediateRole": "Ordinary",
+            "ancestry": ["root"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$(Get-Item target.txt)", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "argument": { "clauseIndex": 1, "argumentIndex": 0, "raw": "$(Get-Item target.txt)", "kind": "DynamicSkip", "isPath": false },
+        "compatibility": { "verbs": ["Get-Item", "Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "pwsh-multiple-command-substitutions",
+      "concern": "Sibling subexpressions preserve authored order before their consumer",
+      "input": "Write-Output $(Get-Date) $(Get-Location)",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 2 },
+          { "id": "dateSub", "kind": "CommandSubstitution", "parent": "write", "slot": "Substitution" },
+          { "id": "dateBody", "kind": "Block", "parent": "dateSub", "slot": "Body" },
+          { "id": "date", "kind": "SimpleCommand", "parent": "dateBody", "slot": "Statement", "commandIndex": 0 },
+          { "id": "locationSub", "kind": "CommandSubstitution", "parent": "write", "slot": "Substitution" },
+          { "id": "locationBody", "kind": "Block", "parent": "locationSub", "slot": "Body" },
+          { "id": "location", "kind": "SimpleCommand", "parent": "locationBody", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Get-Date", "immediateRole": "Substitution", "ancestry": ["root", "dateSub", "dateBody"], "isComplete": true },
+          { "authoredVerb": "Get-Location", "immediateRole": "Substitution", "ancestry": ["root", "locationSub", "locationBody"], "isComplete": true },
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Get-Date", "Get-Location", "Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "pwsh-nested-command-substitutions",
+      "concern": "Nested subexpressions retain parentage and project innermost first",
+      "input": "Write-Output $(Get-Item $(Get-Location))",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 2 },
+          { "id": "outerSub", "kind": "CommandSubstitution", "parent": "write", "slot": "Substitution" },
+          { "id": "outerBody", "kind": "Block", "parent": "outerSub", "slot": "Body" },
+          { "id": "item", "kind": "SimpleCommand", "parent": "outerBody", "slot": "Statement", "commandIndex": 1 },
+          { "id": "innerSub", "kind": "CommandSubstitution", "parent": "item", "slot": "Substitution" },
+          { "id": "innerBody", "kind": "Block", "parent": "innerSub", "slot": "Body" },
+          { "id": "location", "kind": "SimpleCommand", "parent": "innerBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "Get-Location", "immediateRole": "Substitution", "ancestry": ["root", "outerSub", "outerBody", "innerSub", "innerBody"], "isComplete": true },
+          { "authoredVerb": "Get-Item", "immediateRole": "Substitution", "ancestry": ["root", "outerSub", "outerBody"], "isComplete": true },
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Get-Location", "Get-Item", "Write-Output"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "NoSyntheticOperator"]
+      }
+    },
+    {
+      "id": "pwsh-literal-substitution-spellings",
+      "concern": "Single-quoted and escaped subexpression-looking text does not execute",
+      "input": "Write-Output '$(Get-Date)' \"literal `$(Get-Location)\"",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "LiteralExpansionProvenancePreserved"]
+      }
+    },
+    {
+      "id": "pwsh-array-subexpression-execution-gated",
+      "concern": "Execution-bearing array subexpression fails closed until discovery is modeled",
+      "input": "Write-Output @(Get-Date)",
+      "current": {
+        "isUnparseable": false,
+        "argument": { "clauseIndex": 0, "argumentIndex": 0, "raw": "@(Get-Date)", "kind": "DynamicSkip", "isPath": false }
+      },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Argument" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-call-operator-script-block-gated",
+      "concern": "Invoked script block is not treated as an ordinary opaque argument",
+      "input": "& { Remove-Item target.txt }",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-standalone-subexpression-is-not-invocation",
+      "concern": "Standalone subexpression output does not invent an outer command",
+      "input": "$(Write-Output Get-Date)",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "sub", "kind": "CommandSubstitution", "parent": "root", "slot": "Statement" },
+          { "id": "subBody", "kind": "Block", "parent": "sub", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "Write-Output", "immediateRole": "Substitution", "ancestry": ["root", "sub", "subBody"], "isComplete": true }
+        ],
+        "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["AllCommandsVisible", "NoSyntheticOperator"]
+      },
+      "notes": "The produced string Get-Date is output data, not an invocation."
+    },
+    {
+      "id": "pwsh-call-operator-subexpression-invocation",
+      "concern": "Call operator invokes unknown subexpression output after exposing its commands",
+      "input": "& $(Write-Output Get-Date)",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "invoke", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 1 },
+          { "id": "sub", "kind": "CommandSubstitution", "parent": "invoke", "slot": "Substitution" },
+          { "id": "subBody", "kind": "Block", "parent": "sub", "slot": "Body" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 0 }
+        ],
+        "commands": [
+          { "authoredVerb": "Write-Output", "immediateRole": "Substitution", "ancestry": ["root", "sub", "subBody"], "isComplete": true },
+          { "authoredVerb": "$(Write-Output Get-Date)", "immediateRole": "Ordinary", "ancestry": ["root"], "isComplete": false }
+        ],
+        "compatibility": { "verbs": ["Write-Output", "$(Write-Output Get-Date)"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "UnknownPolicyValueFailsClosed", "NoSyntheticOperator"]
+      },
+      "notes": "The parser does not evaluate the produced command name; the outer occurrence remains dynamic and incomplete."
+    },
+    {
+      "id": "pwsh-command-substitution-current-scope-cwd",
+      "concern": "PowerShell subexpression location changes propagate to the consumer and continuation",
+      "input": "Write-Output $(Set-Location /tmp; Get-Location); Get-Item relative.txt",
+      "current": { "isUnparseable": false },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "list", "kind": "CommandList", "parent": "root", "slot": "Statement" },
+          { "id": "write", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 2 },
+          { "id": "sub", "kind": "CommandSubstitution", "parent": "write", "slot": "Substitution" },
+          { "id": "subBody", "kind": "Block", "parent": "sub", "slot": "Body" },
+          { "id": "set", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 0 },
+          { "id": "location", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 1 },
+          { "id": "get", "kind": "SimpleCommand", "parent": "list", "slot": "Statement", "commandIndex": 3 }
+        ],
+        "commands": [
+          { "authoredVerb": "Set-Location", "immediateRole": "Substitution", "ancestry": ["root", "list", "sub", "subBody"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "C:/work" } },
+          { "authoredVerb": "Get-Location", "immediateRole": "Substitution", "ancestry": ["root", "list", "sub", "subBody"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/tmp" } },
+          { "authoredVerb": "Write-Output", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/tmp" } },
+          { "authoredVerb": "Get-Item", "immediateRole": "Ordinary", "ancestry": ["root", "list"], "isComplete": true, "workingDirectory": { "kind": "Exact", "value": "/tmp" } }
+        ],
+        "compatibility": { "verbs": ["Set-Location", "Get-Location", "Write-Output", "Get-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "StateJoinConservative", "NoSyntheticOperator"]
+      }
+    },
+    {
       "id": "pwsh-foreach-literal-array",
       "concern": "Finite literal foreach binding",
       "input": "foreach ($f in @('a.txt', 'b.txt')) { Remove-Item -LiteralPath $f }",
@@ -58,6 +261,39 @@
         "securityInvariants": ["AllCommandsVisible", "IteratorCommandsVisible", "UnknownPolicyValueFailsClosed"]
       },
       "notes": "The iterator emits filesystem objects, not proved literal strings."
+    },
+    {
+      "id": "pwsh-foreach-subexpression-iterator",
+      "concern": "Subexpression iterator preserves nearest substitution role and outer iterator ancestry",
+      "input": "foreach ($f in $(Get-ChildItem C:\\input)) { Remove-Item -LiteralPath $f }",
+      "current": { "isUnparseable": true, "reasonContains": "'foreach'" },
+      "desired": {
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "loop", "kind": "ForEach", "parent": "root", "slot": "Statement", "binding": "f" },
+          { "id": "iterator", "kind": "Block", "parent": "loop", "slot": "Iterator" },
+          { "id": "sub", "kind": "CommandSubstitution", "parent": "iterator", "slot": "Substitution" },
+          { "id": "subBody", "kind": "Block", "parent": "sub", "slot": "Body" },
+          { "id": "get", "kind": "SimpleCommand", "parent": "subBody", "slot": "Statement", "commandIndex": 0 },
+          { "id": "body", "kind": "Block", "parent": "loop", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
+        ],
+        "commands": [
+          { "authoredVerb": "Get-ChildItem", "immediateRole": "Substitution", "ancestry": ["root", "loop", "iterator", "sub", "subBody"], "isComplete": true },
+          {
+            "authoredVerb": "Remove-Item",
+            "immediateRole": "LoopBody",
+            "ancestry": ["root", "loop", "body"],
+            "isComplete": true,
+            "effectiveValues": [
+              { "sourceElement": "$f", "kind": "Unknown", "isPolicySensitive": true }
+            ]
+          }
+        ],
+        "compatibility": { "verbs": ["Get-ChildItem", "Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible", "IteratorCommandsVisible", "UnknownPolicyValueFailsClosed"]
+      },
+      "notes": "The nearest role is Substitution; Iterator remains in ancestry and the produced objects remain unknown."
     },
     {
       "id": "pwsh-foreach-cmdlet-parameter-like-value",

@@ -255,6 +255,14 @@ Working-directory and supported variable state SHALL be propagated through
 sequential regions and joined across branches and loop exits. Disagreement
 SHALL never be resolved by arbitrarily choosing one path.
 
+Bash command substitution SHALL isolate its working-directory and variable
+state from the containing command while retaining sequential state inside the
+substitution. PowerShell `$()` SHALL evaluate in the current runspace scope;
+its sequential location changes SHALL affect later commands inside the
+subexpression, the containing command, and the following outer continuation.
+An unknown mutation SHALL propagate as unknown wherever that shell's scope
+rules make it observable.
+
 #### Scenario: Branch-dependent cwd
 - **WHEN** one branch changes cwd to `/a` and another changes cwd to `/b`
 - **THEN** a following relative path is not resolved solely under `/a` or solely under `/b`
@@ -271,6 +279,21 @@ SHALL never be resolved by arbitrarily choosing one path.
 #### Scenario: Isolated shell scope
 - **WHEN** a supported subshell or scope-isolated group changes cwd
 - **THEN** that cwd does not leak into the enclosing continuation
+
+#### Scenario: Bash substitution cwd is isolated
+- **WHEN** Bash parses `printf '%s' "$(cd /tmp; pwd)"; cat relative.txt`
+- **THEN** `pwd` uses `/tmp` inside the substitution
+- **THEN** `printf` and `cat` retain the exact outer cwd
+
+#### Scenario: PowerShell subexpression cwd propagates
+- **WHEN** PowerShell parses `Write-Output $(Set-Location /tmp; Get-Location); Get-Item relative.txt`
+- **THEN** `Get-Location`, `Write-Output`, and `Get-Item` use `/tmp`
+- **THEN** the analyzer does not restore the pre-subexpression cwd
+
+#### Scenario: Unknown PowerShell subexpression mutation propagates
+- **WHEN** a PowerShell subexpression changes location to an unknown value
+- **THEN** later commands inside the subexpression and in the containing outer continuation have unknown working-directory facts
+- **THEN** no prior exact cwd is selected as a fallback
 
 ### Requirement: Unknown analysis remains policy-sensitive
 An unknown value SHALL identify the occurrence and position it affects so a

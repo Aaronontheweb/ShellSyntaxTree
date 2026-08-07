@@ -221,9 +221,11 @@ value unambiguously signals "an alias was expanded."
 ```csharp
 /// <summary>
 /// True when the clause's command name is a dynamic token the parser
-/// cannot statically identify — a variable (`& $exe`), a subexpression
-/// (`& (Get-Thing)`), or a script block (`& { ... }`) at verb position.
-/// Tokens still carries the verbatim token; CanonicalVerb is null.
+/// cannot statically identify — a variable (`& $exe`), an interpolated name,
+/// or a supported subexpression (`& $(Get-Thing)`) at verb position. Tokens
+/// still carries the verbatim token; CanonicalVerb is null. An unsupported
+/// executable identity expression makes the whole result unparseable with
+/// empty command and compatibility projections instead.
 ///
 /// A consumer MUST treat a clause with IsDynamic=true as "the command being
 /// run is unknown" and route to safe-fail — the verb identity, and
@@ -264,16 +266,21 @@ command          := statement (statement_sep statement)*
 statement_sep    := ";" | "&&" | "||" | NEWLINE
 statement        := pipeline
 pipeline         := pipeline_element ("|" pipeline_element)*
-pipeline_element := call_op? command_name arg* redirect*
+pipeline_element := static_invocation | dynamic_invocation
+                  | supported_subexpression | grouped_pipeline
+static_invocation := call_op? command_name arg* redirect*
+dynamic_invocation := call_op dynamic_command_name arg* redirect*
 call_op          := "&"                        // call operator at verb position
-command_name     := cmdlet | native_word | quoted_string | grouped_pipeline
+command_name     := cmdlet | native_word          // statically identified;
+                                                // excludes variables,
+                                                // quoted expressions, and $()
 arg              := parameter | value
 parameter        := "-" param_name (":" value)?     // -Name value | -Name:value
                   | "-" param_name                   // switch parameter
                   | "--"                              // end-of-parameters marker
 value            := word | quoted_string | here_string
                   | script_block         // { ... }   -> DynamicSkip Arg
-                  | subexpression        // $( ... )  -> DynamicSkip Arg
+                  | supported_subexpression // $( ... ) -> child commands + DynamicSkip Arg
                   | array_expression     // @( ... )  -> DynamicSkip Arg
                   | hash_literal         // @{ ... }  -> DynamicSkip Arg
                   | splat                // @var      -> DynamicSkip Arg
@@ -281,12 +288,19 @@ redirect         := redirect_op target
 redirect_op      := ">" | ">>" | "<"
                   | STREAM ">" | STREAM ">>"          // STREAM in {1..6, *}
                   | STREAM ">&" STREAM                 // stream merge (2>&1)
-target           := word | quoted_string | "$null"
+target           := word | quoted_string | supported_subexpression | "$null"
+supported_subexpression := "$(" command ")"
+dynamic_command_name := variable | quoted_string | supported_subexpression
+variable         := "$" identifier | "${" variable_name "}"
+                  | "$env:" identifier
 grouped_pipeline := "(" pipeline ")"                 // parenthesized sub-pipeline
 word             := run of non-whitespace, non-operator, non-quote chars,
                     honoring backtick escape; absorbs $var / ${name} /
                     $env:NAME / drive-qualified path prefixes
 quoted_string    := single_quoted | double_quoted
+                    // double-quoted and expandable here-string values may
+                    // contain supported_subexpression children; literal or
+                    // backtick-escaped spellings do not
 ```
 
 **Notes:**
@@ -302,10 +316,13 @@ quoted_string    := single_quoted | double_quoted
 - `&` at verb position is the **call operator** (`& git status`, `& $exe`,
   `& { ... }`). A *trailing* `&` (a PowerShell background job) marks
   `IsUnparseable` (§11).
-- A clause whose command name (after an optional `&`) is a dynamic token —
-  a variable `$var`, a subexpression `$( ... )`, or a script block
-  `{ ... }` — still parses, but its `VerbChain.IsDynamic` is set true (§3).
-  Its args and redirects parse normally.
+- Under v0.2 a variable, subexpression, quoted string, or script block at
+  command position could be retained as a dynamic clause. Stable v0.3 aligns
+  this with PowerShell invocation semantics: only `& <dynamic-expression>`
+  creates an outer dynamic command occurrence. Standalone `$()` is an
+  expression statement whose inner commands are exposed without inventing an
+  invocation of its produced value. Standalone `$()` followed by command-style
+  arguments is a syntax error and makes the whole result unparseable.
 - A parenthesized **pipeline** `( ... )` parses as a grouped sub-pipeline;
   its clauses carry `IsSubshell = true` as a *structural* marker only.
   Unlike a bash subshell, PowerShell's `( ... )` is a grouping operator — it
@@ -320,9 +337,15 @@ quoted_string    := single_quoted | double_quoted
   `DynamicSkip` arg. `--%` does **not** stop at a pipeline-element boundary;
   treating `| cmd` after `--%` as a new clause would invent a clause that
   does not exist.
-- Script blocks `{ ... }`, subexpressions `$( ... )`, array `@( ... )`, and
-  hash `@{ ... }` literals are recognized as **opaque tokens** — the
-  interior is not parsed; each becomes one `DynamicSkip` arg.
+- The lexer preserves script blocks `{ ... }`, subexpressions `$( ... )`,
+  array `@( ... )`, and hash `@{ ... }` literals as bounded tokens. Under
+  v0.2 each was one opaque `DynamicSkip` arg. Stable v0.3 recursively parses
+  every completely delimited executable `$()` in a supported value position
+  and exposes its commands while retaining the containing authored
+  `DynamicSkip` leaf. Ordinary script-block literals remain non-executing
+  opaque values. An `@()` or `@{}` value with execution-bearing content is
+  unparseable until that expression form has complete command discovery;
+  a non-executing literal form may remain an opaque value.
 - Under v0.2, control-flow keywords fall outside the grammar. Stable v0.3 owns
   only the contextual statement forms below. Definition keywords, unsupported
   block keywords, `param()`, assignment statements, bare `[type]::member`
@@ -356,6 +379,7 @@ pwsh_else            := "else" script_block_body
 foreach_expression   := literal_value
                       | literal_array
                       | pipeline_expression
+                      | supported_subexpression
 literal_array        := "@(" literal_value ("," literal_value)* ")"
 script_block_body    := "{" pwsh_script(stop = "}") "}"
 ```
@@ -367,6 +391,27 @@ PowerShell object-to-string conversion. The body is recursively parsed only
 after the structural grammar proves that the `ScriptBlock` token is the body
 of a recognized statement. An ordinary script-block argument remains one
 opaque `DynamicSkip` value and does not invent child execution.
+
+A completely delimited `$()` used as an ordinary word, dynamic command
+identity after `&`, redirect value, foreach expression, double-quoted interpolation, or
+expandable here-string is recursively parsed as a command substitution. Its
+commands are exposed before the containing command and its produced value is
+`Unknown`. Single-quoted strings, literal here-strings, and backtick-escaped
+`$()` text never create substitution nodes. An unsupported execution-bearing
+expression makes the whole result unparseable rather than leaving hidden
+commands inside a `DynamicSkip` value.
+
+A standalone `$()` statement has no containing simple command: the syntax block
+contains the `CommandSubstitutionSyntax` directly and `Commands` contains only
+commands from its body. `& $(...)` additionally retains one incomplete dynamic
+outer occurrence after all substitution commands. Bash differs: an unquoted
+command substitution in Bash command-name position contributes to the command
+word, so stable v0.3 makes that runtime-dependent identity unparseable rather
+than inventing a static or PowerShell-style dynamic clause.
+
+`& { ... }` executes a script block and remains unparseable in stable v0.3
+until its body, scope, and state propagation are modeled. This differs from an
+ordinary script-block argument, which remains a non-executing opaque value.
 
 `condition_pipeline` is limited to a pipeline the existing parser can delimit
 completely. A subexpression, member invocation, script block, or other form
@@ -416,7 +461,10 @@ The `PwshLexer` produces tokens consumed by `PwshCommandParser`. Token kinds
 - **ScriptBlock** — a balanced `{ ... }` region, emitted whole. Parser →
   `DynamicSkip` arg.
 - **Subexpression** — a balanced `$( ... )`, `@( ... )`, or `@{ ... }`
-  region, emitted whole. Parser → `DynamicSkip` arg.
+  region, emitted whole. The v0.3 structural parser recursively lowers
+  supported `$()` regions and retains the outer compatibility arg as
+  `DynamicSkip`; unsupported execution-bearing array/hash expressions fail
+  closed.
 - **Splat** — `@identifier` (splatting). Parser → `DynamicSkip` arg.
 - **StopParsing** — the `--%` token; the pipeline-element remainder is
   opaque.
@@ -432,14 +480,17 @@ The `PwshLexer` produces tokens consumed by `PwshCommandParser`. Token kinds
   `$var` / `${name}` / `$env:X` / `$( ... )` interpolation — but the parser
   **does not expand**; `$var` stays literal in the token value and the
   resolver (§8) classifies it. A `$( ... )` inside a double-quoted string
-  does not split the token. Backtick character escapes are decoded into the
+  does not split the compatibility token, but v0.3 recursively exposes its
+  commands through `SimpleCommandSyntax.Substitutions`. Backtick character
+  escapes are decoded into the
   same logical value PowerShell passes to a command, including
   `` `u{hex}`` Unicode scalar escapes.
 - **Here-strings** — `@"` + newline ... newline + `"@` (expandable) and
   `@'` + newline ... newline + `'@` (literal). The closing delimiter must
   start a line. Lexes to one `QuotedString` token with `IsHereString=true`.
-  Expandable here-strings decode backtick character escapes; literal
-  here-strings preserve their body bytes.
+  Expandable here-strings decode backtick character escapes and v0.3 discovers
+  every executable `$()` interpolation; literal here-strings preserve their
+  body bytes and never create substitution commands.
 - Unbalanced quotes or here-strings → `IsUnparseable` with a reason.
 
 ### Escape handling
@@ -993,13 +1044,23 @@ pipeline elements within a statement, not separate statements.
 
 Script blocks `{ ... }`, subexpressions `$( ... )`, array subexpressions
 `@( ... )`, and hash literals `@{ ... }` are bounded by the shared
-`OpaqueRegionScanner` and emitted as single tokens; the parser consumes each
-as one `Arg { Kind=DynamicSkip, IsPath=false, Resolved=null }`, `Raw` being
-the verbatim region slice. Splatting `@var` is likewise `DynamicSkip`. The
-`--%` stop-parsing token makes the pipeline-element remainder one
-`DynamicSkip` arg. The interior of these regions is **not** parsed — this is
-the heart of the Pipeline-aware scope (§4): `gci | ? { ... } | rm` is a
-clean three-clause pipeline whose middle clause carries an opaque arg.
+`OpaqueRegionScanner` and emitted as single tokens. The compatibility parser
+retains each as one `Arg { Kind=DynamicSkip, IsPath=false, Resolved=null }`,
+`Raw` being the verbatim region slice. Stable v0.3 additionally parses every
+supported executable `$()` interior into `SimpleCommandSyntax.Substitutions`.
+Execution-bearing `@()` / `@{}` forms that cannot be completely discovered
+make the whole result unparseable. Splatting `@var` remains `DynamicSkip`.
+The `--%` stop-parsing token makes the pipeline-element remainder one
+`DynamicSkip` arg. An ordinary script-block argument remains non-executing
+opaque data: `gci | ? { ... } | rm` is a clean three-clause pipeline whose
+middle clause carries an opaque arg; consumers decide whether that command
+interprets the block.
+
+PowerShell `$()` runs in the current runspace scope. A `Set-Location` inside a
+subexpression affects later inner commands, the containing command after value
+evaluation, and following outer commands. Unknown location mutations propagate
+as unknown. This differs from Bash command substitution, whose state is
+isolated from the containing shell.
 
 `OpaqueRegionScanner` is grammar-agnostic but escapes on backslash; for
 PowerShell it is given a backtick-escape mode so `` { `} } `` scans
@@ -1126,18 +1187,19 @@ location attribution because it can resolve to current-scope code that calls
 
 ## 11. Parser Anomaly Behavior
 
-The safe-fail contract — set `IsUnparseable=true`, set `UnparseableReason`,
-return whatever clauses parsed, never throw on a well-formed string — is
-defined in **`SPEC.md` §11** and is unchanged.
+The v0.3 safe-fail contract — set `IsUnparseable=true`, set
+`UnparseableReason`, return empty `Commands` and `Clauses`, retain at most a
+diagnostic `Syntax` tree, and never throw on a well-formed string — is defined
+in **`SPEC.md` §11**.
 
 `PwshCommandParser` sets `ParsedCommand.IsUnparseable = true` for:
 
 1. **Lexer sentinels** — unbalanced single/double quote, unterminated
    here-string, unterminated `<# ... #>` block comment, unbalanced `{ }` /
    `$( )` / `@( )` / `@{ }`, unbalanced grouping `( )`.
-2. **Control-flow keywords at statement/verb position** — `if`, `elseif`,
-   `else`, `switch`, `foreach` (when followed by `(`), `for`, `while`, `do`,
-   `until`.
+2. **Unsupported control-flow at statement/verb position** — `switch`, `for`,
+   `do`, `until`, or an `if`, `elseif`, `else`, `foreach`, or `while` form
+   outside the bounded stable-v0.3 grammar in §4.
 3. **Definition keywords** — `function`, `filter`, `workflow`,
    `configuration`, `class`, `enum`.
 4. **Block / trap / data keywords** — `param`, `begin`, `process`, `end`,
