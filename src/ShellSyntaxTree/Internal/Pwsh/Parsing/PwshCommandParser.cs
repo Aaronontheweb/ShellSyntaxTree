@@ -43,12 +43,16 @@ internal static partial class PwshCommandParser
         }
 
         return ParseInternal(
-            source, options, recursionDepth: 0, markWrapped: false,
+            source, options, recursionDepth: 0, structuralDepth: 0, markWrapped: false,
             sharedLocation: null);
     }
 
     private static ParsedCommand ParseInternal(
-        string source, PwshParserOptions options, int recursionDepth, bool markWrapped,
+        string source,
+        PwshParserOptions options,
+        int recursionDepth,
+        int structuralDepth,
+        bool markWrapped,
         PwshSetLocationContext? sharedLocation)
     {
         // §11 item 10: the size cap is checked before lexing, on the
@@ -91,6 +95,7 @@ internal static partial class PwshCommandParser
             significant,
             options,
             recursionDepth,
+            structuralDepth,
             markWrapped,
             sharedLocation);
     }
@@ -480,7 +485,10 @@ internal static partial class PwshCommandParser
     private static BuildResult BuildSegment(
         Segment segment, string source, PwshParserOptions baseOptions,
         PwshParserOptions effectiveOptions, bool workingDirectoryUnknown,
-        int recursionDepth, bool markWrapped, PwshSetLocationContext attribution)
+        int recursionDepth,
+        int structuralDepth,
+        bool markWrapped,
+        PwshSetLocationContext attribution)
     {
         var body = segment.Tokens;
         var start = 0;
@@ -516,7 +524,7 @@ internal static partial class PwshCommandParser
         var classified = ClassifyVerb(body, start);
         if (TryHandleInvokeExpression(
             body, start, classified, source, baseOptions, recursionDepth,
-            segment, markWrapped, attribution, out var expressionResult))
+            structuralDepth, segment, markWrapped, attribution, out var expressionResult))
         {
             return expressionResult;
         }
@@ -526,7 +534,7 @@ internal static partial class PwshCommandParser
             var recursion = TryRecurseIntoPwsh(
                 body, start, classified, source, baseOptions, effectiveOptions,
                 workingDirectoryUnknown, recursionDepth,
-                segment, markWrapped, out var recursionResult);
+                structuralDepth, segment, markWrapped, out var recursionResult);
             if (recursion)
             {
                 return recursionResult;
@@ -1670,7 +1678,11 @@ internal static partial class PwshCommandParser
 
     private static bool TryHandleInvokeExpression(
         List<PwshToken> body, int start, ClassifiedVerb verb, string source,
-        PwshParserOptions options, int recursionDepth, Segment segment, bool markWrapped,
+        PwshParserOptions options,
+        int recursionDepth,
+        int structuralDepth,
+        Segment segment,
+        bool markWrapped,
         PwshSetLocationContext attribution, out BuildResult result)
     {
         result = default;
@@ -1832,7 +1844,7 @@ internal static partial class PwshCommandParser
         }
 
         var innerParsed = ParseInternal(
-            payloadValue!, options, recursionDepth + 1, markWrapped: true,
+            payloadValue!, options, recursionDepth + 1, structuralDepth + 1, markWrapped: true,
             sharedLocation: attribution);
         if (innerParsed.IsUnparseable)
         {
@@ -1946,7 +1958,11 @@ internal static partial class PwshCommandParser
     private static bool TryRecurseIntoPwsh(
         List<PwshToken> body, int start, ClassifiedVerb verb, string source,
         PwshParserOptions options, PwshParserOptions redirectOptions,
-        bool workingDirectoryUnknown, int recursionDepth, Segment segment, bool markWrapped,
+        bool workingDirectoryUnknown,
+        int recursionDepth,
+        int structuralDepth,
+        Segment segment,
+        bool markWrapped,
         out BuildResult result)
     {
         result = default;
@@ -2011,6 +2027,15 @@ internal static partial class PwshCommandParser
                 return false;
             }
 
+            if (!isEncoded && HasDynamicCommandPayload(
+                    body, i, colonValue, payloadEndExclusive))
+            {
+                // The parent shell evaluates expandable command payloads before
+                // starting the child host. Keep the outer host visible and let
+                // structural discovery expose only those parent-scope commands.
+                return false;
+            }
+
             if (failure is not null)
             {
                 result = BuildResult.Fail(failure);
@@ -2055,7 +2080,7 @@ internal static partial class PwshCommandParser
             }
 
             var innerParsed = ParseInternal(
-                inner, options, recursionDepth + 1, markWrapped: true,
+                inner, options, recursionDepth + 1, structuralDepth + 1, markWrapped: true,
                 sharedLocation: null);
             if (innerParsed.IsUnparseable)
             {
@@ -2078,6 +2103,48 @@ internal static partial class PwshCommandParser
 
             result = BuildResult.Recursion(wrapper!);
             return true;
+        }
+
+        return false;
+    }
+
+    private static bool HasDynamicCommandPayload(
+        IReadOnlyList<PwshToken> body,
+        int parameterIndex,
+        string? colonValue,
+        int payloadEndExclusive)
+    {
+        if (colonValue is not null)
+        {
+            return body[parameterIndex].HasInterpolation;
+        }
+
+        if (parameterIndex + 1 >= payloadEndExclusive)
+        {
+            return false;
+        }
+
+        for (var index = parameterIndex + 1; index < payloadEndExclusive; index++)
+        {
+            var token = body[index];
+            if (token.HasInterpolation)
+            {
+                return true;
+            }
+
+            if (token.ResolverValue is null)
+            {
+                continue;
+            }
+
+            foreach (var fragment in token.ResolverValue.Fragments)
+            {
+                if (fragment.Kind == ShellValueFragmentKind.Opaque &&
+                    fragment.OpaqueCause == ShellOpaqueCause.PowerShellSubexpression)
+                {
+                    return true;
+                }
+            }
         }
 
         return false;

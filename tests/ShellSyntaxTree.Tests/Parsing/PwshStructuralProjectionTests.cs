@@ -164,6 +164,47 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
+    public void Exact_substitution_depth_limit_remains_parseable()
+    {
+        var result = Parse(NestedSubstitution(ShellAnalysisLimits.MaxStructuralNesting));
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Commands.Count);
+    }
+
+    [Fact]
+    public void Substitution_depth_overflow_fails_before_recursive_descent()
+    {
+        var result = Parse(NestedSubstitution(ShellAnalysisLimits.MaxStructuralNesting + 1));
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("nesting depth", result.UnparseableReason!);
+    }
+
+    [Fact]
+    public void Group_and_substitution_share_the_exact_structural_depth_budget()
+    {
+        var result = Parse("(" + NestedSubstitution(
+            ShellAnalysisLimits.MaxStructuralNesting - 1) + ")");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Commands.Count);
+    }
+
+    [Fact]
+    public void Mixed_group_and_substitution_depth_overflow_fails_closed()
+    {
+        var result = Parse("(" + NestedSubstitution(
+            ShellAnalysisLimits.MaxStructuralNesting) + ")");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
     public void PowerShell_host_wrapper_preserves_inner_structure_in_an_isolated_group()
     {
         var result = Parse(
@@ -292,13 +333,325 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
-    public void Undiscovered_subexpression_is_incomplete_but_ordinary_variable_data_is_not()
+    public void Discovered_subexpression_completes_the_outer_command_but_variable_data_is_ordinary()
     {
-        var hidden = Parse("Write-Output $(Get-Date)");
+        var discovered = Parse("Write-Output $(Get-Date)");
         var data = Parse("Write-Output $value");
 
-        Assert.False(Assert.Single(hidden.Commands).IsComplete);
+        Assert.Equal(new[] { "Get-Date", "Write-Output" },
+            discovered.Commands.Select(CommandVerb));
+        Assert.All(discovered.Commands, command => Assert.True(command.IsComplete));
         Assert.True(Assert.Single(data.Commands).IsComplete);
+    }
+
+    [Fact]
+    public void Simple_subexpression_preserves_exact_structure_identity_and_spans()
+    {
+        const string source = "Remove-Item $(Get-Item target.txt)";
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "Get-Item", "Remove-Item" }, result.Commands.Select(CommandVerb));
+        var outer = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var substitution = Assert.Single(outer.Substitutions);
+        Assert.Equal(source.IndexOf("$(", System.StringComparison.Ordinal), substitution.SourceStart);
+        Assert.Equal("$(Get-Item target.txt)".Length, substitution.SourceLength);
+        var inner = Assert.IsType<SimpleCommandSyntax>(Assert.Single(substitution.Body.Statements));
+        Assert.Same(inner.Clause, result.Commands[0].Clause);
+        Assert.Same(outer.Clause, result.Commands[1].Clause);
+        Assert.Contains(outer.Clause.Args, argument => argument.Kind == ArgKind.DynamicSkip);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void Multiple_and_nested_subexpressions_emit_innermost_first()
+    {
+        var siblings = Parse("Write-Output $(Get-Date) $(Get-Location)");
+        Assert.Equal(new[] { "Get-Date", "Get-Location", "Write-Output" },
+            siblings.Commands.Select(CommandVerb));
+        Assert.Equal(2, Assert.IsType<SimpleCommandSyntax>(
+            Assert.Single(siblings.Syntax.Statements)).Substitutions.Count);
+
+        var nested = Parse("Write-Output $(Get-Item $(Get-Location))");
+        Assert.Equal(new[] { "Get-Location", "Get-Item", "Write-Output" },
+            nested.Commands.Select(CommandVerb));
+        Assert.Equal(5, nested.Commands[0].Ancestry.Count);
+        Assert.Equal(3, nested.Commands[1].Ancestry.Count);
+    }
+
+    [Theory]
+    [InlineData("Write-Output pre$(Get-Date)post")]
+    [InlineData("Write-Output \"pre$(Get-Date)post\"")]
+    [InlineData("native --output=$(Get-Date)")]
+    public void Supported_word_forms_discover_subexpressions(string source)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal("Get-Date", CommandVerb(result.Commands[0]));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.Contains(result.Clauses.Last().Args,
+            argument => argument.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Fact]
+    public void Expandable_here_string_discovers_subexpression()
+    {
+        var result = Parse("Write-Output @\"\nvalue $(Get-Date)\n\"@");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "Get-Date", "Write-Output" }, result.Commands.Select(CommandVerb));
+    }
+
+    [Theory]
+    [InlineData("Write-Output '$(Get-Date)'")]
+    [InlineData("Write-Output \"literal `$(Get-Date)\"")]
+    [InlineData("Write-Output @'\n$(Get-Date)\n'@")]
+    public void Literal_subexpression_spellings_do_not_create_occurrences(string source)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Single(result.Commands);
+        Assert.Empty(Assert.IsType<SimpleCommandSyntax>(
+            Assert.Single(result.Syntax.Statements)).Substitutions);
+    }
+
+    [Fact]
+    public void Standalone_subexpression_exposes_only_its_body_commands()
+    {
+        var result = Parse("$(Write-Output Get-Date)");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal("Write-Output", CommandVerb(Assert.Single(result.Commands)));
+        Assert.IsType<CommandSubstitutionSyntax>(Assert.Single(result.Syntax.Statements));
+    }
+
+    [Theory]
+    [InlineData("$(Get-Date) argument")]
+    [InlineData("$(Get-Date) | (Get-Process)")]
+    public void Unsupported_standalone_subexpression_shapes_fail_closed(string source)
+    {
+        var result = Parse(source);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
+    public void Call_operator_subexpression_retains_one_incomplete_dynamic_outer_occurrence()
+    {
+        var result = Parse("& $(Write-Output Get-Date) argument");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "Write-Output", "$(Write-Output Get-Date)" },
+            result.Commands.Select(CommandVerb));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[1].Clause.Verb.IsDynamic);
+    }
+
+    [Fact]
+    public void Interpolated_command_word_remains_dynamic_while_exposing_its_subexpression()
+    {
+        var result = Parse("Get-$(Write-Output Content) /etc/passwd");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.Equal("Write-Output", CommandVerb(result.Commands[0]));
+        Assert.True(result.Commands[1].Clause.Verb.IsDynamic);
+        Assert.False(result.Commands[1].IsComplete);
+    }
+
+    [Fact]
+    public void Subexpression_location_changes_propagate_before_outer_resolution()
+    {
+        var result = Parse(
+            "Write-Output $(Set-Location C:\\sensitive; Get-Location); Get-Item child.txt");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "Set-Location", "Get-Location", "Write-Output", "Get-Item" },
+            result.Commands.Select(CommandVerb));
+        Assert.Contains(result.Clauses[1].Args,
+            argument => argument.IsCwdAttribution && argument.Resolved == "C:/sensitive");
+        Assert.Contains(result.Clauses[2].Args,
+            argument => argument.IsCwdAttribution && argument.Resolved == "C:/sensitive");
+        Assert.Contains(result.Clauses[3].Args,
+            argument => argument.Raw == "child.txt" &&
+                argument.Resolved == "C:/sensitive/child.txt");
+    }
+
+    [Fact]
+    public void Dynamic_subexpression_location_poisons_inner_consumer_and_continuation()
+    {
+        var result = Parse(
+            "Write-Output $(Set-Location $target; Get-Item child.txt); Get-Item sibling.txt");
+
+        Assert.False(result.IsUnparseable);
+        Assert.All(result.Clauses.Skip(1), clause => Assert.Contains(
+            clause.Args,
+            argument => argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip));
+        Assert.DoesNotContain(result.Clauses.SelectMany(clause => clause.Args),
+            argument => argument.Raw is "child.txt" or "sibling.txt" &&
+                argument.Resolved is not null);
+    }
+
+    [Fact]
+    public void Redirect_subexpression_is_visible_while_outer_redirect_stays_incomplete()
+    {
+        var result = Parse("Get-Content > $(Join-Path C:\\temp out.txt)");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "Join-Path", "Get-Content" }, result.Commands.Select(CommandVerb));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(Assert.Single(result.Clauses[1].Redirects).IsDynamicSkip);
+    }
+
+    [Theory]
+    [InlineData("Write-Output @(Get-Date)")]
+    [InlineData("Write-Output @(1; Get-Date)")]
+    [InlineData("Write-Output @{x=$(Get-Date)}")]
+    [InlineData("Write-Output @{x=(Get-Date)}")]
+    [InlineData("Write-Output $(1+1)")]
+    [InlineData("Write-Output $(1)")]
+    [InlineData("Write-Output $(1-1)")]
+    [InlineData("Write-Output $(-1)")]
+    [InlineData("Write-Output $(1kb)")]
+    [InlineData("Write-Output $(0x10)")]
+    [InlineData("Write-Output $(1e3)")]
+    [InlineData("Write-Output $(1L)")]
+    [InlineData("Write-Output $(1s)")]
+    [InlineData("Write-Output $(1us)")]
+    [InlineData("Write-Output $(1y)")]
+    [InlineData("Write-Output $(1uy)")]
+    [InlineData("Write-Output $(0x10s)")]
+    [InlineData("Write-Output $(,$x)")]
+    [InlineData("Write-Output $(!$true)")]
+    [InlineData("Write-Output $(++$x)")]
+    [InlineData("Write-Output $(-not $true)")]
+    [InlineData("Write-Output $(-bnot 1)")]
+    [InlineData("Write-Output $(-$x)")]
+    [InlineData("Write-Output $(+$x)")]
+    [InlineData("Write-Output $(-[int]'1')")]
+    [InlineData("Write-Output $(+[int]'1')")]
+    [InlineData("Write-Output $(-join @('a','b'))")]
+    [InlineData("Write-Output $(@(1,2,3))")]
+    [InlineData("Write-Output $(@{x=1})")]
+    [InlineData("Write-Output $(@args)")]
+    [InlineData("Write-Output $({ Get-Date })")]
+    [InlineData("Write-Output $(Get-Date; 1kb)")]
+    [InlineData("Write-Output $(Get-Date; ,$x)")]
+    [InlineData("Write-Output $(Get-Date; @('a'))")]
+    [InlineData("Write-Output $((1kb))")]
+    [InlineData("Write-Output $($x)")]
+    [InlineData("Write-Output $(Get-Date).Property")]
+    [InlineData("Write-Output $(Get-Date).ToString()")]
+    public void Unsupported_execution_bearing_expressions_fail_whole(string source)
+    {
+        var result = Parse(source);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Theory]
+    [InlineData("Write-Output $(7z)", "7z")]
+    [InlineData("Write-Output $(7zip)", "7zip")]
+    [InlineData("Write-Output $(1.0f)", "1.0f")]
+    [InlineData("Write-Output $(1.0m)", "1.0m")]
+    [InlineData("Write-Output $(-foo)", "-foo")]
+    public void Expression_like_command_names_remain_executable_identities(
+        string source,
+        string expectedVerb)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(expectedVerb, CommandVerb(result.Commands[0]));
+    }
+
+    [Theory]
+    [InlineData("Write-Output @(1, 2, 3)")]
+    [InlineData("New-Item -Path C:\\x @{ Force = $true }")]
+    public void Proved_literal_at_expressions_remain_opaque_data(string source)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Single(result.Commands);
+        Assert.False(Assert.Single(result.Commands).IsComplete);
+    }
+
+    [Theory]
+    [InlineData("Write-Output $(Write-Output x # )\nGet-Date)")]
+    [InlineData("Write-Output $(Write-Output x <# ) #>; Get-Date)")]
+    [InlineData("Write-Output $(Write-Output abc#def; Get-Date)")]
+    public void Comment_parentheses_do_not_hide_later_subexpression_commands(string source)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "Write-Output", "Get-Date", "Write-Output" },
+            result.Commands.Select(CommandVerb));
+    }
+
+    [Theory]
+    [InlineData("Write-Output $(Write-Output 'x'# )\nGet-Date)")]
+    [InlineData("Write-Output $($(Write-Output x)# )\nGet-Date)")]
+    public void Direct_subexpression_comments_after_closed_regions_are_recognized(string source)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal("Get-Date", CommandVerb(result.Commands[^2]));
+    }
+
+    [Theory]
+    [InlineData("Write-Output \"$($(Write-Output x)# )\nGet-Date)\"")]
+    [InlineData("Write-Output @\"\n$($(Write-Output x)# )\nGet-Date)\n\"@")]
+    public void Comment_bearing_subexpressions_in_expandable_data_fail_closed(string source)
+    {
+        var result = Parse(source);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
+    public void Expanding_host_payload_keeps_parent_substitution_and_incomplete_outer_host()
+    {
+        var result = Parse("pwsh -Command \"Write-Output $(Get-Date)\"");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "Get-Date", "pwsh" }, result.Commands.Select(CommandVerb));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
+        Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+    }
+
+    [Fact]
+    public void Literal_host_payload_recurses_and_clears_decoded_substitution_spans()
+    {
+        var result = Parse("pwsh -Command 'Write-Output $(Get-Date)'");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "Get-Date", "Write-Output" }, result.Commands.Select(CommandVerb));
+        var wrapper = Assert.IsType<GroupSyntax>(Assert.Single(result.Syntax.Statements));
+        var outer = Assert.Single(
+            Descendants(wrapper.Body).OfType<SimpleCommandSyntax>(),
+            command => command.Clause.Verb.Joined == "Write-Output");
+        var substitution = Assert.Single(outer.Substitutions);
+        Assert.Null(substitution.SourceStart);
+        Assert.Null(substitution.SourceLength);
+        Assert.All(Descendants(substitution.Body), node =>
+        {
+            Assert.Null(node.SourceStart);
+            Assert.Null(node.SourceLength);
+        });
     }
 
     [Fact]
@@ -319,6 +672,12 @@ public class PwshStructuralProjectionTests
             HomeDirectory = "C:/Users/test",
             WorkingDirectory = "C:/work",
         }).Parse(source);
+
+    private static string CommandVerb(CommandOccurrence command) => command.Clause.Verb.Joined;
+
+    private static string NestedSubstitution(int depth) =>
+        "Write-Output " + string.Concat(Enumerable.Repeat("$(", depth)) + "Get-Date" +
+        new string(')', depth);
 
     private static IEnumerable<ShellSyntaxNode> Descendants(ShellSyntaxNode node)
     {
@@ -357,6 +716,23 @@ public class PwshStructuralProjectionTests
                 break;
             case GroupSyntax group:
                 foreach (var descendant in Descendants(group.Body))
+                {
+                    yield return descendant;
+                }
+
+                break;
+            case SimpleCommandSyntax simple:
+                foreach (var substitution in simple.Substitutions)
+                {
+                    foreach (var descendant in Descendants(substitution))
+                    {
+                        yield return descendant;
+                    }
+                }
+
+                break;
+            case CommandSubstitutionSyntax substitution:
+                foreach (var descendant in Descendants(substitution.Body))
                 {
                     yield return descendant;
                 }

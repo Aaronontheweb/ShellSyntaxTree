@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution numeric suffix gated",
+  "input": "Write-Output $(1kb)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "PowerShell numeric suffixes are expression values, not command identities.",
+  "oracleExpectation": "OutOfScope"
+}

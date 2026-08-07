@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution unary comma gated",
+  "input": "Write-Output $(,$x)",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell expression statement in subexpression"
+  },
+  "notes": "Unary comma creates an expression result and cannot be interpreted as a command.",
+  "oracleExpectation": "OutOfScope"
+}

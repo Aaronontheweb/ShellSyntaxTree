@@ -34,10 +34,13 @@
 - [ ] 3.10 Implement Bash `$()` discovery in supported argument words, redirect values, iterables, and expanding heredoc bodies; retain literal/escaped spellings and fail closed on command-name substitutions, legacy backticks, or incomplete interiors.
   - [x] 3.10a Implement the simple-command argument and redirect-target slice, including comment-safe boundaries and fail-closed unsupported interiors.
 - [ ] 3.11 Implement PowerShell `$()` discovery in supported words, redirect values, foreach expressions, call-operator dynamic identities, standalone expression statements, double-quoted strings, and expandable here-strings; never invent invocation from standalone output, retain literal/escaped spellings, and fail closed on trailing command-style arguments, call-operator script blocks, or unsupported execution-bearing `@()` / `@{}` forms.
+  - [x] 3.11a Implement words, redirect values, call-operator dynamic identities, standalone statements, expandable strings/here-strings, and parent-versus-child host payload provenance; fail closed on arbitrary expression values and unsupported execution-bearing `@()` / `@{}` forms.
 - [ ] 3.12 Pin substitution parentage, authored sibling indices, innermost-first ordering, Bash-isolated versus PowerShell-current-scope state, unknown-state propagation, nesting/depth limits, and incomplete dynamic identities in direct tests.
   - [x] 3.12a Pin the Bash argument/redirect slice, isolated cwd behavior, wrapper provenance, and the shared structural-depth budget.
+  - [x] 3.12b Pin the PowerShell simple-command slice, current-scope exact and unknown cwd propagation, parent/child wrapper provenance, expression boundaries, and the shared structural-depth budget.
 - [ ] 3.13 Promote ordinary, multiple, nested, iterator, redirect, quoted, escaped, stateful, malformed, and hidden-execution substitution cases into both executable corpora and the Netclaw approval matrix.
   - [x] 3.13a Promote the Bash ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, and hidden-execution cases into its executable corpus.
+  - [x] 3.13b Promote the PowerShell ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, expression-boundary, and hidden-execution cases into its executable corpus.
 
 ## 4. Explicit Redirect Semantics
 
@@ -52,6 +55,7 @@
 ## 5. Consumer Migration Baseline
 
 - [ ] 5.1 Rewrite the production-shaped consumer loop in `docs/CONSUMER_GUIDE.md` to enumerate every command occurrence.
+  - [x] 5.1a Document the PowerShell `$()` occurrence ordering, standalone/call-operator distinction, parent-versus-child host payload provenance, and completeness-versus-value-safety contract.
 - [ ] 5.2 Document syntax-tree display traversal separately from authorization traversal.
 - [ ] 5.3 Document exact, finite, pattern, unknown, joined-state, redirect, and incomplete-result handling.
 - [ ] 5.4 Document record equality, hashing, `ToString()`, serialization, and `Clauses` compatibility effects.

@@ -4,6 +4,7 @@
     {
       "id": "pwsh-simple-command-substitution",
       "concern": "Subexpression command is attached to its containing simple command",
+      "compatibilityProjectionLanded": true,
       "input": "Remove-Item $(Get-Item target.txt)",
       "current": {
         "isUnparseable": false,
@@ -37,6 +38,7 @@
     {
       "id": "pwsh-multiple-command-substitutions",
       "concern": "Sibling subexpressions preserve authored order before their consumer",
+      "compatibilityProjectionLanded": true,
       "input": "Write-Output $(Get-Date) $(Get-Location)",
       "current": { "isUnparseable": false },
       "desired": {
@@ -62,6 +64,7 @@
     {
       "id": "pwsh-nested-command-substitutions",
       "concern": "Nested subexpressions retain parentage and project innermost first",
+      "compatibilityProjectionLanded": true,
       "input": "Write-Output $(Get-Item $(Get-Location))",
       "current": { "isUnparseable": false },
       "desired": {
@@ -87,6 +90,7 @@
     {
       "id": "pwsh-literal-substitution-spellings",
       "concern": "Single-quoted and escaped subexpression-looking text does not execute",
+      "compatibilityProjectionLanded": true,
       "input": "Write-Output '$(Get-Date)' \"literal `$(Get-Location)\"",
       "current": { "isUnparseable": false },
       "desired": {
@@ -104,6 +108,7 @@
     {
       "id": "pwsh-array-subexpression-execution-gated",
       "concern": "Execution-bearing array subexpression fails closed until discovery is modeled",
+      "compatibilityProjectionLanded": true,
       "input": "Write-Output @(Get-Date)",
       "current": {
         "isUnparseable": false,
@@ -140,6 +145,7 @@
     {
       "id": "pwsh-standalone-subexpression-is-not-invocation",
       "concern": "Standalone subexpression output does not invent an outer command",
+      "compatibilityProjectionLanded": true,
       "input": "$(Write-Output Get-Date)",
       "current": { "isUnparseable": false },
       "desired": {
@@ -160,6 +166,7 @@
     {
       "id": "pwsh-call-operator-subexpression-invocation",
       "concern": "Call operator invokes unknown subexpression output after exposing its commands",
+      "compatibilityProjectionLanded": true,
       "input": "& $(Write-Output Get-Date)",
       "current": { "isUnparseable": false },
       "desired": {
@@ -182,6 +189,7 @@
     {
       "id": "pwsh-command-substitution-current-scope-cwd",
       "concern": "PowerShell subexpression location changes propagate to the consumer and continuation",
+      "compatibilityProjectionLanded": true,
       "input": "Write-Output $(Set-Location /tmp; Get-Location); Get-Item relative.txt",
       "current": { "isUnparseable": false },
       "desired": {

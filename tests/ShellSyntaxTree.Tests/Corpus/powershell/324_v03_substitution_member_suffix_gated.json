@@ -1,0 +1,10 @@
+{
+  "name": "V03 substitution member suffix gated",
+  "input": "Write-Output $(Get-Date).ToString()",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell expression suffix after subexpression is not supported"
+  },
+  "notes": "Member access after a subexpression fails the whole result until expression suffixes are modeled.",
+  "oracleExpectation": "OutOfScope"
+}

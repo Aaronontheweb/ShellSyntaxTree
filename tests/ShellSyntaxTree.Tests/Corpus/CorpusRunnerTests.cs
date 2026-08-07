@@ -89,6 +89,7 @@ public class CorpusRunnerTests
 
         var pwshTokens = PwshLexer.Tokenize(parsed.Source);
         var pwshDirectSegments = DirectPwshSegments(parsed, pwshTokens);
+        var standaloneSubstitutions = StandaloneSubstitutionRegions(parsed.Syntax);
         var pwshSegment = 0;
         var pwshRedirectTargetPending = false;
         foreach (var token in pwshTokens)
@@ -103,10 +104,14 @@ public class CorpusRunnerTests
                     elements,
                     context,
                     token.Value,
-                    !parsed.Clauses.Any(clause => clause.IsCommandStringWrapped)
-                    || pwshDirectSegments.Contains(pwshSegment)
-                    || isRedirectOperator
-                    || isRedirectTarget);
+                    (!parsed.Clauses.Any(clause => clause.IsCommandStringWrapped)
+                     || pwshDirectSegments.Contains(pwshSegment)
+                     || isRedirectOperator
+                     || isRedirectTarget) &&
+                    !standaloneSubstitutions.Any(region =>
+                        region.Start <= token.SourceStart &&
+                        region.Start + region.Length >=
+                            token.SourceStart + token.SourceLength));
                 pwshRedirectTargetPending = isRedirectOperator
                     && token.OperatorText is not null
                     && token.OperatorText.IndexOf(">&", StringComparison.Ordinal) < 0;
@@ -118,6 +123,74 @@ public class CorpusRunnerTests
             }
         }
     }
+
+    private static IReadOnlyList<SourceRegion> StandaloneSubstitutionRegions(
+        ShellSyntaxNode syntax)
+    {
+        var regions = new List<SourceRegion>();
+        CollectStandaloneSubstitutionRegions(syntax, attachedToSimple: false, regions);
+        return regions;
+    }
+
+    private static void CollectStandaloneSubstitutionRegions(
+        ShellSyntaxNode node,
+        bool attachedToSimple,
+        ICollection<SourceRegion> regions)
+    {
+        switch (node)
+        {
+            case CommandSubstitutionSyntax substitution:
+                if (!attachedToSimple && substitution.SourceStart.HasValue &&
+                    substitution.SourceLength.HasValue)
+                {
+                    regions.Add(new SourceRegion(
+                        substitution.SourceStart.Value,
+                        substitution.SourceLength.Value));
+                }
+
+                CollectStandaloneSubstitutionRegions(
+                    substitution.Body, attachedToSimple: false, regions);
+                break;
+            case SimpleCommandSyntax simple:
+                foreach (var substitution in simple.Substitutions)
+                {
+                    CollectStandaloneSubstitutionRegions(
+                        substitution, attachedToSimple: true, regions);
+                }
+
+                break;
+            case ShellBlockSyntax block:
+                foreach (var statement in block.Statements)
+                {
+                    CollectStandaloneSubstitutionRegions(
+                        statement, attachedToSimple: false, regions);
+                }
+
+                break;
+            case PipelineSyntax pipeline:
+                foreach (var stage in pipeline.Stages)
+                {
+                    CollectStandaloneSubstitutionRegions(
+                        stage, attachedToSimple: false, regions);
+                }
+
+                break;
+            case CommandListSyntax list:
+                foreach (var item in list.Items)
+                {
+                    CollectStandaloneSubstitutionRegions(
+                        item.Command, attachedToSimple: false, regions);
+                }
+
+                break;
+            case GroupSyntax group:
+                CollectStandaloneSubstitutionRegions(
+                    group.Body, attachedToSimple: false, regions);
+                break;
+        }
+    }
+
+    private readonly record struct SourceRegion(int Start, int Length);
 
     private static HashSet<int> DirectBashSegments(
         ParsedCommand parsed, IReadOnlyList<BashToken> tokens)

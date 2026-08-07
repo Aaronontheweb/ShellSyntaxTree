@@ -1,13 +1,13 @@
 {
-  "name": "Dynamic subexpression arg",
-  "input": "Get-Content $(Get-Location)",
+  "name": "V03 substitution decimal command identity",
+  "input": "Write-Output $(1.0f)",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
         "verb": [
-          "Get-Location"
+          "1.0f"
         ],
         "args": [],
         "redirects": []
@@ -15,11 +15,11 @@
       {
         "operator": "None",
         "verb": [
-          "Get-Content"
+          "Write-Output"
         ],
         "args": [
           {
-            "raw": "$(Get-Location)",
+            "raw": "$(1.0f)",
             "kind": "DynamicSkip",
             "isPath": false
           }
@@ -34,7 +34,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceLength": 20,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -45,7 +45,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceLength": 20,
         "clauseIndex": 1,
         "groupKind": null,
         "listOperator": null
@@ -55,8 +55,8 @@
         "parentIndex": 1,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 12,
-        "sourceLength": 15,
+        "sourceStart": 13,
+        "sourceLength": 7,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -66,8 +66,8 @@
         "parentIndex": 2,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": 15,
+        "sourceLength": 4,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -77,8 +77,8 @@
         "parentIndex": 3,
         "region": "Statement",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": 15,
+        "sourceLength": 4,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -95,21 +95,21 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 20
           },
           {
             "ancestorKind": "CommandSubstitution",
             "region": "Substitution",
             "childIndex": 0,
-            "sourceStart": 12,
-            "sourceLength": 15
+            "sourceStart": 13,
+            "sourceLength": 7
           },
           {
             "ancestorKind": "Block",
             "region": "Statement",
             "childIndex": 0,
-            "sourceStart": 14,
-            "sourceLength": 12
+            "sourceStart": 15,
+            "sourceLength": 4
           }
         ]
       },
@@ -123,11 +123,11 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 20
           }
         ]
       }
     ]
   },
-  "notes": "A $( ) subexpression argument is opaque DynamicSkip."
+  "notes": "A decimal-looking name without a PowerShell numeric type is still an executable identity."
 }

@@ -1,26 +1,33 @@
 {
-  "name": "Dynamic subexpression arg",
-  "input": "Get-Content $(Get-Location)",
+  "name": "V03 substitution call operator",
+  "input": "\u0026 $(Write-Output Get-Date) argument",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
         "verb": [
-          "Get-Location"
+          "Write-Output"
         ],
-        "args": [],
+        "args": [
+          {
+            "raw": "Get-Date",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
         "redirects": []
       },
       {
         "operator": "None",
         "verb": [
-          "Get-Content"
+          "$(Write-Output Get-Date)"
         ],
+        "isDynamic": true,
         "args": [
           {
-            "raw": "$(Get-Location)",
-            "kind": "DynamicSkip",
+            "raw": "argument",
+            "kind": "Literal",
             "isPath": false
           }
         ],
@@ -34,7 +41,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceLength": 35,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -45,7 +52,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceLength": 35,
         "clauseIndex": 1,
         "groupKind": null,
         "listOperator": null
@@ -55,8 +62,8 @@
         "parentIndex": 1,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 12,
-        "sourceLength": 15,
+        "sourceStart": 2,
+        "sourceLength": 24,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -66,8 +73,8 @@
         "parentIndex": 2,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": 4,
+        "sourceLength": 21,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -77,8 +84,8 @@
         "parentIndex": 3,
         "region": "Statement",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": 4,
+        "sourceLength": 21,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -95,39 +102,39 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 35
           },
           {
             "ancestorKind": "CommandSubstitution",
             "region": "Substitution",
             "childIndex": 0,
-            "sourceStart": 12,
-            "sourceLength": 15
+            "sourceStart": 2,
+            "sourceLength": 24
           },
           {
             "ancestorKind": "Block",
             "region": "Statement",
             "childIndex": 0,
-            "sourceStart": 14,
-            "sourceLength": 12
+            "sourceStart": 4,
+            "sourceLength": 21
           }
         ]
       },
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 35
           }
         ]
       }
     ]
   },
-  "notes": "A $( ) subexpression argument is opaque DynamicSkip."
+  "notes": "The call operator exposes the producer and retains an incomplete dynamic invocation."
 }

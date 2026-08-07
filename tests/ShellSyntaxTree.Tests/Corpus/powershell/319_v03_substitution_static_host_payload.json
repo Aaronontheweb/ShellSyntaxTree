@@ -1,30 +1,32 @@
 {
-  "name": "Dynamic subexpression arg",
-  "input": "Get-Content $(Get-Location)",
+  "name": "V03 substitution static host payload",
+  "input": "pwsh -Command \u0027Write-Output $(Get-Date)\u0027",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
         "verb": [
-          "Get-Location"
+          "Get-Date"
         ],
         "args": [],
-        "redirects": []
+        "redirects": [],
+        "isCommandStringWrapped": true
       },
       {
         "operator": "None",
         "verb": [
-          "Get-Content"
+          "Write-Output"
         ],
         "args": [
           {
-            "raw": "$(Get-Location)",
+            "raw": "$(Get-Date)",
             "kind": "DynamicSkip",
             "isPath": false
           }
         ],
-        "redirects": []
+        "redirects": [],
+        "isCommandStringWrapped": true
       }
     ],
     "syntax": [
@@ -34,51 +36,73 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceLength": 40,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Group",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 40,
+        "clauseIndex": null,
+        "groupKind": "IsolatedScope",
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "GroupBody",
+        "childIndex": null,
+        "sourceStart": null,
+        "sourceLength": null,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
       },
       {
         "kind": "SimpleCommand",
-        "parentIndex": 0,
-        "region": "Root",
+        "parentIndex": 2,
+        "region": "Statement",
         "childIndex": 0,
-        "sourceStart": 0,
-        "sourceLength": 27,
+        "sourceStart": null,
+        "sourceLength": null,
         "clauseIndex": 1,
         "groupKind": null,
         "listOperator": null
       },
       {
         "kind": "CommandSubstitution",
-        "parentIndex": 1,
+        "parentIndex": 3,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 12,
-        "sourceLength": 15,
+        "sourceStart": null,
+        "sourceLength": null,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
       },
       {
         "kind": "Block",
-        "parentIndex": 2,
+        "parentIndex": 4,
         "region": "Substitution",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": null,
+        "sourceLength": null,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
       },
       {
         "kind": "SimpleCommand",
-        "parentIndex": 3,
+        "parentIndex": 5,
         "region": "Statement",
         "childIndex": 0,
-        "sourceStart": 14,
-        "sourceLength": 12,
+        "sourceStart": null,
+        "sourceLength": null,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -95,21 +119,35 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 40
           },
           {
-            "ancestorKind": "CommandSubstitution",
-            "region": "Substitution",
-            "childIndex": 0,
-            "sourceStart": 12,
-            "sourceLength": 15
+            "ancestorKind": "Group",
+            "region": "GroupBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 40
           },
           {
             "ancestorKind": "Block",
             "region": "Statement",
             "childIndex": 0,
-            "sourceStart": 14,
-            "sourceLength": 12
+            "sourceStart": null,
+            "sourceLength": null
+          },
+          {
+            "ancestorKind": "CommandSubstitution",
+            "region": "Substitution",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
           }
         ]
       },
@@ -123,11 +161,25 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 27
+            "sourceLength": 40
+          },
+          {
+            "ancestorKind": "Group",
+            "region": "GroupBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 40
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
           }
         ]
       }
     ]
   },
-  "notes": "A $( ) subexpression argument is opaque DynamicSkip."
+  "notes": "A literal child payload is decoded and its child-scope substitution is exposed."
 }

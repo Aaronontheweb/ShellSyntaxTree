@@ -7,6 +7,22 @@
       {
         "operator": "None",
         "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "Content",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": [
           "Get-$(Write-Output Content)"
         ],
         "isDynamic": true,

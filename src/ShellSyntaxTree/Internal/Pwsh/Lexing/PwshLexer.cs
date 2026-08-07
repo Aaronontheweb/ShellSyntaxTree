@@ -21,9 +21,10 @@ namespace ShellSyntaxTree.Internal.Pwsh.Lexing;
 ///   <item>The lexer never expands variables. <c>$var</c>, <c>${name}</c>,
 ///         and <c>$env:NAME</c> stay literal inside a Word token; the
 ///         resolver classifies them.</item>
-///   <item>Opaque regions — <c>$( … )</c>, <c>@( … )</c>, <c>@{ … }</c>,
-///         <c>{ … }</c> — are bounded by <see cref="OpaqueRegionScanner"/>
-///         (in PowerShell backtick-escape mode) and emitted whole.</item>
+///   <item><c>$( … )</c> uses a PowerShell-specific boundary scan that
+///         honors comments and nested interpolation. Other opaque regions —
+///         <c>@( … )</c>, <c>@{ … }</c>, and <c>{ … }</c> — use
+///         <see cref="OpaqueRegionScanner"/> in backtick-escape mode.</item>
 ///   <item>Malformed regions surface as
 ///         <see cref="PwshTokenKind.UnparseableSentinel"/> tokens the
 ///         parser lifts into <c>ParsedCommand.IsUnparseable</c>.</item>
@@ -701,15 +702,13 @@ internal static class PwshLexer
         var next = value[start + 1];
         if (next == '(')
         {
-            var scan = OpaqueRegionScanner.Scan(
+            var scan = ScanCommandSubexpression(
                 value,
                 start + 1,
-                '(',
-                ')',
-                OpaqueRegionScanner.PwshEscape);
+                allowComments: false);
             if (!scan.Closed)
             {
-                error = "unbalanced '$(' subexpression";
+                error = scan.Error ?? "unbalanced '$(' subexpression";
                 index = value.Length;
                 return true;
             }
@@ -931,14 +930,15 @@ internal static class PwshLexer
         char openChar, char closeChar, PwshTokenKind kind,
         string unbalancedReason, List<PwshToken> tokens)
     {
-        var scan = OpaqueRegionScanner.Scan(
-            src, openAt, openChar, closeChar, OpaqueRegionScanner.PwshEscape);
+        var scan = start < src.Length && src[start] == '$' && openChar == '('
+            ? ScanCommandSubexpression(src, openAt, allowComments: true)
+            : ScanOpaqueRegion(src, openAt, openChar, closeChar);
         if (!scan.Closed)
         {
             tokens.Add(new PwshToken(
                 PwshTokenKind.UnparseableSentinel,
                 src.Slice(start).ToString(), null, start, src.Length - start,
-                unbalancedReason));
+                scan.Error ?? unbalancedReason));
             return src.Length;
         }
 
@@ -956,6 +956,245 @@ internal static class PwshLexer
         });
         return start + length;
     }
+
+    private static CommandSubexpressionScan ScanOpaqueRegion(
+        ReadOnlySpan<char> src,
+        int openAt,
+        char openChar,
+        char closeChar)
+    {
+        var scan = OpaqueRegionScanner.Scan(
+            src, openAt, openChar, closeChar, OpaqueRegionScanner.PwshEscape);
+        return new CommandSubexpressionScan(scan.EndIndex, scan.Closed, null);
+    }
+
+    private static CommandSubexpressionScan ScanCommandSubexpression(
+        ReadOnlySpan<char> src,
+        int openParen,
+        bool allowComments)
+    {
+        if (openParen < 0 || openParen >= src.Length || src[openParen] != '(')
+        {
+            return new CommandSubexpressionScan(src.Length, false, null);
+        }
+
+        var resumeDoubleQuote = new Stack<bool>();
+        resumeDoubleQuote.Push(false);
+        var inDoubleQuote = false;
+        var atWordBoundary = true;
+        var i = openParen + 1;
+        while (i < src.Length)
+        {
+            var c = src[i];
+            if (inDoubleQuote)
+            {
+                if (c == '`' && i + 1 < src.Length)
+                {
+                    i += src[i + 1] == '\r' && i + 2 < src.Length && src[i + 2] == '\n'
+                        ? 3
+                        : 2;
+                    continue;
+                }
+
+                if (c == '"')
+                {
+                    inDoubleQuote = false;
+                    atWordBoundary = true;
+                    i++;
+                    continue;
+                }
+
+                if (c == '$' && i + 1 < src.Length && src[i + 1] == '(')
+                {
+                    if (resumeDoubleQuote.Count >= ShellAnalysisLimits.MaxStructuralNesting)
+                    {
+                        return PowerShellNestingOverflow(src.Length);
+                    }
+
+                    resumeDoubleQuote.Push(true);
+                    inDoubleQuote = false;
+                    i += 2;
+                    continue;
+                }
+
+                i++;
+                continue;
+            }
+
+            if (c == '`' && i + 1 < src.Length)
+            {
+                if (src[i + 1] is not '\n' and not '\r')
+                {
+                    atWordBoundary = false;
+                }
+
+                i += src[i + 1] == '\r' && i + 2 < src.Length && src[i + 2] == '\n'
+                    ? 3
+                    : 2;
+                continue;
+            }
+
+            if (c == '\'')
+            {
+                i++;
+                while (i < src.Length)
+                {
+                    if (src[i] != '\'')
+                    {
+                        i++;
+                        continue;
+                    }
+
+                    if (i + 1 < src.Length && src[i + 1] == '\'')
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    i++;
+                    break;
+                }
+
+                if (i >= src.Length && (src.Length == 0 || src[src.Length - 1] != '\''))
+                {
+                    return new CommandSubexpressionScan(src.Length, false, null);
+                }
+
+                atWordBoundary = true;
+                continue;
+            }
+
+            if (c == '"')
+            {
+                inDoubleQuote = true;
+                atWordBoundary = false;
+                i++;
+                continue;
+            }
+
+            if (c == '#' && atWordBoundary)
+            {
+                if (!allowComments || resumeDoubleQuote.Peek())
+                {
+                    return new CommandSubexpressionScan(
+                        src.Length,
+                        false,
+                        "comments inside expandable PowerShell subexpressions are not supported");
+                }
+
+                while (i < src.Length && src[i] is not '\n' and not '\r')
+                {
+                    i++;
+                }
+
+                atWordBoundary = true;
+                continue;
+            }
+
+            if (c == '<' && i + 1 < src.Length && src[i + 1] == '#')
+            {
+                if (!allowComments || resumeDoubleQuote.Peek())
+                {
+                    return new CommandSubexpressionScan(
+                        src.Length,
+                        false,
+                        "comments inside expandable PowerShell subexpressions are not supported");
+                }
+
+                i += 2;
+                while (i + 1 < src.Length && (src[i] != '#' || src[i + 1] != '>'))
+                {
+                    i++;
+                }
+
+                if (i + 1 >= src.Length)
+                {
+                    return new CommandSubexpressionScan(src.Length, false, null);
+                }
+
+                i += 2;
+                atWordBoundary = true;
+                continue;
+            }
+
+            if (c == '@' && i + 1 < src.Length && src[i + 1] is '\'' or '"' &&
+                StartsHereString(src, i))
+            {
+                return new CommandSubexpressionScan(
+                    src.Length,
+                    false,
+                    "here-strings inside PowerShell subexpressions are not supported");
+            }
+
+            if (c == '$' && i + 1 < src.Length && src[i + 1] == '(')
+            {
+                if (resumeDoubleQuote.Count >= ShellAnalysisLimits.MaxStructuralNesting)
+                {
+                    return PowerShellNestingOverflow(src.Length);
+                }
+
+                resumeDoubleQuote.Push(false);
+                atWordBoundary = true;
+                i += 2;
+                continue;
+            }
+
+            if (c == '(')
+            {
+                if (resumeDoubleQuote.Count >= ShellAnalysisLimits.MaxStructuralNesting)
+                {
+                    return PowerShellNestingOverflow(src.Length);
+                }
+
+                resumeDoubleQuote.Push(false);
+                atWordBoundary = true;
+                i++;
+                continue;
+            }
+
+            if (c == ')')
+            {
+                var restoreDoubleQuote = resumeDoubleQuote.Pop();
+                if (resumeDoubleQuote.Count == 0)
+                {
+                    return new CommandSubexpressionScan(i, true, null);
+                }
+
+                inDoubleQuote = restoreDoubleQuote;
+                atWordBoundary = true;
+                i++;
+                continue;
+            }
+
+            atWordBoundary = char.IsWhiteSpace(c) ||
+                c is ';' or '|' or '&' or '<' or '>' or '{' or '}';
+            i++;
+        }
+
+        return new CommandSubexpressionScan(src.Length, false, null);
+    }
+
+    private static bool StartsHereString(ReadOnlySpan<char> src, int start)
+    {
+        var index = start + 2;
+        while (index < src.Length && IsInlineWhitespace(src[index]))
+        {
+            index++;
+        }
+
+        return index < src.Length && src[index] is '\n' or '\r';
+    }
+
+    private static CommandSubexpressionScan PowerShellNestingOverflow(int endIndex) =>
+        new(
+            endIndex,
+            false,
+            $"PowerShell structural nesting depth exceeded (>{ShellAnalysisLimits.MaxStructuralNesting})");
+
+    private readonly record struct CommandSubexpressionScan(
+        int EndIndex,
+        bool Closed,
+        string? Error);
 
     // ---------------------------------------------------------------- comments
 

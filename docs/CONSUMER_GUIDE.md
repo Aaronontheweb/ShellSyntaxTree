@@ -372,9 +372,35 @@ Redirects authored on the outer PowerShell wrapper remain attached to the last
 surfaced clause, so redirect policy still sees paths such as
 `pwsh -Command "git status" > audit.log`.
 
-PowerShell script blocks, subexpressions, splats, and `--%` regions are opaque
-and surface as `DynamicSkip`. A dynamically invoked command such as `& $exe`
-sets `VerbChain.IsDynamic = true`; no verb-pattern grant should match it.
+Supported PowerShell `$()` subexpressions are structural rather than hidden
+opaque values. The containing `SimpleCommandSyntax.Substitutions` records each
+authored child, and `ParsedCommand.Commands` projects its executable commands
+before the containing command, with `ImmediateRole = Substitution`. Consumers
+should authorize that occurrence list directly; walking `Syntax` again would
+double-count the same shared `Clause` instances. A standalone
+`$(Write-Output Get-Date)` exposes `Write-Output` without inventing an outer
+invocation. By contrast, `& $(Write-Output Get-Date)` also retains an
+incomplete dynamic outer occurrence because PowerShell invokes the produced
+name.
+
+Quoting also determines the scope of host-wrapper substitutions. In
+`pwsh -Command "Write-Output $(Get-Date)"`, the parent evaluates `Get-Date`, so
+the result contains that parent-scope occurrence plus an incomplete outer
+`pwsh` occurrence; the parser does not pretend the expanded payload is a
+literal child script. A literal payload such as
+`pwsh -Command 'Write-Output $(Get-Date)'` can be decoded into child-host
+syntax. Decoded child nodes have null source spans because their offsets do not
+map exactly onto the outer source.
+
+An ordinary script-block argument, splat, or `--%` remainder stays opaque and
+surfaces as `DynamicSkip`. Proved-literal `@()` / `@{}` data stays opaque and
+incomplete; execution-bearing forms and unsupported arbitrary expressions make
+the whole result unparseable with empty `Commands` and `Clauses`. A containing
+command may be structurally complete after every supported `$()` command is
+visible while its produced argument value remains policy-sensitive. Treat
+completeness and value safety as separate decisions. A dynamically invoked
+command such as `& $exe` sets `VerbChain.IsDynamic = true`; no verb-pattern
+grant should match it.
 
 ## Safe-fail rules
 

@@ -271,8 +271,9 @@ public class ResolverProvenanceTests
         Assert.True(bash.IsUnparseable);
         Assert.Empty(bash.Clauses);
 
-        var pwshClause = Assert.Single(Pwsh.Parse(
-            "Get-$(Write-Output Content) /etc/passwd").Clauses);
+        var pwshResult = Pwsh.Parse("Get-$(Write-Output Content) /etc/passwd");
+        Assert.Equal("Write-Output", pwshResult.Clauses[0].Verb.Joined);
+        var pwshClause = pwshResult.Clauses[1];
         Assert.True(pwshClause.Verb.IsDynamic);
     }
 
