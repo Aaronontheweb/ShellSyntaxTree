@@ -293,6 +293,9 @@ priorities.
       decoded-wrapper state, and dynamic fail-closed compatibility attribution
       whenever cwd joins to Unknown. Keep OpenSpec task 6.5 open, then add the
       remaining loop cases and Netclaw approval matrix after implementation.
+      The non-loop state engine is now implemented for lists, pipelines,
+      substitutions, subshells, and decoded wrappers; loop iteration state and
+      removal of the temporary mutation rejection remain next.
 - [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
       Netclaw approval-matrix cases. The simple-command slice is delivered for
       ordinary, adjacent, quoted, here-string, redirect, standalone,

@@ -14,7 +14,7 @@ namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
 internal static partial class BashCommandParser
 {
-    private static ParsedCommand ParseStructured(
+    private static BashParseResult ParseStructured(
         string source,
         IReadOnlyList<BashToken> tokens,
         BashParserOptions options,
@@ -36,38 +36,66 @@ internal static partial class BashCommandParser
             return StructuralFailure(source, error, syntax);
         }
 
-        if (!ShellSyntaxProjection.TryProject(
+        if (!BashAbstractStateAnalyzer.TryAnalyze(
                 syntax,
+                options,
                 coordinator.GetFacts,
+                out var analyzedSyntax,
+                out var analyzedFacts) ||
+            !ShellSyntaxProjection.TryProject(
+                analyzedSyntax,
+                analyzedFacts,
                 out var projection))
         {
             return StructuralFailure(
                 source,
                 "Bash structural syntax exceeded limits or contained invalid parser-owned facts",
-                syntax);
+                analyzedSyntax);
         }
 
-        return new ParsedCommand
+        var command = new ParsedCommand
         {
             Source = source,
-            Syntax = syntax,
+            Syntax = analyzedSyntax,
             Commands = projection.Commands,
             Clauses = projection.Clauses,
         };
+        return new BashParseResult(
+            command,
+            CreateDependencySets(projection.Commands, analyzedFacts));
     }
 
-    private static ParsedCommand StructuralFailure(
+    private static IReadOnlyList<CwdPathDependencySet> CreateDependencySets(
+        IReadOnlyList<CommandOccurrence> commands,
+        Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory)
+    {
+        var sets = new CwdPathDependencySet[commands.Count];
+        for (var index = 0; index < sets.Length; index++)
+        {
+            var clause = commands[index].Clause;
+            var facts = factsFactory(new SimpleCommandSyntax { Clause = clause });
+            sets[index] = new CwdPathDependencySet(
+                clause,
+                facts.CwdPathDependencies);
+        }
+
+        return sets;
+    }
+
+    private static BashParseResult StructuralFailure(
         string source,
         string? reason,
-        ShellBlockSyntax? syntax = null) => new()
-        {
-            Source = source,
-            Syntax = syntax ?? new ShellBlockSyntax(),
-            Commands = Array.Empty<CommandOccurrence>(),
-            Clauses = Array.Empty<Clause>(),
-            IsUnparseable = true,
-            UnparseableReason = reason,
-        };
+        ShellBlockSyntax? syntax = null) => new(
+            new ParsedCommand
+            {
+                Source = source,
+                Syntax = syntax ?? new ShellBlockSyntax(),
+                Commands = Array.Empty<CommandOccurrence>(),
+                Clauses = Array.Empty<Clause>(),
+                IsUnparseable = true,
+                UnparseableReason = reason,
+            },
+            Array.Empty<CwdPathDependencySet>());
 
     private sealed class StructuralCoordinator
     {
@@ -394,12 +422,13 @@ internal static partial class BashCommandParser
                     return false;
                 }
 
-                var inner = ParseInternal(
+                var innerResult = ParseInternal(
                     innerCommand!,
                     _options,
                     _bashCDepth + 1,
                     _structuralDepth + _subshellDepth + _loopDepth + 1,
                     markBashCWrapped: true);
+                var inner = innerResult.Command;
                 if (inner.IsUnparseable)
                 {
                     error = inner.UnparseableReason;
@@ -428,7 +457,11 @@ internal static partial class BashCommandParser
                     SourceLength = lastToken.SourceStart + lastToken.SourceLength -
                         firstToken.SourceStart,
                 };
-                if (!TryRegisterDecodedFacts(inner, body, out error))
+                if (!TryRegisterDecodedFacts(
+                        inner,
+                        innerResult.CwdPathDependencySets,
+                        body,
+                        out error))
                 {
                     command = null;
                     return false;
@@ -517,7 +550,11 @@ internal static partial class BashCommandParser
                 SourceStart = firstSource.SourceStart,
                 SourceLength = sourceEnd - firstSource.SourceStart,
             };
-            RegisterFacts(simple, segmentTokens);
+            RegisterFacts(
+                simple,
+                segmentTokens,
+                parsed.PathResolutions,
+                effectiveOptions);
             command = simple;
             return true;
         }
@@ -1128,31 +1165,55 @@ internal static partial class BashCommandParser
 
         private void RegisterFacts(
             SimpleCommandSyntax simple,
-            IReadOnlyList<BashToken> sourceTokens)
+            IReadOnlyList<BashToken> sourceTokens,
+            IReadOnlyList<BashPathResolutionSeed> pathResolutions,
+            BashParserOptions parseOptions)
         {
             var effective = new List<EffectiveArgument>();
+            var cwdPathDependencies = new List<CwdPathDependency>();
             for (var elementIndex = 0;
                  elementIndex < simple.Clause.Elements.Count;
                  elementIndex++)
             {
                 var element = simple.Clause.Elements[elementIndex];
-                if (element.Role != ClauseElementRole.Argument ||
-                    !TryGetElementValue(element, sourceTokens, out var value) ||
-                    !_bindings.TryAnalyzeEffectiveValue(value, out var domain))
+                if (!TryGetElementValue(element, sourceTokens, out var value))
                 {
                     continue;
                 }
 
-                effective.Add(new EffectiveArgument
+                if (element.Role == ClauseElementRole.Argument &&
+                    _bindings.TryAnalyzeEffectiveValue(value, out var domain))
                 {
-                    ClauseElementIndex = elementIndex,
-                    Value = domain,
-                });
+                    effective.Add(new EffectiveArgument
+                    {
+                        ClauseElementIndex = elementIndex,
+                        Value = domain,
+                    });
+                }
+
+            }
+
+            foreach (var pathResolution in pathResolutions)
+            {
+                var withoutCwd = BashResolver.Resolve(
+                    pathResolution.ResolverValue,
+                    treatAsPath: true,
+                    parseOptions,
+                    workingDirectoryUnknown: true,
+                    consumer: pathResolution.Consumer);
+                cwdPathDependencies.Add(new CwdPathDependency(
+                    pathResolution.ClauseElementIndex,
+                    pathResolution.ClauseArgumentIndex,
+                    withoutCwd.Resolved is null,
+                    pathResolution.ResolverValue.Decoded,
+                    pathResolution.AuthoredValue,
+                    parseOptions.WorkingDirectory ?? Environment.CurrentDirectory));
             }
 
             _facts.Add(simple.Clause, new CommandOccurrenceFacts
             {
                 EffectiveArguments = effective.ToArray(),
+                CwdPathDependencies = cwdPathDependencies.ToArray(),
                 IsComplete = simple.Clause.Redirects.Count == 0 &&
                     !HasUnexpandedCommandString(simple.Clause),
             });
@@ -1210,6 +1271,7 @@ internal static partial class BashCommandParser
 
         private bool TryRegisterDecodedFacts(
             ParsedCommand inner,
+            IReadOnlyList<CwdPathDependencySet> dependencySets,
             ShellBlockSyntax clonedBody,
             out string? error)
         {
@@ -1228,12 +1290,30 @@ internal static partial class BashCommandParser
                     EffectiveArguments = source.EffectiveArguments,
                     WorkingDirectory = source.WorkingDirectory,
                     Redirects = source.Redirects,
+                    CwdPathDependencies = FindDependencies(
+                        dependencySets,
+                        source.Clause),
                     IsComplete = source.IsComplete,
                 });
             }
 
             error = null;
             return true;
+        }
+
+        private static IReadOnlyList<CwdPathDependency> FindDependencies(
+            IReadOnlyList<CwdPathDependencySet> dependencySets,
+            Clause clause)
+        {
+            foreach (var set in dependencySets)
+            {
+                if (object.ReferenceEquals(set.Clause, clause))
+                {
+                    return set.Dependencies;
+                }
+            }
+
+            return Array.Empty<CwdPathDependency>();
         }
 
         private static bool IsPotentialBindingMutation(Clause clause)

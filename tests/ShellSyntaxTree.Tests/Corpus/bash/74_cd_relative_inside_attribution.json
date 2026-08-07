@@ -18,7 +18,7 @@
         "operator": "AndIf",
         "verb": ["cd"],
         "args": [
-          { "raw": "sub", "kind": "Literal", "isPath": true, "resolved": "/a/sub" },
+          { "raw": "sub", "kind": "Literal", "isPath": true, "resolved": "__NULL__" },
           { "raw": "/a", "kind": "Literal", "isPath": true, "resolved": "/a", "isCwdAttribution": true }
         ],
         "redirects": [],
@@ -27,5 +27,5 @@
       }
     ]
   },
-  "notes": "Relative cd target resolves against the active attribution; PR 5 swaps in WorkingDirectory=/a for the second cd."
+  "notes": "A bare relative cd operand may be resolved through CDPATH or cdable_vars. Its target and resulting cwd therefore remain unknown even though the command inherits /a on entry."
 }

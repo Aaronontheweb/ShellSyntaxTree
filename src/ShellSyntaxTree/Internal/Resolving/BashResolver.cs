@@ -749,7 +749,7 @@ internal static class BashResolver
     /// which is platform-aware and would, e.g., treat <c>/foo</c> as
     /// non-rooted on Windows for the purposes of bash path semantics.
     /// </summary>
-    private static bool IsRootedPath(string token)
+    internal static bool IsRootedPath(string token)
     {
         if (token.Length == 0)
         {

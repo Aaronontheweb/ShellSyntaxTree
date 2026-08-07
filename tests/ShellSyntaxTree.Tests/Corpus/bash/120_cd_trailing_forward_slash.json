@@ -8,7 +8,7 @@
         "operator": "None",
         "verb": ["cd"],
         "args": [
-          { "raw": "dir/", "kind": "Literal", "isPath": true, "resolved": "/work/dir" }
+          { "raw": "dir/", "kind": "Literal", "isPath": true, "resolved": "__NULL__" }
         ],
         "redirects": [],
         "isSubshell": false,
@@ -16,5 +16,5 @@
       }
     ]
   },
-  "notes": "v0.1.2 / B3 regression guard: the LooksLikePath heuristic now treats a lone trailing backslash as a non-signal, but a trailing forward slash is a meaningful bash directory hint (`cd dir/` is common). Confirm `dir/` still resolves as a path."
+  "notes": "A trailing slash remains a path signal, but the bare relative cd operand may be searched through CDPATH or cdable_vars and therefore cannot publish an exact target."
 }

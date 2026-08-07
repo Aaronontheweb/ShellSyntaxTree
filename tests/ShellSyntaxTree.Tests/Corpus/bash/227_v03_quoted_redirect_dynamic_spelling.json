@@ -1,0 +1,28 @@
+{
+  "name": "v0.3 dynamic redirect retains authored quoted spelling",
+  "input": "cd /maybe; printf x > \"relative file.txt\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/maybe", "kind": "Literal", "isPath": true, "resolved": "/maybe" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["printf", "x"],
+        "args": [
+          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+        ],
+        "redirects": [
+          { "direction": "Out", "target": "\"relative file.txt\"", "isDynamicSkip": true }
+        ]
+      }
+    ]
+  },
+  "notes": "When cwd outcomes join, the redirect fails closed while preserving the legacy target-only authored spelling, including quotes."
+}

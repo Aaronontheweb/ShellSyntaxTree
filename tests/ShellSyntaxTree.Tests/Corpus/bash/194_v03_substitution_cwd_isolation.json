@@ -27,10 +27,10 @@
         ],
         "args": [
           {
-            "raw": "/tmp",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "/tmp",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
             "isFlag": false,
             "isCwdAttribution": true
           }
@@ -307,5 +307,5 @@
       }
     ]
   },
-  "notes": "Directory changes inside a substitution do not leak to the following outer command."
+  "notes": "Directory changes inside a substitution do not leak; semicolon continuation joins cd success and failure, so inner pwd receives dynamic cwd attribution."
 }

@@ -1,0 +1,27 @@
+{
+  "name": "v0.3 parent traversal after cwd join fails closed",
+  "input": "cd /maybe/deep; cat ../secret.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/maybe/deep", "kind": "Literal", "isPath": true, "resolved": "/maybe/deep" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "../secret.txt", "kind": "Literal", "isPath": true },
+          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Parent traversal can escape the parse-time cwd prefix; outcome joining clears the false exact path instead of attempting string-prefix rebasing."
+}

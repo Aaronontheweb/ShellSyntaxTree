@@ -1,0 +1,26 @@
+{
+  "name": "v0.3 redirect-only command preserves cwd",
+  "input": "> out.txt; cat relative.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "/work/out.txt", "isDynamicSkip": false }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "relative.txt", "kind": "Literal", "isPath": true, "resolved": "/work/relative.txt" }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A supported redirect-only simple command cannot mutate cwd, so its continuation retains exact path resolution and avoids an unnecessary approval prompt."
+}

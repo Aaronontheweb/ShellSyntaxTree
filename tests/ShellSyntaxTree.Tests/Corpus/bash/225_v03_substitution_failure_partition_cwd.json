@@ -1,0 +1,34 @@
+{
+  "name": "v0.3 substitution inherits cd failure-partition cwd",
+  "input": "cd /maybe || echo \"$(cat rel.txt)\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/maybe", "kind": "Literal", "isPath": true, "resolved": "/maybe" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "rel.txt", "kind": "Literal", "isPath": true, "resolved": "/work/rel.txt" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "OrIf",
+        "verb": ["echo"],
+        "args": [
+          { "raw": "\"$(cat rel.txt)\"", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "The right side of || executes only when cd fails, so its isolated substitution inherits /work rather than the parser's speculative /maybe success cwd."
+}

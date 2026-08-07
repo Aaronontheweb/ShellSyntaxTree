@@ -1,0 +1,32 @@
+{
+  "name": "v0.3 last pipeline stage cwd joins shell-option outcomes",
+  "input": "printf x | cd /tmp; pwd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["printf", "x"],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Pipe",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["pwd"],
+        "args": [
+          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Without proved lastpipe and pipefail options, the last stage may or may not mutate parent cwd and the following command fails closed."
+}

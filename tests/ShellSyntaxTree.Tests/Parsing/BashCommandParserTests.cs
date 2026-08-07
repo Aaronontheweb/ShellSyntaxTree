@@ -1031,11 +1031,8 @@ public class BashCommandParserTests
     }
 
     [Fact]
-    public void Pushd_parses_as_cwd_verb_but_does_not_propagate()
+    public void Pushd_marks_following_cwd_unknown()
     {
-        // Locked interpretation #5: only cd/chdir propagate attribution.
-        // pushd parses as a CwdVerb (its first positional is path-classified)
-        // but the next clause receives NO synthetic attribution arg.
         var result = Parse("pushd /target && cmd");
         Assert.False(result.IsUnparseable);
         Assert.Equal(2, result.Clauses.Count);
@@ -1043,8 +1040,11 @@ public class BashCommandParserTests
         Assert.Equal("/target", result.Clauses[0].Args[0].Resolved);
         Assert.True(result.Clauses[0].Args[0].IsPath);
 
-        // The cmd clause has no synthetic attribution arg.
-        Assert.Empty(result.Clauses[1].Args);
+        var attribution = Assert.Single(result.Clauses[1].Args);
+        Assert.True(attribution.IsCwdAttribution);
+        Assert.Equal("<dynamic-cwd>", attribution.Raw);
+        Assert.Equal(ArgKind.DynamicSkip, attribution.Kind);
+        Assert.Null(attribution.Resolved);
     }
 
     [Fact]

@@ -297,6 +297,14 @@ unless all executable regions and transfers are discovered.
 - **THEN** the `pwd` cwd is unknown because `cd` may fail and `;` still continues
 - **THEN** the analyzer does not publish `/maybe` as the sole cwd
 
+#### Scenario: Bash cd environment and physical resolution stay explicit
+- **WHEN** Bash parses a bare relative `cd sub` without proved `CDPATH` and `cdable_vars` state
+- **THEN** the successful cwd is unknown rather than a lexical `<cwd>/sub` guess
+- **WHEN** Bash parses `cd ./sub` or `cd ../sub` with an exact incoming cwd
+- **THEN** the successful cwd may remain exact because those operands bypass directory search
+- **WHEN** Bash parses `cd -P`, `cd -@`, `pushd`, or `popd` without the required filesystem or directory-stack facts
+- **THEN** the successful cwd is unknown
+
 #### Scenario: Zero-iteration loop path
 - **WHEN** a loop may execute zero times and its body changes cwd
 - **THEN** the post-loop state includes the pre-loop possibility

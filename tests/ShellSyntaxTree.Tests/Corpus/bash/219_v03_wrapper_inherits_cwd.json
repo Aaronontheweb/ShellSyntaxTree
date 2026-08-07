@@ -1,0 +1,44 @@
+{
+  "name": "v0.3 decoded wrapper inherits invocation cwd and isolates exit",
+  "input": "cd /outer && bash -c 'cd /inner && pwd' && pwd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/outer", "kind": "Literal", "isPath": true, "resolved": "/outer" }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/inner", "kind": "Literal", "isPath": true, "resolved": "/inner" }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["pwd"],
+        "args": [
+          { "raw": "/inner", "kind": "Literal", "isPath": true, "resolved": "/inner", "isCwdAttribution": true }
+        ],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["pwd"],
+        "args": [
+          { "raw": "/outer", "kind": "Literal", "isPath": true, "resolved": "/outer", "isCwdAttribution": true }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "The decoded child starts in /outer, changes only its own cwd to /inner, and restores /outer for the outer continuation."
+}

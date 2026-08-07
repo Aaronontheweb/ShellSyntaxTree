@@ -1,0 +1,26 @@
+{
+  "name": "v0.3 exact failure partition promotes a cwd-blocked redirect path",
+  "input": "cd \"$TARGET\" || printf x > out.txt",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "\"$TARGET\"", "kind": "DynamicSkip", "isPath": false }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "OrIf",
+        "verb": ["printf", "x"],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "/work/out.txt", "isDynamicSkip": false }
+        ]
+      }
+    ]
+  },
+  "notes": "The cd failure partition proves the original /work cwd, so a redirect that was dynamic only because of parse-order cwd becomes exact."
+}

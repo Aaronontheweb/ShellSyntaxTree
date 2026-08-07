@@ -77,6 +77,11 @@
     conservative `lastpipe` / `pipefail`, ordered iteration plans,
     decoded-wrapper inheritance, and dynamic fail-closed compatibility
     sanitization before implementing the state pass.
+  - [x] 6.5b Apply outcome-sensitive cwd analysis to existing Bash lists,
+    pipelines, substitutions, subshells, and decoded wrappers; rebase exact
+    compatibility paths and retain `<dynamic-cwd>` after conservative joins.
+  - [ ] 6.5c Carry ordered loop binding and cwd state through zero-or-more
+    iterations, then remove the temporary loop-mutation rejection.
   - The first static-value slice deliberately leaves occurrence cwd Unknown
     and rejects loop shell-state mutation, nested active-binding reuse, or
     loops reached after recognized prior shell-state mutation. A separate
