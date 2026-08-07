@@ -1755,6 +1755,22 @@ internal static partial class PwshCommandParser
                 var isFirst = state.LeafIndex == 0;
                 var isLast = state.LeafIndex == state.LeafCount - 1;
                 state.LeafIndex++;
+                var executionRegions = new List<ExecutionRegionSyntax>(
+                    simple.ExecutionRegions.Count);
+                foreach (var executionRegion in simple.ExecutionRegions)
+                {
+                    if (!TryCloneDecodedNode(
+                            executionRegion,
+                            state,
+                            out var clonedExecutionRegion) ||
+                        clonedExecutionRegion is not ExecutionRegionSyntax typedExecutionRegion)
+                    {
+                        return false;
+                    }
+
+                    executionRegions.Add(typedExecutionRegion);
+                }
+
                 var redirects = new List<Redirect>(simple.Clause.Redirects.Count +
                     (isLast ? state.WrapperRedirects.Count : 0));
                 redirects.AddRange(simple.Clause.Redirects);
@@ -1789,6 +1805,7 @@ internal static partial class PwshCommandParser
                         IsCommandStringWrapped = true,
                     },
                     Substitutions = substitutions,
+                    ExecutionRegions = executionRegions,
                 };
                 return true;
             case PipelineSyntax pipeline:
@@ -1899,6 +1916,22 @@ internal static partial class PwshCommandParser
                 }
 
                 clone = new CommandSubstitutionSyntax { Body = substitutionBody };
+                return true;
+            case ExecutionRegionSyntax executionRegion:
+                if (!TryCloneDecodedBlock(executionRegion.Body, state, out var executionBody))
+                {
+                    return false;
+                }
+
+                clone = new ExecutionRegionSyntax
+                {
+                    Origin = executionRegion.Origin,
+                    HostClauseElementIndex = executionRegion.HostClauseElementIndex,
+                    Phase = executionRegion.Phase,
+                    Timing = executionRegion.Timing,
+                    Cardinality = executionRegion.Cardinality,
+                    Body = executionBody,
+                };
                 return true;
             default:
                 return false;

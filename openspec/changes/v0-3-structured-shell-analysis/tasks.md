@@ -55,7 +55,7 @@
 - [x] 3.14 Add `ExecutionRegionSyntax`, its four discriminant enums,
   `SimpleCommandSyntax.ExecutionRegions`, and appended occurrence/ancestry enum
   members to the public API and snapshot without changing existing enum values.
-- [ ] 3.15 Extend the structural projector, compatibility flattener, depth
+- [x] 3.15 Extend the structural projector, compatibility flattener, depth
   validation, cloning, and corpus DTOs so direct and command-owned execution
   regions emit every body command exactly once in the locked order.
 
