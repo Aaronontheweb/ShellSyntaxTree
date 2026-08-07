@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using System.Text;
 using ShellSyntaxTree.Internal.Lexing;
 using ShellSyntaxTree.Internal.Resolving;
 
@@ -30,9 +31,9 @@ namespace ShellSyntaxTree.Internal.Bash.Lexing;
 ///         <c>${var//pat/repl}</c> — emit a
 ///         <see cref="BashTokenKind.UnparseableSentinel"/>. The parser
 ///         lifts that sentinel into <c>ParsedCommand.IsUnparseable</c>.</item>
-///   <item>Heredoc bodies are dropped per SPEC §4. Only the
-///         <c>&lt;&lt;</c>/<c>&lt;&lt;-</c> operator and the delimiter
-///         word make it into the token stream.</item>
+///   <item>Heredoc bodies do not become ordinary tokens. The delimiter token
+///         retains body resolver fragments so stable v0.3 can discover
+///         executable substitutions without treating body data as argv.</item>
 /// </list>
 /// </summary>
 internal static class BashLexer
@@ -1228,38 +1229,69 @@ internal static class BashLexer
             return i;
         }
 
-        // Read the delimiter as a word (no quote/escape unwrapping handling
-        // beyond what ReadWord does — bash supports `<<'EOF'` for
-        // unexpanded bodies, but we skip the body either way so the value
-        // doesn't matter). Capture the delimiter text from the freshly
-        // appended token.
-        var beforeDelim = tokens.Count;
-        var afterDelim = ReadWord(src, i, tokens);
-        if (tokens.Count == beforeDelim)
+        if (!TryReadHeredocDelimiter(
+                src,
+                i,
+                out var afterDelim,
+                out var delim,
+                out var delimiterQuoted,
+                out var delimiterError))
         {
-            // ReadWord didn't produce a token (delimiter started with an
-            // operator/quote we don't unwrap here). Treat as malformed.
             tokens.Add(new BashToken(
                 BashTokenKind.UnparseableSentinel,
-                "",
+                src.Slice(i, afterDelim - i).ToString(),
                 null,
                 i,
-                0,
-                "heredoc operator '" + opText + "' missing delimiter"));
+                afterDelim - i,
+                delimiterError ?? "heredoc operator '" + opText + "' missing delimiter"));
             return afterDelim;
         }
 
-        var delimToken = tokens[tokens.Count - 1];
-        var delim = delimToken.Value;
+        var delimiterIndex = tokens.Count;
+        tokens.Add(new BashToken(
+            BashTokenKind.Word,
+            delim,
+            null,
+            i,
+            afterDelim - i,
+            null)
+        {
+            ResolverValue = ShellValue.Literal(delim, i, afterDelim - i),
+        });
 
         // Skip the heredoc body: from the next newline to the line that
         // contains only `delim` (or, for `<<-`, optional leading tabs +
         // delim). On unterminated body, emit a sentinel and stop.
         var j = afterDelim;
-        // Find the first newline that opens the body.
-        while (j < src.Length && src[j] != '\n')
+        while (j < src.Length && src[j] is ' ' or '\t')
         {
             j++;
+        }
+
+        if (j < src.Length && src[j] == '#')
+        {
+            while (j < src.Length && src[j] is not '\n' and not '\r')
+            {
+                j++;
+            }
+        }
+
+        if (j < src.Length && src[j] is not '\n' and not '\r')
+        {
+            var headerEnd = j;
+            while (headerEnd < src.Length && src[headerEnd] is not '\n' and not '\r')
+            {
+                headerEnd++;
+            }
+
+            tokens.Add(new BashToken(
+                BashTokenKind.UnparseableSentinel,
+                src.Slice(j, headerEnd - j).ToString(),
+                null,
+                j,
+                headerEnd - j,
+                "tokens after a heredoc delimiter are not supported"));
+            return src.Length;
         }
 
         if (j >= src.Length)
@@ -1275,7 +1307,15 @@ internal static class BashLexer
             return src.Length;
         }
 
-        j++; // step past the opening newline; body now starts at j.
+        if (src[j] == '\r' && j + 1 < src.Length && src[j + 1] == '\n')
+        {
+            j += 2;
+        }
+        else
+        {
+            j++;
+        }
+
         var bodyStart = j;
 
         var stripTabs = opText == "<<-";
@@ -1288,7 +1328,11 @@ internal static class BashLexer
                 j++;
             }
 
-            var lineEnd = j; // exclusive
+            var lineEnd = j;
+            if (lineEnd > lineStart && src[lineEnd - 1] == '\r')
+            {
+                lineEnd--;
+            }
 
             // For <<-, optional leading tabs are stripped before comparing.
             var compareStart = lineStart;
@@ -1303,6 +1347,38 @@ internal static class BashLexer
             var lineSlice = src.Slice(compareStart, lineEnd - compareStart);
             if (lineSlice.SequenceEqual(delim.AsSpan()))
             {
+                var bodyLength = lineStart - bodyStart;
+                ShellValue bodyValue;
+                if (delimiterQuoted)
+                {
+                    bodyValue = ShellValue.Literal(
+                        src.Slice(bodyStart, bodyLength).ToString(),
+                        bodyStart,
+                        bodyLength);
+                }
+                else if (!TryBuildExpandingHeredocBodyValue(
+                             src,
+                             bodyStart,
+                             bodyLength,
+                             out bodyValue,
+                             out var bodyError))
+                {
+                    tokens.Add(new BashToken(
+                        BashTokenKind.UnparseableSentinel,
+                        src.Slice(bodyStart, bodyLength).ToString(),
+                        null,
+                        bodyStart,
+                        bodyLength,
+                        bodyError));
+                    return src.Length;
+                }
+
+                tokens[delimiterIndex] = tokens[delimiterIndex] with
+                {
+                    HeredocBodyValue = bodyValue,
+                    HeredocSourceEnd = lineEnd,
+                };
+
                 // Found terminator. Skip the body silently — no token is
                 // emitted for the body itself — but emit a single
                 // Whitespace token covering the terminator's trailing
@@ -1340,5 +1416,165 @@ internal static class BashLexer
         }
 
         return j;
+    }
+
+    private static bool TryReadHeredocDelimiter(
+        ReadOnlySpan<char> src,
+        int start,
+        out int end,
+        out string delimiter,
+        out bool quoted,
+        out string? error)
+    {
+        var decoded = new StringBuilder();
+        quoted = false;
+        error = null;
+        var index = start;
+        while (index < src.Length && !char.IsWhiteSpace(src[index]) &&
+               src[index] is not ';' and not '|' and not '&' and not '<' and not '>')
+        {
+            var character = src[index];
+            if (character == '\\')
+            {
+                quoted = true;
+                if (index + 1 >= src.Length || src[index + 1] is '\n' or '\r')
+                {
+                    end = Math.Min(index + 1, src.Length);
+                    delimiter = decoded.ToString();
+                    error = "heredoc delimiter has an unsupported continuation";
+                    return false;
+                }
+
+                decoded.Append(src[index + 1]);
+                index += 2;
+                continue;
+            }
+
+            if (character is '\'' or '"')
+            {
+                quoted = true;
+                var quote = character;
+                index++;
+                var closed = false;
+                while (index < src.Length)
+                {
+                    character = src[index];
+                    if (character == quote)
+                    {
+                        index++;
+                        closed = true;
+                        break;
+                    }
+
+                    if (quote == '"' && character == '\\' && index + 1 < src.Length &&
+                        src[index + 1] is '$' or '`' or '"' or '\\')
+                    {
+                        decoded.Append(src[index + 1]);
+                        index += 2;
+                        continue;
+                    }
+
+                    decoded.Append(character);
+                    index++;
+                }
+
+                if (!closed)
+                {
+                    end = index;
+                    delimiter = decoded.ToString();
+                    error = "unterminated quote in heredoc delimiter";
+                    return false;
+                }
+
+                continue;
+            }
+
+            decoded.Append(character);
+            index++;
+        }
+
+        end = index;
+        delimiter = decoded.ToString();
+        if (delimiter.Length == 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryBuildExpandingHeredocBodyValue(
+        ReadOnlySpan<char> src,
+        int bodyStart,
+        int bodyLength,
+        out ShellValue value,
+        out string? error)
+    {
+        var bodyEnd = bodyStart + bodyLength;
+        var builder = new ShellValueBuilder();
+        builder.AppendBoundary(bodyStart);
+        var index = bodyStart;
+        while (index < bodyEnd)
+        {
+            var character = src[index];
+            if (character == '\\' && index + 1 < bodyEnd)
+            {
+                var escaped = src[index + 1];
+                if (escaped is '\n' or '\r')
+                {
+                    value = builder.Build();
+                    error = "continuations inside expanding heredoc bodies are not supported";
+                    return false;
+                }
+
+                if (escaped is '$' or '`' or '\\')
+                {
+                    builder.AppendLiteral(escaped, index, 2);
+                    index += 2;
+                    continue;
+                }
+            }
+
+            if (character == '`')
+            {
+                value = builder.Build();
+                error = "legacy backtick command substitution is not supported";
+                return false;
+            }
+
+            if (character == '$' && index + 1 < bodyEnd && src[index + 1] == '(')
+            {
+                if (index + 2 < bodyEnd && src[index + 2] == '(')
+                {
+                    value = builder.Build();
+                    error = "arithmetic expansion '$((…))' not supported in heredoc body";
+                    return false;
+                }
+
+                var scan = ScanCommandSubstitution(src, index + 1);
+                if (!scan.Closed || scan.EndIndex >= bodyEnd)
+                {
+                    value = builder.Build();
+                    error = scan.Error ?? "unbalanced command substitution in heredoc body";
+                    return false;
+                }
+
+                var substitutionLength = scan.EndIndex - index + 1;
+                builder.AppendOpaque(
+                    src.Slice(index, substitutionLength).ToString(),
+                    ShellOpaqueCause.CommandSubstitution,
+                    index,
+                    substitutionLength);
+                index += substitutionLength;
+                continue;
+            }
+
+            builder.AppendLiteral(character, index, 1);
+            index++;
+        }
+
+        value = builder.Build();
+        error = null;
+        return true;
     }
 }

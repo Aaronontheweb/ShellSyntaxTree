@@ -58,6 +58,20 @@ internal readonly record struct BashToken(
     public ShellValue? ResolverValue { get; init; }
 
     /// <summary>
+    /// Resolver fragments from the authored heredoc body associated with a
+    /// delimiter token. Null for ordinary tokens and malformed heredocs.
+    /// </summary>
+    public ShellValue? HeredocBodyValue { get; init; }
+
+    /// <summary>
+    /// Exclusive authored-source end of the heredoc terminator associated
+    /// with a delimiter token. Null for ordinary tokens and malformed
+    /// heredocs. This lets structural spans cover the body without exposing
+    /// the body as an ordinary compatibility token.
+    /// </summary>
+    public int? HeredocSourceEnd { get; init; }
+
+    /// <summary>
     /// True when this <see cref="BashTokenKind.Whitespace"/> token contains
     /// a newline and therefore acts as a statement separator equivalent to
     /// <c>;</c> per SPEC §4. The lexer sets this on the newline branch and

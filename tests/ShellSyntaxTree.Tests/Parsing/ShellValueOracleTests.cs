@@ -12,6 +12,47 @@ namespace ShellSyntaxTree.Tests.Parsing;
 
 public class ShellValueOracleTests
 {
+    [Theory]
+    [InlineData("cat <<EOF\n$(printf executed)\nEOF", "executed")]
+    [InlineData("cat <<E\"OF\"\n$(printf executed)\nEOF", "$(printf executed)")]
+    [InlineData("cat <<E\\OF\n$(printf executed)\nEOF", "$(printf executed)")]
+    [InlineData("cat <<EOF\n'$(printf executed)'\nEOF", "'executed'")]
+    [InlineData("cat <<EOF\n\\$(printf executed)\nEOF", "$(printf executed)")]
+    [InlineData("cat <<EOF\n\\\\$(printf executed)\nEOF", "\\executed")]
+    [InlineData("cat <<-EOF\n\t$(printf executed)\n\tEOF", "executed")]
+    public void Bash_heredoc_expansion_matches_delimiter_and_body_rules(
+        string source,
+        string expected)
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        Assert.Equal(expected, Run("bash", "-c", source));
+    }
+
+    [Theory]
+    [InlineData("cat <<EOF >out\nbody\nEOF")]
+    [InlineData("cat <<EOF; evil\nbody\nEOF")]
+    [InlineData("cat <<EOF | sh\nbody\nEOF")]
+    [InlineData("cat <<A <<B\na\nA\nb\nB")]
+    public void Bash_accepts_heredoc_header_forms_the_bounded_parser_declines(
+        string source)
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked("bash", "-n", "-c", source);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.True(
+            string.IsNullOrEmpty(result.StandardError),
+            $"bash syntax oracle wrote to stderr: {result.StandardError}");
+    }
+
     [Fact]
     public void Standalone_escapes_are_literal_in_both_shells()
     {

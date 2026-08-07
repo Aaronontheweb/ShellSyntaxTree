@@ -588,7 +588,7 @@
       "id": "bash-heredoc-body-is-data",
       "concern": "Literal heredoc data does not create hidden commands or unnecessary approval scope",
       "input": "cat > output.txt <<'EOF'\nhello\nEOF\n",
-      "current": { "isUnparseable": true, "reasonContains": "missing delimiter" },
+      "current": { "isUnparseable": false },
       "desired": {
         "syntax": [
           { "id": "root", "kind": "Block", "slot": "Root" },

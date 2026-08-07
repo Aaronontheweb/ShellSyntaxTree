@@ -265,8 +265,18 @@ priorities.
       depth limits, comment-safe delimiter scanning, and fail-closed command
       identities, background lists, assignment prefixes, backticks, heredocs,
       and malformed interiors.
-- [ ] Extend Bash substitution discovery to iterables and expanding heredoc
-      bodies, then add the corresponding Netclaw approval-matrix cases.
+- [x] Extend Bash substitution discovery to expanding heredoc bodies. The
+      bounded slice recognizes quoted, escaped, mixed, and tab-stripping
+      delimiters; preserves exact body/terminator provenance; surfaces nested
+      substitutions in authored order with isolated state; and rejects header
+      tails, queued heredocs, backticks, arithmetic, continuations, incomplete
+      interiors, and depth overflow atomically. Direct and executable-corpus
+      cases pin exact syntax, command ancestry, spans, completeness, and
+      literal-versus-expanding behavior; real-Bash output and parse-only
+      oracles independently pin the bounded semantic boundary.
+- [ ] Extend Bash substitution discovery to iterables with the complete
+      `for ... in` vertical slice, then add the Bash substitution cases to the
+      Netclaw approval matrix.
 - [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
       Netclaw approval-matrix cases. The simple-command slice is delivered for
       ordinary, adjacent, quoted, here-string, redirect, standalone,
@@ -276,9 +286,9 @@ priorities.
 - [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
       language-specific vertical slices, then extract only the shared analysis
       proven by both implementations.
-- [ ] Preserve the existing Bash heredoc grammar, fix quoted-delimiter
-      adjacency, expose body/delimiter/expansion/completeness facts, and add a
-      separately tested Bash `<<<` here-string redirect slice.
+- [ ] Build on the delivered bounded Bash heredoc grammar and quoted-delimiter
+      adjacency by exposing public body/delimiter/expansion/completeness facts,
+      then add a separately tested Bash `<<<` here-string redirect slice.
 - [ ] Near the end of v0.3 delivery, expand the Web sample with curated complex
       Bash and PowerShell inputs and deterministic Mermaid views of syntax,
       occurrences, compatibility clauses, ancestry, redirects, and fail-closed

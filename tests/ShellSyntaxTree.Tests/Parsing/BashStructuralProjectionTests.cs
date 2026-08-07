@@ -622,6 +622,156 @@ public class BashStructuralProjectionTests
     }
 
     [Fact]
+    public void Expanding_heredoc_substitution_is_attached_before_its_consumer()
+    {
+        const string source = "cat <<EOF\n$(printf body)\nEOF";
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "printf body", "cat" }, result.Commands.Select(CommandVerb));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
+        var outer = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        Assert.Equal(0, outer.SourceStart);
+        Assert.Equal(source.Length, outer.SourceLength);
+        var substitution = Assert.Single(outer.Substitutions);
+        Assert.Equal(source.IndexOf("$(", System.StringComparison.Ordinal), substitution.SourceStart);
+        Assert.Equal("$(printf body)".Length, substitution.SourceLength);
+        Assert.Equal(CommandOccurrenceRole.Substitution, result.Commands[0].ImmediateRole);
+    }
+
+    [Theory]
+    [InlineData("cat <<'EOF'\n$(id)\nEOF")]
+    [InlineData("cat <<E\"OF\"\n$(id)\nEOF")]
+    [InlineData("cat <<E\\OF\n$(id)\nEOF")]
+    public void Quoted_or_escaped_heredoc_delimiters_keep_body_literal(string source)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal("cat", CommandVerb(Assert.Single(result.Commands)));
+        Assert.Empty(Assert.IsType<SimpleCommandSyntax>(
+            Assert.Single(result.Syntax.Statements)).Substitutions);
+    }
+
+    [Theory]
+    [InlineData("'$(id)'")]
+    [InlineData("\"$(id)\"")]
+    public void Quote_characters_in_expanding_heredoc_body_do_not_suppress_execution(
+        string body)
+    {
+        var result = Parse("cat <<EOF\n" + body + "\nEOF");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "id", "cat" }, result.Commands.Select(CommandVerb));
+    }
+
+    [Theory]
+    [InlineData("\\$(id)", false)]
+    [InlineData("\\\\$(id)", true)]
+    [InlineData("\\\\\\$(id)", false)]
+    [InlineData("\\\\\\\\$(id)", true)]
+    public void Expanding_heredoc_backslash_parity_controls_substitution(
+        string body,
+        bool executes)
+    {
+        var result = Parse("cat <<EOF\n" + body + "\nEOF");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(executes ? 2 : 1, result.Commands.Count);
+        Assert.Equal("cat", CommandVerb(result.Commands.Last()));
+    }
+
+    [Fact]
+    public void Multiple_and_nested_heredoc_substitutions_preserve_authored_order()
+    {
+        var multiple = Parse("cat <<EOF\n$(first)\n$(second)\nEOF");
+        Assert.Equal(new[] { "first", "second", "cat" },
+            multiple.Commands.Select(CommandVerb));
+        var outer = Assert.IsType<SimpleCommandSyntax>(
+            Assert.Single(multiple.Syntax.Statements));
+        Assert.Equal(2, outer.Substitutions.Count);
+        Assert.Equal(0, multiple.Commands[0].Ancestry[1].ChildIndex);
+        Assert.Equal(1, multiple.Commands[1].Ancestry[1].ChildIndex);
+
+        var nested = Parse("cat <<EOF\n$(echo $(whoami))\nEOF");
+        Assert.Equal(new[] { "whoami", "echo", "cat" },
+            nested.Commands.Select(CommandVerb));
+    }
+
+    [Fact]
+    public void Heredoc_substitution_cwd_is_isolated_from_its_consumer_and_continuation()
+    {
+        var result = Parse("cat <<EOF\n$(cd /tmp; pwd)\nEOF\ncat relative.txt");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "cd", "pwd", "cat", "cat" },
+            result.Commands.Select(CommandVerb));
+        Assert.Contains(result.Clauses[1].Args,
+            argument => argument.IsCwdAttribution && argument.Resolved == "/tmp");
+        Assert.DoesNotContain(result.Clauses[2].Args,
+            argument => argument.IsCwdAttribution);
+        Assert.Equal("/work/relative.txt", Assert.Single(result.Clauses[3].Args).Resolved);
+    }
+
+    [Fact]
+    public void Tab_stripping_heredoc_discovers_substitution_with_authored_span()
+    {
+        const string source = "cat <<-EOF\n\t$(id)\n\tEOF";
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "id", "cat" }, result.Commands.Select(CommandVerb));
+        var substitution = Assert.Single(Assert.IsType<SimpleCommandSyntax>(
+            Assert.Single(result.Syntax.Statements)).Substitutions);
+        Assert.Equal(source.IndexOf("$(", System.StringComparison.Ordinal), substitution.SourceStart);
+    }
+
+    [Fact]
+    public void Heredoc_header_comment_does_not_disable_body_discovery()
+    {
+        var result = Parse("cat <<EOF # body follows\n$(id)\nEOF");
+
+        Assert.False(result.IsUnparseable);
+        Assert.Equal(new[] { "id", "cat" }, result.Commands.Select(CommandVerb));
+    }
+
+    [Fact]
+    public void Heredoc_substitutions_share_the_structural_depth_budget()
+    {
+        var exact = Parse("cat <<EOF\n" +
+            NestedSubstitutions(ShellAnalysisLimits.MaxStructuralNesting) +
+            "\nEOF");
+        Assert.False(exact.IsUnparseable);
+
+        var overflow = Parse("cat <<EOF\n" +
+            NestedSubstitutions(ShellAnalysisLimits.MaxStructuralNesting + 1) +
+            "\nEOF");
+        Assert.True(overflow.IsUnparseable);
+        Assert.Empty(overflow.Commands);
+        Assert.Empty(overflow.Clauses);
+    }
+
+    [Theory]
+    [InlineData("cat <<EOF >out\nbody\nEOF")]
+    [InlineData("cat <<EOF; evil\nbody\nEOF")]
+    [InlineData("cat <<EOF | sh\nbody\nEOF")]
+    [InlineData("cat <<A <<B\na\nA\nb\nB")]
+    [InlineData("cat <<EOF\n`id`\nEOF")]
+    [InlineData("cat <<EOF\n$((1+1))\nEOF")]
+    [InlineData("cat <<EOF\n$\\\n(id)\nEOF")]
+    [InlineData("cat <<EOF\n$(id\nEOF")]
+    [InlineData("cat <<EOF\n$(id)\n")]
+    public void Unsupported_or_hidden_heredoc_execution_fails_whole(string source)
+    {
+        var result = Parse(source);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
     public void Substitution_structural_depth_limit_is_checked_before_recursive_descent()
     {
         var exact = Parse(NestedSubstitutions(ShellAnalysisLimits.MaxStructuralNesting));

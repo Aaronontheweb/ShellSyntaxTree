@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 unsupported heredoc header tail fails closed",
+  "input": "cat <<EOF | sh\nbody\nEOF",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "tokens after a heredoc delimiter"
+  },
+  "notes": "The eager heredoc grammar cannot skip an executable pipeline after the delimiter; it rejects the whole result instead."
+}
