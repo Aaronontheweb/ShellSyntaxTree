@@ -287,8 +287,12 @@ priorities.
       enabling cwd-changing loop bodies or claiming the complete `for ... in`
       vertical slice. The parse-order attribution model cannot soundly publish
       occurrence cwd across pipelines, conditional lists, substitutions, and
-      repeated iterations. Keep OpenSpec task 6.5 open, then add the remaining
-      loop cases and Netclaw approval matrix after that design is reviewed.
+      repeated iterations. The design now requires internal success/failure
+      flow partitions, failure-aware `cd`, conservative `lastpipe` / `pipefail`,
+      ordered duplicate-preserving loop plans, inherited but isolated
+      decoded-wrapper state, and dynamic fail-closed compatibility attribution
+      whenever cwd joins to Unknown. Keep OpenSpec task 6.5 open, then add the
+      remaining loop cases and Netclaw approval matrix after implementation.
 - [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
       Netclaw approval-matrix cases. The simple-command slice is delivered for
       ordinary, adjacent, quoted, here-string, redirect, standalone,

@@ -12,7 +12,12 @@ classification that is false because lexical provenance or consumer/binding
 context was lost. This includes false exact paths, false `Glob` or `Tilde`
 claims, and avoidable `DynamicSkip` results. Every such correction SHALL be
 documented and corpus-pinned; compatibility does not require preserving a
-security defect.
+security defect. When control-flow analysis cannot prove the cwd used by a
+relative compatibility operand, the projection SHALL clear any false exact
+resolution rather than publish one parse-order path as authoritative. It SHALL
+replace any false exact cwd attribution with the existing dynamic cwd marker;
+it SHALL NOT omit the marker and thereby remove a v0.2 consumer's fail-closed
+signal.
 
 #### Scenario: Old consumer sees loop body command
 - **WHEN** Bash fully parses `for f in a b; do rm "$f"; done`
@@ -34,6 +39,13 @@ security defect.
 - **THEN** v0.3 preserves its raw spelling, decoded value, and source span
 - **THEN** the compatibility leaf reports the oracle-proved literal path or fails closed
 - **THEN** release notes identify the classification correction
+
+#### Scenario: Joined cwd does not leak a false compatibility path
+- **WHEN** a relative operand may execute under more than one cwd after a loop, pipeline, or conditional list
+- **THEN** its authored spelling, path relevance, and source provenance remain available
+- **THEN** `Arg.Resolved` and the corresponding `ClauseElement.Resolved` are null
+- **THEN** the clause contains a synthetic `<dynamic-cwd>` `DynamicSkip` attribution argument with `Resolved=null`
+- **THEN** no synthetic cwd-attribution argument selects one possible exact path
 
 ### Requirement: Unparseable results are never authorization evidence
 When `ParsedCommand.IsUnparseable=true`, `Commands` and `Clauses` SHALL be
