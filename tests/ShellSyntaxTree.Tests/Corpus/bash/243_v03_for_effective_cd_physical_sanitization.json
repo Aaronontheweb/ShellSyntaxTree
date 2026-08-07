@@ -1,0 +1,28 @@
+{
+  "name": "v0.3 Bash effective cd physical-option sanitation",
+  "input": "for f in -P; do cd \"$f\" ./sub && cat file.txt; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "\"$f\"", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false },
+          { "raw": "./sub", "kind": "Literal", "isPath": true, "resolved": "__NULL__", "isFlag": false }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "file.txt", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false },
+          { "raw": "<dynamic-cwd>", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false, "isCwdAttribution": true }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "The rebound -P option makes physical resolution unprovable, clears the authored ./sub resolution, and propagates unknown cwd to the success continuation."
+}

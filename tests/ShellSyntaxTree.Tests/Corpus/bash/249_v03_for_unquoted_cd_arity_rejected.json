@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash unquoted cd argv arity rejected",
+  "input": "for f in 'a b'; do cd $f && pwd; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "invalid parser-owned facts"
+  },
+  "notes": "Unquoted loop expansion may field-split into multiple argv words, so transfer analysis fails atomically rather than inventing one unknown operand.",
+  "oracleExpectation": "OutOfScope"
+}

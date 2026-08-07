@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash post-loop binding mutation rejected",
+  "input": "for f in a; do :; done; unset f; echo \"$f\"",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "invalid parser-owned facts"
+  },
+  "notes": "Loop bindings persist after done; an unsupported later unset cannot leave a stale exact effective value.",
+  "oracleExpectation": "OutOfScope"
+}

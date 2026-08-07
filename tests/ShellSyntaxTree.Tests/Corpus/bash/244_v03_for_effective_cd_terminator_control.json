@@ -1,0 +1,28 @@
+{
+  "name": "v0.3 Bash effective cd option-terminator control",
+  "input": "for f in --; do cd \"$f\" ./sub && cat file.txt; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "\"$f\"", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false },
+          { "raw": "./sub", "kind": "Literal", "isPath": true, "resolved": "/work/sub", "isFlag": false }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "file.txt", "kind": "Literal", "isPath": true, "resolved": "/work/sub/file.txt", "isFlag": false },
+          { "raw": "/work/sub", "kind": "Literal", "isPath": true, "resolved": "/work/sub", "isFlag": false, "isCwdAttribution": true }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "The rebound -- terminator leaves ./sub as the sole logical operand and preserves exact downstream cwd and path facts."
+}

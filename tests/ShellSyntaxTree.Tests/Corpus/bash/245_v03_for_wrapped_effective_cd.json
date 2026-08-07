@@ -1,0 +1,32 @@
+{
+  "name": "v0.3 Bash recursively wrapped effective cd",
+  "input": "for f in /tmp; do command -p -- builtin -- cd \"$f\" && cat file.txt; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["command"],
+        "args": [
+          { "raw": "-p", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": true },
+          { "raw": "--", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": true },
+          { "raw": "builtin", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": false },
+          { "raw": "--", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": true },
+          { "raw": "cd", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": false },
+          { "raw": "\"$f\"", "kind": "EnvVar", "isPath": false, "resolved": "__NULL__", "isFlag": false }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["cat"],
+        "args": [
+          { "raw": "file.txt", "kind": "Literal", "isPath": true, "resolved": "/tmp/file.txt", "isFlag": false },
+          { "raw": "/tmp", "kind": "Literal", "isPath": true, "resolved": "/tmp", "isFlag": false, "isCwdAttribution": true }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Exact command and builtin wrapper options are recursively classified before the loop-derived cd argv is interpreted."
+}

@@ -526,6 +526,19 @@ required for `cd "$f"`: a candidate may be `-P`, `--`, `-`, or an operand even
 though the authored expansion was not lexed as an option. Operand-only string
 substitution is not an acceptable shortcut.
 
+Static dispatch is interpreted from the same ordered element stream. Exact
+`command -p`, `command --`, and `builtin --` wrappers may recurse to `cd` or
+`chdir`; `command -v` / `-V` is a nonmutating query. Invalid or dynamic wrapper
+grammar does not dispatch. If a rebound physical option changes which authored
+element is the operand, every compatibility resolution made unsafe by that
+visit is cleared by element coordinate in both `Clause.Args` and
+`Clause.Elements`. The first operand ends option recognition; every later word
+is a second operand and therefore an exact failure. Unknown quoted one-word
+values may conservatively produce unknown cwd on success, but unquoted field
+splitting or globbing of a tracked loop binding leaves argv cardinality
+unproved and fails the region atomically. Ambient dynamic values retain the
+older compatibility contract's conservative unknown-state behavior.
+
 An unreachable success or failure partition stays unreachable. `&&` and `||`
 must not replace a missing input partition with `JoinedState` to manufacture
 facts for a structurally present but unreachable continuation. Such commands

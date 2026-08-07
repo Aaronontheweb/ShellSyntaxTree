@@ -826,6 +826,54 @@ public class ShellValueOracleTests
         Assert.NotEqual(0, result.ExitCode);
     }
 
+    [Theory]
+    [InlineData("command -- cd /tmp")]
+    [InlineData("command -p cd /tmp")]
+    [InlineData("builtin -- cd /tmp")]
+    [InlineData("command -p -- builtin -- cd /tmp")]
+    public void Bash_runtime_dispatch_wrappers_preserve_cd_in_process(string dispatch)
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run("bash", "--noprofile", "--norc", "-c", $"cd /; {dispatch}; pwd");
+
+        Assert.Equal("/tmp", output);
+    }
+
+    [Fact]
+    public void Bash_runtime_cd_operand_count_and_option_status_match_transfer_grammar()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "HOME=/tmp; cd /; cd --; pwd; " +
+            "cd -Z >/dev/null 2>&1 || printf 'invalid\\n'; " +
+            "cd / /tmp >/dev/null 2>&1 || printf 'multiple\\n'; " +
+            "cd /; cd /tmp -- >/dev/null 2>&1 || printf 'terminator-after-operand\\n'; " +
+            "cd /; cd /tmp -P >/dev/null 2>&1 || printf 'option-after-operand\\n'");
+
+        Assert.Equal(
+            new[]
+            {
+                "/tmp",
+                "invalid",
+                "multiple",
+                "terminator-after-operand",
+                "option-after-operand",
+            },
+            Lines(output));
+    }
+
     private static bool IsAvailable(string executable)
     {
         try

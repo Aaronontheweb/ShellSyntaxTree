@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash pattern-domain cd argv arity rejected",
+  "input": "for f in *.txt; do cd $f; done",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "invalid parser-owned facts"
+  },
+  "notes": "A pattern-domain loop binding expanded unquoted has unproved argv cardinality and fails before the analyzer takes its conservative unknown-domain shortcut.",
+  "oracleExpectation": "OutOfScope"
+}

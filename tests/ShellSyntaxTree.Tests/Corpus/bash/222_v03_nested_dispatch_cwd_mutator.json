@@ -1,5 +1,5 @@
 {
-  "name": "v0.3 nested static dispatch mutator fails closed",
+  "name": "v0.3 nested static dispatch cwd transfer",
   "input": "command builtin cd /outer && cat relative.txt",
   "expected": {
     "isUnparseable": false,
@@ -16,12 +16,12 @@
         "operator": "AndIf",
         "verb": ["cat"],
         "args": [
-          { "raw": "relative.txt", "kind": "Literal", "isPath": true },
-          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "isCwdAttribution": true }
+          { "raw": "relative.txt", "kind": "Literal", "isPath": true, "resolved": "/outer/relative.txt" },
+          { "raw": "/outer", "kind": "Literal", "isPath": true, "resolved": "/outer", "isCwdAttribution": true }
         ],
         "redirects": []
       }
     ]
   },
-  "notes": "Static command and builtin dispatch layers may reach a current-shell cd; the analyzer scans through every wrapper and does not retain the old cwd."
+  "notes": "Static command and builtin dispatch layers are recursively proved, so the analyzer applies the complete cd argv and retains the exact successful cwd."
 }
