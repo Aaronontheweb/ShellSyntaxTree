@@ -13,7 +13,8 @@ namespace ShellSyntaxTree.Tools.PwshCorpus;
 
 /// <summary>
 /// Serializes a live <see cref="ParsedCommand"/> into the corpus JSON
-/// schema consumed by <c>CorpusRunnerTests</c> (SPEC.POWERSHELL.md §13).
+/// schema consumed by <c>CorpusRunnerTests</c> (SPEC §13 and
+/// SPEC.POWERSHELL.md §13).
 /// Default-valued fields are omitted to keep entries readable.
 /// </summary>
 internal static class CorpusJson

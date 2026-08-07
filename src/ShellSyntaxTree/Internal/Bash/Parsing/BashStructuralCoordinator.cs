@@ -447,14 +447,20 @@ internal static partial class BashCommandParser
             }
 
             var firstSource = segmentTokens[0];
-            var lastSource = segmentTokens[segmentTokens.Count - 1];
+            var sourceEnd = firstSource.SourceStart + firstSource.SourceLength;
+            foreach (var token in segmentTokens)
+            {
+                sourceEnd = Math.Max(
+                    sourceEnd,
+                    token.HeredocSourceEnd ?? token.SourceStart + token.SourceLength);
+            }
+
             command = new SimpleCommandSyntax
             {
                 Clause = emitted,
                 Substitutions = substitutions,
                 SourceStart = firstSource.SourceStart,
-                SourceLength = lastSource.SourceStart + lastSource.SourceLength -
-                    firstSource.SourceStart,
+                SourceLength = sourceEnd - firstSource.SourceStart,
             };
             return true;
         }
@@ -587,56 +593,59 @@ internal static partial class BashCommandParser
 
             foreach (var token in tokens)
             {
-                var value = token.ResolverValue;
-                if (value is null)
+                foreach (var value in new[] { token.ResolverValue, token.HeredocBodyValue })
                 {
-                    continue;
-                }
-
-                foreach (var fragment in value.Fragments)
-                {
-                    if (fragment.Kind != ShellValueFragmentKind.Opaque ||
-                        fragment.OpaqueCause != ShellOpaqueCause.CommandSubstitution)
+                    if (value is null)
                     {
                         continue;
                     }
 
-                    if (fragment.SourceStart is null || fragment.SourceLength is null ||
-                        fragment.SourceLength < 2 ||
-                        fragment.SourceStart < _sourceStart ||
-                        fragment.SourceStart + fragment.SourceLength >
-                            _sourceStart + _sourceLength)
+                    foreach (var fragment in value.Fragments)
                     {
-                        substitutions = Array.Empty<ShellValueFragment>();
-                        error = "Bash command substitution has invalid source provenance";
-                        return false;
-                    }
+                        if (fragment.Kind != ShellValueFragmentKind.Opaque ||
+                            fragment.OpaqueCause != ShellOpaqueCause.CommandSubstitution)
+                        {
+                            continue;
+                        }
 
-                    var raw = _source.Substring(
-                        fragment.SourceStart.Value,
-                        fragment.SourceLength.Value);
-                    if (raw[0] == '`')
-                    {
-                        substitutions = Array.Empty<ShellValueFragment>();
-                        error = "legacy backtick command substitution is not supported";
-                        return false;
-                    }
+                        if (fragment.SourceStart is null || fragment.SourceLength is null ||
+                            fragment.SourceLength < 2 ||
+                            fragment.SourceStart < _sourceStart ||
+                            fragment.SourceStart + fragment.SourceLength >
+                                _sourceStart + _sourceLength)
+                        {
+                            substitutions = Array.Empty<ShellValueFragment>();
+                            error = "Bash command substitution has invalid source provenance";
+                            return false;
+                        }
 
-                    if (!raw.StartsWith("$(", StringComparison.Ordinal) || raw[raw.Length - 1] != ')')
-                    {
-                        substitutions = Array.Empty<ShellValueFragment>();
-                        error = "unsupported Bash command substitution provenance";
-                        return false;
-                    }
+                        var raw = _source.Substring(
+                            fragment.SourceStart.Value,
+                            fragment.SourceLength.Value);
+                        if (raw[0] == '`')
+                        {
+                            substitutions = Array.Empty<ShellValueFragment>();
+                            error = "legacy backtick command substitution is not supported";
+                            return false;
+                        }
 
-                    if (fragment.SourceStart < commandNameEnd)
-                    {
-                        substitutions = Array.Empty<ShellValueFragment>();
-                        error = "Bash command-name substitution is not supported";
-                        return false;
-                    }
+                        if (!raw.StartsWith("$(", StringComparison.Ordinal) ||
+                            raw[raw.Length - 1] != ')')
+                        {
+                            substitutions = Array.Empty<ShellValueFragment>();
+                            error = "unsupported Bash command substitution provenance";
+                            return false;
+                        }
 
-                    discovered.Add(fragment);
+                        if (fragment.SourceStart < commandNameEnd)
+                        {
+                            substitutions = Array.Empty<ShellValueFragment>();
+                            error = "Bash command-name substitution is not supported";
+                            return false;
+                        }
+
+                        discovered.Add(fragment);
+                    }
                 }
             }
 

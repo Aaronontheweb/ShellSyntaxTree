@@ -978,6 +978,17 @@ quoted_string   := single-quoted | double-quoted
 - v0.2 recognizes heredocs (`<<EOF ... EOF`) as redirect syntax while the
   body is skipped. Stable v0.3 preserves delimiter, body, expansion mode,
   tab-stripping mode, and completeness through `HereDocumentAnalysis`.
+  The bounded grammar accepts one terminal `<<` / `<<-` redirect on a command
+  header, with optional whitespace or a trailing comment after the delimiter.
+  Additional header tokens, pipelines, and queued heredocs are unparseable
+  until their body-association grammar is modeled. Quote removal determines
+  the delimiter spelling; any quoted or escaped delimiter fragment makes the
+  body literal. In an expanding body, unescaped `$()` substitutions are
+  executable even when their spelling is surrounded by quote characters,
+  because heredoc body quotes are data rather than shell quoting syntax.
+  Escaped substitutions remain literal. Legacy backticks, arithmetic
+  expansion, line continuations that could hide a substitution boundary, and
+  incomplete substitutions make the whole result unparseable.
 - Redirect targets matching the POSIX fd-dup / fd-close shorthand —
   `&N`, `&N-`, or `&-` (where `N` is one or more decimal digits) — are
   NOT path-resolved. The parser carries the raw token (e.g. `&1`) on
@@ -1068,7 +1079,8 @@ The lexer produces tokens consumed by the parser. Token kinds:
 - **OPERATOR** — `&&`, `||`, `;`, `|`, `>`, `>>`, `<`, `2>`, `2>>`,
   `(`, `)`, `<<`, `<<-`.
 - **WHITESPACE** — one or more spaces, tabs, or newlines (newlines inside
-  a skipped heredoc body are not tokenized). A whitespace run that
+  a heredoc body are not emitted as ordinary tokens; the delimiter token
+  retains the body's resolver fragments and authored extent). A whitespace run that
   contains a newline — including the newline after a heredoc terminator —
   is flagged as a **statement separator**; the parser retains those
   tokens past `FilterSignificant` and splits clauses on them per §4. A
@@ -1081,6 +1093,9 @@ The lexer produces tokens consumed by the parser. Token kinds:
   and `\X` escapes via a shared opaque-region scanner. The parser
   consumes this token as `Arg{ Kind=DynamicSkip, IsPath=false,
   Resolved=null }` per locked interpretation #2.
+  Expanding-heredoc substitutions use the same opaque fragment semantics but
+  remain attached to the delimiter token rather than entering the ordinary
+  command-token stream.
 - **UNPARSEABLE_SENTINEL** — `$((expr))` arithmetic expansion or
   `${var//pat/repl}` complex parameter expansion. The lexer skips past
   the matching close (`))` or `}` respectively) and emits a sentinel

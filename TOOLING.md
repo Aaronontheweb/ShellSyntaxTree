@@ -40,12 +40,15 @@ and parser slice exists. The PII audit scans both corpus trees.
 ### PwshCorpusTool
 
 `tools/PwshCorpusTool` is the PowerShell corpus authoring aid
-(SPEC.POWERSHELL.md §13). It is a dev-only console app (not packed).
+(SPEC.POWERSHELL.md §13). Its shared serializer also exposes an ad-hoc Bash
+check so structural Bash entries do not need hand-authored spans. It is a
+dev-only console app (not packed).
 
 | Command | Purpose |
 |---|---|
 | `dotnet run --project tools/PwshCorpusTool -- generate` | Regenerate every `Corpus/powershell/NNN_slug.json` from the curated `CorpusManifest`. Run after any parser change that shifts PowerShell AST output. |
 | `dotnet run --project tools/PwshCorpusTool -- check "<command>"` | Print the parser's expected-AST JSON block for a command beside the real-`pwsh` oracle verdict — the fastest way to author or debug a binding-category entry. |
+| `dotnet run --project tools/PwshCorpusTool -- check-bash "<command>"` | Print exact Bash `clauses`, `syntax`, and `commands` expectations using the corpus resolver settings. |
 
 The curated inputs live in `tools/PwshCorpusTool/CorpusManifest.cs`; the
 `expected` AST is generated from `PwshParser`, and `PwshOracleTests`

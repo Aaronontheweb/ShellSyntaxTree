@@ -16,6 +16,8 @@ using ShellSyntaxTree.Tools.PwshCorpus;
 //                          from the curated CorpusManifest.
 //   check "<command>"      Print the parser's expected-AST JSON block for a
 //                          command beside the real-pwsh oracle verdict.
+//   check-bash "<command>" Print Bash parser expectations using the same
+//                          resolver settings as the executable corpus.
 
 // The corpus runner pins these resolver knobs; generation must match.
 var options = new PwshParserOptions
@@ -24,6 +26,11 @@ var options = new PwshParserOptions
     WorkingDirectory = "C:/work",
 };
 var parser = new PwshParser(options);
+var bashParser = new BashParser(new BashParserOptions
+{
+    HomeDirectory = "/home/test",
+    WorkingDirectory = "/work",
+});
 
 if (args.Length == 0)
 {
@@ -37,6 +44,8 @@ switch (args[0].ToLowerInvariant())
         return Generate(args.Length > 1 ? args[1] : DefaultCorpusDir());
     case "check":
         return Check(string.Join(' ', args.Skip(1)));
+    case "check-bash":
+        return CheckBash(string.Join(' ', args.Skip(1)));
     default:
         PrintUsage();
         return 1;
@@ -116,6 +125,27 @@ int Check(string command)
     return 0;
 }
 
+int CheckBash(string command)
+{
+    if (string.IsNullOrEmpty(command))
+    {
+        Console.Error.WriteLine("check-bash: supply a command string.");
+        return 1;
+    }
+
+    var parsed = bashParser.Parse(command);
+    Console.WriteLine(CorpusJson.BuildEntry(
+        "check",
+        command,
+        parsed,
+        "ad-hoc check",
+        outOfScope: false,
+        includeElements: false,
+        includeStructure: true,
+        includeOptionalAssertions: true));
+    return 0;
+}
+
 static string DefaultCorpusDir() => Path.Combine(
     "tests", "ShellSyntaxTree.Tests", "Corpus", "powershell");
 
@@ -125,4 +155,5 @@ static void PrintUsage()
     Console.WriteLine();
     Console.WriteLine("  generate [outputDir]   Regenerate the Corpus/powershell/ entries.");
     Console.WriteLine("  check \"<command>\"      Show the parser AST + the real-pwsh verdict.");
+    Console.WriteLine("  check-bash \"<command>\" Show the Bash parser AST for corpus authoring.");
 }

@@ -1,0 +1,64 @@
+{
+  "name": "v0.3 quoted heredoc keeps substitution spelling literal",
+  "input": "cat <<E\"OF\"\n$(id)\nEOF",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cat"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "In",
+            "target": "<<EOF>",
+            "isDynamicSkip": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 21,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 21,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 21
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Quote removal yields delimiter EOF, while any quoted delimiter fragment disables body expansion."
+}

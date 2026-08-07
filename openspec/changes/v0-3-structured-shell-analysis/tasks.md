@@ -33,14 +33,17 @@
 - [x] 3.9 Add corpus expectations for syntax shape, occurrences, roles, and completeness for existing constructs.
 - [ ] 3.10 Implement Bash `$()` discovery in supported argument words, redirect values, iterables, and expanding heredoc bodies; retain literal/escaped spellings and fail closed on command-name substitutions, legacy backticks, or incomplete interiors.
   - [x] 3.10a Implement the simple-command argument and redirect-target slice, including comment-safe boundaries and fail-closed unsupported interiors.
+  - [x] 3.10b Implement the bounded expanding-heredoc slice with quote-removed delimiters, literal quoted/escaped bodies, tab stripping, exact provenance, and fail-closed unsupported header/body forms.
 - [ ] 3.11 Implement PowerShell `$()` discovery in supported words, redirect values, foreach expressions, call-operator dynamic identities, standalone expression statements, double-quoted strings, and expandable here-strings; never invent invocation from standalone output, retain literal/escaped spellings, and fail closed on trailing command-style arguments, call-operator script blocks, or unsupported execution-bearing `@()` / `@{}` forms.
   - [x] 3.11a Implement words, redirect values, call-operator dynamic identities, standalone statements, expandable strings/here-strings, and parent-versus-child host payload provenance; fail closed on arbitrary expression values and unsupported execution-bearing `@()` / `@{}` forms.
 - [ ] 3.12 Pin substitution parentage, authored sibling indices, innermost-first ordering, Bash-isolated versus PowerShell-current-scope state, unknown-state propagation, nesting/depth limits, and incomplete dynamic identities in direct tests.
   - [x] 3.12a Pin the Bash argument/redirect slice, isolated cwd behavior, wrapper provenance, and the shared structural-depth budget.
   - [x] 3.12b Pin the PowerShell simple-command slice, current-scope exact and unknown cwd propagation, parent/child wrapper provenance, expression boundaries, and the shared structural-depth budget.
+  - [x] 3.12c Pin expanding-heredoc sibling/nested ordering, exact spans, isolated state, delimiter modes, escape parity, depth limits, and atomic failure.
 - [ ] 3.13 Promote ordinary, multiple, nested, iterator, redirect, quoted, escaped, stateful, malformed, and hidden-execution substitution cases into both executable corpora and the Netclaw approval matrix.
   - [x] 3.13a Promote the Bash ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, and hidden-execution cases into its executable corpus.
   - [x] 3.13b Promote the PowerShell ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, expression-boundary, and hidden-execution cases into its executable corpus.
+  - [x] 3.13c Promote expanding, literal, tab-stripped, multiple, and malformed Bash heredoc cases with full structural expectations into the executable corpus.
 
 ## 4. Explicit Redirect Semantics
 
@@ -106,10 +109,11 @@
 ## 10. Heredoc / Here-String Slice and Separately Gated Follow-ups
 
 - [x] 10.1 Specify heredoc delimiter adjacency and quoting, expansion mode, body provenance, substitutions, tab stripping, completeness, and Bash here-string semantics.
-- [ ] 10.2 Preserve existing `<<` / `<<-` behavior and fix quoted-delimiter adjacency without regressing the v0.2 compatibility redirect.
+- [x] 10.2 Preserve existing `<<` / `<<-` behavior and fix quoted-delimiter adjacency without regressing the v0.2 compatibility redirect.
 - [ ] 10.3 Add explicit heredoc delimiter/body/expansion/completeness facts and surface every supported substitution command.
 - [ ] 10.4 Add Bash `<<<` here-string tokenization, explicit redirect facts, bounded operand analysis, and trailing-newline semantics.
 - [ ] 10.5 Add direct, malformed, quoted/unquoted, tab-stripped, dynamic, and substitution-bearing corpus cases plus real-Bash parse-only validation.
+  - [x] 10.5a Add direct, executable-corpus, real-Bash output, and real-Bash parse-only coverage for the bounded substitution-discovery slice; explicit redirect facts and the full heredoc matrix remain pending.
 - [ ] 10.6 After stable v0.3, specify process-substitution command discovery and the unknown produced descriptor/path value before enabling it.
 - [ ] 10.7 After stable v0.3, specify background-list concurrency, ordering, and shell-state boundaries before enabling single `&`.
 - [ ] 10.8 Specify C-style loop and arithmetic hidden-execution behavior before enabling either construct.
