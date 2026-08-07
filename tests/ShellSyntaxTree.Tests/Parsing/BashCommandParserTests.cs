@@ -496,11 +496,11 @@ public class BashCommandParserTests
     }
 
     [Fact]
-    public void Control_flow_for_keyword_marks_outer_unparseable()
+    public void Supported_for_in_loop_populates_body_clause()
     {
         var result = Parse("for i in 1 2 3; do echo $i; done");
-        Assert.True(result.IsUnparseable);
-        Assert.Contains("'for'", result.UnparseableReason!);
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(new[] { "echo" }, Assert.Single(result.Clauses).Verb.Tokens);
     }
 
     [Fact]
@@ -910,14 +910,11 @@ public class BashCommandParserTests
     }
 
     [Fact]
-    public void Control_flow_keyword_after_newline_marks_outer_unparseable()
+    public void Supported_for_in_loop_after_newline_is_a_second_statement()
     {
-        // A control-flow keyword opening a newline-separated clause must
-        // still safe-fail per SPEC §11 — TryDetectAnomaly treats the
-        // newline as a verb-slot boundary.
-        var result = Parse("echo hi\nfor i in 1 2 3");
-        Assert.True(result.IsUnparseable);
-        Assert.Contains("'for'", result.UnparseableReason!);
+        var result = Parse("echo hi\nfor i in 1 2 3; do echo $i; done");
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(new[] { "echo", "echo" }, result.Clauses.Select(c => c.Verb.Tokens[0]));
     }
 
     // ---------------- Subshell ----------------

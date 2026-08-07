@@ -844,14 +844,9 @@ internal static class BashLexer
         ReadOnlySpan<char> src, int start, List<BashToken> tokens, out int afterBrace)
     {
         // src[start] = '$', src[start+1] = '{'. We need to find the matching
-        // '}' and decide: simple ${VAR} -> false (let word reader take it);
-        // ${...//...} or any other "complex" form -> emit UnparseableSentinel.
-        //
-        // For v0.1 we treat the presence of a slash inside the braces as the
-        // single signal of "complex param expansion" (per the locked
-        // interpretation #2 in the OpenSpec change). Other operators inside
-        // ${...} (like ${X-default}, ${X#prefix}) fall through to the word
-        // reader; a future PR can tighten this if needed.
+        // '}' and decide: a simple variable, positional, or special parameter
+        // falls through to the word reader. Operators can themselves contain
+        // executable substitutions, so every other body fails closed.
         var openBrace = start + 1;
         var scan = OpaqueRegionScanner.Scan(src, openBrace, '{', '}');
         if (!scan.Closed)
@@ -870,20 +865,9 @@ internal static class BashLexer
         var endInclusive = scan.EndIndex;
         var bodyStart = openBrace + 1;
         var bodyEnd = endInclusive; // exclusive of '}'
-        var hasSlash = false;
-        for (var k = bodyStart; k < bodyEnd; k++)
+        var body = src.Slice(bodyStart, bodyEnd - bodyStart);
+        if (IsSimpleBracedParameterName(body))
         {
-            if (src[k] == '/')
-            {
-                hasSlash = true;
-                break;
-            }
-        }
-
-        if (!hasSlash)
-        {
-            // Simple ${VAR} (or ${X-default} etc.). Caller will fall through
-            // to the word reader and absorb it as part of a Word token.
             afterBrace = -1;
             return false;
         }
@@ -895,7 +879,7 @@ internal static class BashLexer
             null,
             start,
             length,
-            "complex parameter expansion '${var//pat/repl}' not supported in v0.1"));
+            "complex parameter expansion is not supported in v0.3"));
         afterBrace = start + length;
         return true;
     }
@@ -1101,9 +1085,9 @@ internal static class BashLexer
 
             expansionLength = scan.EndIndex - start + 1;
             name = src.Slice(start + 2, expansionLength - 3).ToString();
-            if (name.Length == 0 || name.IndexOf('/') >= 0)
+            if (!IsSimpleBracedParameterName(name.AsSpan()))
             {
-                error = "complex parameter expansion '${var//pat/repl}' not supported in v0.1";
+                error = "complex parameter expansion is not supported in v0.3";
                 index += expansionLength;
                 return true;
             }
@@ -1165,6 +1149,46 @@ internal static class BashLexer
         foreach (var character in value)
         {
             if (character is < '0' or > '9')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsSimpleBracedParameterName(ReadOnlySpan<char> value)
+    {
+        if (value.Length == 0)
+        {
+            return false;
+        }
+
+        if (value.Length == 1 &&
+            value[0] is '?' or '$' or '#' or '-' or '!' or '@' or '*')
+        {
+            return true;
+        }
+
+        var allDigits = true;
+        for (var index = 0; index < value.Length; index++)
+        {
+            allDigits &= value[index] is >= '0' and <= '9';
+        }
+
+        if (allDigits)
+        {
+            return true;
+        }
+
+        if (!IsBashIdentifierStart(value[0]))
+        {
+            return false;
+        }
+
+        for (var index = 1; index < value.Length; index++)
+        {
+            if (!IsBashIdentifierContinuation(value[index]))
             {
                 return false;
             }

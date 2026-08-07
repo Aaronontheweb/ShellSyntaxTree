@@ -3,7 +3,7 @@
   "input": "echo hi\nfor i in 1 2 3",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "'for'"
+    "unparseableReasonContains": "missing its list terminator"
   },
-  "notes": "SPEC §4/§11: a newline opens a new clause; a control-flow keyword at that verb slot safe-fails just as it would after ';'."
+  "notes": "The supported for-in grammar still fails atomically when its list terminator and do block are absent."
 }

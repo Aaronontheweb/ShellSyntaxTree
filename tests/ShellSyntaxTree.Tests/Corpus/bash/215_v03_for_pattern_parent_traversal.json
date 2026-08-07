@@ -1,0 +1,144 @@
+{
+  "name": "v0.3 Bash for-in pattern parent traversal",
+  "input": "for f in /tmp/*/../../etc/passwd; do rm -- \"$f\"; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "rm"
+        ],
+        "args": [
+          {
+            "raw": "--",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\"$f\"",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 53,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 53,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "f",
+        "bindingRaw": "f",
+        "bindingSourceStart": 4,
+        "bindingSourceLength": 1,
+        "iterableRaw": "/tmp/*/../../etc/passwd",
+        "iterableSourceStart": 9,
+        "iterableSourceLength": 23
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 9,
+        "sourceLength": 23,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 36,
+        "sourceLength": 13,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 37,
+        "sourceLength": 10,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 53
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 53
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 36,
+            "sourceLength": 13
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "Parent traversal anywhere after glob expansion invalidates the covering-directory proof and widens to Unknown."
+}

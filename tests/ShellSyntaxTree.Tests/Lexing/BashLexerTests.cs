@@ -406,6 +406,18 @@ public class BashLexerTests
         Assert.Contains("complex parameter expansion", t.UnparseableReason);
     }
 
+    [Theory]
+    [InlineData("${f:-$(evil)}")]
+    [InlineData("\"${f:-$(evil)}\"")]
+    [InlineData("${f#prefix}")]
+    public void Parameter_operators_emit_unparseable_sentinel(string source)
+    {
+        var token = Assert.Single(LexNonWs(source));
+
+        Assert.Equal(BashTokenKind.UnparseableSentinel, token.Kind);
+        Assert.Contains("complex parameter expansion", token.UnparseableReason);
+    }
+
     [Fact]
     public void Unbalanced_double_quote_emits_unparseable_sentinel()
     {

@@ -71,10 +71,11 @@ public class CorpusRunnerTests
                         elements,
                         context,
                         token.Value,
-                        !parsed.Clauses.Any(clause => clause.IsCommandStringWrapped)
-                        || directSegments.Contains(segment)
-                        || isRedirectOperator
-                        || isRedirectTarget);
+                        (!parsed.Clauses.Any(clause => clause.IsCommandStringWrapped)
+                         || directSegments.Contains(segment)
+                         || isRedirectOperator
+                         || isRedirectTarget) &&
+                        !IsBashForEachStructuralToken(parsed.Syntax, token));
                     redirectTargetPending = isRedirectOperator;
                 }
 
@@ -122,6 +123,85 @@ public class CorpusRunnerTests
                 pwshSegment++;
             }
         }
+    }
+
+    private static bool IsBashForEachStructuralToken(
+        ShellSyntaxNode node,
+        BashToken token)
+    {
+        if (node is ForEachSyntax forEach &&
+            IsForEachStructuralToken(forEach, token))
+        {
+            return true;
+        }
+
+        return node switch
+        {
+            ShellBlockSyntax block => block.Statements.Any(
+                child => IsBashForEachStructuralToken(child, token)),
+            SimpleCommandSyntax simple => simple.Substitutions.Any(
+                child => IsBashForEachStructuralToken(child, token)),
+            PipelineSyntax pipeline => pipeline.Stages.Any(
+                child => IsBashForEachStructuralToken(child, token)),
+            CommandListSyntax list => list.Items.Any(
+                item => IsBashForEachStructuralToken(item.Command, token)),
+            GroupSyntax group => IsBashForEachStructuralToken(group.Body, token),
+            ForEachSyntax nested =>
+                IsBashForEachStructuralToken(nested.IteratorCommands, token) ||
+                IsBashForEachStructuralToken(nested.Body, token),
+            ConditionLoopSyntax loop =>
+                IsBashForEachStructuralToken(loop.Condition, token) ||
+                IsBashForEachStructuralToken(loop.Body, token),
+            ConditionalSyntax conditional => conditional.Branches.Any(
+                    branch => IsBashForEachStructuralToken(branch, token)) ||
+                conditional.Else is not null &&
+                IsBashForEachStructuralToken(conditional.Else, token),
+            ConditionalBranchSyntax branch =>
+                IsBashForEachStructuralToken(branch.Condition, token) ||
+                IsBashForEachStructuralToken(branch.Body, token),
+            CommandSubstitutionSyntax substitution =>
+                IsBashForEachStructuralToken(substitution.Body, token),
+            _ => false,
+        };
+    }
+
+    private static bool IsForEachStructuralToken(
+        ForEachSyntax forEach,
+        BashToken token)
+    {
+        if (forEach.SourceStart is null || forEach.SourceLength is null ||
+            forEach.Binding.Source.SourceStart is null ||
+            forEach.Binding.Source.SourceLength is null ||
+            forEach.Iterable.SourceStart is null ||
+            forEach.Iterable.SourceLength is null ||
+            forEach.Body.SourceStart is null || forEach.Body.SourceLength is null)
+        {
+            return false;
+        }
+
+        var tokenEnd = token.SourceStart + token.SourceLength;
+        var loopEnd = forEach.SourceStart.Value + forEach.SourceLength.Value;
+        var bindingStart = forEach.Binding.Source.SourceStart.Value;
+        var bindingEnd = bindingStart + forEach.Binding.Source.SourceLength.Value;
+        var iterableStart = forEach.Iterable.SourceStart.Value;
+        var iterableEnd = iterableStart + forEach.Iterable.SourceLength.Value;
+        var bodyStart = forEach.Body.SourceStart.Value;
+        var bodyEnd = bodyStart + forEach.Body.SourceLength.Value;
+        if (token.SourceStart >= iterableStart && tokenEnd <= iterableEnd ||
+            token.SourceStart == bindingStart && tokenEnd == bindingEnd)
+        {
+            return true;
+        }
+
+        return token.Kind == BashTokenKind.Word &&
+            (string.Equals(token.Value, "for", StringComparison.Ordinal) &&
+             token.SourceStart == forEach.SourceStart ||
+             string.Equals(token.Value, "in", StringComparison.Ordinal) &&
+             token.SourceStart >= bindingEnd && tokenEnd <= iterableStart ||
+             string.Equals(token.Value, "do", StringComparison.Ordinal) &&
+             token.SourceStart >= iterableEnd && tokenEnd == bodyStart ||
+             string.Equals(token.Value, "done", StringComparison.Ordinal) &&
+             token.SourceStart == bodyEnd && tokenEnd == loopEnd);
     }
 
     private static IReadOnlyList<SourceRegion> StandaloneSubstitutionRegions(
@@ -503,6 +583,20 @@ public sealed record ExpectedSyntaxNode
     public ShellGroupKind? GroupKind { get; init; }
 
     public CompoundOperator? ListOperator { get; init; }
+
+    public string? BindingName { get; init; }
+
+    public string? BindingRaw { get; init; }
+
+    public int? BindingSourceStart { get; init; }
+
+    public int? BindingSourceLength { get; init; }
+
+    public string? IterableRaw { get; init; }
+
+    public int? IterableSourceStart { get; init; }
+
+    public int? IterableSourceLength { get; init; }
 }
 
 public sealed record ExpectedCommandOccurrence
@@ -514,6 +608,28 @@ public sealed record ExpectedCommandOccurrence
     public bool IsComplete { get; init; }
 
     public List<ExpectedCommandAncestryFrame>? Ancestry { get; init; }
+
+    public List<ExpectedEffectiveArgument>? EffectiveArguments { get; init; }
+
+    public ExpectedValueDomain? WorkingDirectory { get; init; }
+}
+
+public sealed record ExpectedEffectiveArgument
+{
+    public int ClauseElementIndex { get; init; } = -1;
+
+    public ExpectedValueDomain Value { get; init; } = new();
+}
+
+public sealed record ExpectedValueDomain
+{
+    public ShellValueDomainKind Kind { get; init; }
+
+    public List<string>? Values { get; init; }
+
+    public string? Pattern { get; init; }
+
+    public string? CoveringDirectory { get; init; }
 }
 
 public sealed record ExpectedCommandAncestryFrame

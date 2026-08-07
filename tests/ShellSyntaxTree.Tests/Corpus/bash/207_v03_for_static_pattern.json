@@ -1,0 +1,144 @@
+{
+  "name": "v0.3 Bash for-in static path pattern",
+  "input": "for f in /tmp/*.txt; do rm -- \"$f\"; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "rm"
+        ],
+        "args": [
+          {
+            "raw": "--",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\"$f\"",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 40,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 40,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "f",
+        "bindingRaw": "f",
+        "bindingSourceStart": 4,
+        "bindingSourceLength": 1,
+        "iterableRaw": "/tmp/*.txt",
+        "iterableSourceStart": 9,
+        "iterableSourceLength": 10
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 9,
+        "sourceLength": 10,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 23,
+        "sourceLength": 13,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 24,
+        "sourceLength": 10,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 40
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 40
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 23,
+            "sourceLength": 13
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Pattern",
+              "values": [],
+              "pattern": "/tmp/*.txt",
+              "coveringDirectory": "/tmp"
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "Pins a static iterable glob as a Pattern with its non-enumerated covering directory."
+}

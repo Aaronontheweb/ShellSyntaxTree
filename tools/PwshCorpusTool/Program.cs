@@ -76,7 +76,8 @@ int Generate(string outputDir)
             entry.OutOfScope,
             entry.IncludeElements,
             entry.IncludeStructure,
-            entry.IncludeOptionalAssertions);
+            entry.IncludeOptionalAssertions,
+            includeV03Assertions: false);
         var fileName = $"{index:D3}_{entry.Slug}.json";
         File.WriteAllText(Path.Combine(outputDir, fileName), json);
         index++;
@@ -104,7 +105,8 @@ int Check(string command)
         parsed.IsUnparseable,
         includeElements: true,
         includeStructure: true,
-        includeOptionalAssertions: true));
+        includeOptionalAssertions: true,
+        includeV03Assertions: false));
 
     Console.WriteLine("---- real pwsh oracle ----");
     var counts = PwshOracle.CountParseErrors(new[] { command });
@@ -142,7 +144,8 @@ int CheckBash(string command)
         outOfScope: false,
         includeElements: false,
         includeStructure: true,
-        includeOptionalAssertions: true));
+        includeOptionalAssertions: true,
+        includeV03Assertions: true));
     return 0;
 }
 

@@ -621,6 +621,141 @@ public class ShellValueOracleTests
         }
     }
 
+    [Fact]
+    public void Bash_for_in_runtime_oracle_matches_word_formation_and_empty_values()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "-c",
+            "for f in a\"b\" \"\" a a; do printf '<%s>\\n' \"$f\"; done");
+
+        Assert.Equal(new[] { "<ab>", "<>", "<a>", "<a>" }, Lines(output));
+    }
+
+    [Theory]
+    [InlineData("for")]
+    [InlineData("in")]
+    [InlineData("do")]
+    [InlineData("done")]
+    public void Bash_for_in_runtime_oracle_accepts_reserved_word_binding(string binding)
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        Assert.Equal(
+            "a",
+            Run(
+                "bash",
+                "-c",
+                $"for {binding} in a; do printf %s \"${binding}\"; done"));
+    }
+
+    [Fact]
+    public void Bash_debug_trap_can_mutate_a_loop_binding_before_body_commands()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "-c",
+            "for f in a b; do trap 'f=x' DEBUG; printf '<%s>\\n' \"$f\"; done");
+
+        Assert.Equal(new[] { "<x>", "<x>" }, Lines(output));
+    }
+
+    [Fact]
+    public void Bash_debug_trap_installed_before_a_loop_can_mutate_each_binding()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "-c",
+            "trap 'f=x' DEBUG; for f in a b; do printf '<%s>\\n' \"$f\"; done");
+
+        Assert.Equal(new[] { "<x>", "<x>" }, Lines(output));
+    }
+
+    [Fact]
+    public void Bash_nested_loop_binding_reuse_does_not_restore_the_outer_value()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "-c",
+            "for f in a b; do for f in x y; do :; done; printf 'after=<%s>\\n' \"$f\"; done");
+
+        Assert.Equal(new[] { "after=<y>", "after=<y>" }, Lines(output));
+    }
+
+    [Fact]
+    public void Bash_globskipdots_can_expand_dot_prefixed_globs_to_parent_traversal()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "-c",
+            "shopt -u globskipdots; printf '<%s>\\n' /tmp/.[.] /tmp/.? /tmp/..*");
+
+        Assert.Equal(new[] { "</tmp/..>", "</tmp/..>", "</tmp/..>" }, Lines(output));
+    }
+
+    [Theory]
+    [InlineData("for 1f in a; do :; done")]
+    [InlineData("for f-x in a; do :; done")]
+    [InlineData("for \\f in a; do :; done")]
+    public void Bash_runtime_rejects_identifiers_that_parse_only_can_misclassify(string source)
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked("bash", "-c", source);
+
+        Assert.NotEqual(0, result.ExitCode);
+    }
+
+    [Theory]
+    [InlineData("\\for f in a; do :; done")]
+    [InlineData("for f \\in a; do :; done")]
+    [InlineData("for f i\\n a; do :; done")]
+    [InlineData("for f in a; \\do :; done")]
+    [InlineData("for f in a; d\\o :; done")]
+    [InlineData("for f in a; do :; \\done")]
+    public void Bash_runtime_rejects_escaped_contextual_loop_keywords(string source)
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked("bash", "-n", "-c", source);
+
+        Assert.NotEqual(0, result.ExitCode);
+    }
+
     private static bool IsAvailable(string executable)
     {
         try

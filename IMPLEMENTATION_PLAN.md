@@ -274,9 +274,21 @@ priorities.
       cases pin exact syntax, command ancestry, spans, completeness, and
       literal-versus-expanding behavior; real-Bash output and parse-only
       oracles independently pin the bounded semantic boundary.
-- [ ] Extend Bash substitution discovery to iterables with the complete
-      `for ... in` vertical slice, then add the Bash substitution cases to the
-      Netclaw approval matrix.
+- [x] Deliver the static-value Bash `for ... in` slice: locked structural
+      nodes and spans, iterator `$()` discovery, condition-free body
+      occurrences, exact/finite/pattern/unknown value domains, quote-proved
+      effective arguments, nested distinct-name correlation, fixed
+      candidate/depth limits,
+      strict executable-corpus facts, and real-Bash oracles. Compatibility
+      leaves preserve authored dynamic operands. Loop binding and cwd
+      mutation fail closed, loops reached after recognized prior shell-state
+      mutation fail closed, and occurrence cwd remains Unknown.
+- [ ] Design and implement structure-aware Bash abstract-state analysis before
+      enabling cwd-changing loop bodies or claiming the complete `for ... in`
+      vertical slice. The parse-order attribution model cannot soundly publish
+      occurrence cwd across pipelines, conditional lists, substitutions, and
+      repeated iterations. Keep OpenSpec task 6.5 open, then add the remaining
+      loop cases and Netclaw approval matrix after that design is reviewed.
 - [ ] Complete PowerShell `$()` discovery in `foreach` expressions and add the
       Netclaw approval-matrix cases. The simple-command slice is delivered for
       ordinary, adjacent, quoted, here-string, redirect, standalone,
