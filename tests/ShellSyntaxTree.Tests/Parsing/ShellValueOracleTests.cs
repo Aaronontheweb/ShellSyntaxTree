@@ -981,6 +981,45 @@ public class ShellValueOracleTests
             Lines(output));
     }
 
+    [Fact]
+    public void PowerShell_current_scope_receivers_and_data_blocks_have_distinct_state()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$x='outer'; Measure-Command { $x='measure' } | Out-Null; " +
+            "\"measure=<$x>\"; " +
+            "$x='outer'; Trace-Command -Name ParameterBinding " +
+            "-Expression { $x='trace' } -PSHost *> $null; \"trace=<$x>\"; " +
+            "$x='outer'; Write-Output { $x='data' } | Out-Null; \"data=<$x>\"; " +
+            "$x='outer'; Set-Alias Measure-Command Write-Output; " +
+            "Measure-Command { $x='shadowed' } | Out-Null; \"shadowed=<$x>\"; " +
+            "Microsoft.PowerShell.Utility\\Measure-Command { $x='qualified' } | " +
+            "Out-Null; \"qualified=<$x>\"; " +
+            "$ErrorActionPreference='SilentlyContinue'; Set-Location /; " +
+            "Measure-Command { Set-Location /definitely-missing-sst } | Out-Null; " +
+            "\"innerFailureHostStatus=<$?>\"");
+
+        Assert.Equal(
+            new[]
+            {
+                "measure=<measure>",
+                "trace=<trace>",
+                "data=<outer>",
+                "shadowed=<outer>",
+                "qualified=<qualified>",
+                "innerFailureHostStatus=<True>",
+            },
+            Lines(output));
+    }
+
     private static bool IsAvailable(string executable)
     {
         try

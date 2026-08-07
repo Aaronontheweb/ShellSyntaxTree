@@ -10,6 +10,126 @@ namespace ShellSyntaxTree.Tests.Parsing;
 
 public class PwshExecutionRegionStructuralTests
 {
+    [Theory]
+    [InlineData(
+        "Measure-Command { Get-Item child.txt }",
+        "Measure-Command")]
+    [InlineData(
+        "Trace-Command -Name ParameterBinding -Expression { Get-Item child.txt } -PSHost",
+        "Trace-Command")]
+    public void Current_scope_once_receivers_publish_typed_regions(
+        string source,
+        string expectedHost)
+    {
+        var result = ParseIsolated(source);
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionOrigin.CommandArgument, region.Origin);
+        Assert.Equal(ExecutionRegionPhase.Main, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, region.Cardinality);
+        Assert.Equal(
+            new[] { expectedHost, "Get-Item" },
+            result.Commands.Select(command => command.Clause.Verb.Tokens[0]));
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void Current_scope_once_receiver_propagates_binding_state()
+    {
+        var result = ParseIsolated(
+            "Measure-Command { foreach ($x in 'inner') { } }; Write-Output $x");
+
+        var continuation = result.Commands.Last();
+        Assert.True(continuation.IsComplete);
+        Assert.Equal(
+            new[] { "inner" },
+            Assert.Single(continuation.EffectiveArguments).Value.Values);
+    }
+
+    [Fact]
+    public void Current_scope_receiver_joins_inner_outcomes_before_host_continuation()
+    {
+        var result = ParseIsolated(
+            "Measure-Command { Set-Location /tmp } && Get-Item child.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.Equal(ShellValueDomainKind.Unknown, continuation.WorkingDirectory.Kind);
+    }
+
+    [Fact]
+    public void Receiver_identity_is_bound_before_its_own_common_parameter_mutation()
+    {
+        var result = ParseIsolated(
+            "Measure-Command { Get-Date } -OutVariable measurement");
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Main, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, region.Cardinality);
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
+    }
+
+    [Fact]
+    public void Conflicting_receiver_identity_across_loop_visits_stays_unknown()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in @('first','second')) { " +
+            "Measure-Command { Set-Alias Measure-Command Write-Output } }");
+
+        var loop = Assert.IsType<ForEachSyntax>(Assert.Single(result.Syntax.Statements));
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(loop.Body.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Unknown, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Unknown, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Unknown, region.Cardinality);
+        Assert.All(result.Commands, command => Assert.False(command.IsComplete));
+    }
+
+    [Fact]
+    public void Observed_command_mutation_downgrades_a_later_receiver()
+    {
+        var result = ParseIsolated(
+            "Set-Alias Measure-Command Write-Output; " +
+            "Measure-Command { Remove-Item victim.txt }; Get-Item later.txt");
+
+        var host = result.Syntax.Statements
+            .OfType<CommandListSyntax>()
+            .SelectMany(list => list.Items)
+            .Select(item => item.Command)
+            .OfType<SimpleCommandSyntax>()
+            .Single(command => command.Clause.Verb.Tokens[0] == "Measure-Command");
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Unknown, region.Phase);
+        Assert.False(result.Commands.Last().IsComplete);
+    }
+
+    [Fact]
+    public void Module_qualified_receiver_remains_proved_after_alias_mutation()
+    {
+        var result = ParseIsolated(
+            "Set-Alias Measure-Command Write-Output; " +
+            "Microsoft.PowerShell.Utility\\Measure-Command { Get-Date }");
+
+        Assert.False(result.IsUnparseable);
+        var host = result.Syntax.Statements
+            .OfType<CommandListSyntax>()
+            .SelectMany(list => list.Items)
+            .Select(item => item.Command)
+            .OfType<SimpleCommandSyntax>()
+            .Last();
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Main, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, region.Cardinality);
+        Assert.True(result.Commands[1].IsComplete);
+        Assert.False(result.Commands[2].IsComplete);
+    }
+
     [Fact]
     public void Command_script_block_is_exposed_as_an_unknown_incomplete_region()
     {
@@ -176,6 +296,19 @@ public class PwshExecutionRegionStructuralTests
                 ShellValueDomainKind.Unknown,
                 continuation.WorkingDirectory.Kind);
         });
+    }
+
+    [Fact]
+    public void Unknown_region_in_direct_child_can_escape_command_resolution_state()
+    {
+        var result = Parse(
+            "& { Invoke-Custom { Set-Alias erase Get-Date -Scope Global } }; " +
+            "erase target.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("erase", continuation.Clause.Verb.Tokens[0]);
+        Assert.False(continuation.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, continuation.WorkingDirectory.Kind);
     }
 
     [Fact]

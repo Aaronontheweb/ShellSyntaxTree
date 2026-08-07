@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
+using ShellSyntaxTree.Internal.Pwsh.Verbs;
 using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Pwsh.Parsing;
@@ -978,6 +979,8 @@ internal sealed class PwshForEachValueAnalyzer
     private readonly IReadOnlyList<Clause> _incompleteClauses;
     private readonly Dictionary<Clause, CommandOccurrenceFacts> _facts =
         new(ClauseReferenceComparer.Instance);
+    private readonly Dictionary<Clause, IReadOnlyList<ExecutionRegionSyntax>>
+        _executionRegions = new(ClauseReferenceComparer.Instance);
     private bool _isComplete = true;
     private int _remainingLoopAnalysisTransitions = MaxLoopAnalysisTransitions;
     private long _executionRegionEffectCount;
@@ -1124,7 +1127,7 @@ internal sealed class PwshForEachValueAnalyzer
                 }
 
                 var flow = location.Value;
-                return ApplyExecutionRegionEffect(simple, new PwshFlowResult(
+                return ApplyExecutionRegionEffect(simple, current, new PwshFlowResult(
                     flow.OnSuccess is AnalysisContext success
                         ? success.Invalidate(locationEffectUnknownCwd)
                         : null,
@@ -1133,7 +1136,7 @@ internal sealed class PwshForEachValueAnalyzer
                         : null));
             }
 
-            return ApplyExecutionRegionEffect(simple, location.Value);
+            return ApplyExecutionRegionEffect(simple, current, location.Value);
         }
 
         if (simple.Clause.Verb.IsDynamic)
@@ -1142,6 +1145,7 @@ internal sealed class PwshForEachValueAnalyzer
             _childScopeEscapeRiskCount++;
             return ApplyExecutionRegionEffect(
                 simple,
+                current,
                 PwshFlowResult.Both(current.Invalidate(unknownCwd: true)));
         }
 
@@ -1160,14 +1164,16 @@ internal sealed class PwshForEachValueAnalyzer
 
             return ApplyExecutionRegionEffect(
                 simple,
+                current,
                 PwshFlowResult.Both(current.Invalidate(unknownCwd)));
         }
 
-        return ApplyExecutionRegionEffect(simple, PwshFlowResult.Both(current));
+        return ApplyExecutionRegionEffect(simple, current, PwshFlowResult.Both(current));
     }
 
     private PwshFlowResult ApplyExecutionRegionEffect(
         SimpleCommandSyntax simple,
+        AnalysisContext receiverInput,
         PwshFlowResult flow)
     {
         if (simple.ExecutionRegions.Count == 0)
@@ -1175,14 +1181,147 @@ internal sealed class PwshForEachValueAnalyzer
             return flow;
         }
 
-        _executionRegionEffectCount++;
-        return new PwshFlowResult(
-            flow.OnSuccess is AnalysisContext success
-                ? success.Invalidate(unknownCwd: true)
-                : null,
-            flow.OnFailure is AnalysisContext failure
-                ? failure.Invalidate(unknownCwd: true)
-                : null);
+        var binding = PwshExecutionRegionBindingCatalog.Bind(
+            simple.Clause,
+            IsCommandIdentityProven(simple.Clause, receiverInput));
+        if (!IsCurrentScopeOnceReceiver(binding) ||
+            !TryApplyExecutionRegionBindings(simple, binding, out var regions))
+        {
+            RecordExecutionRegions(
+                simple.Clause,
+                simple.ExecutionRegions,
+                simple.ExecutionRegions);
+            _executionRegionEffectCount++;
+            _childScopeEscapeRiskCount++;
+            return new PwshFlowResult(
+                flow.OnSuccess is AnalysisContext success
+                    ? success.Invalidate(unknownCwd: true)
+                    : null,
+                flow.OnFailure is AnalysisContext failure
+                    ? failure.Invalidate(unknownCwd: true)
+                    : null);
+        }
+
+        RecordExecutionRegions(simple.Clause, regions, simple.ExecutionRegions);
+        if (flow.JoinedState is not AnalysisContext regionInput)
+        {
+            return flow;
+        }
+
+        var executionRegionEffectCount = _executionRegionEffectCount;
+        var nonRegionStateMutationCount = _nonRegionStateMutationCount;
+        var bodyFlow = AnalyzeBlock(regions[0].Body, regionInput);
+        _executionRegionEffectCount = executionRegionEffectCount + 1;
+        _nonRegionStateMutationCount = nonRegionStateMutationCount;
+        return bodyFlow.JoinedState is AnalysisContext bodyExit
+            ? PwshFlowResult.Both(bodyExit)
+            : flow;
+    }
+
+    private static bool IsCommandIdentityProven(
+        Clause clause,
+        AnalysisContext input)
+    {
+        if (!input.CommandResolutionInvalidated)
+        {
+            return true;
+        }
+
+        return clause.Verb.Tokens.Count == 1 &&
+            PwshExecutionRegionBindingCatalog.IsSupportedModuleQualifiedCommand(
+                clause.Verb.Tokens[0]);
+    }
+
+    private void RecordExecutionRegions(
+        Clause clause,
+        IReadOnlyList<ExecutionRegionSyntax> regions,
+        IReadOnlyList<ExecutionRegionSyntax> unknownFallback)
+    {
+        if (!_executionRegions.TryGetValue(clause, out var prior))
+        {
+            _executionRegions.Add(clause, regions);
+            return;
+        }
+
+        if (!HaveSameCompleteRegionFacts(prior, regions))
+        {
+            _executionRegions[clause] = unknownFallback;
+        }
+    }
+
+    private static bool HaveSameCompleteRegionFacts(
+        IReadOnlyList<ExecutionRegionSyntax> left,
+        IReadOnlyList<ExecutionRegionSyntax> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Count; index++)
+        {
+            if (left[index].HostClauseElementIndex != right[index].HostClauseElementIndex ||
+                left[index].Phase != right[index].Phase ||
+                left[index].Timing != right[index].Timing ||
+                left[index].Cardinality != right[index].Cardinality)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsCurrentScopeOnceReceiver(
+        PwshExecutionRegionBindingResult binding) =>
+        binding.Status == PwshExecutionRegionBindingStatus.ProvedExecution &&
+        binding.ParameterSet is PwshExecutionRegionParameterSet.MeasureExpression or
+            PwshExecutionRegionParameterSet.TraceExpression &&
+        binding.Bindings.Count == 1 &&
+        binding.Bindings[0].Timing == ExecutionRegionTiming.Synchronous &&
+        binding.Bindings[0].Cardinality == ExecutionRegionCardinality.Once &&
+        binding.Bindings[0].IsComplete;
+
+    private static bool TryApplyExecutionRegionBindings(
+        SimpleCommandSyntax simple,
+        PwshExecutionRegionBindingResult binding,
+        out IReadOnlyList<ExecutionRegionSyntax> regions)
+    {
+        var resolved = new ExecutionRegionSyntax[binding.Bindings.Count];
+        for (var bindingIndex = 0;
+             bindingIndex < binding.Bindings.Count;
+             bindingIndex++)
+        {
+            var current = binding.Bindings[bindingIndex];
+            ExecutionRegionSyntax? source = null;
+            for (var regionIndex = 0;
+                 regionIndex < simple.ExecutionRegions.Count;
+                 regionIndex++)
+            {
+                if (simple.ExecutionRegions[regionIndex].HostClauseElementIndex ==
+                    current.HostClauseElementIndex)
+                {
+                    source = simple.ExecutionRegions[regionIndex];
+                    break;
+                }
+            }
+
+            if (source is null)
+            {
+                regions = Array.Empty<ExecutionRegionSyntax>();
+                return false;
+            }
+
+            resolved[bindingIndex] = source with
+            {
+                Phase = current.Phase,
+                Timing = current.Timing,
+                Cardinality = current.Cardinality,
+            };
+        }
+
+        regions = resolved;
+        return true;
     }
 
     private void RecordFacts(
@@ -1202,7 +1341,7 @@ internal sealed class PwshForEachValueAnalyzer
             ValueProvenance = source.ValueProvenance,
             HasCompleteValueProvenance = source.HasCompleteValueProvenance,
             IsComplete = source.IsComplete &&
-                !input.CommandResolutionInvalidated &&
+                IsCommandIdentityProven(simple.Clause, input) &&
                 (!isForEachIncomplete || mayPromote),
         };
         if (!_facts.TryGetValue(simple.Clause, out var prior))
@@ -1778,10 +1917,15 @@ internal sealed class PwshForEachValueAnalyzer
                 facts);
         }
 
-        var executionRegions = new ExecutionRegionSyntax[simple.ExecutionRegions.Count];
+        var sourceRegions = _executionRegions.TryGetValue(
+            simple.Clause,
+            out var analyzedRegions)
+            ? analyzedRegions
+            : simple.ExecutionRegions;
+        var executionRegions = new ExecutionRegionSyntax[sourceRegions.Count];
         for (var index = 0; index < executionRegions.Length; index++)
         {
-            var region = simple.ExecutionRegions[index];
+            var region = sourceRegions[index];
             executionRegions[index] = region with
             {
                 Body = RewriteBlock(region.Body, facts),

@@ -90,7 +90,7 @@ public class PwshExecutionRegionBindingCatalogTests
     }
 
     [Fact]
-    public void Module_qualified_receiver_is_catalogued_but_not_admitted_before_body_emission()
+    public void Module_qualified_receiver_is_admitted_once_body_emission_is_guaranteed()
     {
         var resolved = PwshExecutionRegionBindingCatalog.TryResolveStaticCommandName(
             "Microsoft.PowerShell.Core\\ForEach-Object",
@@ -100,9 +100,13 @@ public class PwshExecutionRegionBindingCatalogTests
 
         Assert.True(resolved);
         Assert.Equal("ForEach-Object", canonical);
-        Assert.True(parsed.IsUnparseable);
-        Assert.Empty(parsed.Commands);
-        Assert.Empty(parsed.Clauses);
+        Assert.False(parsed.IsUnparseable);
+        Assert.Equal(2, parsed.Commands.Count);
+        Assert.Equal(2, parsed.Clauses.Count);
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(parsed.Syntax.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Unknown, region.Phase);
+        Assert.All(parsed.Commands, command => Assert.False(command.IsComplete));
     }
 
     [Theory]

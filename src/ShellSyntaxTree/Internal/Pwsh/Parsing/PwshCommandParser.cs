@@ -263,6 +263,11 @@ internal static partial class PwshCommandParser
             return false;
         }
 
+        if (PwshExecutionRegionBindingCatalog.IsSupportedModuleQualifiedCommand(command))
+        {
+            return false;
+        }
+
         var separator = command.LastIndexOf('\\');
         if (separator <= 0 || separator + 1 >= command.Length)
         {
