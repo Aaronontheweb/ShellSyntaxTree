@@ -408,6 +408,13 @@ priorities.
       Pipelines with any supported synchronous execution region plus another
       stateful stage withhold body facts that downstream initialization or
       per-object interleaving can invalidate.
+      `New-Module` initialization now runs once synchronously from caller
+      state in a child module scope, propagates shared location, restores
+      ordinary child bindings, applies common variable-writer initialization
+      before the body, invalidates body identity when a writer can alter
+      resolution preferences, and retains conservative host command-resolution
+      invalidation for exported functions across canonical, alias, and supported
+      module-qualified identities.
       Child process/runspace jobs and parallel
       blocks; deferred breakpoint/event/completion actions; then unknown
       receiver and nested/adversarial matrices. Preserve script blocks proved

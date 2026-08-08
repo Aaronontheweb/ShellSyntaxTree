@@ -367,8 +367,7 @@ internal static class PwshPersistentStateMutation
         out bool unknownCwd)
     {
         unknownCwd = false;
-        var verb = clause.Verb.CanonicalVerb ??
-            (clause.Verb.Tokens.Count == 0 ? null : clause.Verb.Tokens[0]);
+        var verb = GetCanonicalVerb(clause);
         if (verb is null)
         {
             return false;
@@ -405,8 +404,7 @@ internal static class PwshPersistentStateMutation
         Clause clause,
         IReadOnlyList<EffectiveArgument> effectiveArguments)
     {
-        var verb = clause.Verb.CanonicalVerb ??
-            (clause.Verb.Tokens.Count == 0 ? null : clause.Verb.Tokens[0]);
+        var verb = GetCanonicalVerb(clause);
         if (verb is null)
         {
             return true;
@@ -486,6 +484,27 @@ internal static class PwshPersistentStateMutation
         }
 
         return !hasLocalProviderTarget;
+    }
+
+    internal static bool HasVariableWritingArgument(Clause clause)
+    {
+        var verb = GetCanonicalVerb(clause);
+        return verb is null || HasVariableWritingArgument(verb, clause);
+    }
+
+    private static string? GetCanonicalVerb(Clause clause)
+    {
+        var verb = clause.Verb.CanonicalVerb ??
+            (clause.Verb.Tokens.Count == 0 ? null : clause.Verb.Tokens[0]);
+        if (verb is not null &&
+            PwshExecutionRegionBindingCatalog.TryResolveStaticCommandName(
+                verb,
+                out var canonicalName))
+        {
+            return canonicalName;
+        }
+
+        return verb;
     }
 
     private static bool IsProvedChildLocalProviderMutation(
@@ -1229,6 +1248,15 @@ internal sealed class PwshForEachValueAnalyzer
                 flow);
         }
 
+        if (binding.ParameterSet == PwshExecutionRegionParameterSet.NewModuleScriptBlock)
+        {
+            var bodyInput = PwshPersistentStateMutation.HasVariableWritingArgument(
+                simple.Clause)
+                ? receiverInput.Invalidate(unknownCwd: false)
+                : receiverInput;
+            return AnalyzeNewModule(regions[0], bodyInput, flow);
+        }
+
         var executionRegionEffectCount = _executionRegionEffectCount;
         var nonRegionStateMutationCount = _nonRegionStateMutationCount;
         var bodyFlow = AnalyzeExecutionRegionBody(regions[0].Body, regionInput);
@@ -1237,6 +1265,44 @@ internal sealed class PwshForEachValueAnalyzer
         return bodyFlow.JoinedState is AnalysisContext bodyExit
             ? PwshFlowResult.Both(bodyExit)
             : flow;
+    }
+
+    private PwshFlowResult AnalyzeNewModule(
+        ExecutionRegionSyntax region,
+        AnalysisContext input,
+        PwshFlowResult hostFlow)
+    {
+        var executionRegionEffectCount = _executionRegionEffectCount;
+        var nonRegionStateMutationCount = _nonRegionStateMutationCount;
+        var locationStateMutationCount = _locationStateMutationCount;
+        var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
+        var body = AnalyzeExecutionRegionBody(region.Body, input);
+        var locationMutated = _locationStateMutationCount > locationStateMutationCount;
+        var childScopeMayEscape =
+            _childScopeEscapeRiskCount > childScopeEscapeRiskCount;
+        _executionRegionEffectCount = executionRegionEffectCount + 1;
+        _nonRegionStateMutationCount = nonRegionStateMutationCount;
+        _childScopeEscapeRiskCount = childScopeEscapeRiskCount +
+            (childScopeMayEscape ? 1 : 0);
+
+        var restoredExit = AnalysisContext.JoinNullable(
+            RestoreChildScopeExit(
+                body.OnSuccess,
+                input,
+                locationMutated,
+                childScopeMayEscape),
+            RestoreChildScopeExit(
+                body.OnFailure,
+                input,
+                locationMutated,
+                childScopeMayEscape));
+        if (restoredExit is not AnalysisContext bodyExit ||
+            hostFlow.JoinedState is not AnalysisContext hostExit)
+        {
+            return hostFlow;
+        }
+
+        return PwshFlowResult.Both(hostExit.WithCwd(bodyExit.WorkingDirectory));
     }
 
     private PwshFlowResult AnalyzeInProcessInvokeCommand(
@@ -1497,6 +1563,7 @@ internal sealed class PwshForEachValueAnalyzer
         (binding.ParameterSet is PwshExecutionRegionParameterSet.MeasureExpression or
             PwshExecutionRegionParameterSet.TraceExpression or
             PwshExecutionRegionParameterSet.InvokeInProcess or
+            PwshExecutionRegionParameterSet.NewModuleScriptBlock or
             PwshExecutionRegionParameterSet.ForEachScriptBlock or
             PwshExecutionRegionParameterSet.WhereScriptBlock) &&
         AllBindingsAreCompleteAndSynchronous(binding.Bindings);
@@ -1762,7 +1829,8 @@ internal sealed class PwshForEachValueAnalyzer
                 PwshExecutionRegionParameterSet.WhereScriptBlock or
                 PwshExecutionRegionParameterSet.InvokeInProcess or
                 PwshExecutionRegionParameterSet.MeasureExpression or
-                PwshExecutionRegionParameterSet.TraceExpression;
+                PwshExecutionRegionParameterSet.TraceExpression or
+                PwshExecutionRegionParameterSet.NewModuleScriptBlock;
     }
 
     private static bool SimpleMayMutatePipelineState(SimpleCommandSyntax simple)
