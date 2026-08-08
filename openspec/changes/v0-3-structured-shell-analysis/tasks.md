@@ -91,12 +91,12 @@
 
 ## 5. Consumer Migration Baseline
 
-- [ ] 5.1 Rewrite the production-shaped consumer loop in `docs/CONSUMER_GUIDE.md` to enumerate every command occurrence.
+- [x] 5.1 Rewrite the production-shaped consumer loop in `docs/CONSUMER_GUIDE.md` to enumerate every command occurrence.
   - [x] 5.1a Document the PowerShell `$()` occurrence ordering, standalone/call-operator distinction, parent-versus-child host payload provenance, and completeness-versus-value-safety contract.
-- [ ] 5.2 Document syntax-tree display traversal separately from authorization traversal.
-- [ ] 5.3 Document exact, finite, pattern, unknown, joined-state, redirect, and incomplete-result handling.
-- [ ] 5.4 Document record equality, hashing, `ToString()`, serialization, and `Clauses` compatibility effects.
-- [ ] 5.5 Update the README getting-started and migration examples to direct v0.3 consumers to the command-occurrence API and full consumer guide.
+- [x] 5.2 Document syntax-tree display traversal separately from authorization traversal.
+- [x] 5.3 Document exact, finite, pattern, unknown, joined-state, redirect, and incomplete-result handling.
+- [x] 5.4 Document record equality, hashing, `ToString()`, serialization, and `Clauses` compatibility effects.
+- [x] 5.5 Update the README getting-started and migration examples to direct v0.3 consumers to the command-occurrence API and full consumer guide.
 - [x] 5.6 Publish a 0.3.0 prerelease containing the contracted structural,
   substitution, redirect, Bash `for`, and PowerShell `foreach` behavior before
   the downstream migration gate.

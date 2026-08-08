@@ -516,6 +516,12 @@ priorities.
 - [x] Publish `0.3.0-alpha` for the Netclaw migration gate. The bare SemVer tag
       published the NuGet package, symbol package, and GitHub prerelease from
       the reviewed merge commit after Linux and Windows CI passed.
+- [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
+      authorization loop and separate syntax-display guidance. Document exact,
+      finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
+      equality, hashing, `ToString()`, serialization, and `Clauses` migration
+      behavior in the guide and release notes; direct the README quick start
+      to `Commands` and the full guide.
 - [ ] Build on the delivered bounded Bash heredoc grammar and quoted-delimiter
       adjacency by exposing public body/delimiter/expansion/completeness facts,
       then add a separately tested Bash `<<<` here-string redirect slice.
