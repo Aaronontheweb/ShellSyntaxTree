@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Text.Json;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests;
@@ -458,6 +459,121 @@ public class V03PublicApiSnapshotTests
             Assert.True(property.GetMethod!.IsStatic);
             Assert.False(property.CanWrite);
             Assert.Equal(typeof(int), property.PropertyType);
+        }
+    }
+
+    [Fact]
+    public void Parsed_command_new_members_participate_in_generated_record_behavior()
+    {
+        var clauses = Array.Empty<Clause>();
+        var commands = Array.Empty<CommandOccurrence>();
+        var syntax = new ShellBlockSyntax();
+        var original = new ParsedCommand
+        {
+            Source = "echo ok",
+            Syntax = syntax,
+            Commands = commands,
+            Clauses = clauses,
+        };
+        var equalCopy = original with { };
+
+        Assert.Equal(original, equalCopy);
+        Assert.Equal(original.GetHashCode(), equalCopy.GetHashCode());
+        Assert.Contains($"{nameof(ParsedCommand.Syntax)} =", original.ToString());
+        Assert.Contains($"{nameof(ParsedCommand.Commands)} =", original.ToString());
+
+        Assert.NotEqual(
+            original,
+            original with
+            {
+                Syntax = syntax with { SourceStart = 0, SourceLength = 7 },
+            });
+        Assert.NotEqual(
+            original,
+            original with
+            {
+                Commands = new[] { new CommandOccurrence() },
+            });
+    }
+
+    [Fact]
+    public void Default_json_is_not_a_polymorphic_parser_result_round_trip_contract()
+    {
+        var clause = new Clause
+        {
+            Verb = new VerbChain { Tokens = new[] { "echo" } },
+        };
+        var parsed = new ParsedCommand
+        {
+            Source = "echo ok",
+            Syntax = new ShellBlockSyntax
+            {
+                Statements = new ShellSyntaxNode[]
+                {
+                    new SimpleCommandSyntax { Clause = clause },
+                },
+            },
+            Commands = new[]
+            {
+                new CommandOccurrence
+                {
+                    Clause = clause,
+                    ImmediateRole = CommandOccurrenceRole.Ordinary,
+                    IsComplete = true,
+                },
+            },
+            Clauses = new[] { clause },
+        };
+
+        var json = JsonSerializer.Serialize(parsed);
+
+        Assert.Contains($"\"{nameof(ParsedCommand.Syntax)}\"", json);
+        Assert.Contains($"\"{nameof(ParsedCommand.Commands)}\"", json);
+        Assert.Contains($"\"{nameof(ParsedCommand.Clauses)}\"", json);
+        Assert.Throws<NotSupportedException>(
+            () => JsonSerializer.Deserialize<ParsedCommand>(json));
+        var syntaxTypes = typeof(ShellSyntaxNode).Assembly
+            .GetExportedTypes()
+            .Where(type => typeof(ShellSyntaxNode).IsAssignableFrom(type));
+        Assert.All(
+            syntaxTypes,
+            type => Assert.DoesNotContain(
+                type.CustomAttributes,
+                attribute => attribute.AttributeType.Namespace ==
+                             "System.Text.Json.Serialization"));
+        Assert.DoesNotContain(
+            typeof(ShellSyntaxNode).Assembly.GetReferencedAssemblies(),
+            assembly => assembly.Name == "System.Text.Json");
+    }
+
+    [Fact]
+    public void Unknown_numeric_enum_values_remain_detectable_for_consumer_rejection()
+    {
+        const int unknownValue = 999;
+        var policySensitiveEnums = new[]
+        {
+            typeof(BashInitialStateMode),
+            typeof(PwshInitialStateMode),
+            typeof(ShellSyntaxKind),
+            typeof(ShellGroupKind),
+            typeof(ConditionLoopKind),
+            typeof(ExecutionRegionOrigin),
+            typeof(ExecutionRegionPhase),
+            typeof(ExecutionRegionTiming),
+            typeof(ExecutionRegionCardinality),
+            typeof(CommandOccurrenceRole),
+            typeof(CommandAncestryRegion),
+            typeof(ShellValueDomainKind),
+            typeof(HereDocumentExpansionMode),
+            typeof(RedirectSourceKind),
+            typeof(RedirectOperation),
+        };
+
+        foreach (var enumType in policySensitiveEnums)
+        {
+            var value = Enum.ToObject(enumType, unknownValue);
+            Assert.Equal(unknownValue, Convert.ToInt32(value));
+            Assert.False(Enum.IsDefined(enumType, value));
         }
     }
 

@@ -250,11 +250,20 @@
 
 ## 11. Verification and Release
 
-- [ ] 11.1 Add public API default-value, equality, serialization, and unknown-enum compatibility tests.
+- [x] 11.1 Add public API default-value, equality, serialization, and unknown-enum compatibility tests.
+  - `V03PublicApiSnapshotTests` pins every additive record default and enum
+    zero value, proves `Syntax` and `Commands` participate in generated record
+    equality and `ToString()` plus equal-record hash consistency, demonstrates
+    that default JSON is not a polymorphic round-trip contract, and makes every
+    policy-sensitive unknown numeric enum value detectable for consumer rejection.
 - [ ] 11.2 Assert every supported executable region appears exactly once and every unsupported executable region makes the result unparseable.
 - [x] 11.3 Run the complete Bash and PowerShell corpus suites plus the PII audit.
 - [x] 11.4 Run `dotnet build -c Release`, `dotnet test -c Release`, `dotnet pack -c Release`, and header verification.
-- [ ] 11.5 Validate the public API field-for-field against the synchronized shared and PowerShell specifications.
+- [x] 11.5 Validate the public API field-for-field against the synchronized shared and PowerShell specifications.
+  - `PublicApiSnapshotTests` and `V03PublicApiSnapshotTests` enumerate the exact
+    exported namespace, type family, exact property sets, parser constructors
+    and entry points, enum ordering, reference nullability, defaults, and fixed
+    limits synchronized into `SPEC.md` and `SPEC.POWERSHELL.md`.
 - [ ] 11.6 Validate Netclaw's ordinary-command, redirect, bounded-loop, and unknown-value approval matrices against the prerelease package.
 - [x] 11.7 Update release notes and remove Netclaw's temporary descriptor workaround only after explicit redirect integration is live.
   - The `0.3.0-alpha` release notes document the explicit redirect model. The

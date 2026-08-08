@@ -522,6 +522,14 @@ priorities.
       equality, hashing, `ToString()`, serialization, and `Clauses` migration
       behavior in the guide and release notes; direct the README quick start
       to `Commands` and the full guide.
+- [x] Close the v0.3 public-API compatibility gate. Existing reflection
+      snapshots pin the exact exported types, members, enum ordering,
+      reference nullability, defaults, parser constructors and entry points,
+      and fixed limits against the shared and PowerShell specifications.
+      Additional tests pin generated equality and `ToString()` participation
+      plus equal-record hash consistency, demonstrate that default JSON is not
+      a polymorphic round-trip contract, and make every policy-sensitive
+      unknown numeric enum value detectable so consumers can reject it.
 - [ ] Build on the delivered bounded Bash heredoc grammar and quoted-delimiter
       adjacency by exposing public body/delimiter/expansion/completeness facts,
       then add a separately tested Bash `<<<` here-string redirect slice.
