@@ -297,6 +297,20 @@ public class PwshExecutionRegionBindingCatalogTests
 
         Assert.Equal(PwshExecutionRegionParameterSet.InvokeInProcess, local.ParameterSet);
         Assert.True(Assert.Single(local.Bindings).IsComplete);
+        Assert.True(local.HasNoNewScope);
+        var positionalLocal = Bind("Invoke-Command { Get-Date }");
+        Assert.Equal(
+            PwshExecutionRegionParameterSet.InvokeInProcess,
+            positionalLocal.ParameterSet);
+        Assert.False(positionalLocal.HasNoNewScope);
+        Assert.False(Bind(
+            "Invoke-Command -NoNewScope:$false { Get-Date }").HasNoNewScope);
+        Assert.True(Bind(
+            "Invoke-Command -NoNewScope:$true { Get-Date }").HasNoNewScope);
+        Assert.False(Bind(
+            "Invoke-Command -NoNewScope:0 { Get-Date }").HasNoNewScope);
+        Assert.True(Bind(
+            "Invoke-Command -NoNewScope:1 { Get-Date }").HasNoNewScope);
         Assert.Equal(PwshExecutionRegionParameterSet.InvokeRemote, remote.ParameterSet);
         var remoteBinding = Assert.Single(remote.Bindings);
         Assert.Equal(ExecutionRegionTiming.Unknown, remoteBinding.Timing);

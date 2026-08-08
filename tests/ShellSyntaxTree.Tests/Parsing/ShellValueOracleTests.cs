@@ -1082,6 +1082,62 @@ public class ShellValueOracleTests
             Lines(output));
     }
 
+    [Fact]
+    public void PowerShell_synchronous_regions_observe_scope_and_pipeline_stage_effects()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$x='outer'; Set-Location /; " +
+            "Invoke-Command { $x='inner'; Set-Location /tmp; Set-Alias zz Get-Date }; " +
+            "\"default-x=<$x>\"; \"default-cwd=<$((Get-Location).Path)>\"; " +
+            "\"default-alias=<$([bool](Get-Alias zz -ErrorAction Ignore))>\"; " +
+            "$x='outer'; Invoke-Command -NoNewScope:$false { $x='false-inner' }; " +
+            "\"false-x=<$x>\"; Set-Location /; Invoke-Command -NoNewScope:$true { " +
+            "$x='shared'; Set-Location /tmp; Set-Alias zz Get-Date }; " +
+            "\"shared-x=<$x>\"; \"shared-cwd=<$((Get-Location).Path)>\"; " +
+            "\"shared-alias=<$([bool](Get-Alias zz -ErrorAction Ignore))>\"; " +
+            "Set-Location /; Invoke-Command { " +
+            "Set-Location /definitely-missing-shellsyntaxtree " +
+            "-ErrorAction SilentlyContinue }; " +
+            "\"failure-status=<$?>\"; \"failure-cwd=<$((Get-Location).Path)>\"; " +
+            "$x='start'; Invoke-Command -NoNewScope { " +
+            "\"invoke-interleave=<$x>\"; \"invoke-interleave=<$x>\" } | " +
+            "Write-Output -OutVariable x | Out-Null; $x; " +
+            "$x='start'; Measure-Command { " +
+            "Write-Host \"measure-stage=<$x>\" } | " +
+            "Write-Output -OutVariable x | Out-Null; " +
+            "$x='start'; Trace-Command -Name ParameterBinding -Expression { " +
+            "\"trace-stage=<$x>\" } -PSHost 5>$null | " +
+            "Write-Output -OutVariable x | Out-Null; $x");
+
+        Assert.Equal(
+            new[]
+            {
+                "default-x=<outer>",
+                "default-cwd=</tmp>",
+                "default-alias=<False>",
+                "false-x=<outer>",
+                "shared-x=<shared>",
+                "shared-cwd=</tmp>",
+                "shared-alias=<True>",
+                "failure-status=<True>",
+                "failure-cwd=</>",
+                "invoke-interleave=<>",
+                "invoke-interleave=<invoke-interleave=<>>",
+                "measure-stage=<>",
+                "trace-stage=<>",
+            },
+            Lines(output));
+    }
+
     private static bool IsAvailable(string executable)
     {
         try

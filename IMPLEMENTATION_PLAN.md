@@ -402,8 +402,13 @@ priorities.
       pin current-scope mutation, empty input, explicit input, phase order, and
       the differing no-input behavior of the two cmdlets. Ordinary assignment
       state transfer remains an atomic task 7.5b follow-up; task 7.5b is not
-      complete. Continue with in-process `Invoke-Command`; child
-      process/runspace jobs and parallel
+      complete. In-process `Invoke-Command` now distinguishes default child
+      variable/command scope from `-NoNewScope` current-scope flow while
+      propagating shared location and retaining synchronous/once region facts.
+      Pipelines with any supported synchronous execution region plus another
+      stateful stage withhold body facts that downstream initialization or
+      per-object interleaving can invalidate.
+      Child process/runspace jobs and parallel
       blocks; deferred breakpoint/event/completion actions; then unknown
       receiver and nested/adversarial matrices. Preserve script blocks proved
       to be data as opaque values, expose ambiguous bodies with incomplete

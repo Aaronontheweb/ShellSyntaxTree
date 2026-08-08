@@ -988,7 +988,7 @@ internal sealed class PwshForEachValueAnalyzer
     private long _locationStateMutationCount;
     private long _childScopeEscapeRiskCount;
     private bool _pipelineStageMayReceiveInput;
-    private bool _pipelineCallbacksMayInterleave;
+    private bool _pipelineStageEffectsMayReachRegionBodies;
 
     private PwshForEachValueAnalyzer(
         PwshParserOptions options,
@@ -1220,6 +1220,15 @@ internal sealed class PwshForEachValueAnalyzer
                 flow);
         }
 
+        if (binding.ParameterSet == PwshExecutionRegionParameterSet.InvokeInProcess)
+        {
+            return AnalyzeInProcessInvokeCommand(
+                binding,
+                regions[0],
+                regionInput,
+                flow);
+        }
+
         var executionRegionEffectCount = _executionRegionEffectCount;
         var nonRegionStateMutationCount = _nonRegionStateMutationCount;
         var bodyFlow = AnalyzeExecutionRegionBody(regions[0].Body, regionInput);
@@ -1228,6 +1237,48 @@ internal sealed class PwshForEachValueAnalyzer
         return bodyFlow.JoinedState is AnalysisContext bodyExit
             ? PwshFlowResult.Both(bodyExit)
             : flow;
+    }
+
+    private PwshFlowResult AnalyzeInProcessInvokeCommand(
+        PwshExecutionRegionBindingResult binding,
+        ExecutionRegionSyntax region,
+        AnalysisContext input,
+        PwshFlowResult fallback)
+    {
+        var executionRegionEffectCount = _executionRegionEffectCount;
+        var nonRegionStateMutationCount = _nonRegionStateMutationCount;
+        var locationStateMutationCount = _locationStateMutationCount;
+        var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
+        var body = AnalyzeExecutionRegionBody(region.Body, input);
+        var locationMutated = _locationStateMutationCount > locationStateMutationCount;
+        var childScopeMayEscape =
+            _childScopeEscapeRiskCount > childScopeEscapeRiskCount;
+        _executionRegionEffectCount = executionRegionEffectCount + 1;
+        _nonRegionStateMutationCount = nonRegionStateMutationCount;
+
+        if (binding.HasNoNewScope)
+        {
+            return body.JoinedState is AnalysisContext bodyExit
+                ? PwshFlowResult.Both(bodyExit)
+                : fallback;
+        }
+
+        _childScopeEscapeRiskCount = childScopeEscapeRiskCount +
+            (childScopeMayEscape ? 1 : 0);
+        var restoredExit = AnalysisContext.JoinNullable(
+            RestoreChildScopeExit(
+                body.OnSuccess,
+                input,
+                locationMutated,
+                childScopeMayEscape),
+            RestoreChildScopeExit(
+                body.OnFailure,
+                input,
+                locationMutated,
+                childScopeMayEscape));
+        return restoredExit is AnalysisContext joined
+            ? PwshFlowResult.Both(joined)
+            : fallback;
     }
 
     private PwshFlowResult AnalyzePipelineCallbackRegions(
@@ -1362,7 +1413,7 @@ internal sealed class PwshForEachValueAnalyzer
     {
         var enclosingStageMayReceiveInput = _pipelineStageMayReceiveInput;
         _pipelineStageMayReceiveInput = false;
-        var bodyInput = _pipelineCallbacksMayInterleave
+        var bodyInput = _pipelineStageEffectsMayReachRegionBodies
             ? input.Invalidate(unknownCwd: true)
             : input;
         var flow = AnalyzeBlock(body, bodyInput);
@@ -1445,6 +1496,7 @@ internal sealed class PwshForEachValueAnalyzer
         binding.Status == PwshExecutionRegionBindingStatus.ProvedExecution &&
         (binding.ParameterSet is PwshExecutionRegionParameterSet.MeasureExpression or
             PwshExecutionRegionParameterSet.TraceExpression or
+            PwshExecutionRegionParameterSet.InvokeInProcess or
             PwshExecutionRegionParameterSet.ForEachScriptBlock or
             PwshExecutionRegionParameterSet.WhereScriptBlock) &&
         AllBindingsAreCompleteAndSynchronous(binding.Bindings);
@@ -1606,8 +1658,10 @@ internal sealed class PwshForEachValueAnalyzer
     private PwshFlowResult AnalyzePipeline(PipelineSyntax pipeline, AnalysisContext input)
     {
         var stageInput = input;
-        var enclosingCallbacksMayInterleave = _pipelineCallbacksMayInterleave;
-        _pipelineCallbacksMayInterleave |= PipelineCallbacksMayInterleave(pipeline);
+        var enclosingStageEffectsMayReachBodies =
+            _pipelineStageEffectsMayReachRegionBodies;
+        _pipelineStageEffectsMayReachRegionBodies |=
+            PipelineStageEffectsMayReachRegionBodies(pipeline);
         try
         {
             for (var stageIndex = 0; stageIndex < pipeline.Stages.Count; stageIndex++)
@@ -1644,35 +1698,43 @@ internal sealed class PwshForEachValueAnalyzer
         }
         finally
         {
-            _pipelineCallbacksMayInterleave = enclosingCallbacksMayInterleave;
+            _pipelineStageEffectsMayReachRegionBodies =
+                enclosingStageEffectsMayReachBodies;
         }
     }
 
-    private static bool PipelineCallbacksMayInterleave(PipelineSyntax pipeline)
+    private static bool PipelineStageEffectsMayReachRegionBodies(PipelineSyntax pipeline)
     {
-        var hasCallback = false;
+        var hasPipelineSensitiveRegion = false;
         var statefulStageCount = 0;
         for (var index = 0; index < pipeline.Stages.Count; index++)
         {
             var stage = pipeline.Stages[index];
-            hasCallback |= ContainsPipelineCallback(stage);
+            hasPipelineSensitiveRegion |= ContainsPipelineSensitiveExecutionRegion(stage);
             if (MayMutatePipelineState(stage))
             {
                 statefulStageCount++;
             }
         }
 
-        return hasCallback && statefulStageCount > 1;
+        return hasPipelineSensitiveRegion && statefulStageCount > 1;
     }
 
-    private static bool ContainsPipelineCallback(ShellSyntaxNode node) =>
+    private static bool ContainsPipelineSensitiveExecutionRegion(ShellSyntaxNode node) =>
         node switch
         {
-            SimpleCommandSyntax simple => IsPipelineCallback(simple),
-            ShellBlockSyntax block => BlockContains(block, ContainsPipelineCallback),
-            GroupSyntax group => ContainsPipelineCallback(group.Body),
-            CommandListSyntax list => ListContains(list, ContainsPipelineCallback),
-            PipelineSyntax pipeline => PipelineContains(pipeline, ContainsPipelineCallback),
+            SimpleCommandSyntax simple => IsPipelineSensitiveExecutionRegionHost(simple),
+            ShellBlockSyntax block => BlockContains(
+                block,
+                ContainsPipelineSensitiveExecutionRegion),
+            GroupSyntax group => ContainsPipelineSensitiveExecutionRegion(group.Body),
+            CommandListSyntax list => ListContains(
+                list,
+                ContainsPipelineSensitiveExecutionRegion),
+            PipelineSyntax pipeline => PipelineContains(
+                pipeline,
+                ContainsPipelineSensitiveExecutionRegion),
+            ExecutionRegionSyntax => true,
             _ => false,
         };
 
@@ -1690,14 +1752,17 @@ internal sealed class PwshForEachValueAnalyzer
             _ => false,
         };
 
-    private static bool IsPipelineCallback(SimpleCommandSyntax simple)
+    private static bool IsPipelineSensitiveExecutionRegionHost(SimpleCommandSyntax simple)
     {
         var binding = PwshExecutionRegionBindingCatalog.Bind(
             simple.Clause,
             commandIdentityProven: true);
         return binding.Status == PwshExecutionRegionBindingStatus.ProvedExecution &&
             binding.ParameterSet is PwshExecutionRegionParameterSet.ForEachScriptBlock or
-                PwshExecutionRegionParameterSet.WhereScriptBlock;
+                PwshExecutionRegionParameterSet.WhereScriptBlock or
+                PwshExecutionRegionParameterSet.InvokeInProcess or
+                PwshExecutionRegionParameterSet.MeasureExpression or
+                PwshExecutionRegionParameterSet.TraceExpression;
     }
 
     private static bool SimpleMayMutatePipelineState(SimpleCommandSyntax simple)
@@ -1818,19 +1883,19 @@ internal sealed class PwshForEachValueAnalyzer
         }
 
         return new PwshFlowResult(
-            RestoreDirectCallExit(
+            RestoreChildScopeExit(
                 body.OnSuccess,
                 input,
                 locationMutated,
                 childScopeMayEscape),
-            RestoreDirectCallExit(
+            RestoreChildScopeExit(
                 body.OnFailure,
                 input,
                 locationMutated,
                 childScopeMayEscape));
     }
 
-    private static AnalysisContext? RestoreDirectCallExit(
+    private static AnalysisContext? RestoreChildScopeExit(
         AnalysisContext? bodyExit,
         AnalysisContext input,
         bool locationMutated,
