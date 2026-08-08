@@ -967,8 +967,9 @@ public sealed record Clause
     public IReadOnlyList<Arg> Args { get; init; } = [];
 
     /// <summary>
-    /// Redirect operators on this clause (>, >>, <, 2>, 2>>). Each entry
-    /// includes direction and target path.
+    /// Compatibility redirects on this clause (>, >>, <, 2>, 2>>, &>,
+    /// &>>). Each entry retains the v0.2 direction and target projection;
+    /// v0.3 consumers use CommandOccurrence.Redirects for exact semantics.
     /// </summary>
     public IReadOnlyList<Redirect> Redirects { get; init; } = [];
 
@@ -1270,7 +1271,8 @@ verb_like_word  := static word satisfying §6.1; the initial command-name
 arg             := word | flag | quoted_string | supported_substitution
 flag            := "-" letter+ | "--" word
 redirect        := redirect_op target
-redirect_op     := ">" | ">>" | "<" | "2>" | "2>>"
+redirect_op     := descriptor? (">" | ">>" | "<") | "&>" | "&>>"
+descriptor      := digit+
 target          := word | quoted_string | supported_substitution
 supported_substitution := "$(" command ")"
 word            := non-whitespace, non-operator fragments; may contain
@@ -1396,7 +1398,8 @@ The lexer produces tokens consumed by the parser. Token kinds:
 - **QUOTED_STRING** — single- or double-quoted string. The lexer strips
   the quote delimiters from the token value. Example: `"hello world"`
   becomes the token value `hello world`.
-- **OPERATOR** — `&&`, `||`, `;`, `|`, `>`, `>>`, `<`, `2>`, `2>>`,
+- **OPERATOR** — `&&`, `||`, `;`, `|`, `>`, `>>`, `<`, numeric-descriptor
+  forms such as `2>`, `3>>`, and `10<`, `&>`, `&>>`,
   `(`, `)`, `<<`, `<<-`.
 - **WHITESPACE** — one or more spaces, tabs, or newlines (newlines inside
   a heredoc body are not emitted as ordinary tokens; the delimiter token
@@ -1456,7 +1459,13 @@ The lexer produces tokens consumed by the parser. Token kinds:
 
 Operators terminate the current token. `cd /tmp&&ls` lexes as
 `[cd, /tmp, &&, ls]` — no whitespace required around operators. The lexer
-must handle this.
+must handle this. A numeric descriptor is an operator prefix only when its
+digits begin at a shell-token boundary and become adjacent to `<`, `>`, or
+`>>` after Bash removes unquoted line continuations. Continuations may join
+digit fragments or the descriptor and operator; LF and CRLF spellings retain
+their authored span while producing the same descriptor. Digits joined to an
+ordinary, quoted, or escaped word remain part of that word; `command3>file`
+therefore uses command name `command3` and a default-source `>` redirect.
 
 ### Comment handling
 
@@ -1464,7 +1473,8 @@ must handle this.
   that runs to (but does not include) the next newline. A word boundary
   is: start of input, or the position immediately after a whitespace
   run, a newline, an operator (`&&`, `||`, `;`, `|`, `>`, `>>`, `<`,
-  `2>`, `2>>`, `(`, `)`, `<<`, `<<-`), a quoted string, or an opaque
+  a numeric descriptor adjacent to `>`, `>>`, or `<`, `&>`, `&>>`, `(`,
+  `)`, `<<`, `<<-`), a quoted string, or an opaque
   substitution. Equivalently: `#` is comment-start everywhere the
   outer lexer dispatch loop sits, because every other lexer rule has
   already consumed its territory before `#` is considered.

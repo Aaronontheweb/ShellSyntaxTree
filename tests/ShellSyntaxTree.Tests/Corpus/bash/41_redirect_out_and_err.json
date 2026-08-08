@@ -15,7 +15,36 @@
         "isSubshell": false,
         "isCommandStringWrapped": false
       }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 16 }
+        ],
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "operation": "FileOutput",
+            "target": { "kind": "Exact", "values": ["/work/out"] },
+            "isPathRelevant": true,
+            "isComplete": true
+          },
+          {
+            "redirectIndex": 1,
+            "sourceKind": "Descriptor",
+            "sourceDescriptor": 2,
+            "operation": "FileOutput",
+            "target": { "kind": "Exact", "values": ["/work/err"] },
+            "isPathRelevant": true,
+            "isComplete": true
+          }
+        ]
+      }
     ]
   },
-  "notes": "PR 4: redirect targets resolve against WorkingDirectory (/work in tests)."
+  "notes": "Pins independent authored coordinates and exact targets for multiple v0.3 file redirects."
 }

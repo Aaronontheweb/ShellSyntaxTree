@@ -235,14 +235,199 @@ public class BashStructuralProjectionTests
     }
 
     [Fact]
-    public void Redirect_leaf_is_structurally_visible_but_incomplete_until_redirect_analysis_lands()
+    public void Literal_file_redirect_has_complete_explicit_analysis()
     {
         var result = Parse("echo ok > out.txt");
 
         Assert.False(result.IsUnparseable);
         var command = Assert.Single(result.Commands);
-        Assert.False(command.IsComplete);
+        Assert.True(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(0, redirect.RedirectIndex);
+        Assert.Equal(RedirectSourceKind.Default, redirect.Source.Kind);
+        Assert.Null(redirect.Source.Descriptor);
+        Assert.Equal(RedirectOperation.FileOutput, redirect.Operation);
+        Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
+        Assert.Equal("/work/out.txt", Assert.Single(redirect.Target.Values));
+        Assert.True(redirect.IsPathRelevant);
+        Assert.True(redirect.IsComplete);
         Assert.Single(result.Clauses);
+    }
+
+    [Theory]
+    [InlineData("dotnet test 2>&1", RedirectSourceKind.Descriptor, 2, RedirectOperation.DescriptorDuplicate, 1)]
+    [InlineData("command 2>&-", RedirectSourceKind.Descriptor, 2, RedirectOperation.DescriptorClose, null)]
+    [InlineData("command 2>&1-", RedirectSourceKind.Descriptor, 2, RedirectOperation.DescriptorMove, 1)]
+    [InlineData("command <&0", RedirectSourceKind.Default, null, RedirectOperation.DescriptorDuplicate, 0)]
+    [InlineData("command <&-", RedirectSourceKind.Default, null, RedirectOperation.DescriptorClose, null)]
+    [InlineData("command <&0-", RedirectSourceKind.Default, null, RedirectOperation.DescriptorMove, 0)]
+    [InlineData("command 3>&1", RedirectSourceKind.Descriptor, 3, RedirectOperation.DescriptorDuplicate, 1)]
+    [InlineData("command 10>&2-", RedirectSourceKind.Descriptor, 10, RedirectOperation.DescriptorMove, 2)]
+    public void Literal_descriptor_redirects_are_complete_and_not_paths(
+        string source,
+        RedirectSourceKind sourceKind,
+        int? sourceDescriptor,
+        RedirectOperation operation,
+        int? targetDescriptor)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(sourceKind, redirect.Source.Kind);
+        Assert.Equal(sourceDescriptor, redirect.Source.Descriptor);
+        Assert.Equal(operation, redirect.Operation);
+        Assert.Equal(targetDescriptor, redirect.TargetDescriptor);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
+        Assert.False(redirect.IsPathRelevant);
+        Assert.True(redirect.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("command 3> out.log", 3, RedirectOperation.FileOutput)]
+    [InlineData("command 10>> out.log", 10, RedirectOperation.FileAppend)]
+    [InlineData("command 4< input.txt", 4, RedirectOperation.FileInput)]
+    public void Numeric_source_file_redirect_preserves_descriptor(
+        string source,
+        int sourceDescriptor,
+        RedirectOperation operation)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(RedirectSourceKind.Descriptor, redirect.Source.Kind);
+        Assert.Equal(sourceDescriptor, redirect.Source.Descriptor);
+        Assert.Equal(operation, redirect.Operation);
+        Assert.True(redirect.IsPathRelevant);
+        Assert.True(redirect.IsComplete);
+    }
+
+    [Fact]
+    public void Quoted_adjacent_digits_are_an_argument_not_a_source_descriptor()
+    {
+        var result = Parse("command \"\"3> out.log");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(RedirectSourceKind.Default, redirect.Source.Kind);
+        Assert.Equal(RedirectOperation.FileOutput, redirect.Operation);
+        Assert.Contains(command.Clause.Args, argument => argument.Raw == "\"\"3");
+    }
+
+    [Theory]
+    [InlineData("command 3\\\n> out.log", 3, RedirectOperation.FileOutput, null)]
+    [InlineData("command 3\\\r\n>&1", 3, RedirectOperation.DescriptorDuplicate, 1)]
+    [InlineData("command 1\\\n0>&2-", 10, RedirectOperation.DescriptorMove, 2)]
+    public void Continued_numeric_source_preserves_descriptor_semantics(
+        string source,
+        int sourceDescriptor,
+        RedirectOperation operation,
+        int? targetDescriptor)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        Assert.DoesNotContain(command.Clause.Args, argument => argument.Raw is "3" or "10");
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(RedirectSourceKind.Descriptor, redirect.Source.Kind);
+        Assert.Equal(sourceDescriptor, redirect.Source.Descriptor);
+        Assert.Equal(operation, redirect.Operation);
+        Assert.Equal(targetDescriptor, redirect.TargetDescriptor);
+        Assert.True(redirect.IsComplete);
+    }
+
+    [Fact]
+    public void Overflow_numeric_source_descriptor_remains_incomplete()
+    {
+        var result = Parse("command 999999999999999999999> out.log");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.False(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(RedirectSourceKind.Unknown, redirect.Source.Kind);
+        Assert.Equal(RedirectOperation.Unknown, redirect.Operation);
+        Assert.False(redirect.IsComplete);
+    }
+
+    [Fact]
+    public void Malformed_numeric_descriptor_target_is_unparseable()
+    {
+        var result = Parse("command 3>&1bad");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
+    public void Multiple_redirects_preserve_authored_coordinates_and_independent_operations()
+    {
+        var result = Parse("command > out.log 2>&1");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        Assert.Collection(
+            command.Redirects,
+            redirect =>
+            {
+                Assert.Equal(0, redirect.RedirectIndex);
+                Assert.Equal(RedirectOperation.FileOutput, redirect.Operation);
+                Assert.Equal("/work/out.log", Assert.Single(redirect.Target.Values));
+            },
+            redirect =>
+            {
+                Assert.Equal(1, redirect.RedirectIndex);
+                Assert.Equal(RedirectOperation.DescriptorDuplicate, redirect.Operation);
+                Assert.Equal(1, redirect.TargetDescriptor);
+            });
+    }
+
+    [Theory]
+    [InlineData("command 2>&$FD")]
+    [InlineData("command >&${FD}")]
+    public void Computed_descriptor_target_remains_incomplete(string source)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.False(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(RedirectOperation.DescriptorDuplicate, redirect.Operation);
+        Assert.Null(redirect.TargetDescriptor);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
+        Assert.False(redirect.IsPathRelevant);
+        Assert.False(redirect.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("command &> out.log", RedirectOperation.CombinedOutput)]
+    [InlineData("command &>> out.log", RedirectOperation.CombinedOutputAppend)]
+    public void Combined_output_redirects_have_explicit_operations(
+        string source,
+        RedirectOperation operation)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(RedirectSourceKind.Default, redirect.Source.Kind);
+        Assert.Equal(operation, redirect.Operation);
+        Assert.Equal("/work/out.log", Assert.Single(redirect.Target.Values));
+        Assert.True(redirect.IsPathRelevant);
+        Assert.True(redirect.IsComplete);
     }
 
     [Fact]

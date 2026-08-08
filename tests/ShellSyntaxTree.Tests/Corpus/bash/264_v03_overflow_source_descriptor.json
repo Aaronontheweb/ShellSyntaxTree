@@ -1,0 +1,38 @@
+{
+  "name": "v0.3 Bash overflow source descriptor fails closed",
+  "input": "command 999999999999999999999> out.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["command"],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "/work/out.log", "isDynamicSkip": false }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 38 }
+        ],
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Unknown",
+            "operation": "Unknown",
+            "target": { "kind": "Unknown" },
+            "isPathRelevant": false,
+            "isComplete": false
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "The compatibility leaf remains diagnostic-only; an unrepresentable descriptor cannot become complete authorization evidence."
+}

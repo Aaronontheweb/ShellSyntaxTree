@@ -1037,6 +1037,27 @@ public sealed record ExpectedCommandOccurrence
     public List<ExpectedEffectiveArgument>? EffectiveArguments { get; init; }
 
     public ExpectedValueDomain? WorkingDirectory { get; init; }
+
+    public List<ExpectedRedirectAnalysis>? Redirects { get; init; }
+}
+
+public sealed record ExpectedRedirectAnalysis
+{
+    public int RedirectIndex { get; init; } = -1;
+
+    public RedirectSourceKind SourceKind { get; init; }
+
+    public int? SourceDescriptor { get; init; }
+
+    public RedirectOperation Operation { get; init; }
+
+    public int? TargetDescriptor { get; init; }
+
+    public ExpectedValueDomain Target { get; init; } = new();
+
+    public bool IsPathRelevant { get; init; }
+
+    public bool IsComplete { get; init; }
 }
 
 public sealed record ExpectedEffectiveArgument

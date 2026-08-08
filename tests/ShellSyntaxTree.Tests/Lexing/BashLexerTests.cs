@@ -77,6 +77,11 @@ public class BashLexerTests
     [InlineData("<")]
     [InlineData("2>")]
     [InlineData("2>>")]
+    [InlineData("3>")]
+    [InlineData("10>>")]
+    [InlineData("0<")]
+    [InlineData("&>")]
+    [InlineData("&>>")]
     [InlineData("(")]
     [InlineData(")")]
     public void Each_operator_lexes_in_isolation(string op)
@@ -145,6 +150,60 @@ public class BashLexerTests
         var tokens = LexNonWs("cmd 2>> log");
         Assert.Equal(3, tokens.Length);
         Assert.Equal("2>>", tokens[1].OperatorText);
+    }
+
+    [Theory]
+    [InlineData("cmd &> out", "&>")]
+    [InlineData("cmd &>> out", "&>>")]
+    public void Combined_output_redirect_is_not_a_background_list(
+        string input,
+        string expectedOperator)
+    {
+        var tokens = LexNonWs(input);
+
+        Assert.Equal(3, tokens.Length);
+        Assert.Equal(expectedOperator, tokens[1].OperatorText);
+        Assert.Equal(BashTokenKind.Word, tokens[2].Kind);
+        Assert.Equal("out", tokens[2].Value);
+    }
+
+    [Fact]
+    public void Numeric_descriptor_is_recognized_only_at_a_token_boundary()
+    {
+        var descriptor = LexNonWs("command 3>out");
+        Assert.Equal("3>", descriptor[1].OperatorText);
+
+        var commandName = LexNonWs("command3>out");
+        Assert.Equal("command3", commandName[0].Value);
+        Assert.Equal(">", commandName[1].OperatorText);
+
+        var separated = LexNonWs("command 3 >out");
+        Assert.Equal("3", separated[1].Value);
+        Assert.Equal(">", separated[2].OperatorText);
+
+        var quotedPrefix = LexNonWs("command \"\"3>out");
+        Assert.Equal(BashTokenKind.QuotedString, quotedPrefix[1].Kind);
+        Assert.Equal("3", quotedPrefix[2].Value);
+        Assert.Equal(">", quotedPrefix[3].OperatorText);
+
+        var continuedQuotedPrefix = LexNonWs("command \"\"\\\n3>out");
+        Assert.Equal(BashTokenKind.QuotedString, continuedQuotedPrefix[1].Kind);
+        Assert.Equal("3", continuedQuotedPrefix[2].Value);
+        Assert.Equal(">", continuedQuotedPrefix[3].OperatorText);
+    }
+
+    [Theory]
+    [InlineData("command 3\\\n>out", "3>")]
+    [InlineData("command 3\\\r\n>out", "3>")]
+    [InlineData("command 1\\\n0>&2-", "10>")]
+    public void Unquoted_line_continuation_is_removed_before_descriptor_recognition(
+        string input,
+        string expectedOperator)
+    {
+        var tokens = LexNonWs(input);
+
+        Assert.Equal(expectedOperator, tokens[1].OperatorText);
+        Assert.DoesNotContain(tokens, token => token.Value is "3" or "10");
     }
 
     [Fact]
@@ -593,7 +652,7 @@ public class BashLexerTests
     public void Operator_text_is_set_exactly_for_each_kind()
     {
         // Sweep all operators in one input to lock the OperatorText shape.
-        var tokens = LexNonWs("a&&b||c;d|e>f>>g<h2>i2>>j(k)");
+        var tokens = LexNonWs("a&&b||c;d|e>f>>g<h 2>i 2>>j(k)");
         var ops = tokens.Where(t => t.Kind == BashTokenKind.Operator)
             .Select(t => t.OperatorText).ToArray();
         Assert.Equal(

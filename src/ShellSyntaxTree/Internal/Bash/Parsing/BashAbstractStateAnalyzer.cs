@@ -1207,14 +1207,15 @@ internal sealed class BashAbstractStateAnalyzer
         }
 
         var clause = RewriteClause(simple.Clause, input, sourceFacts.CwdPathDependencies);
+        var redirects = RewriteRedirectFacts(sourceFacts.Redirects, clause);
         facts.Add(clause, new CommandOccurrenceFacts
         {
             EffectiveArguments = CreateEffectiveArguments(simple.Clause),
             WorkingDirectory = input.ToDomain(),
-            Redirects = RewriteRedirectFacts(sourceFacts.Redirects, clause),
+            Redirects = redirects,
             CwdPathDependencies = sourceFacts.CwdPathDependencies,
             ValueProvenance = sourceFacts.ValueProvenance,
-            IsComplete = sourceFacts.IsComplete,
+            IsComplete = sourceFacts.IsComplete && AreRedirectsComplete(redirects),
         });
         return simple with
         {
@@ -1463,10 +1464,24 @@ internal sealed class BashAbstractStateAnalyzer
                         Kind = ShellValueDomainKind.Exact,
                         Values = new[] { redirect.Target },
                     },
+                IsComplete = fact.IsComplete && !redirect.IsDynamicSkip,
             };
         }
 
         return rewritten;
+    }
+
+    private static bool AreRedirectsComplete(IReadOnlyList<RedirectAnalysis> redirects)
+    {
+        foreach (var redirect in redirects)
+        {
+            if (!redirect.IsComplete)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private string? RebaseResolution(

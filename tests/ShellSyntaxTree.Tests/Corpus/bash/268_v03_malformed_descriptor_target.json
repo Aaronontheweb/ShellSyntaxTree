@@ -1,0 +1,8 @@
+{
+  "name": "v0.3 Bash malformed descriptor target fails atomically",
+  "input": "command 3>&1bad",
+  "expected": {
+    "isUnparseable": true
+  },
+  "notes": "A literal descriptor followed by a malformed suffix cannot produce a partial authorization projection."
+}

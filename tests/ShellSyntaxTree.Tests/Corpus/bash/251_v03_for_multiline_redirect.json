@@ -37,7 +37,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "LoopBody",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 59 },
           { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 59 },
@@ -47,7 +47,19 @@
         "effectiveArguments": [
           { "clauseElementIndex": 2, "value": { "kind": "FiniteSet", "values": ["a", "b"], "pattern": null, "coveringDirectory": null } }
         ],
-        "workingDirectory": { "kind": "Exact", "values": ["/work"], "pattern": null, "coveringDirectory": null }
+        "workingDirectory": { "kind": "Exact", "values": ["/work"], "pattern": null, "coveringDirectory": null },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "operation": "FileOutput",
+            "targetDescriptor": null,
+            "target": { "kind": "Exact", "values": ["/work/out.txt"], "pattern": null, "coveringDirectory": null },
+            "isPathRelevant": true,
+            "isComplete": true
+          }
+        ]
       },
       {
         "clauseIndex": 1,
@@ -64,5 +76,5 @@
       }
     ]
   },
-  "notes": "Pins newline list terminators and separators, a multiline loop body, finite loop binding analysis, and the compatibility redirect boundary. Redirect-bearing occurrences remain incomplete until explicit redirect analysis lands."
+  "notes": "Pins newline list terminators, a multiline loop body, finite loop binding analysis, and complete occurrence-level file redirect facts."
 }

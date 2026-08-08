@@ -180,9 +180,30 @@ internal static partial class BashCommandParser
 
         private CommandOccurrenceFacts CreateDefaultFacts(Clause clause) => new()
         {
-            IsComplete = clause.Redirects.Count == 0 &&
+            Redirects = BashRedirectAnalysis.Analyze(clause),
+            IsComplete = clause.Verb.Tokens.Count > 0 &&
+                AreRedirectsComplete(clause) &&
                 !HasUnexpandedCommandString(clause),
         };
+
+        private static bool AreRedirectsComplete(Clause clause)
+        {
+            var redirects = BashRedirectAnalysis.Analyze(clause);
+            if (redirects.Count != clause.Redirects.Count)
+            {
+                return false;
+            }
+
+            foreach (var redirect in redirects)
+            {
+                if (!redirect.IsComplete)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
 
         internal bool TryParse(out ShellBlockSyntax syntax, out string? error)
         {
@@ -1267,11 +1288,14 @@ internal static partial class BashCommandParser
                     parseOptions.WorkingDirectory ?? Environment.CurrentDirectory));
             }
 
+            var redirectAnalysis = BashRedirectAnalysis.Analyze(simple.Clause);
             _facts.Add(simple.Clause, new CommandOccurrenceFacts
             {
+                Redirects = redirectAnalysis,
                 ValueProvenance = valueProvenance.ToArray(),
                 CwdPathDependencies = cwdPathDependencies.ToArray(),
-                IsComplete = simple.Clause.Redirects.Count == 0 &&
+                IsComplete = simple.Clause.Verb.Tokens.Count > 0 &&
+                    AreRedirectsComplete(simple.Clause) &&
                     !HasUnexpandedCommandString(simple.Clause),
             });
         }

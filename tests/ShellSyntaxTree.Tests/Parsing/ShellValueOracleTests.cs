@@ -12,6 +12,76 @@ namespace ShellSyntaxTree.Tests.Parsing;
 
 public class ShellValueOracleTests
 {
+    [Fact]
+    public void Bash_descriptor_duplicate_routes_stderr_to_stdout()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked(
+            "bash",
+            "-c",
+            "{ printf out; printf err >&2; } 2>&1");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("outerr", result.StandardOutput);
+        Assert.Empty(result.StandardError);
+    }
+
+    [Fact]
+    public void Bash_removes_line_continuation_before_descriptor_recognition()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked(
+            "bash",
+            "-c",
+            "{ printf via3 >&3; } 3\\\n>&1");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("via3", result.StandardOutput);
+        Assert.Empty(result.StandardError);
+    }
+
+    [Fact]
+    public void Bash_combined_output_overwrite_and_append_share_one_file()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "shellsyntaxtree-redirect-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            var result = RunUncheckedInWorkingDirectory(
+                "bash",
+                root,
+                "-c",
+                "{ printf out; printf err >&2; } &> combined.log; " +
+                "{ printf plus; printf more >&2; } &>> combined.log");
+
+            Assert.Equal(0, result.ExitCode);
+            Assert.Empty(result.StandardOutput);
+            Assert.Empty(result.StandardError);
+            Assert.Equal(
+                "outerrplusmore",
+                File.ReadAllText(Path.Combine(root, "combined.log")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("cat <<EOF\n$(printf executed)\nEOF", "executed")]
     [InlineData("cat <<E\"OF\"\n$(printf executed)\nEOF", "$(printf executed)")]

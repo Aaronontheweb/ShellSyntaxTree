@@ -114,10 +114,16 @@ internal static class BashLexer
             }
 
             // ---- operators (longer-match first) ----
-            // Order matters: `&&` before `&`, `||` before `|`, `>>` before `>`,
-            // `2>>` before `2>`, `<<-` before `<<`, `<<` before `<`. We don't
-            // recognize a bare `&` in v0.1 (no background-job support; SPEC §1).
-            if (TryReadOperator(src, i, out var opLen, out var opText))
+            // Order matters: a token-boundary numeric descriptor precedes its
+            // redirect, `&&` precedes `&`, `||` precedes `|`, `>>` precedes
+            // `>`, and `<<-` precedes `<<` and `<`. Bare `&` background jobs
+            // remain unsupported.
+            if (TryReadOperator(
+                    src,
+                    i,
+                    CanStartNumericDescriptor(tokens),
+                    out var opLen,
+                    out var opText))
             {
                 var operatorTok = new BashToken(
                     BashTokenKind.Operator, "", opText, i, opLen, null);
@@ -268,7 +274,7 @@ internal static class BashLexer
         }
 
         if (previousIndex < 0 || tokens[previousIndex].Kind != BashTokenKind.Operator ||
-            tokens[previousIndex].OperatorText is not (">" or ">>" or "<" or "2>" or "2>>"))
+            !CanTakeDescriptorTarget(tokens[previousIndex].OperatorText))
         {
             return false;
         }
@@ -323,16 +329,89 @@ internal static class BashLexer
         return true;
     }
 
+    private static bool CanTakeDescriptorTarget(string? operatorText)
+    {
+        if (string.IsNullOrEmpty(operatorText))
+        {
+            return false;
+        }
+
+        var operatorStart = 0;
+        while (operatorStart < operatorText!.Length &&
+               operatorText[operatorStart] is >= '0' and <= '9')
+        {
+            operatorStart++;
+        }
+
+        var redirect = operatorText.Substring(operatorStart);
+        return redirect is ">" or ">>" or "<";
+    }
+
     // ---------------------------------------------------------------- operators
 
     private static bool TryReadOperator(
-        ReadOnlySpan<char> src, int i, out int length, out string? text)
+        ReadOnlySpan<char> src,
+        int i,
+        bool canStartNumericDescriptor,
+        out int length,
+        out string? text)
     {
+        var descriptor = new StringBuilder();
+        var descriptorEnd = i;
+        while (descriptorEnd < src.Length)
+        {
+            if (src[descriptorEnd] is >= '0' and <= '9')
+            {
+                descriptor.Append(src[descriptorEnd]);
+                descriptorEnd++;
+                continue;
+            }
+
+            if (TrySkipLineContinuation(src, descriptorEnd, out var afterContinuation))
+            {
+                descriptorEnd = afterContinuation;
+                continue;
+            }
+
+            break;
+        }
+
+        if (canStartNumericDescriptor &&
+            descriptor.Length > 0 &&
+            descriptorEnd < src.Length)
+        {
+            if (src[descriptorEnd] == '>')
+            {
+                var append = descriptorEnd + 1 < src.Length &&
+                    src[descriptorEnd + 1] == '>';
+                length = descriptorEnd - i + (append ? 2 : 1);
+                text = descriptor.ToString() + (append ? ">>" : ">");
+                return true;
+            }
+
+            if (src[descriptorEnd] == '<')
+            {
+                length = descriptorEnd - i + 1;
+                text = descriptor.ToString() + "<";
+                return true;
+            }
+        }
+
         // Multi-char operators first.
         if (i + 1 < src.Length)
         {
             var c0 = src[i];
             var c1 = src[i + 1];
+            if (c0 == '&' && c1 == '>')
+            {
+                if (i + 2 < src.Length && src[i + 2] == '>')
+                {
+                    length = 3; text = "&>>"; return true;
+                }
+
+                length = 2; text = "&>"; return true;
+            }
+
             if (c0 == '&' && c1 == '&') { length = 2; text = "&&"; return true; }
             if (c0 == '|' && c1 == '|') { length = 2; text = "||"; return true; }
             if (c0 == '>' && c1 == '>') { length = 2; text = ">>"; return true; }
@@ -346,15 +425,6 @@ internal static class BashLexer
                 length = 2; text = "<<"; return true;
             }
 
-            if (c0 == '2' && c1 == '>')
-            {
-                if (i + 2 < src.Length && src[i + 2] == '>')
-                {
-                    length = 3; text = "2>>"; return true;
-                }
-
-                length = 2; text = "2>"; return true;
-            }
         }
 
         // Single-char operators.
@@ -369,6 +439,49 @@ internal static class BashLexer
             default:
                 length = 0; text = null; return false;
         }
+    }
+
+    private static bool TrySkipLineContinuation(
+        ReadOnlySpan<char> source,
+        int index,
+        out int afterContinuation)
+    {
+        afterContinuation = index;
+        if (index + 1 >= source.Length || source[index] != '\\' ||
+            source[index + 1] is not ('\n' or '\r'))
+        {
+            return false;
+        }
+
+        afterContinuation = source[index + 1] == '\r' &&
+            index + 2 < source.Length && source[index + 2] == '\n'
+            ? index + 3
+            : index + 2;
+        return true;
+    }
+
+    private static bool CanStartNumericDescriptor(IReadOnlyList<BashToken> tokens)
+    {
+        if (tokens.Count == 0)
+        {
+            return true;
+        }
+
+        var index = tokens.Count - 1;
+        while (index >= 0 && tokens[index].Kind == BashTokenKind.Continuation)
+        {
+            index--;
+        }
+
+        if (index < 0)
+        {
+            return true;
+        }
+
+        return tokens[index].Kind is
+            BashTokenKind.Whitespace or
+            BashTokenKind.Operator or
+            BashTokenKind.Comment;
     }
 
     // ---------------------------------------------------------------- quoted
@@ -1219,10 +1332,6 @@ internal static class BashLexer
                 // Both `&&` and unsupported bare `&` terminate a word. The
                 // tokenizer emits a sentinel for the latter on its next pass.
                 return true;
-            case '2':
-                // `2>` and `2>>` start with '2' — only treat them as operator
-                // starts when the immediate next char is '>'.
-                return i + 1 < src.Length && src[i + 1] == '>';
             default:
                 return false;
         }

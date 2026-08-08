@@ -479,6 +479,55 @@ internal static class AstAssert
                     observed.WorkingDirectory,
                     prefix + $"commands[{index}].workingDirectory");
             }
+
+            if (wanted.Redirects is not null)
+            {
+                AssertRedirectAnalysesEqual(
+                    wanted.Redirects,
+                    observed.Redirects,
+                    prefix + $"commands[{index}].redirects");
+            }
+        }
+    }
+
+    private static void AssertRedirectAnalysesEqual(
+        IReadOnlyList<ExpectedRedirectAnalysis> expected,
+        IReadOnlyList<RedirectAnalysis> actual,
+        string path)
+    {
+        if (expected.Count != actual.Count)
+        {
+            throw new XunitException(
+                $"{path}.count: expected={expected.Count}, actual={actual.Count}");
+        }
+
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var wanted = expected[index];
+            var observed = actual[index];
+            if (wanted.RedirectIndex != observed.RedirectIndex ||
+                wanted.SourceKind != observed.Source.Kind ||
+                wanted.SourceDescriptor != observed.Source.Descriptor ||
+                wanted.Operation != observed.Operation ||
+                wanted.TargetDescriptor != observed.TargetDescriptor ||
+                wanted.IsPathRelevant != observed.IsPathRelevant ||
+                wanted.IsComplete != observed.IsComplete)
+            {
+                throw new XunitException(
+                    $"{path}[{index}] differs: expected index={wanted.RedirectIndex}, "
+                    + $"source={wanted.SourceKind}/{wanted.SourceDescriptor}, "
+                    + $"operation={wanted.Operation}, targetDescriptor={wanted.TargetDescriptor}, "
+                    + $"pathRelevant={wanted.IsPathRelevant}, complete={wanted.IsComplete}; "
+                    + $"actual index={observed.RedirectIndex}, "
+                    + $"source={observed.Source.Kind}/{observed.Source.Descriptor}, "
+                    + $"operation={observed.Operation}, targetDescriptor={observed.TargetDescriptor}, "
+                    + $"pathRelevant={observed.IsPathRelevant}, complete={observed.IsComplete}");
+            }
+
+            AssertValueDomainEqual(
+                wanted.Target,
+                observed.Target,
+                $"{path}[{index}].target");
         }
     }
 
