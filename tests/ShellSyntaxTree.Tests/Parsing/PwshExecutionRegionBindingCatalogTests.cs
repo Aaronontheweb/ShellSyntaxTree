@@ -105,8 +105,8 @@ public class PwshExecutionRegionBindingCatalogTests
         Assert.Equal(2, parsed.Clauses.Count);
         var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(parsed.Syntax.Statements));
         var region = Assert.Single(host.ExecutionRegions);
-        Assert.Equal(ExecutionRegionPhase.Unknown, region.Phase);
-        Assert.All(parsed.Commands, command => Assert.False(command.IsComplete));
+        Assert.Equal(ExecutionRegionPhase.Process, region.Phase);
+        Assert.All(parsed.Commands, command => Assert.True(command.IsComplete));
     }
 
     [Theory]
@@ -129,6 +129,18 @@ public class PwshExecutionRegionBindingCatalogTests
         var binding = Assert.Single(Bind(source).Bindings);
 
         Assert.Equal(ExecutionRegionPhase.Process, binding.Phase);
+    }
+
+    [Theory]
+    [InlineData("Where-Object -InputObject value -FilterScript { Get-Date }")]
+    [InlineData("ForEach-Object -Inp value -Process { Get-Date }")]
+    public void Explicit_input_object_binding_is_retained_for_cardinality_analysis(
+        string source)
+    {
+        var result = Bind(source);
+
+        Assert.Equal(PwshExecutionRegionBindingStatus.ProvedExecution, result.Status);
+        Assert.True(result.HasExplicitInputObject);
     }
 
     [Fact]

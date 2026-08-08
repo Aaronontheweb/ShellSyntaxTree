@@ -1020,6 +1020,68 @@ public class ShellValueOracleTests
             Lines(output));
     }
 
+    [Fact]
+    public void PowerShell_pipeline_callbacks_share_state_and_use_semantic_phases()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$x='outer'; 1,2 | ForEach-Object " +
+            "-End { \"end-before=<$x>\"; $x='end' } " +
+            "-Begin { \"begin-before=<$x>\"; $x='begin' } " +
+            "-Process { \"process-$_-before=<$x>\"; $x=\"p$_\" }; " +
+            "\"foreach-after=<$x>\"; " +
+            "$x='outer'; @() | ForEach-Object -Begin { $x='empty-begin' } " +
+            "-Process { $x='empty-process' } " +
+            "-End { \"empty-end-before=<$x>\"; $x='empty-end' }; " +
+            "\"empty-after=<$x>\"; " +
+            "$x='outer'; 1,2 | Where-Object { $x=\"w$_\"; $true } | Out-Null; " +
+            "\"where-after=<$x>\"; " +
+            "$x='outer'; ForEach-Object { $x='standalone-process' }; " +
+            "\"standalone-foreach=<$x>\"; " +
+            "$x='outer'; Where-Object { $x='standalone-filter'; $true }; " +
+            "\"standalone-where=<$x>\"; " +
+            "$x='outer'; Where-Object -InputObject value " +
+            "-FilterScript { $x='explicit-filter'; $true } | Out-Null; " +
+            "\"explicit-where=<$x>\"; " +
+            "$x='start'; 1,2 | ForEach-Object { \"interleave=<$x>\" } | " +
+            "ForEach-Object { $x='down'; $_ }; " +
+            "$x='start'; . { \"dot=<$x>\"; \"dot=<$x>\" } | " +
+            "ForEach-Object { $x='down'; $_ }; " +
+            "$x='start'; & { \"call=<$x>\"; \"call=<$x>\" } | " +
+            "ForEach-Object { $x='down'; $_ }");
+
+        Assert.Equal(
+            new[]
+            {
+                "begin-before=<outer>",
+                "process-1-before=<begin>",
+                "process-2-before=<p1>",
+                "end-before=<p2>",
+                "foreach-after=<end>",
+                "empty-end-before=<empty-begin>",
+                "empty-after=<empty-end>",
+                "where-after=<w2>",
+                "standalone-foreach=<standalone-process>",
+                "standalone-where=<outer>",
+                "explicit-where=<explicit-filter>",
+                "interleave=<start>",
+                "interleave=<down>",
+                "dot=<start>",
+                "dot=<down>",
+                "call=<start>",
+                "call=<down>",
+            },
+            Lines(output));
+    }
+
     private static bool IsAvailable(string executable)
     {
         try

@@ -90,6 +90,8 @@ internal sealed record PwshExecutionRegionBindingResult
 
     internal string? CanonicalCommandName { get; init; }
 
+    internal bool HasExplicitInputObject { get; init; }
+
     internal IReadOnlyList<PwshExecutionRegionBinding> Bindings { get; init; } =
         Array.Empty<PwshExecutionRegionBinding>();
 }
@@ -440,6 +442,7 @@ internal static class PwshExecutionRegionBindingCatalog
             Receiver = receiver,
             ParameterSet = parameterSet,
             CanonicalCommandName = canonicalName,
+            HasExplicitInputObject = arguments.HasNamed("InputObject"),
             Bindings = bindings.OrderBy(binding => binding.HostClauseElementIndex).ToArray(),
         };
     }
