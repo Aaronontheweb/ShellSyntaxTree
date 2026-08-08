@@ -1202,10 +1202,13 @@ internal sealed class PwshForEachValueAnalyzer
             return flow;
         }
 
+        var commandIdentityProven = IsCommandIdentityProven(
+            simple.Clause,
+            receiverInput);
         var binding = PwshExecutionRegionBindingCatalog.Bind(
             simple.Clause,
-            IsCommandIdentityProven(simple.Clause, receiverInput));
-        if (!IsSupportedSynchronousReceiver(binding) ||
+            commandIdentityProven);
+        if (!IsSupportedExecutionRegionReceiver(binding) ||
             !TryApplyExecutionRegionBindings(simple, binding, out var regions))
         {
             RecordExecutionRegions(
@@ -1213,6 +1216,12 @@ internal sealed class PwshForEachValueAnalyzer
                 simple.ExecutionRegions,
                 simple.ExecutionRegions);
             _executionRegionEffectCount++;
+            if (commandIdentityProven &&
+                binding.Receiver == PwshExecutionRegionReceiver.StartJob)
+            {
+                return flow;
+            }
+
             _childScopeEscapeRiskCount++;
             return new PwshFlowResult(
                 flow.OnSuccess is AnalysisContext success
@@ -1255,6 +1264,11 @@ internal sealed class PwshForEachValueAnalyzer
                 ? receiverInput.Invalidate(unknownCwd: false)
                 : receiverInput;
             return AnalyzeNewModule(regions[0], bodyInput, flow);
+        }
+
+        if (binding.ParameterSet == PwshExecutionRegionParameterSet.StartJobScriptBlock)
+        {
+            return AnalyzeStartJob(simple, binding, regions, receiverInput, flow);
         }
 
         var executionRegionEffectCount = _executionRegionEffectCount;
@@ -1303,6 +1317,92 @@ internal sealed class PwshForEachValueAnalyzer
         }
 
         return PwshFlowResult.Both(hostExit.WithCwd(bodyExit.WorkingDirectory));
+    }
+
+    private PwshFlowResult AnalyzeStartJob(
+        SimpleCommandSyntax simple,
+        PwshExecutionRegionBindingResult binding,
+        IReadOnlyList<ExecutionRegionSyntax> regions,
+        AnalysisContext receiverInput,
+        PwshFlowResult hostFlow)
+    {
+        var executionRegionEffectCount = _executionRegionEffectCount;
+        var nonRegionStateMutationCount = _nonRegionStateMutationCount;
+        var locationStateMutationCount = _locationStateMutationCount;
+        var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
+        try
+        {
+            var child = CreateStartJobInput(simple, binding, receiverInput);
+            if (TryAnalyzeRegionPhase(
+                    regions,
+                    ExecutionRegionPhase.Initialization,
+                    child,
+                    out var initialized))
+            {
+                TryAnalyzeRegionPhase(
+                    regions,
+                    ExecutionRegionPhase.Main,
+                    initialized,
+                    out _);
+            }
+        }
+        finally
+        {
+            _executionRegionEffectCount = executionRegionEffectCount + regions.Count;
+            _nonRegionStateMutationCount = nonRegionStateMutationCount;
+            _locationStateMutationCount = locationStateMutationCount;
+            _childScopeEscapeRiskCount = childScopeEscapeRiskCount;
+        }
+
+        return hostFlow;
+    }
+
+    private AnalysisContext CreateStartJobInput(
+        SimpleCommandSyntax simple,
+        PwshExecutionRegionBindingResult binding,
+        AnalysisContext receiverInput)
+    {
+        var child = receiverInput
+            .Invalidate(unknownCwd: false, invalidateCommandResolution: false)
+            .WithoutBindings();
+        if (binding.WorkingDirectoryElementIndex is not int elementIndex)
+        {
+            return child;
+        }
+
+        if (!TryGetElementValue(
+                simple,
+                elementIndex,
+                binding.WorkingDirectoryValueOffset,
+                out var targetValue))
+        {
+            return child.WithCwd(workingDirectory: null);
+        }
+
+        if (receiverInput.TryEvaluateValue(targetValue, out var domain) &&
+            domain.Kind == ShellValueDomainKind.Exact &&
+            domain.Values.Count == 1)
+        {
+            targetValue = ShellValue.Literal(domain.Values[0]);
+        }
+
+        var options = new PwshParserOptions
+        {
+            HomeDirectory = _options.HomeDirectory,
+            WorkingDirectory = receiverInput.WorkingDirectory,
+            InitialStateMode = _options.InitialStateMode,
+        };
+        var resolved = PwshResolver.Resolve(
+            targetValue,
+            treatAsPath: true,
+            options,
+            workingDirectoryUnknown: true,
+            ShellResolutionConsumer.PowerShellCmdletPath);
+        return child.WithCwd(
+            resolved.IsPath &&
+            resolved.Resolved is not null
+                ? resolved.Resolved
+                : null);
     }
 
     private PwshFlowResult AnalyzeInProcessInvokeCommand(
@@ -1557,19 +1657,37 @@ internal sealed class PwshForEachValueAnalyzer
         return true;
     }
 
-    private static bool IsSupportedSynchronousReceiver(
-        PwshExecutionRegionBindingResult binding) =>
-        binding.Status == PwshExecutionRegionBindingStatus.ProvedExecution &&
-        (binding.ParameterSet is PwshExecutionRegionParameterSet.MeasureExpression or
-            PwshExecutionRegionParameterSet.TraceExpression or
-            PwshExecutionRegionParameterSet.InvokeInProcess or
-            PwshExecutionRegionParameterSet.NewModuleScriptBlock or
-            PwshExecutionRegionParameterSet.ForEachScriptBlock or
-            PwshExecutionRegionParameterSet.WhereScriptBlock) &&
-        AllBindingsAreCompleteAndSynchronous(binding.Bindings);
+    private static bool IsSupportedExecutionRegionReceiver(
+        PwshExecutionRegionBindingResult binding)
+    {
+        if (binding.Status != PwshExecutionRegionBindingStatus.ProvedExecution)
+        {
+            return false;
+        }
 
-    private static bool AllBindingsAreCompleteAndSynchronous(
-        IReadOnlyList<PwshExecutionRegionBinding> bindings)
+        return binding.ParameterSet switch
+        {
+            PwshExecutionRegionParameterSet.StartJobScriptBlock =>
+                !binding.HasExplicitPSVersion &&
+                AllBindingsAreCompleteWithTiming(
+                    binding.Bindings,
+                    ExecutionRegionTiming.Concurrent),
+            PwshExecutionRegionParameterSet.MeasureExpression or
+                PwshExecutionRegionParameterSet.TraceExpression or
+                PwshExecutionRegionParameterSet.InvokeInProcess or
+                PwshExecutionRegionParameterSet.NewModuleScriptBlock or
+                PwshExecutionRegionParameterSet.ForEachScriptBlock or
+                PwshExecutionRegionParameterSet.WhereScriptBlock =>
+                AllBindingsAreCompleteWithTiming(
+                    binding.Bindings,
+                    ExecutionRegionTiming.Synchronous),
+            _ => false,
+        };
+    }
+
+    private static bool AllBindingsAreCompleteWithTiming(
+        IReadOnlyList<PwshExecutionRegionBinding> bindings,
+        ExecutionRegionTiming timing)
     {
         if (bindings.Count == 0)
         {
@@ -1579,7 +1697,7 @@ internal sealed class PwshForEachValueAnalyzer
         for (var index = 0; index < bindings.Count; index++)
         {
             if (!bindings[index].IsComplete ||
-                bindings[index].Timing != ExecutionRegionTiming.Synchronous)
+                bindings[index].Timing != timing)
             {
                 return false;
             }
@@ -2253,16 +2371,40 @@ internal sealed class PwshForEachValueAnalyzer
         AnalysisContext input,
         out ShellValueDomain domain)
     {
+        if (TryGetElementValue(simple, elementIndex, 0, out var value))
+        {
+            return input.TryEvaluateValue(value, out domain);
+        }
+
+        domain = ShellValueDomain.Unknown;
+        return false;
+    }
+
+    private bool TryGetElementValue(
+        SimpleCommandSyntax simple,
+        int elementIndex,
+        int valueOffset,
+        out ShellValue value)
+    {
         var source = _factsFactory(simple);
         foreach (var provenance in source.ValueProvenance)
         {
             if (provenance.ClauseElementIndex == elementIndex)
             {
-                return input.TryEvaluateValue(provenance.Value, out domain);
+                if (valueOffset < 0 || valueOffset > provenance.Value.Decoded.Length)
+                {
+                    value = ShellValue.Literal(string.Empty);
+                    return false;
+                }
+
+                value = valueOffset == 0
+                    ? provenance.Value
+                    : provenance.Value.Slice(valueOffset);
+                return true;
             }
         }
 
-        domain = ShellValueDomain.Unknown;
+        value = ShellValue.Literal(string.Empty);
         return false;
     }
 

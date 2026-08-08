@@ -490,6 +490,62 @@ public class PwshExecutionRegionBindingCatalogTests
             Assert.Equal(ExecutionRegionTiming.Concurrent, binding.Timing));
     }
 
+    [Theory]
+    [InlineData("Start-Job -WorkingDirectory /tmp -ScriptBlock { Get-Date }", "/tmp")]
+    [InlineData("Start-Job -WorkingD /var/tmp -ScriptBlock { Get-Date }", "/var/tmp")]
+    [InlineData("Start-Job -WorkingDirectory:/opt -ScriptBlock { Get-Date }", "/opt")]
+    [InlineData(
+        "Start-Job -WorkingDirectory:' /tmp ' -ScriptBlock { Get-Date }",
+        " /tmp ")]
+    [InlineData(
+        "Start-Job -WorkingDirectory:\"x$HOME\" -ScriptBlock { Get-Date }",
+        "x$HOME")]
+    public void Start_job_retains_the_bound_working_directory_coordinate(
+        string source,
+        string expectedValue)
+    {
+        var clause = ParseClause(source);
+        var result = PwshExecutionRegionBindingCatalog.Bind(
+            clause,
+            commandIdentityProven: true);
+
+        var elementIndex = Assert.IsType<int>(result.WorkingDirectoryElementIndex);
+        Assert.EndsWith(expectedValue, clause.Elements[elementIndex].Value);
+        Assert.Equal(
+            expectedValue,
+            clause.Elements[elementIndex].Value.Substring(
+                result.WorkingDirectoryValueOffset));
+        Assert.Equal(PwshExecutionRegionBindingStatus.ProvedExecution, result.Status);
+    }
+
+    [Fact]
+    public void Non_job_receivers_do_not_publish_a_working_directory_coordinate()
+    {
+        var result = Bind("Invoke-Command -ScriptBlock { Get-Date }");
+
+        Assert.Null(result.WorkingDirectoryElementIndex);
+        Assert.Equal(0, result.WorkingDirectoryValueOffset);
+    }
+
+    [Theory]
+    [InlineData("Start-Job -PSVersion 5.1 -ScriptBlock { Get-Date }")]
+    [InlineData("Start-Job -PSVersion:5.1 -ScriptBlock { Get-Date }")]
+    public void Start_job_retains_an_explicit_child_version_boundary(string source)
+    {
+        var result = Bind(source);
+
+        Assert.True(result.HasExplicitPSVersion);
+        Assert.Equal(PwshExecutionRegionBindingStatus.ProvedExecution, result.Status);
+    }
+
+    [Fact]
+    public void Default_start_job_does_not_invent_an_explicit_child_version()
+    {
+        var result = Bind("Start-Job -ScriptBlock { Get-Date }");
+
+        Assert.False(result.HasExplicitPSVersion);
+    }
+
     [Fact]
     public void Named_primary_parameters_shift_positional_script_block_slots()
     {
