@@ -35,6 +35,150 @@ public class PwshExecutionRegionStructuralTests
         Assert.All(result.Commands, command => Assert.True(command.IsComplete));
     }
 
+    [Theory]
+    [InlineData("Invoke-Command { Get-Item child.txt }")]
+    [InlineData("icm -ScriptBlock { Get-Item child.txt }")]
+    [InlineData("Microsoft.PowerShell.Core\\Invoke-Command { Get-Item child.txt }")]
+    public void In_process_invoke_command_publishes_a_synchronous_once_region(
+        string source)
+    {
+        var result = ParseIsolated(source);
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionOrigin.CommandArgument, region.Origin);
+        Assert.Equal(ExecutionRegionPhase.Main, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, region.Cardinality);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void In_process_invoke_command_isolates_bindings_but_shares_location()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; Invoke-Command { " +
+            "foreach ($x in 'inner') { }; Set-Location /tmp }; " +
+            "Write-Output $x; Get-Item child.txt");
+
+        var continuation = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] is "Write-Output" or "Get-Item")
+            .TakeLast(2)
+            .ToArray();
+        Assert.Equal(
+            new[] { "outer" },
+            Assert.Single(continuation[0].EffectiveArguments).Value.Values);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            continuation[1].WorkingDirectory.Kind);
+        Assert.All(continuation, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void In_process_invoke_command_no_new_scope_shares_supported_state()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; Invoke-Command -NoNewScope { " +
+            "foreach ($x in 'inner') { }; Set-Location /tmp }; " +
+            "Write-Output $x; Get-Item child.txt");
+
+        var continuation = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] is "Write-Output" or "Get-Item")
+            .TakeLast(2)
+            .ToArray();
+        Assert.Equal(
+            new[] { "inner" },
+            Assert.Single(continuation[0].EffectiveArguments).Value.Values);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            continuation[1].WorkingDirectory.Kind);
+        Assert.All(continuation, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void In_process_invoke_command_explicit_false_no_new_scope_isolates_state()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; " +
+            "Invoke-Command -NoNewScope:$false { foreach ($x in 'inner') { } }; " +
+            "Write-Output $x");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal(
+            new[] { "outer" },
+            Assert.Single(continuation.EffectiveArguments).Value.Values);
+        Assert.True(continuation.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("Invoke-Command -ComputerName server -ScriptBlock { Get-Date }")]
+    [InlineData("Invoke-Command -AsJob -ScriptBlock { Get-Date }")]
+    [InlineData("Invoke-Command -NoNewScope:$scope -ScriptBlock { Get-Date }")]
+    public void Unproved_invoke_command_shapes_remain_unknown(string source)
+    {
+        var result = ParseIsolated(source);
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Unknown, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Unknown, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Unknown, region.Cardinality);
+        Assert.All(result.Commands, command => Assert.False(command.IsComplete));
+    }
+
+    [Fact]
+    public void In_process_invoke_command_child_scope_isolates_alias_mutation()
+    {
+        var result = ParseIsolated(
+            "Invoke-Command { Set-Alias Measure-Command Write-Output }; " +
+            "Measure-Command { Get-Date }");
+
+        var host = result.Syntax.Statements
+            .OfType<CommandListSyntax>()
+            .SelectMany(list => list.Items)
+            .Select(item => item.Command)
+            .OfType<SimpleCommandSyntax>()
+            .Last();
+        Assert.Equal(
+            ExecutionRegionPhase.Main,
+            Assert.Single(host.ExecutionRegions).Phase);
+        Assert.True(result.Commands.Last().IsComplete);
+    }
+
+    [Fact]
+    public void In_process_invoke_command_no_new_scope_propagates_alias_mutation()
+    {
+        var result = ParseIsolated(
+            "Invoke-Command -NoNewScope { Set-Alias Measure-Command Write-Output }; " +
+            "Measure-Command { Get-Date }");
+
+        var host = result.Syntax.Statements
+            .OfType<CommandListSyntax>()
+            .SelectMany(list => list.Items)
+            .Select(item => item.Command)
+            .OfType<SimpleCommandSyntax>()
+            .Last();
+        Assert.Equal(
+            ExecutionRegionPhase.Unknown,
+            Assert.Single(host.ExecutionRegions).Phase);
+        Assert.False(result.Commands.Last().IsComplete);
+    }
+
+    [Fact]
+    public void In_process_invoke_command_joins_body_outcomes_before_host_continuation()
+    {
+        var result = ParseIsolated(
+            "Invoke-Command { Set-Location /maybe } && Get-Item child.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            continuation.WorkingDirectory.Kind);
+        Assert.True(continuation.IsComplete);
+    }
+
     [Fact]
     public void Current_scope_once_receiver_propagates_binding_state()
     {
@@ -438,6 +582,37 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(
             ShellValueDomainKind.Unknown,
             Assert.Single(callbackWrite.EffectiveArguments).Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("Invoke-Command", "")]
+    [InlineData("Invoke-Command -NoNewScope", "")]
+    [InlineData(".", "")]
+    [InlineData("&", "")]
+    [InlineData("Measure-Command", "")]
+    [InlineData("Trace-Command -Name ParameterBinding -Expression", " -PSHost")]
+    public void Pipeline_stage_effects_make_synchronous_region_state_unknown(
+        string invocation,
+        string trailingArguments)
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'start') { }; " + invocation + " { " +
+            "Write-Output $x; Write-Output $x; foreach ($x in 'end') { } }" +
+            trailingArguments + " | " +
+            "Write-Output -OutVariable x");
+
+        var upstream = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .Take(2)
+            .ToArray();
+        Assert.Equal(2, upstream.Length);
+        Assert.All(upstream, command =>
+        {
+            Assert.False(command.IsComplete);
+            Assert.Equal(
+                ShellValueDomainKind.Unknown,
+                Assert.Single(command.EffectiveArguments).Value.Kind);
+        });
     }
 
     [Fact]

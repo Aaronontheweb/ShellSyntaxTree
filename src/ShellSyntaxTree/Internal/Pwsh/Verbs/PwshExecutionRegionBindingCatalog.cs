@@ -92,6 +92,8 @@ internal sealed record PwshExecutionRegionBindingResult
 
     internal bool HasExplicitInputObject { get; init; }
 
+    internal bool HasNoNewScope { get; init; }
+
     internal IReadOnlyList<PwshExecutionRegionBinding> Bindings { get; init; } =
         Array.Empty<PwshExecutionRegionBinding>();
 }
@@ -443,6 +445,8 @@ internal static class PwshExecutionRegionBindingCatalog
             ParameterSet = parameterSet,
             CanonicalCommandName = canonicalName,
             HasExplicitInputObject = arguments.HasNamed("InputObject"),
+            HasNoNewScope = receiver == PwshExecutionRegionReceiver.InvokeCommand &&
+                arguments.IsSwitchEnabled("NoNewScope"),
             Bindings = bindings.OrderBy(binding => binding.HostClauseElementIndex).ToArray(),
         };
     }
@@ -1571,6 +1575,33 @@ internal static class PwshExecutionRegionBindingCatalog
         }
 
         internal bool HasNamed(string name) => NamedParameters.Contains(name);
+
+        internal bool IsSwitchEnabled(string name)
+        {
+            if (!HasNamed(name))
+            {
+                return false;
+            }
+
+            foreach (var argument in NamedArguments)
+            {
+                if (!string.Equals(
+                        argument.ParameterName,
+                        name,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                return string.Equals(
+                        argument.Value,
+                        "$true",
+                        StringComparison.OrdinalIgnoreCase) ||
+                    argument.Value == "1";
+            }
+
+            return true;
+        }
 
         internal bool HasAnyNamed(params string[] names) => names.Any(HasNamed);
 
