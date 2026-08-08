@@ -350,7 +350,11 @@ priorities.
       delivered for ordinary, adjacent, quoted, here-string, redirect, standalone,
       call-operator, dynamic-identity, and host-wrapper positions, with
       current-scope state propagation and bounded expression rejection pinned
-      by the 383-entry executable corpus.
+      by the 393-entry executable corpus. Remote/session/SSH/VM/container
+      `Invoke-Command` now starts from arbitrary child state, isolates all exit
+      effects, publishes synchronous/once only for one proved target, and
+      publishes concurrent timing for multiple targets or enabled asynchronous
+      switches while keeping dynamic cardinality fail closed.
 - [ ] Deliver typed PowerShell script-block execution regions before calling
       tasks 7.5-7.7 complete. The corrected contract adds an execution-region
       syntax node with independent origin, phase, timing, and cardinality rather than a
@@ -443,8 +447,8 @@ priorities.
       mutator such as `Set-Alias` being rebound to `Set-Item` before a later
       authored `Set-Alias Env:...` invocation.
       The generator-owned executable corpus now supports per-entry initial-
-      state mode and includes the promoted Parallel design case. Pinned child
-      runspace jobs and remote/session invocation remain before deferred
+      state mode and includes the promoted Parallel and remote/session cases.
+      Pinned child runspace jobs remain before deferred
       breakpoint/event/completion actions; then unknown
       receiver and nested/adversarial matrices. Preserve script blocks proved
       to be data as opaque values, expose ambiguous bodies with incomplete

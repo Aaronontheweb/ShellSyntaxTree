@@ -553,14 +553,24 @@ internal static class PwshExecutionRegionBindingCatalog
         var set = remote
             ? PwshExecutionRegionParameterSet.InvokeRemote
             : PwshExecutionRegionParameterSet.InvokeInProcess;
+        var remoteTargetCardinality = remote
+            ? GetRemoteTargetCardinality(arguments, compatibleSets)
+            : RemoteTargetCardinality.Unknown;
+        var timing = remote
+            ? GetRemoteTiming(arguments, remoteTargetCardinality)
+            : ExecutionRegionTiming.Synchronous;
+        var cardinality = remoteTargetCardinality == RemoteTargetCardinality.Single
+            ? ExecutionRegionCardinality.Once
+            : remote
+                ? ExecutionRegionCardinality.Unknown
+                : ExecutionRegionCardinality.Once;
         var named = AddNamed(
             arguments,
             bindings,
             "ScriptBlock",
             ExecutionRegionPhase.Main,
-            remote ? ExecutionRegionTiming.Unknown : ExecutionRegionTiming.Synchronous,
-            remote ? ExecutionRegionCardinality.Unknown : ExecutionRegionCardinality.Once,
-            isComplete: !remote);
+            timing,
+            cardinality);
         if (named > 0)
         {
             return set;
@@ -575,13 +585,229 @@ internal static class PwshExecutionRegionBindingCatalog
                 boundBlock.ElementIndex,
                 "ScriptBlock",
                 ExecutionRegionPhase.Main,
-                remote ? ExecutionRegionTiming.Unknown : ExecutionRegionTiming.Synchronous,
-                remote ? ExecutionRegionCardinality.Unknown : ExecutionRegionCardinality.Once,
-                isComplete: !remote));
+                timing,
+                cardinality));
         }
 
         return set;
     }
+
+    private static ExecutionRegionTiming GetRemoteTiming(
+        BoundArguments arguments,
+        RemoteTargetCardinality targetCardinality)
+    {
+        if (arguments.IsSwitchEnabled("AsJob") ||
+            arguments.IsSwitchEnabled("InDisconnectedSession") ||
+            targetCardinality == RemoteTargetCardinality.Multiple)
+        {
+            return ExecutionRegionTiming.Concurrent;
+        }
+
+        return targetCardinality == RemoteTargetCardinality.Single
+            ? ExecutionRegionTiming.Synchronous
+            : ExecutionRegionTiming.Unknown;
+    }
+
+    private static RemoteTargetCardinality GetRemoteTargetCardinality(
+        BoundArguments arguments,
+        IReadOnlyList<ParameterSetDefinition> compatibleSets)
+    {
+        string? targetParameter = null;
+        ParameterSetDefinition? selectedSet = null;
+        foreach (var compatibleSet in compatibleSets)
+        {
+            var candidate = RemoteTargetParameterFor(compatibleSet.Name);
+            if (candidate is null ||
+                targetParameter is not null && !targetParameter.Equals(
+                    candidate,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return RemoteTargetCardinality.Unknown;
+            }
+
+            targetParameter = candidate;
+            selectedSet = compatibleSet;
+        }
+
+        if (targetParameter is null || selectedSet is null)
+        {
+            return RemoteTargetCardinality.Unknown;
+        }
+
+        var targets = arguments.ArgumentsBoundTo(targetParameter, selectedSet);
+        if (targets.Count == 0)
+        {
+            return RemoteTargetCardinality.Unknown;
+        }
+
+        if (targets.Count > 1 || targets.Any(TargetHasMultipleValues))
+        {
+            return RemoteTargetCardinality.Multiple;
+        }
+
+        return IsProvedScalarTarget(targets[0], targetParameter)
+            ? RemoteTargetCardinality.Single
+            : RemoteTargetCardinality.Unknown;
+    }
+
+    private static bool TargetHasMultipleValues(BoundArgument target)
+    {
+        if (target.HasTrailingComma)
+        {
+            return true;
+        }
+
+        var raw = target.RawValue.Trim();
+        if (raw.Length == 0 || IsQuotedScalar(raw))
+        {
+            return false;
+        }
+
+        if (raw.StartsWith("@(", StringComparison.Ordinal) &&
+            raw.EndsWith(")", StringComparison.Ordinal))
+        {
+            raw = raw.Substring(2, raw.Length - 3);
+        }
+
+        return ContainsTopLevelComma(raw);
+    }
+
+    private static bool ContainsTopLevelComma(string raw)
+    {
+        var parenthesisDepth = 0;
+        var braceDepth = 0;
+        var bracketDepth = 0;
+        var quote = '\0';
+        for (var index = 0; index < raw.Length; index++)
+        {
+            var current = raw[index];
+            if (quote != '\0')
+            {
+                if (quote == '\'' && current == '\'' &&
+                    index + 1 < raw.Length && raw[index + 1] == '\'')
+                {
+                    index++;
+                    continue;
+                }
+
+                if (quote == '"' && current == '`' && index + 1 < raw.Length)
+                {
+                    index++;
+                    continue;
+                }
+
+                if (current == quote)
+                {
+                    quote = '\0';
+                }
+
+                continue;
+            }
+
+            if (current == '`' && index + 1 < raw.Length)
+            {
+                index++;
+                continue;
+            }
+
+            if (current is '\'' or '"')
+            {
+                quote = current;
+                continue;
+            }
+
+            switch (current)
+            {
+                case '(':
+                    parenthesisDepth++;
+                    break;
+                case ')':
+                    if (parenthesisDepth > 0)
+                    {
+                        parenthesisDepth--;
+                    }
+
+                    break;
+                case '{':
+                    braceDepth++;
+                    break;
+                case '}':
+                    if (braceDepth > 0)
+                    {
+                        braceDepth--;
+                    }
+
+                    break;
+                case '[':
+                    bracketDepth++;
+                    break;
+                case ']':
+                    if (bracketDepth > 0)
+                    {
+                        bracketDepth--;
+                    }
+
+                    break;
+                case ',' when parenthesisDepth == 0 &&
+                    braceDepth == 0 && bracketDepth == 0:
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsProvedScalarTarget(
+        BoundArgument target,
+        string targetParameter)
+    {
+        if (target.HasTrailingComma || TargetHasMultipleValues(target))
+        {
+            return false;
+        }
+
+        var raw = target.RawValue.Trim();
+        if (IsQuotedScalar(raw))
+        {
+            return true;
+        }
+
+        if (targetParameter.Equals("SSHConnection", StringComparison.OrdinalIgnoreCase))
+        {
+            return raw.StartsWith("@{", StringComparison.Ordinal) &&
+                raw.EndsWith("}", StringComparison.Ordinal);
+        }
+
+        if (targetParameter.Equals("ConnectionUri", StringComparison.OrdinalIgnoreCase) ||
+            targetParameter.Equals("VMId", StringComparison.OrdinalIgnoreCase))
+        {
+            // Compatible parameter-set selection already proved the scalar
+            // URI or GUID conversion; their punctuation can be DynamicSkip
+            // in the general shell argument classifier.
+            return true;
+        }
+
+        return target.Kind is ArgKind.Literal or ArgKind.Glob or ArgKind.Tilde;
+    }
+
+    private static bool IsQuotedScalar(string raw) =>
+        raw.Length >= 2 &&
+        raw[0] is '\'' or '"' &&
+        raw[raw.Length - 1] == raw[0];
+
+    private static string? RemoteTargetParameterFor(string parameterSetName) =>
+        parameterSetName switch
+        {
+            "Session" => "Session",
+            "ComputerName" => "ComputerName",
+            "Uri" => "ConnectionUri",
+            "VMId" => "VMId",
+            "VMName" => "VMName",
+            "SSHHost" => "HostName",
+            "ContainerId" => "ContainerId",
+            "SSHHostHashParam" => "SSHConnection",
+            _ => null,
+        };
 
     private static PwshExecutionRegionParameterSet BindTraceCommand(
         BoundArguments arguments,
@@ -869,6 +1095,8 @@ internal static class PwshExecutionRegionBindingCatalog
                     result.NamedArguments.Add(new BoundArgument(
                         index, -1, true, resolution.CanonicalName,
                         HasTrailingComma(element), parameter.InlineValue!,
+                        InlineRawValue(element.Raw),
+                        element.Kind,
                         element.Value.Length - parameter.InlineValue!.Length));
                     if (HasTrailingComma(element)
                         && !AcceptsScriptBlockArray(resolution.CanonicalName!))
@@ -881,10 +1109,28 @@ internal static class PwshExecutionRegionBindingCatalog
 
                 if (parameter.HasInlineValue)
                 {
+                    var hasTrailingComma = HasTrailingComma(element);
                     result.NamedArguments.Add(new BoundArgument(
-                        index, -1, false, resolution.CanonicalName, false,
+                        index, -1, false, resolution.CanonicalName, hasTrailingComma,
                         parameter.InlineValue!,
+                        InlineRawValue(element.Raw),
+                        element.Kind,
                         element.Value.Length - parameter.InlineValue!.Length));
+                    if (hasTrailingComma &&
+                        AcceptsArgumentArray(resolution.CanonicalName!))
+                    {
+                        ConsumeNamedArrayContinuation(
+                            elements,
+                            index,
+                            resolution.CanonicalName!,
+                            consumed,
+                            result);
+                    }
+                    else if (hasTrailingComma)
+                    {
+                        result.HasInvalidScalarScriptBlockArray = true;
+                    }
+
                     continue;
                 }
 
@@ -909,9 +1155,21 @@ internal static class PwshExecutionRegionBindingCatalog
                 result.NamedArguments.Add(new BoundArgument(
                     valueIndex, -1, IsScriptBlock(elements[valueIndex]),
                     resolution.CanonicalName, HasTrailingComma(elements[valueIndex]),
-                    elements[valueIndex].Value));
-                if (HasTrailingComma(elements[valueIndex])
-                    && !AcceptsScriptBlockArray(resolution.CanonicalName!))
+                    elements[valueIndex].Value,
+                    elements[valueIndex].Raw,
+                    elements[valueIndex].Kind));
+                if (HasTrailingComma(elements[valueIndex]) &&
+                    AcceptsArgumentArray(resolution.CanonicalName!))
+                {
+                    ConsumeNamedArrayContinuation(
+                        elements,
+                        valueIndex,
+                        resolution.CanonicalName!,
+                        consumed,
+                        result);
+                }
+                else if (HasTrailingComma(elements[valueIndex]) &&
+                    !AcceptsScriptBlockArray(resolution.CanonicalName!))
                 {
                     result.HasInvalidScalarScriptBlockArray = true;
                 }
@@ -921,11 +1179,43 @@ internal static class PwshExecutionRegionBindingCatalog
 
             result.PositionalArguments.Add(new BoundArgument(
                 index, positionalIndex, IsScriptBlock(element), null,
-                HasTrailingComma(element), element.Value));
+                HasTrailingComma(element), element.Value, element.Raw, element.Kind));
             positionalIndex++;
         }
 
         return result;
+    }
+
+    private static void ConsumeNamedArrayContinuation(
+        IReadOnlyList<ClauseElement> elements,
+        int firstValueIndex,
+        string parameterName,
+        HashSet<int> consumed,
+        BoundArguments result)
+    {
+        var valueIndex = firstValueIndex;
+        while (HasTrailingComma(elements[valueIndex]))
+        {
+            if (!TryFindNextArgument(elements, valueIndex + 1, out var nextIndex) ||
+                elements[nextIndex].IsFlag)
+            {
+                result.HasAmbiguousScriptBlockBinding = true;
+                return;
+            }
+
+            consumed.Add(nextIndex);
+            var next = elements[nextIndex];
+            result.NamedArguments.Add(new BoundArgument(
+                nextIndex,
+                -1,
+                IsScriptBlock(next),
+                parameterName,
+                HasTrailingComma(next),
+                next.Value,
+                next.Raw,
+                next.Kind));
+            valueIndex = nextIndex;
+        }
     }
 
     private static bool TryFindNextArgument(
@@ -971,6 +1261,22 @@ internal static class PwshExecutionRegionBindingCatalog
     private static bool AcceptsScriptBlockArray(string parameterName) =>
         string.Equals(parameterName, "Process", StringComparison.OrdinalIgnoreCase)
         || string.Equals(parameterName, "RemainingScripts", StringComparison.OrdinalIgnoreCase);
+
+    private static bool AcceptsArgumentArray(string parameterName) =>
+        parameterName.Equals("ComputerName", StringComparison.OrdinalIgnoreCase) ||
+        parameterName.Equals("ConnectionUri", StringComparison.OrdinalIgnoreCase) ||
+        parameterName.Equals("Session", StringComparison.OrdinalIgnoreCase) ||
+        parameterName.Equals("VMId", StringComparison.OrdinalIgnoreCase) ||
+        parameterName.Equals("VMName", StringComparison.OrdinalIgnoreCase) ||
+        parameterName.Equals("HostName", StringComparison.OrdinalIgnoreCase) ||
+        parameterName.Equals("ContainerId", StringComparison.OrdinalIgnoreCase) ||
+        parameterName.Equals("SSHConnection", StringComparison.OrdinalIgnoreCase);
+
+    private static string InlineRawValue(string raw)
+    {
+        var separator = raw.IndexOf(':');
+        return separator < 0 ? raw : raw.Substring(separator + 1);
+    }
 
     private static bool HasTrailingComma(ClauseElement element) =>
         element.Raw.TrimEnd().EndsWith(",", StringComparison.Ordinal);
@@ -1027,36 +1333,42 @@ internal static class PwshExecutionRegionBindingCatalog
         string parameterName)
     {
         var valueKind = ValueKindFor(parameterName);
+        var value = argument.HasTrailingComma
+            ? argument.Value.TrimEnd().TrimEnd(',')
+            : argument.Value;
         switch (valueKind)
         {
             case PwshParameterValueKind.String:
                 return !argument.IsScriptBlock
-                    && IsStringLiteral(parameterName, argument.Value);
+                    && IsStringLiteral(parameterName, value);
             case PwshParameterValueKind.Object:
                 return !string.Equals(
-                    argument.Value,
+                    value,
                     "$null",
                     StringComparison.OrdinalIgnoreCase);
             case PwshParameterValueKind.ScriptBlock:
                 return argument.IsScriptBlock;
             case PwshParameterValueKind.Switch:
-                return IsBooleanLiteral(parameterName, argument.Value);
+                return IsBooleanLiteral(parameterName, value);
             case PwshParameterValueKind.Int32:
-                return IsInt32Literal(parameterName, argument.Value);
+                return IsInt32Literal(parameterName, value);
             case PwshParameterValueKind.Enum:
-                return IsEnumLiteral(parameterName, argument.Value);
+                return IsEnumLiteral(parameterName, value);
             case PwshParameterValueKind.Uri:
-                return Uri.TryCreate(argument.Value, UriKind.Absolute, out _);
+                return Uri.TryCreate(value, UriKind.Absolute, out _);
             case PwshParameterValueKind.Guid:
-                return System.Guid.TryParse(argument.Value, out _);
+                return System.Guid.TryParse(value, out _);
             case PwshParameterValueKind.Version:
-                return string.Equals(argument.Value, "5.1", StringComparison.Ordinal);
+                return string.Equals(value, "5.1", StringComparison.Ordinal);
             case PwshParameterValueKind.Hashtable:
-                return argument.Value.StartsWith("@{", StringComparison.Ordinal)
-                    && argument.Value.EndsWith("}", StringComparison.Ordinal)
-                    && argument.Value.Substring(2, argument.Value.Length - 3)
+                return value.StartsWith("@{", StringComparison.Ordinal)
+                    && value.EndsWith("}", StringComparison.Ordinal)
+                    && value.Substring(2, value.Length - 3)
                         .Trim().Length > 0;
             case PwshParameterValueKind.RuntimeObject:
+                return !argument.IsScriptBlock &&
+                    argument.Kind is ArgKind.EnvVar or ArgKind.DynamicSkip &&
+                    !string.Equals(value, "$null", StringComparison.OrdinalIgnoreCase);
             default:
                 return false;
         }
@@ -1459,45 +1771,69 @@ internal static class PwshExecutionRegionBindingCatalog
         Set("Session",
             "Session,ThrottleLimit,AsJob,HideComputerName,JobName,ScriptBlock,RemoteDebug," +
             "InputObject,ArgumentList",
-            "ScriptBlock", new[] { Pos("Session"), Pos("ScriptBlock", true) },
+            "ScriptBlock", new[]
+            {
+                Pos("Session", acceptsCommaContinuation: true),
+                Pos("ScriptBlock", true),
+            },
             selectionRequiredAny: "Session", remote: true),
         Set("FilePathRunspace",
             "Session,ThrottleLimit,AsJob,HideComputerName,JobName,FilePath,RemoteDebug," +
             "InputObject,ArgumentList",
-            "FilePath", new[] { Pos("Session"), Pos("FilePath") },
+            "FilePath", new[]
+            {
+                Pos("Session", acceptsCommaContinuation: true), Pos("FilePath"),
+            },
             selectionRequiredAny: "Session", remote: true),
         Set("ComputerName",
             "ComputerName,Credential,Port,UseSSL,ConfigurationName,ApplicationName," +
             "ThrottleLimit,AsJob,InDisconnectedSession,SessionName,HideComputerName," +
             "JobName,ScriptBlock,SessionOption,Authentication,EnableNetworkAccess," +
             "RemoteDebug,InputObject,ArgumentList,CertificateThumbprint",
-            "ScriptBlock", new[] { Pos("ComputerName"), Pos("ScriptBlock", true) },
+            "ScriptBlock", new[]
+            {
+                Pos("ComputerName", acceptsCommaContinuation: true),
+                Pos("ScriptBlock", true),
+            },
             selectionRequiredAny: "ComputerName", remote: true),
         Set("FilePathComputerName",
             "ComputerName,Credential,Port,UseSSL,ConfigurationName,ApplicationName," +
             "ThrottleLimit,AsJob,InDisconnectedSession,SessionName,HideComputerName," +
             "JobName,FilePath,SessionOption,Authentication,EnableNetworkAccess,RemoteDebug," +
             "InputObject,ArgumentList",
-            "FilePath", new[] { Pos("ComputerName"), Pos("FilePath") },
+            "FilePath", new[]
+            {
+                Pos("ComputerName", acceptsCommaContinuation: true), Pos("FilePath"),
+            },
             selectionRequiredAny: "ComputerName", remote: true),
         Set("Uri",
             "Credential,ConfigurationName,ThrottleLimit,ConnectionUri,AsJob," +
             "InDisconnectedSession,HideComputerName,JobName,ScriptBlock,AllowRedirection," +
             "SessionOption,Authentication,EnableNetworkAccess,RemoteDebug,InputObject," +
             "ArgumentList,CertificateThumbprint",
-            "ScriptBlock", new[] { Pos("ConnectionUri"), Pos("ScriptBlock", true) },
+            "ScriptBlock", new[]
+            {
+                Pos("ConnectionUri", acceptsCommaContinuation: true),
+                Pos("ScriptBlock", true),
+            },
             selectionRequiredAny: "ConnectionUri", remote: true),
         Set("FilePathUri",
             "Credential,ConfigurationName,ThrottleLimit,ConnectionUri,AsJob," +
             "InDisconnectedSession,HideComputerName,JobName,FilePath,AllowRedirection," +
             "SessionOption,Authentication,EnableNetworkAccess,RemoteDebug,InputObject," +
             "ArgumentList",
-            "FilePath", new[] { Pos("ConnectionUri"), Pos("FilePath") },
+            "FilePath", new[]
+            {
+                Pos("ConnectionUri", acceptsCommaContinuation: true), Pos("FilePath"),
+            },
             selectionRequiredAny: "ConnectionUri", remote: true),
         Set("VMId",
             "Credential,ConfigurationName,ThrottleLimit,AsJob,HideComputerName,ScriptBlock," +
             "RemoteDebug,InputObject,ArgumentList,VMId",
-            "Credential,ScriptBlock,VMId", new[] { Pos("VMId"), Pos("ScriptBlock", true) },
+            "Credential,ScriptBlock,VMId", new[]
+            {
+                Pos("VMId", acceptsCommaContinuation: true), Pos("ScriptBlock", true),
+            },
             remote: true),
         Set("VMName",
             "Credential,ConfigurationName,ThrottleLimit,AsJob,HideComputerName,ScriptBlock," +
@@ -1519,7 +1855,10 @@ internal static class PwshExecutionRegionBindingCatalog
         Set("FilePathVMId",
             "Credential,ConfigurationName,ThrottleLimit,AsJob,HideComputerName,FilePath," +
             "RemoteDebug,InputObject,ArgumentList,VMId",
-            "Credential,FilePath,VMId", new[] { Pos("VMId"), Pos("FilePath") }, remote: true),
+            "Credential,FilePath,VMId", new[]
+            {
+                Pos("VMId", acceptsCommaContinuation: true), Pos("FilePath"),
+            }, remote: true),
         Set("FilePathVMName",
             "Credential,ConfigurationName,ThrottleLimit,AsJob,HideComputerName,FilePath," +
             "RemoteDebug,InputObject,ArgumentList,VMName",
@@ -1553,7 +1892,9 @@ internal static class PwshExecutionRegionBindingCatalog
     private static PositionalParameter Pos(
         string name,
         bool acceptsScriptBlock = false,
-        bool multiple = false) => new(name, acceptsScriptBlock, multiple);
+        bool multiple = false,
+        bool acceptsCommaContinuation = false) =>
+        new(name, acceptsScriptBlock, multiple, acceptsCommaContinuation);
 
     private readonly record struct ParsedParameter(
         string Name,
@@ -1570,6 +1911,8 @@ internal static class PwshExecutionRegionBindingCatalog
         string? ParameterName,
         bool HasTrailingComma,
         string Value,
+        string RawValue,
+        ArgKind Kind,
         int ValueOffset = 0);
 
     private sealed class BoundArguments
@@ -1694,6 +2037,25 @@ internal static class PwshExecutionRegionBindingCatalog
                     StringComparison.OrdinalIgnoreCase))
                 .Select(binding => (BoundArgument?)binding.Argument)
                 .FirstOrDefault();
+        }
+
+        internal IReadOnlyList<BoundArgument> ArgumentsBoundTo(
+            string parameterName,
+            ParameterSetDefinition parameterSet)
+        {
+            var result = NamedArguments
+                .Where(argument => string.Equals(
+                    argument.ParameterName,
+                    parameterName,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            result.AddRange(parameterSet.BindPositionals(this)
+                .Where(binding => string.Equals(
+                    binding.ParameterName,
+                    parameterName,
+                    StringComparison.OrdinalIgnoreCase))
+                .Select(binding => binding.Argument));
+            return result;
         }
     }
 
@@ -1854,14 +2216,18 @@ internal static class PwshExecutionRegionBindingCatalog
                     var positional = _positionals[slot];
                     if (argument.IsScriptBlock != positional.AcceptsScriptBlock
                         || !CanConvert(argument, positional.Name)
-                        || (argument.HasTrailingComma && !positional.AcceptsMultiple))
+                        || (argument.HasTrailingComma &&
+                            !positional.AcceptsMultiple &&
+                            !positional.AcceptsCommaContinuation))
                     {
                         bindings = Array.Empty<PositionalBinding>();
                         return false;
                     }
 
                     result.Add(new PositionalBinding(argument, positional.Name));
-                    if (!positional.AcceptsMultiple)
+                    if (!positional.AcceptsMultiple &&
+                        !(positional.AcceptsCommaContinuation &&
+                            argument.HasTrailingComma))
                     {
                         slot++;
                     }
@@ -1887,7 +2253,8 @@ internal static class PwshExecutionRegionBindingCatalog
     private readonly record struct PositionalParameter(
         string Name,
         bool AcceptsScriptBlock,
-        bool AcceptsMultiple);
+        bool AcceptsMultiple,
+        bool AcceptsCommaContinuation);
 
     private readonly record struct PositionalBinding(
         BoundArgument Argument,
@@ -1897,4 +2264,11 @@ internal static class PwshExecutionRegionBindingCatalog
         string? CanonicalName,
         bool IsSwitch,
         bool IsKnown);
+
+    private enum RemoteTargetCardinality
+    {
+        Unknown,
+        Single,
+        Multiple,
+    }
 }

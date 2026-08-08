@@ -532,13 +532,27 @@ The version-pinned PowerShell 7 catalog covers:
 | `ForEach-Object -Parallel` | Process | Concurrent | OncePerInputObject | child runspace; runspace-local exit isolated; process-wide effects conservative |
 | `Where-Object -FilterScript` | Filter | Synchronous | OncePerInputObject | current runspace |
 | in-process `Invoke-Command -ScriptBlock` | Main | Synchronous | Once | child scope unless `-NoNewScope`; shared location |
-| remote/session/SSH/VM/container `Invoke-Command` | Main | proved from complete parameter set | Unknown unless targets are proved | remote/child state; exit isolated |
+| remote/session/SSH/VM/container `Invoke-Command` | Main | Synchronous for one proved target; Concurrent for multiple targets or enabled `-AsJob` / `-InDisconnectedSession`; otherwise Unknown | Once for one proved target; otherwise Unknown | arbitrary remote state; exit isolated |
 | `Measure-Command -Expression`, `Trace-Command -Expression` | Main | Synchronous | Once | current scope and location |
 | `Start-Job -InitializationScript` | Initialization | Concurrent | Once | child process before Main |
 | `Start-Job -ScriptBlock` | Main | Concurrent | Once | child process; exit isolated |
 | `New-Module -ScriptBlock` | Initialization | Synchronous | Once | module state; current-runspace effects analyzed separately |
 | `Set-PSBreakpoint -Action`, event `-Action` | Action | Deferred | ZeroOrMore | trigger-time state Unknown without proof |
 | `Register-ArgumentCompleter -ScriptBlock` | Completion | Deferred | ZeroOrMore | completion-time state Unknown without proof |
+
+Remote `Invoke-Command` bodies begin with Unknown working directory, bindings,
+aliases, functions, modules, profiles, and command resolution. Local parser
+state is not an inheritance proof for a remote host or persistent session, and
+remote exit state never flows into the invoking host continuation. A complete
+literal, quoted, URI, GUID, or hashtable target proves one activation. A
+complete top-level comma-separated target list, whether named, inline, or
+positional, proves concurrent scheduling but maps to public cardinality
+`Unknown`, because the public enum intentionally has no once-per-target value.
+Quoted, backtick-escaped, or nested commas remain part of one target value. A
+dynamic target or session collection leaves both
+timing and cardinality `Unknown` unless an enabled `-AsJob` or
+`-InDisconnectedSession` independently proves concurrent scheduling. Explicit
+`:$false` switch values do not prove concurrency.
 
 Parallel child runspaces do not inherit ordinary caller variables or aliases,
 and their runspace-local variable and location exit state does not flow into the

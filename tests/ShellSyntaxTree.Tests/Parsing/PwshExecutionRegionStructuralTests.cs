@@ -112,7 +112,6 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Theory]
-    [InlineData("Invoke-Command -ComputerName server -ScriptBlock { Get-Date }")]
     [InlineData("Invoke-Command -AsJob -ScriptBlock { Get-Date }")]
     [InlineData("Invoke-Command -NoNewScope:$scope -ScriptBlock { Get-Date }")]
     public void Unproved_invoke_command_shapes_remain_unknown(string source)
@@ -125,6 +124,92 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(ExecutionRegionTiming.Unknown, region.Timing);
         Assert.Equal(ExecutionRegionCardinality.Unknown, region.Cardinality);
         Assert.All(result.Commands, command => Assert.False(command.IsComplete));
+    }
+
+    [Theory]
+    [InlineData(
+        "Invoke-Command -ComputerName server -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Synchronous,
+        ExecutionRegionCardinality.Once,
+        true)]
+    [InlineData(
+        "Invoke-Command -ComputerName server -AsJob -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Concurrent,
+        ExecutionRegionCardinality.Once,
+        true)]
+    [InlineData(
+        "Invoke-Command -ComputerName server1,server2 " +
+        "-ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Concurrent,
+        ExecutionRegionCardinality.Unknown,
+        false)]
+    [InlineData(
+        "Invoke-Command -Session $session -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Unknown,
+        ExecutionRegionCardinality.Unknown,
+        false)]
+    public void Remote_invoke_command_publishes_proved_region_facts(
+        string source,
+        ExecutionRegionTiming expectedTiming,
+        ExecutionRegionCardinality expectedCardinality,
+        bool expectedHostComplete)
+    {
+        var result = ParseIsolated(source);
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Main, region.Phase);
+        Assert.Equal(expectedTiming, region.Timing);
+        Assert.Equal(expectedCardinality, region.Cardinality);
+        Assert.Equal(expectedHostComplete, result.Commands[0].IsComplete);
+        var body = result.Commands[1];
+        Assert.Equal("Get-Date", body.Clause.Verb.Tokens[0]);
+        Assert.False(body.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, body.WorkingDirectory.Kind);
+    }
+
+    [Fact]
+    public void Remote_invoke_command_isolates_child_state_from_host_continuation()
+    {
+        var result = ParseIsolated(
+            "Invoke-Command -ComputerName server -ScriptBlock { " +
+            "Set-Location /tmp; " +
+            "Set-Alias Measure-Command Write-Output; " +
+            "Set-Item Env:SST_REMOTE_CHILD child }; " +
+            "Get-Item host.txt; Measure-Command { Get-Date }");
+
+        var continuation = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] is
+                "Get-Item" or "Measure-Command")
+            .TakeLast(2)
+            .ToArray();
+        Assert.Equal(
+            new[] { "C:/work" },
+            continuation[0].WorkingDirectory.Values);
+        Assert.All(continuation, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void Remote_invoke_command_does_not_inherit_or_export_bindings()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; " +
+            "Invoke-Command -ComputerName server -ScriptBlock { " +
+            "Write-Output $x; foreach ($x in 'inner') { } }; " +
+            "Write-Output $x");
+
+        var writes = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .ToArray();
+        Assert.Equal(2, writes.Length);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(writes[0].EffectiveArguments).Value.Kind);
+        Assert.False(writes[0].IsComplete);
+        Assert.Equal(
+            new[] { "outer" },
+            Assert.Single(writes[1].EffectiveArguments).Value.Values);
+        Assert.True(writes[1].IsComplete);
     }
 
     [Fact]

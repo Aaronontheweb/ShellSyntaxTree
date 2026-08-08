@@ -372,6 +372,7 @@ PowerShell 7.6.4 probes demonstrate that these are independent dimensions:
 | `ForEach-Object { ... }` | shared current runspace | shared | synchronous / once per input |
 | `Where-Object { ... }` | shared current runspace | shared | synchronous / once per input |
 | local `Invoke-Command { ... }` | child scope unless `-NoNewScope` | shared | synchronous / once |
+| remote/session/SSH/VM/container `Invoke-Command { ... }` | arbitrary remote state; no local binding proof | arbitrary remote location; exit isolated | one target synchronous/once; multiple or async concurrent; otherwise unknown |
 | `Measure-Command { ... }` / `Trace-Command -Expression { ... }` | shared current scope | shared | synchronous / once |
 | `Start-Job { ... }` | child process state | inherited initial location; exit isolated | concurrent / once |
 | `ForEach-Object -Parallel { ... }` | child runspace state; process-wide effects may escape | inherited initial location; runspace-local exit isolated | concurrent / once per input |
@@ -398,6 +399,17 @@ proved is treated as a possible process-wide mutation. Ambiguous names,
 wildcards, and set overflow collapse to all unproved command names. This
 prevents both an alias to `Set-Item` and a rebound `Set-Alias` mutator from
 hiding an environment-provider write without tainting unrelated names.
+
+Remote `Invoke-Command` does not reuse local cwd, binding, alias, function,
+module, profile, or command-resolution facts. The remote body is always
+authorization-visible but incomplete under that arbitrary initial state, and
+its exit state never affects the invoking host continuation. A complete single
+target proves synchronous/once execution. A complete top-level multiple-target
+list, an enabled `-AsJob`, or an enabled `-InDisconnectedSession` proves
+concurrent execution; quoted, escaped, or nested commas remain scalar, and
+multiple or dynamic targets retain cardinality `Unknown`. A dynamic
+target also retains timing `Unknown` unless one of those enabled switches proves
+concurrency. An explicit false switch value does not change scheduling facts.
 
 `SimpleCommandSyntax.ExecutionRegions` preserves authored script-block order.
 The analyzer separately applies semantic phase order. PowerShell's binder can

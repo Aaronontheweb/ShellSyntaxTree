@@ -318,28 +318,141 @@ public class PwshExecutionRegionBindingCatalogTests
             "Invoke-Command -NoNewScope:1 { Get-Date }").HasNoNewScope);
         Assert.Equal(PwshExecutionRegionParameterSet.InvokeRemote, remote.ParameterSet);
         var remoteBinding = Assert.Single(remote.Bindings);
-        Assert.Equal(ExecutionRegionTiming.Unknown, remoteBinding.Timing);
-        Assert.Equal(ExecutionRegionCardinality.Unknown, remoteBinding.Cardinality);
-        Assert.False(remoteBinding.IsComplete);
+        Assert.Equal(ExecutionRegionTiming.Concurrent, remoteBinding.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, remoteBinding.Cardinality);
+        Assert.True(remoteBinding.IsComplete);
         Assert.Equal(PwshExecutionRegionParameterSet.InvokeRemote, inlineRemote.ParameterSet);
-        Assert.False(Assert.Single(inlineRemote.Bindings).IsComplete);
+        Assert.True(Assert.Single(inlineRemote.Bindings).IsComplete);
         Assert.Equal(PwshExecutionRegionParameterSet.InvokeRemote, aliasRemote.ParameterSet);
-        Assert.False(Assert.Single(aliasRemote.Bindings).IsComplete);
+        Assert.True(Assert.Single(aliasRemote.Bindings).IsComplete);
         Assert.Equal(PwshExecutionRegionParameterSet.InvokeRemote, positionalRemote.ParameterSet);
-        Assert.False(Assert.Single(positionalRemote.Bindings).IsComplete);
+        Assert.True(Assert.Single(positionalRemote.Bindings).IsComplete);
     }
 
     [Theory]
     [InlineData("Invoke-Command server -ScriptBlock { Get-Date }")]
     [InlineData("Invoke-Command -Command { Get-Date } server")]
-    public void Mixed_named_and_positional_remote_targets_cannot_be_proved_local(string source)
+    public void Mixed_named_and_positional_remote_targets_bind_as_single_remote_targets(
+        string source)
     {
         var result = Bind(source);
 
         Assert.Equal(PwshExecutionRegionParameterSet.InvokeRemote, result.ParameterSet);
         var binding = Assert.Single(result.Bindings);
-        Assert.Equal(ExecutionRegionTiming.Unknown, binding.Timing);
-        Assert.False(binding.IsComplete);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, binding.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, binding.Cardinality);
+        Assert.True(binding.IsComplete);
+    }
+
+    [Theory]
+    [InlineData(
+        "Invoke-Command -ComputerName server -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Synchronous,
+        ExecutionRegionCardinality.Once)]
+    [InlineData(
+        "Invoke-Command -ComputerName server -AsJob -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Concurrent,
+        ExecutionRegionCardinality.Once)]
+    [InlineData(
+        "Invoke-Command -ComputerName server -InDisconnectedSession " +
+        "-ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Concurrent,
+        ExecutionRegionCardinality.Once)]
+    [InlineData(
+        "Invoke-Command -ComputerName server -AsJob:$false " +
+        "-ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Synchronous,
+        ExecutionRegionCardinality.Once)]
+    [InlineData(
+        "Invoke-Command -ComputerName server -InDisconnectedSession:$false " +
+        "-ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Synchronous,
+        ExecutionRegionCardinality.Once)]
+    [InlineData(
+        "Invoke-Command -ComputerName 'server1,server2' " +
+        "-ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Synchronous,
+        ExecutionRegionCardinality.Once)]
+    [InlineData(
+        "Invoke-Command -ComputerName server1`,server2 " +
+        "-ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Synchronous,
+        ExecutionRegionCardinality.Once)]
+    [InlineData(
+        "Invoke-Command -ComputerName server1,server2 -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Concurrent,
+        ExecutionRegionCardinality.Unknown)]
+    [InlineData(
+        "Invoke-Command -ComputerName server1, server2 -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Concurrent,
+        ExecutionRegionCardinality.Unknown)]
+    [InlineData(
+        "Invoke-Command server1, server2 -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Concurrent,
+        ExecutionRegionCardinality.Unknown)]
+    [InlineData(
+        "Invoke-Command -ComputerName:server1, server2 " +
+        "-ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Concurrent,
+        ExecutionRegionCardinality.Unknown)]
+    [InlineData(
+        "Invoke-Command -ComputerName $servers -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Unknown,
+        ExecutionRegionCardinality.Unknown)]
+    [InlineData(
+        "Invoke-Command -Session $session -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Unknown,
+        ExecutionRegionCardinality.Unknown)]
+    [InlineData(
+        "Invoke-Command -Session $session -AsJob -ScriptBlock { Get-Date }",
+        ExecutionRegionTiming.Concurrent,
+        ExecutionRegionCardinality.Unknown)]
+    public void Remote_targets_publish_only_proved_scheduling_facts(
+        string source,
+        ExecutionRegionTiming expectedTiming,
+        ExecutionRegionCardinality expectedCardinality)
+    {
+        var result = Bind(source);
+
+        Assert.Equal(PwshExecutionRegionBindingStatus.ProvedExecution, result.Status);
+        Assert.Equal(PwshExecutionRegionParameterSet.InvokeRemote, result.ParameterSet);
+        var binding = Assert.Single(result.Bindings);
+        Assert.Equal(expectedTiming, binding.Timing);
+        Assert.Equal(expectedCardinality, binding.Cardinality);
+        Assert.True(binding.IsComplete);
+    }
+
+    [Theory]
+    [InlineData(
+        "Invoke-Command -ConnectionUri https://example.invalid/wsman " +
+        "-ScriptBlock { Get-Date }")]
+    [InlineData(
+        "Invoke-Command -HostName example.invalid -ScriptBlock { Get-Date }")]
+    [InlineData(
+        "Invoke-Command -VMId 8a9d9e75-0ec0-4e0d-948a-a0d876ccf995 " +
+        "-Credential $credential -ScriptBlock { Get-Date }")]
+    [InlineData(
+        "Invoke-Command -VMName vm01 -Credential $credential " +
+        "-ScriptBlock { Get-Date }")]
+    [InlineData(
+        "Invoke-Command -ContainerId container01 -ScriptBlock { Get-Date }")]
+    [InlineData(
+        "Invoke-Command -SSHConnection @{HostName='example.invalid'} " +
+        "-ScriptBlock { Get-Date }")]
+    [InlineData(
+        "Invoke-Command -SSHConnection @{HostName='server,corp'} " +
+        "-ScriptBlock { Get-Date }")]
+    public void Remote_target_families_share_the_isolated_single_target_contract(
+        string source)
+    {
+        var result = Bind(source);
+
+        Assert.Equal(PwshExecutionRegionBindingStatus.ProvedExecution, result.Status);
+        Assert.Equal(PwshExecutionRegionParameterSet.InvokeRemote, result.ParameterSet);
+        var binding = Assert.Single(result.Bindings);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, binding.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, binding.Cardinality);
+        Assert.True(binding.IsComplete);
     }
 
     [Fact]
@@ -463,7 +576,7 @@ public class PwshExecutionRegionBindingCatalogTests
     }
 
     [Fact]
-    public void Ssh_transport_true_value_preserves_remote_incomplete_binding()
+    public void Ssh_transport_true_value_preserves_remote_binding()
     {
         var result = Bind(
             "Invoke-Command -HostName example.invalid -ScriptBlock { Get-Date } " +
@@ -471,7 +584,10 @@ public class PwshExecutionRegionBindingCatalogTests
 
         Assert.Equal(PwshExecutionRegionBindingStatus.ProvedExecution, result.Status);
         Assert.Equal(PwshExecutionRegionParameterSet.InvokeRemote, result.ParameterSet);
-        Assert.False(Assert.Single(result.Bindings).IsComplete);
+        var binding = Assert.Single(result.Bindings);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, binding.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, binding.Cardinality);
+        Assert.True(binding.IsComplete);
     }
 
     [Fact]
