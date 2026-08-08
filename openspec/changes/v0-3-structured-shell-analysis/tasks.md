@@ -79,7 +79,15 @@
     independent occurrence facts for multiple redirects.
   - [x] 4.6b Add the paired PowerShell direct and executable-corpus cases when
     task 4.5 maps its stream model.
-- [ ] 4.7 Verify the explicit model removes the need for raw-prefix inference in a Netclaw integration test.
+- [x] 4.7 Verify the explicit model removes the need for raw-prefix inference in a Netclaw integration test.
+  - Netclaw PR
+    [#5](https://github.com/Aaronontheweb/netclaw/pull/5) consumes typed
+    descriptor duplicate, move, close, combined-output, and file-target facts.
+    It removes the temporary raw descriptor-prefix workaround and pins static,
+    computed, malformed, and future-enum forms in focused security tests.
+    Follow-up PR [#6](https://github.com/Aaronontheweb/netclaw/pull/6)
+    preserves macOS system path aliases without trusting writable symlinks or
+    allowing lexical normalization to erase authored parent traversal.
 
 ## 5. Consumer Migration Baseline
 
@@ -92,7 +100,16 @@
 - [x] 5.6 Publish a 0.3.0 prerelease containing the contracted structural,
   substitution, redirect, Bash `for`, and PowerShell `foreach` behavior before
   the downstream migration gate.
-- [ ] 5.7 Migrate Netclaw's existing-command analysis to the occurrence and redirect APIs behind focused regression tests.
+- [x] 5.7 Migrate Netclaw's existing-command analysis to the occurrence and redirect APIs behind focused regression tests.
+  - Netclaw PR
+    [#5](https://github.com/Aaronontheweb/netclaw/pull/5) migrates the Bash
+    approval path to `ParsedCommand.Commands`, complete ancestry and cwd facts,
+    compatibility argument/path facts, and explicit redirects. Unknown or
+    incomplete identity, ancestry, cwd, or redirect facts and dynamic or
+    unresolved compatibility arguments still fail closed. The 120-case
+    approval matrix and focused security tests cover
+    ordinary commands, wrappers, pipelines, cwd attribution, redirects,
+    symlinks, authored redirect-path traversal, and hard-deny precedence.
 
 ## 6. Bash For-In Vertical Slice
 
@@ -239,7 +256,10 @@
 - [x] 11.4 Run `dotnet build -c Release`, `dotnet test -c Release`, `dotnet pack -c Release`, and header verification.
 - [ ] 11.5 Validate the public API field-for-field against the synchronized shared and PowerShell specifications.
 - [ ] 11.6 Validate Netclaw's ordinary-command, redirect, bounded-loop, and unknown-value approval matrices against the prerelease package.
-- [ ] 11.7 Update release notes and remove Netclaw's temporary descriptor workaround only after explicit redirect integration is live.
+- [x] 11.7 Update release notes and remove Netclaw's temporary descriptor workaround only after explicit redirect integration is live.
+  - The `0.3.0-alpha` release notes document the explicit redirect model. The
+    workaround was removed only in the reviewed Netclaw migration after the
+    prerelease package was published.
 - [ ] 11.9 Promote stable 0.3.0 only after Linux and Windows CI, package publication, and downstream acceptance succeed.
 
 ## Post-v0.3 Backlog (Non-Gating)
