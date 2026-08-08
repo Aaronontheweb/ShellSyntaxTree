@@ -415,7 +415,17 @@ priorities.
       resolution preferences, and retains conservative host command-resolution
       invalidation for exported functions across canonical, alias, and supported
       module-qualified identities.
-      Child process/runspace jobs and parallel
+      `Start-Job` now schedules initialization before main in an isolated child
+      process state, inherits or applies the invocation working directory, and
+      prevents child exit mutation from contaminating the host continuation.
+      Inline working-directory values retain exact value provenance, while an
+      explicit relative working directory remains unknown because PowerShell
+      resolves it from a platform-specific child startup location rather than
+      the caller location. Known but unsupported job variants retain their
+      proved child-process isolation while their body analysis stays fail
+      closed; an explicit alternate `-PSVersion` remains visible but incomplete
+      because it falls outside the pinned PowerShell 7 runtime model.
+      Child runspace jobs and parallel
       blocks; deferred breakpoint/event/completion actions; then unknown
       receiver and nested/adversarial matrices. Preserve script blocks proved
       to be data as opaque values, expose ambiguous bodies with incomplete

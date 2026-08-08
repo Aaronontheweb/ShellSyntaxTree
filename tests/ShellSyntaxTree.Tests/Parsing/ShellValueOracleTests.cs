@@ -1176,6 +1176,158 @@ public class ShellValueOracleTests
             Lines(output));
     }
 
+    [Fact]
+    public void PowerShell_start_job_initializes_child_before_main_and_isolates_exit()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$start=(Get-Location).Path; " +
+            "$target=[IO.Path]::TrimEndingDirectorySeparator(" +
+            "(Resolve-Path ([IO.Path]::GetTempPath())).Path); " +
+            "$x='outer'; $job=Start-Job -WorkingDirectory $target " +
+            "-InitializationScript { " +
+            "\"init-cwd-target=<$((Get-Location).Path -eq " +
+            "[IO.Path]::TrimEndingDirectorySeparator(" +
+            "(Resolve-Path ([IO.Path]::GetTempPath())).Path))>\"; $x='init' } " +
+            "-ScriptBlock { \"main-x=<$x>\"; " +
+            "\"main-cwd-target=<$((Get-Location).Path -eq " +
+            "[IO.Path]::TrimEndingDirectorySeparator(" +
+            "(Resolve-Path ([IO.Path]::GetTempPath())).Path))>\"; " +
+            "$x='main'; Set-Location ([IO.Path]::GetPathRoot((Get-Location).Path)) }; " +
+            "Receive-Job -Job $job -Wait; Remove-Job -Job $job; " +
+            "\"host-x=<$x>\"; " +
+            "\"host-cwd-start=<$((Get-Location).Path -eq $start)>\"");
+
+        Assert.Equal(
+            new[]
+            {
+                "init-cwd-target=<True>",
+                "main-x=<init>",
+                "main-cwd-target=<True>",
+                "host-x=<outer>",
+                "host-cwd-start=<True>",
+            },
+            Lines(output));
+    }
+
+    [Fact]
+    public void PowerShell_start_job_preserves_inline_working_directory_whitespace()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$target=' sst-inline-space-path-91f62f1f '; " +
+            "if (Test-Path -LiteralPath $target) { throw 'path collision' }; " +
+            "try { Start-Job -WorkingDirectory:' sst-inline-space-path-91f62f1f ' " +
+            "-ScriptBlock { Get-Date } -ErrorAction Stop } " +
+            "catch { \"path-preserved=<$($_.Exception.Message.Contains($target))>\" }");
+
+        Assert.Equal("path-preserved=<True>", output);
+    }
+
+    [Fact]
+    public void PowerShell_start_job_prefixed_home_expansion_remains_relative()
+    {
+        if (OperatingSystem.IsWindows() || !IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$target=\"x$HOME\"; " +
+            "if (Test-Path -LiteralPath $target) { throw 'path collision' }; " +
+            "try { Start-Job -WorkingDirectory:\"x$HOME\" " +
+            "-ScriptBlock { Get-Date } -ErrorAction Stop } " +
+            "catch { \"path-preserved=<$($_.Exception.Message.Contains($target))>\" }");
+
+        Assert.Equal("path-preserved=<True>", output);
+    }
+
+    [Fact]
+    public void PowerShell_start_job_relative_working_directory_uses_child_startup_base()
+    {
+        if (OperatingSystem.IsWindows() || !IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var workingDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "shellsyntaxtree-oracle-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workingDirectory);
+        try
+        {
+            var output = RunInWorkingDirectory(
+                "pwsh",
+                workingDirectory,
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "$start=(Get-Location).Path; $homePath=(Resolve-Path $HOME).Path; " +
+                "$dot=Start-Job -WorkingDirectory . -ScriptBlock { " +
+                "(Get-Location).Path }; $dotPath=Receive-Job $dot -Wait; " +
+                "Remove-Job $dot; $parent=Start-Job -WorkingDirectory .. " +
+                "-ScriptBlock { (Get-Location).Path }; " +
+                "$parentPath=Receive-Job $parent -Wait; Remove-Job $parent; " +
+                "\"caller-distinct=<$($dotPath -ne $start)>\"; " +
+                "\"dot-home=<$($dotPath -eq $homePath)>\"; " +
+                "\"parent-home-parent=<$($parentPath -eq " +
+                "(Split-Path $homePath -Parent))>\"");
+
+            Assert.Equal(
+                new[]
+                {
+                    "caller-distinct=<True>",
+                    "dot-home=<True>",
+                    "parent-home-parent=<True>",
+                },
+                Lines(output));
+        }
+        finally
+        {
+            Directory.Delete(workingDirectory, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void Windows_start_job_psversion_selects_windows_powershell_51()
+    {
+        if (!OperatingSystem.IsWindows() || !IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$job=Start-Job -PSVersion 5.1 -ScriptBlock { " +
+            "$PSVersionTable.PSVersion.ToString() }; " +
+            "Receive-Job -Job $job -Wait; Remove-Job -Job $job");
+
+        Assert.StartsWith("5.1.", output, StringComparison.Ordinal);
+    }
+
     private static bool IsAvailable(string executable)
     {
         try

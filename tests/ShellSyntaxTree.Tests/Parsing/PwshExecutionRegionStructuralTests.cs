@@ -180,6 +180,266 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Theory]
+    [InlineData("Start-Job -ScriptBlock { Get-Item child.txt }")]
+    [InlineData("sajb { Get-Item child.txt }")]
+    [InlineData("Microsoft.PowerShell.Core\\Start-Job { Get-Item child.txt }")]
+    public void Start_job_publishes_a_concurrent_once_main_region(string source)
+    {
+        var result = ParseIsolated(source);
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionOrigin.CommandArgument, region.Origin);
+        Assert.Equal(ExecutionRegionPhase.Main, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Concurrent, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, region.Cardinality);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void Start_job_keeps_authored_order_but_initializes_child_before_main()
+    {
+        var result = ParseIsolated(
+            "Start-Job -ScriptBlock { Measure-Command { Get-Date } } " +
+            "-InitializationScript { Set-Alias Measure-Command Write-Output }");
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        Assert.Equal(
+            new[] { ExecutionRegionPhase.Main, ExecutionRegionPhase.Initialization },
+            host.ExecutionRegions.Select(region => region.Phase));
+        Assert.Equal(
+            new[] { "Start-Job", "Measure-Command", "Get-Date", "Set-Alias" },
+            result.Commands.Select(command => command.Clause.Verb.Tokens[0]));
+        var main = result.Commands[1];
+        Assert.False(main.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("-WorkingDirectory /tmp")]
+    [InlineData("-WorkingD:/tmp")]
+    public void Start_job_applies_working_directory_before_initialization_and_isolates_exit(
+        string workingDirectoryArgument)
+    {
+        var result = ParseIsolated(
+            $"Start-Job {workingDirectoryArgument} " +
+            "-InitializationScript { Get-Item init.txt } " +
+            "-ScriptBlock { Get-Item main.txt; Set-Location / }; " +
+            "Get-Item host.txt");
+
+        var items = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Get-Item")
+            .ToArray();
+        Assert.Equal(3, items.Length);
+        Assert.Equal("/tmp", Assert.Single(items[0].WorkingDirectory.Values));
+        Assert.Equal("/tmp", Assert.Single(items[1].WorkingDirectory.Values));
+        Assert.Equal("C:/work", Assert.Single(items[2].WorkingDirectory.Values));
+        Assert.All(items, command => Assert.True(command.IsComplete));
+    }
+
+    [Theory]
+    [InlineData("-WorkingDirectory $target")]
+    [InlineData("-WorkingDirectory:$target")]
+    public void Start_job_accepts_a_bounded_host_working_directory_value(
+        string workingDirectoryArgument)
+    {
+        var result = ParseIsolated(
+            "foreach ($target in '/tmp') { }; " +
+            $"Start-Job {workingDirectoryArgument} " +
+            "-ScriptBlock { Get-Item child.txt }");
+
+        var child = Assert.Single(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "Get-Item");
+        Assert.Equal(
+            new[] { "/tmp" },
+            child.WorkingDirectory.Values);
+        Assert.True(child.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("~/jobs", "C:/Users/test/jobs")]
+    [InlineData("$HOME/jobs", "C:/Users/test/jobs")]
+    public void Start_job_resolves_static_host_working_directory_forms(
+        string target,
+        string expected)
+    {
+        var result = ParseIsolated(
+            $"Start-Job -WorkingDirectory {target} " +
+            "-ScriptBlock { Get-Item child.txt }");
+
+        var child = result.Commands.Last();
+        Assert.Equal(
+            new[] { expected },
+            child.WorkingDirectory.Values);
+        Assert.True(child.IsComplete);
+    }
+
+    [Theory]
+    [InlineData(".")]
+    [InlineData("..")]
+    [InlineData("jobs")]
+    [InlineData("child*")]
+    [InlineData("HKLM:/Software")]
+    [InlineData("\"x$HOME\"")]
+    [InlineData("\" $HOME \"")]
+    [InlineData("\"prefix${HOME}/x\"")]
+    public void Start_job_rejects_non_independently_rooted_working_directory_forms(
+        string target)
+    {
+        var result = ParseIsolated(
+            $"Start-Job -WorkingDirectory {target} " +
+            "-ScriptBlock { Get-Item child.txt }");
+
+        var child = result.Commands.Last();
+        Assert.Equal(ShellValueDomainKind.Unknown, child.WorkingDirectory.Kind);
+    }
+
+    [Fact]
+    public void Start_job_preserves_significant_inline_working_directory_whitespace()
+    {
+        var result = ParseIsolated(
+            "Start-Job -WorkingDirectory:' /tmp ' " +
+            "-ScriptBlock { Get-Item child.txt }");
+
+        var child = result.Commands.Last();
+        Assert.Equal(ShellValueDomainKind.Unknown, child.WorkingDirectory.Kind);
+        Assert.True(child.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("-PSVersion 5.1")]
+    [InlineData("-PSVersion:5.1")]
+    public void Start_job_alternate_child_version_remains_visible_but_incomplete(
+        string versionArgument)
+    {
+        var result = ParseIsolated(
+            $"Start-Job {versionArgument} -ScriptBlock {{ Get-Item child.txt }}");
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Unknown, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Unknown, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Unknown, region.Cardinality);
+        Assert.All(result.Commands, command => Assert.False(command.IsComplete));
+    }
+
+    [Theory]
+    [InlineData(
+        "Start-Job -PSVersion 5.1 -ScriptBlock { Set-Location / }")]
+    [InlineData(
+        "Start-Job -FilePath script.ps1 " +
+        "-InitializationScript { Set-Location / }")]
+    [InlineData(
+        "Start-Job -RunAs32 -ScriptBlock { Set-Location / }")]
+    public void Incomplete_start_job_variants_preserve_host_location_boundary(
+        string invocation)
+    {
+        var result = ParseIsolated(invocation + "; Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.Equal(
+            new[] { "C:/work" },
+            continuation.WorkingDirectory.Values);
+        Assert.True(continuation.IsComplete);
+    }
+
+    [Theory]
+    [InlineData(
+        "Start-Job -PSVersion 5.1 -ScriptBlock { " +
+        "Set-Alias Measure-Command Write-Output }")]
+    [InlineData(
+        "Start-Job -FilePath script.ps1 -InitializationScript { " +
+        "Set-Alias Measure-Command Write-Output }")]
+    [InlineData(
+        "Start-Job -RunAs32 -ScriptBlock { " +
+        "Set-Alias Measure-Command Write-Output }")]
+    public void Incomplete_start_job_variants_preserve_host_command_resolution_boundary(
+        string invocation)
+    {
+        var result = ParseIsolated(invocation + "; Measure-Command { Get-Date }");
+
+        var continuation = result.Commands
+            .Last(command => command.Clause.Verb.Tokens[0] == "Measure-Command");
+        Assert.True(continuation.IsComplete);
+    }
+
+    [Fact]
+    public void Start_job_does_not_inherit_host_bindings_or_export_child_bindings()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; Start-Job " +
+            "-InitializationScript { foreach ($x in 'init') { }; Write-Output $x } " +
+            "-ScriptBlock { Write-Output $x; foreach ($x in 'main') { } }; " +
+            "Write-Output $x");
+
+        var writes = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .ToArray();
+        Assert.Equal(3, writes.Length);
+        Assert.All(writes.Take(2), write =>
+        {
+            Assert.Equal(
+                ShellValueDomainKind.Unknown,
+                Assert.Single(write.EffectiveArguments).Value.Kind);
+            Assert.True(write.IsComplete);
+        });
+        Assert.Equal(
+            new[] { "outer" },
+            Assert.Single(writes[2].EffectiveArguments).Value.Values);
+        Assert.True(writes[2].IsComplete);
+    }
+
+    [Fact]
+    public void Start_job_initialization_mutation_invalidates_main_but_not_host_resolution()
+    {
+        var result = ParseIsolated(
+            "Start-Job -InitializationScript { " +
+            "Set-Alias Measure-Command Write-Output } -ScriptBlock { " +
+            "Measure-Command { Get-Date } }; Measure-Command { Get-Date }");
+
+        var measurements = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Measure-Command")
+            .ToArray();
+        Assert.Equal(2, measurements.Length);
+        Assert.False(measurements[0].IsComplete);
+        Assert.True(measurements[1].IsComplete);
+    }
+
+    [Fact]
+    public void Dynamic_start_job_working_directory_fails_closed_only_in_the_child()
+    {
+        var result = ParseIsolated(
+            "Start-Job -WorkingDirectory $target " +
+            "-ScriptBlock { Get-Item child.txt }; Get-Item host.txt");
+
+        var items = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Get-Item")
+            .ToArray();
+        Assert.Equal(2, items.Length);
+        Assert.Equal(ShellValueDomainKind.Unknown, items[0].WorkingDirectory.Kind);
+        Assert.True(items[0].IsComplete);
+        Assert.Equal(
+            new[] { "C:/work" },
+            items[1].WorkingDirectory.Values);
+        Assert.True(items[1].IsComplete);
+    }
+
+    [Fact]
+    public void Start_job_file_path_keeps_initialization_visible_but_incomplete()
+    {
+        var result = ParseIsolated(
+            "Start-Job -FilePath script.ps1 " +
+            "-InitializationScript { Get-Date }");
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var initialization = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Unknown, initialization.Phase);
+        Assert.All(result.Commands, command => Assert.False(command.IsComplete));
+    }
+
+    [Theory]
     [InlineData("New-Module { Get-Item child.txt }")]
     [InlineData("nmo -ScriptBlock { Get-Item child.txt }")]
     [InlineData("Microsoft.PowerShell.Core\\New-Module { Get-Item child.txt }")]

@@ -94,6 +94,12 @@ internal sealed record PwshExecutionRegionBindingResult
 
     internal bool HasNoNewScope { get; init; }
 
+    internal int? WorkingDirectoryElementIndex { get; init; }
+
+    internal int WorkingDirectoryValueOffset { get; init; }
+
+    internal bool HasExplicitPSVersion { get; init; }
+
     internal IReadOnlyList<PwshExecutionRegionBinding> Bindings { get; init; } =
         Array.Empty<PwshExecutionRegionBinding>();
 }
@@ -447,6 +453,14 @@ internal static class PwshExecutionRegionBindingCatalog
             HasExplicitInputObject = arguments.HasNamed("InputObject"),
             HasNoNewScope = receiver == PwshExecutionRegionReceiver.InvokeCommand &&
                 arguments.IsSwitchEnabled("NoNewScope"),
+            WorkingDirectoryElementIndex = receiver == PwshExecutionRegionReceiver.StartJob
+                ? arguments.FirstNamedArgumentElementIndex("WorkingDirectory")
+                : null,
+            WorkingDirectoryValueOffset = receiver == PwshExecutionRegionReceiver.StartJob
+                ? arguments.FirstNamedArgumentValueOffset("WorkingDirectory")
+                : 0,
+            HasExplicitPSVersion = receiver == PwshExecutionRegionReceiver.StartJob &&
+                arguments.HasNamed("PSVersion"),
             Bindings = bindings.OrderBy(binding => binding.HostClauseElementIndex).ToArray(),
         };
     }
@@ -850,7 +864,8 @@ internal static class PwshExecutionRegionBindingCatalog
                 {
                     result.NamedArguments.Add(new BoundArgument(
                         index, -1, true, resolution.CanonicalName,
-                        HasTrailingComma(element), parameter.InlineValue!));
+                        HasTrailingComma(element), parameter.InlineValue!,
+                        element.Value.Length - parameter.InlineValue!.Length));
                     if (HasTrailingComma(element)
                         && !AcceptsScriptBlockArray(resolution.CanonicalName!))
                     {
@@ -864,7 +879,8 @@ internal static class PwshExecutionRegionBindingCatalog
                 {
                     result.NamedArguments.Add(new BoundArgument(
                         index, -1, false, resolution.CanonicalName, false,
-                        parameter.InlineValue!));
+                        parameter.InlineValue!,
+                        element.Value.Length - parameter.InlineValue!.Length));
                     continue;
                 }
 
@@ -938,11 +954,11 @@ internal static class PwshExecutionRegionBindingCatalog
             return new ParsedParameter(value.Substring(1), false, false, true, false, null);
         }
 
-        var inlineValue = value.Substring(colon + 1).Trim();
+        var inlineValue = value.Substring(colon + 1);
         return new ParsedParameter(
             value.Substring(1, colon - 1),
             inlineValue.Length > 0,
-            LooksLikeScriptBlock(inlineValue),
+            LooksLikeScriptBlock(inlineValue.Trim()),
             true,
             true,
             inlineValue);
@@ -1549,7 +1565,8 @@ internal static class PwshExecutionRegionBindingCatalog
         bool IsScriptBlock,
         string? ParameterName,
         bool HasTrailingComma,
-        string Value);
+        string Value,
+        int ValueOffset = 0);
 
     private sealed class BoundArguments
     {
@@ -1604,6 +1621,38 @@ internal static class PwshExecutionRegionBindingCatalog
         }
 
         internal bool HasAnyNamed(params string[] names) => names.Any(HasNamed);
+
+        internal int? FirstNamedArgumentElementIndex(string parameterName)
+        {
+            foreach (var argument in NamedArguments)
+            {
+                if (string.Equals(
+                        argument.ParameterName,
+                        parameterName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return argument.ElementIndex;
+                }
+            }
+
+            return null;
+        }
+
+        internal int FirstNamedArgumentValueOffset(string parameterName)
+        {
+            foreach (var argument in NamedArguments)
+            {
+                if (string.Equals(
+                        argument.ParameterName,
+                        parameterName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return argument.ValueOffset;
+                }
+            }
+
+            return 0;
+        }
 
         internal int CountNamed(params string[] names) => names.Count(HasNamed);
 
