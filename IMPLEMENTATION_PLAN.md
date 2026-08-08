@@ -393,9 +393,17 @@ priorities.
       synchronous/once, execute against current-scope state, downgrade across
       conflicting loop visits, and are pinned by live PowerShell probes for
       current-scope, opaque-data, shadowed-command, and module-qualified
-      behavior. Ordinary assignment state transfer remains an atomic task 7.5b
-      follow-up; task 7.5b is not complete. Continue with `ForEach-Object`,
-      `Where-Object`, and in-process `Invoke-Command`; child process/runspace jobs and parallel
+      behavior. `ForEach-Object` Begin, Process, RemainingScripts, and End and
+      `Where-Object` FilterScript now retain authored region order while the
+      analyzer applies semantic phase order. Standalone, first-pipeline-stage,
+      upstream-pipeline, and explicit-InputObject cardinalities remain
+      distinct; zero-or-more Process/Filter effects use a conservative fixed
+      point, and Begin/End state surrounds that join. Live PowerShell probes
+      pin current-scope mutation, empty input, explicit input, phase order, and
+      the differing no-input behavior of the two cmdlets. Ordinary assignment
+      state transfer remains an atomic task 7.5b follow-up; task 7.5b is not
+      complete. Continue with in-process `Invoke-Command`; child
+      process/runspace jobs and parallel
       blocks; deferred breakpoint/event/completion actions; then unknown
       receiver and nested/adversarial matrices. Preserve script blocks proved
       to be data as opaque values, expose ambiguous bodies with incomplete

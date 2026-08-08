@@ -131,9 +131,9 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Fact]
-    public void Command_script_block_is_exposed_as_an_unknown_incomplete_region()
+    public void Unknown_command_script_block_is_exposed_as_an_incomplete_region()
     {
-        const string source = "ForEach-Object { Remove-Item victim.txt }";
+        const string source = "Invoke-Custom { Remove-Item victim.txt }";
 
         var result = Parse(source);
 
@@ -149,7 +149,7 @@ public class PwshExecutionRegionStructuralTests
 
         var body = Assert.IsType<SimpleCommandSyntax>(Assert.Single(region.Body.Statements));
         Assert.Equal("Remove-Item", Assert.Single(body.Clause.Verb.Tokens));
-        Assert.Equal(new[] { "ForEach-Object", "Remove-Item" },
+        Assert.Equal(new[] { "Invoke-Custom", "Remove-Item" },
             result.Commands.Select(command => command.Clause.Verb.Tokens[0]));
         Assert.All(result.Commands, command => Assert.False(command.IsComplete));
         Assert.Equal(CommandOccurrenceRole.ExecutionRegion, result.Commands[1].ImmediateRole);
@@ -175,9 +175,25 @@ public class PwshExecutionRegionStructuralTests
             .Select(region => region.SourceStart)
             .SequenceEqual(host.ExecutionRegions.Select(region => region.SourceStart)
                 .OrderBy(start => start)));
+        Assert.Equal(
+            new[]
+            {
+                ExecutionRegionPhase.Begin,
+                ExecutionRegionPhase.Process,
+                ExecutionRegionPhase.End,
+            },
+            host.ExecutionRegions.Select(region => region.Phase));
+        Assert.Equal(
+            new[]
+            {
+                ExecutionRegionCardinality.Once,
+                ExecutionRegionCardinality.OncePerInputObject,
+                ExecutionRegionCardinality.Once,
+            },
+            host.ExecutionRegions.Select(region => region.Cardinality));
         Assert.All(host.ExecutionRegions, region =>
         {
-            Assert.Equal(ExecutionRegionPhase.Unknown, region.Phase);
+            Assert.Equal(ExecutionRegionTiming.Synchronous, region.Timing);
             Assert.Single(region.Body.Statements);
         });
         Assert.Equal(4, result.Commands.Count);
@@ -206,7 +222,7 @@ public class PwshExecutionRegionStructuralTests
         var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Empty(Assert.Single(host.ExecutionRegions).Body.Statements);
         Assert.Single(result.Commands);
-        Assert.False(result.Commands[0].IsComplete);
+        Assert.True(result.Commands[0].IsComplete);
     }
 
     [Theory]
@@ -248,9 +264,180 @@ public class PwshExecutionRegionStructuralTests
             location.Commands.Last().WorkingDirectory.Kind);
         Assert.False(location.Commands.Last().IsComplete);
         Assert.Equal(
-            ShellValueDomainKind.Unknown,
+            ShellValueDomainKind.Exact,
             alias.Commands.Last().WorkingDirectory.Kind);
         Assert.False(alias.Commands.Last().IsComplete);
+    }
+
+    [Fact]
+    public void Standalone_for_each_object_uses_semantic_phase_order()
+    {
+        var result = ParseIsolated(
+            "ForEach-Object " +
+            "-End { Write-Output $x } " +
+            "-Begin { foreach ($x in 'begin') { } } " +
+            "-Process { Write-Output $x; foreach ($x in 'process') { } }; " +
+            "Write-Output $x");
+
+        var writes = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .ToArray();
+        Assert.Equal(3, writes.Length);
+        Assert.Equal("process", Assert.Single(writes[0].EffectiveArguments).Value.Values[0]);
+        Assert.Equal("begin", Assert.Single(writes[1].EffectiveArguments).Value.Values[0]);
+        Assert.Equal("process", Assert.Single(writes[2].EffectiveArguments).Value.Values[0]);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void Pipeline_for_each_object_joins_zero_and_repeated_process_visits()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; Write-Output input | ForEach-Object " +
+            "-End { Write-Output $x } " +
+            "-Begin { foreach ($x in 'begin') { } } " +
+            "-Process { Write-Output $x; foreach ($x in 'process') { } }; " +
+            "Write-Output $x");
+
+        var writes = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .ToArray();
+        Assert.Equal(4, writes.Length);
+        Assert.Equal(
+            new[] { "begin", "process" },
+            Assert.Single(writes[1].EffectiveArguments).Value.Values
+                .OrderBy(value => value));
+        Assert.Equal(
+            new[] { "begin", "process" },
+            Assert.Single(writes[2].EffectiveArguments).Value.Values
+                .OrderBy(value => value));
+        Assert.False(writes[3].IsComplete);
+    }
+
+    [Fact]
+    public void Standalone_where_object_records_but_does_not_apply_filter_state()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; " +
+            "Where-Object { foreach ($x in 'filter') { } }; Write-Output $x");
+
+        var host = result.Syntax.Statements
+            .OfType<CommandListSyntax>()
+            .SelectMany(list => list.Items)
+            .Select(item => item.Command)
+            .OfType<SimpleCommandSyntax>()
+            .Single(command => command.Clause.Verb.Tokens[0] == "Where-Object");
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Filter, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.OncePerInputObject, region.Cardinality);
+        var continuation = result.Commands.Last();
+        Assert.Equal("outer", Assert.Single(continuation.EffectiveArguments).Value.Values[0]);
+        Assert.True(continuation.IsComplete);
+    }
+
+    [Fact]
+    public void Explicit_where_input_conservatively_applies_filter_state()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; " +
+            "Where-Object -InputObject value -FilterScript { " +
+            "foreach ($x in 'filter') { } }; Write-Output $x");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal(
+            new[] { "filter", "outer" },
+            Assert.Single(continuation.EffectiveArguments).Value.Values
+                .OrderBy(value => value));
+        Assert.True(continuation.IsComplete);
+    }
+
+    [Fact]
+    public void First_pipeline_stage_for_each_processes_once_without_upstream_input()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; " +
+            "ForEach-Object { Write-Output $x; foreach ($x in 'process') { } } | " +
+            "Out-Null");
+
+        var processWrite = result.Commands
+            .Single(command => command.Clause.Verb.Tokens[0] == "Write-Output");
+        Assert.Equal(
+            new[] { "outer" },
+            Assert.Single(processWrite.EffectiveArguments).Value.Values);
+    }
+
+    [Fact]
+    public void First_pipeline_stage_where_has_no_filter_input()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; " +
+            "Where-Object { foreach ($x in 'filter') { } } | Out-Null; " +
+            "Write-Output $x");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal(
+            new[] { "outer" },
+            Assert.Single(continuation.EffectiveArguments).Value.Values);
+        Assert.True(continuation.IsComplete);
+    }
+
+    [Fact]
+    public void Interleaved_pipeline_callbacks_never_publish_stale_upstream_state()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'start') { }; Write-Output 1 2 | " +
+            "ForEach-Object { Write-Output $x } | " +
+            "ForEach-Object { foreach ($x in 'down') { }; Write-Output $_ }");
+
+        var upstream = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .ElementAt(1);
+        Assert.False(upstream.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(upstream.EffectiveArguments).Value.Kind);
+    }
+
+    [Theory]
+    [InlineData(". { Write-Output $x; Write-Output $x }")]
+    [InlineData("& { Write-Output $x; Write-Output $x }")]
+    public void Interleaved_direct_regions_never_publish_stale_upstream_state(
+        string upstreamStage)
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'start') { }; " + upstreamStage + " | " +
+            "ForEach-Object { foreach ($x in 'down') { }; Write-Output $_ }");
+
+        var upstream = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .Take(2)
+            .ToArray();
+        Assert.Equal(2, upstream.Length);
+        Assert.All(upstream, command =>
+        {
+            Assert.False(command.IsComplete);
+            Assert.Equal(
+                ShellValueDomainKind.Unknown,
+                Assert.Single(command.EffectiveArguments).Value.Kind);
+        });
+    }
+
+    [Fact]
+    public void Interleaved_common_parameter_writer_invalidates_callback_state()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'start') { }; Write-Output 1 2 | " +
+            "ForEach-Object { Write-Output $x } | " +
+            "Write-Output -OutVariable x");
+
+        var callbackWrite = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .ElementAt(1);
+        Assert.False(callbackWrite.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(callbackWrite.EffectiveArguments).Value.Kind);
     }
 
     [Fact]
