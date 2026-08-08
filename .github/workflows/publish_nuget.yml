@@ -80,21 +80,20 @@ jobs:
       - name: "Extract latest release notes"
         shell: pwsh
         run: |
-          # RELEASE_NOTES.md uses `#### X.Y.Z[-suffix] <date> ####` per-section
-          # headings. Capture only the BODY of the first section (no heading)
-          # so the GitHub release page doesn't duplicate the version string in
-          # both the title and the first line of the body, and so a stale
-          # hand-typed date in the heading doesn't fight the published date
-          # GitHub renders automatically.
+          # Select the pushed version, not the first section. An Unreleased
+          # section can remain at the top without changing the published body.
           if (-not (Test-Path RELEASE_NOTES.md)) {
-            "No release notes available." | Set-Content RELEASE_NOTES_LATEST.md
-            exit 0
+            Write-Error "RELEASE_NOTES.md does not exist."
+            exit 1
           }
           $content = Get-Content RELEASE_NOTES.md -Raw
-          if ($content -match '(?s)####[^\r\n]*\r?\n+(.+?)(?=\r?\n####|\z)') {
+          $version = [regex]::Escape($env:PACKAGE_VERSION)
+          $pattern = "(?ms)^####\s+$version(?=\s|#|\r?$)[^\r\n]*\r?\n+(.+?)(?=^####|\z)"
+          if ($content -match $pattern) {
             $Matches[1].Trim() | Set-Content RELEASE_NOTES_LATEST.md
           } else {
-            $content | Set-Content RELEASE_NOTES_LATEST.md
+            Write-Error "RELEASE_NOTES.md has no section for $env:PACKAGE_VERSION."
+            exit 1
           }
 
       - name: "Create GitHub release"
