@@ -36,6 +36,8 @@ public class PublicApiSnapshotTests
         var parameters = parse.GetParameters();
         Assert.Single(parameters);
         Assert.Equal(typeof(string), parameters[0].ParameterType);
+        AssertReferenceNullability(parse.ReturnParameter, NullabilityState.NotNull);
+        AssertReferenceNullability(parameters[0], NullabilityState.NotNull);
     }
 
     // -------- BashParser --------
@@ -61,6 +63,14 @@ public class PublicApiSnapshotTests
         var parse = t.GetMethod(nameof(BashParser.Parse), new[] { typeof(string) });
         Assert.NotNull(parse);
         Assert.Equal(typeof(ParsedCommand), parse!.ReturnType);
+        Assert.Equal(
+            new[] { nameof(BashParser.Parse) },
+            DeclaredPublicMethodNames(t));
+        AssertReferenceNullability(parse.ReturnParameter, NullabilityState.NotNull);
+        AssertReferenceNullability(
+            Assert.Single(parse.GetParameters()),
+            NullabilityState.NotNull);
+        AssertReferenceNullability(withOptions[0], NullabilityState.NotNull);
     }
 
     [Fact]
@@ -123,6 +133,14 @@ public class PublicApiSnapshotTests
         var parse = t.GetMethod(nameof(PwshParser.Parse), new[] { typeof(string) });
         Assert.NotNull(parse);
         Assert.Equal(typeof(ParsedCommand), parse!.ReturnType);
+        Assert.Equal(
+            new[] { nameof(PwshParser.Parse) },
+            DeclaredPublicMethodNames(t));
+        AssertReferenceNullability(parse.ReturnParameter, NullabilityState.NotNull);
+        AssertReferenceNullability(
+            Assert.Single(parse.GetParameters()),
+            NullabilityState.NotNull);
+        AssertReferenceNullability(withOptions[0], NullabilityState.NotNull);
     }
 
     [Fact]
@@ -304,6 +322,15 @@ public class PublicApiSnapshotTests
         AssertInitProperty(t, "Elements", typeof(IReadOnlyList<ClauseElement>));
         AssertInitProperty(t, "IsSubshell", typeof(bool));
         AssertInitProperty(t, "IsCommandStringWrapped", typeof(bool));
+        AssertDeclaredPropertyNames(
+            t,
+            "Args",
+            "Elements",
+            "IsCommandStringWrapped",
+            "IsSubshell",
+            "Operator",
+            "Redirects",
+            "Verb");
 
         var instance = new Clause();
         Assert.Equal(CompoundOperator.None, instance.Operator);
@@ -336,6 +363,18 @@ public class PublicApiSnapshotTests
         AssertInitProperty(t, "IsFlag", typeof(bool));
         AssertInitProperty(t, "IsPath", typeof(bool));
         AssertInitProperty(t, "Resolved", typeof(string), nullable: true);
+        AssertDeclaredPropertyNames(
+            t,
+            "IsFlag",
+            "IsPath",
+            "Kind",
+            "PrecedingVerbElementCount",
+            "Raw",
+            "Resolved",
+            "Role",
+            "SourceLength",
+            "SourceStart",
+            "Value");
 
         var instance = new ClauseElement();
         Assert.Equal("", instance.Raw);
@@ -370,6 +409,8 @@ public class PublicApiSnapshotTests
         Assert.Equal(typeof(string), joined!.PropertyType);
         Assert.True(joined.CanRead);
         Assert.False(joined.CanWrite);
+        AssertReferenceNullability(joined, NullabilityState.NotNull);
+        AssertDeclaredPropertyNames(t, "CanonicalVerb", "IsDynamic", "Joined", "Tokens");
 
         var instance = new VerbChain { Tokens = new[] { "git", "push" } };
         Assert.Equal("git push", instance.Joined);
@@ -403,6 +444,14 @@ public class PublicApiSnapshotTests
         Assert.Equal(typeof(bool), isFlag!.PropertyType);
         Assert.True(isFlag.CanRead);
         Assert.False(isFlag.CanWrite);
+        AssertDeclaredPropertyNames(
+            t,
+            "IsCwdAttribution",
+            "IsFlag",
+            "IsPath",
+            "Kind",
+            "Raw",
+            "Resolved");
 
         Assert.True(new Arg { Raw = "-f" }.IsFlag);
         Assert.True(new Arg { Raw = "--force" }.IsFlag);
@@ -434,6 +483,7 @@ public class PublicApiSnapshotTests
         AssertInitProperty(t, "Direction", typeof(RedirectDirection));
         AssertInitProperty(t, "Target", typeof(string));
         AssertInitProperty(t, "IsDynamicSkip", typeof(bool));
+        AssertDeclaredPropertyNames(t, "Direction", "IsDynamicSkip", "Target");
 
         var instance = new Redirect();
         Assert.Equal(RedirectDirection.In, instance.Direction);
@@ -589,6 +639,22 @@ public class PublicApiSnapshotTests
     private static IEnumerable<PropertyInfo> DeclaredInstanceProps(Type t) =>
         t.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly);
 
+    private static string[] DeclaredPublicMethodNames(Type type) =>
+        type.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+            .Select(method => method.Name)
+            .OrderBy(name => name)
+            .ToArray();
+
+    private static void AssertDeclaredPropertyNames(Type type, params string[] expected)
+    {
+        Assert.Equal(
+            expected.OrderBy(name => name),
+            DeclaredInstanceProps(type)
+                .Where(property => property.Name != "EqualityContract")
+                .Select(property => property.Name)
+                .OrderBy(name => name));
+    }
+
     private static void AssertIsRecord(Type t)
     {
         // Records emit a compiler-generated <Clone>$ method and an
@@ -620,8 +686,46 @@ public class PublicApiSnapshotTests
         var modreqs = setter!.ReturnParameter.GetRequiredCustomModifiers();
         Assert.Contains(modreqs, m => m.FullName == "System.Runtime.CompilerServices.IsExternalInit");
 
-        // Suppress unused-parameter warning; nullability metadata isn't queried at runtime
-        // without NullabilityInfoContext (net6+) and our purpose here is shape, not nullability.
-        _ = nullable;
+        if (!prop.PropertyType.IsValueType)
+        {
+            var expectedNullability = nullable
+                ? NullabilityState.Nullable
+                : NullabilityState.NotNull;
+            AssertReferenceNullability(prop, expectedNullability);
+        }
+    }
+
+    private static void AssertReferenceNullability(
+        PropertyInfo property,
+        NullabilityState expected)
+    {
+        var info = new NullabilityInfoContext().Create(property);
+        Assert.Equal(expected, info.ReadState);
+        if (property.CanWrite)
+        {
+            Assert.Equal(expected, info.WriteState);
+        }
+
+        AssertGenericArgumentsNotNull(property.Name, info);
+    }
+
+    private static void AssertReferenceNullability(
+        ParameterInfo parameter,
+        NullabilityState expected)
+    {
+        var info = new NullabilityInfoContext().Create(parameter);
+        Assert.Equal(expected, info.ReadState);
+        AssertGenericArgumentsNotNull(parameter.Name ?? "return", info);
+    }
+
+    private static void AssertGenericArgumentsNotNull(
+        string member,
+        NullabilityInfo info)
+    {
+        foreach (var argument in info.GenericTypeArguments)
+        {
+            Assert.Equal(NullabilityState.NotNull, argument.ReadState);
+            AssertGenericArgumentsNotNull(member, argument);
+        }
     }
 }
