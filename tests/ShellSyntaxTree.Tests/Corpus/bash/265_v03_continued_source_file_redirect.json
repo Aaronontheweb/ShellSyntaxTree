@@ -1,0 +1,39 @@
+{
+  "name": "v0.3 Bash continued numeric source file redirect",
+  "input": "command 3\\\n> out.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["command"],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "/work/out.log", "isDynamicSkip": false }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 20 }
+        ],
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Descriptor",
+            "sourceDescriptor": 3,
+            "operation": "FileOutput",
+            "target": { "kind": "Exact", "values": ["/work/out.log"] },
+            "isPathRelevant": true,
+            "isComplete": true
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Bash removes the unquoted continuation before recognizing descriptor 3."
+}

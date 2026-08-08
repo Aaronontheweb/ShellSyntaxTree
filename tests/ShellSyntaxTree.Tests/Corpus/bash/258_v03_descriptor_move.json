@@ -1,18 +1,16 @@
 {
-  "name": "Redirect fd-dup: cmd 2>&1",
-  "input": "cmd 2>&1",
+  "name": "v0.3 Bash static descriptor move",
+  "input": "command 2>&1-",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["cmd"],
+        "verb": ["command"],
         "args": [],
         "redirects": [
-          { "direction": "ErrOut", "target": "&1", "isDynamicSkip": true }
-        ],
-        "isSubshell": false,
-        "isCommandStringWrapped": false
+          { "direction": "ErrOut", "target": "&1-", "isDynamicSkip": true }
+        ]
       }
     ],
     "commands": [
@@ -21,14 +19,14 @@
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 8 }
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 13 }
         ],
         "redirects": [
           {
             "redirectIndex": 0,
             "sourceKind": "Descriptor",
             "sourceDescriptor": 2,
-            "operation": "DescriptorDuplicate",
+            "operation": "DescriptorMove",
             "targetDescriptor": 1,
             "target": { "kind": "Unknown" },
             "isPathRelevant": false,
@@ -38,5 +36,5 @@
       }
     ]
   },
-  "notes": "The v0.2 redirect remains fail-closed for path iterators, while v0.3 identifies the complete static descriptor duplication without raw-prefix inference."
+  "notes": "The move target is a static descriptor and never a path."
 }

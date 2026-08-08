@@ -94,7 +94,7 @@
       {
         "clauseIndex": 1,
         "immediateRole": "PipelineStage",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",

@@ -1,0 +1,40 @@
+{
+  "name": "v0.3 Bash continued multi-digit source move",
+  "input": "command 1\\\n0>&2-",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["command"],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "&2-", "isDynamicSkip": true }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 16 }
+        ],
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Descriptor",
+            "sourceDescriptor": 10,
+            "operation": "DescriptorMove",
+            "targetDescriptor": 2,
+            "target": { "kind": "Unknown" },
+            "isPathRelevant": false,
+            "isComplete": true
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Continuation removal composes the authored digit fragments into descriptor 10."
+}

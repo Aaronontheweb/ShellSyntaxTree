@@ -305,6 +305,21 @@ priorities.
       transfers, and occurrence-specific redirect values remain fail closed.
       Next add the Netclaw approval matrix before calling the Bash consumer
       integration complete.
+- [x] Deliver occurrence-level Bash explicit redirect facts for ordinary file
+      input/output/append, static descriptor duplicate/close/move, computed
+      descriptor targets, and combined `&>` / `&>>` output. Static descriptor
+      operations are complete non-path facts even though the v0.2 compatibility
+      redirect remains `IsDynamicSkip`; computed targets remain incomplete and
+      cannot be exempted by raw prefix. Arbitrary numeric source descriptors are
+      retained only when authored at a token boundary; overflow sources remain
+      incomplete rather than being truncated, and word suffixes such as
+      `command3>file` keep `3` in the command name. Unquoted LF/CRLF line
+      continuations are removed before descriptor recognition, including when
+      they join multi-digit sources. Exact file targets now complete their
+      containing occurrence, while cwd or value uncertainty still downgrades
+      the redirect and occurrence after abstract-state joins. Direct lexer and
+      parser tests plus executable corpus cases pin the boundary. Next map the
+      PowerShell stream model, then prove the paired Netclaw redirect matrix.
 - [ ] Complete PowerShell `foreach` integration and add the
       Netclaw approval-matrix cases. The structural slice now preserves literal
       scalar/array and executable iterator forms, recursively parses bodies,

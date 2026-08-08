@@ -772,7 +772,7 @@ public class BashForInStructuralTests
         Assert.Equal(RedirectDirection.Out, redirect.Direction);
         Assert.Equal("/work/out.txt", redirect.Target);
         Assert.False(redirect.IsDynamicSkip);
-        Assert.False(result.Commands[0].IsComplete);
+        Assert.True(result.Commands[0].IsComplete);
         Assert.True(result.Commands[1].IsComplete);
         Assert.All(result.Commands, command =>
             Assert.Equal(CommandOccurrenceRole.LoopBody, command.ImmediateRole));

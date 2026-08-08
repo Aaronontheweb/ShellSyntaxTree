@@ -14,7 +14,28 @@
         "isSubshell": false,
         "isCommandStringWrapped": false
       }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 8 }
+        ],
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Descriptor",
+            "sourceDescriptor": 2,
+            "operation": "DescriptorClose",
+            "target": { "kind": "Unknown" },
+            "isPathRelevant": false,
+            "isComplete": true
+          }
+        ]
+      }
     ]
   },
-  "notes": "fd-close form: '>&-' closes the source fd. Same parser treatment as fd-dup — target is the verbatim '&-' and IsDynamicSkip=true."
+  "notes": "The compatibility target stays verbatim and dynamic, while v0.3 explicitly proves the descriptor-close operation is complete and non-path."
 }

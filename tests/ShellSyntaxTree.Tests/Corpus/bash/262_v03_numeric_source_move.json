@@ -1,0 +1,40 @@
+{
+  "name": "v0.3 Bash multi-digit source descriptor move",
+  "input": "command 10>&2-",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["command"],
+        "args": [],
+        "redirects": [
+          { "direction": "Out", "target": "&2-", "isDynamicSkip": true }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 14 }
+        ],
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Descriptor",
+            "sourceDescriptor": 10,
+            "operation": "DescriptorMove",
+            "targetDescriptor": 2,
+            "target": { "kind": "Unknown" },
+            "isPathRelevant": false,
+            "isComplete": true
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Both source and target descriptors are preserved for move semantics."
+}

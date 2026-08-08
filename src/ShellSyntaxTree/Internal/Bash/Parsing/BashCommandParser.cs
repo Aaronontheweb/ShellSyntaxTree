@@ -1609,6 +1609,41 @@ internal static partial class BashCommandParser
 
     private static bool TryMapRedirect(string? op, out RedirectDirection direction)
     {
+        if (!string.IsNullOrEmpty(op))
+        {
+            var operatorStart = 0;
+            while (operatorStart < op!.Length && op[operatorStart] is >= '0' and <= '9')
+            {
+                operatorStart++;
+            }
+
+            if (operatorStart > 0)
+            {
+                var redirect = op.Substring(operatorStart);
+                if (redirect == "<")
+                {
+                    direction = RedirectDirection.In;
+                    return true;
+                }
+
+                if (redirect is ">" or ">>")
+                {
+                    var isStandardError = string.Equals(
+                        op.Substring(0, operatorStart),
+                        "2",
+                        StringComparison.Ordinal);
+                    direction = redirect == ">>"
+                        ? isStandardError
+                            ? RedirectDirection.ErrAppend
+                            : RedirectDirection.Append
+                        : isStandardError
+                            ? RedirectDirection.ErrOut
+                            : RedirectDirection.Out;
+                    return true;
+                }
+            }
+        }
+
         switch (op)
         {
             case ">":
@@ -1625,6 +1660,12 @@ internal static partial class BashCommandParser
                 return true;
             case "2>>":
                 direction = RedirectDirection.ErrAppend;
+                return true;
+            case "&>":
+                direction = RedirectDirection.Out;
+                return true;
+            case "&>>":
+                direction = RedirectDirection.Append;
                 return true;
             default:
                 direction = default;

@@ -1,0 +1,39 @@
+{
+  "name": "v0.3 Bash computed descriptor target remains incomplete",
+  "input": "command 2>&$FD",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["command"],
+        "args": [],
+        "redirects": [
+          { "direction": "ErrOut", "target": "&$FD", "isDynamicSkip": true }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 14 }
+        ],
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Descriptor",
+            "sourceDescriptor": 2,
+            "operation": "DescriptorDuplicate",
+            "target": { "kind": "Unknown" },
+            "isPathRelevant": false,
+            "isComplete": false
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "A runtime descriptor value cannot be exempted using the authored ampersand prefix."
+}
