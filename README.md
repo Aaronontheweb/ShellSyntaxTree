@@ -12,12 +12,12 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 `netstandard2.0` and `net8.0`.
 
 ```bash
-dotnet add package ShellSyntaxTree --version 0.2.0
+# Current structured-analysis prerelease
+dotnet add package ShellSyntaxTree --version 0.3.0-alpha
 ```
 
-The `0.2.0` release adds PowerShell support. The latest stable
-`0.2.x` package supports bash and PowerShell together. The public surface
-documented below tracks the `dev` branch.
+The latest stable package is `0.2.0`. The `0.3.0-alpha` prerelease adds the
+typed syntax tree and command-occurrence authorization API documented below.
 
 ## What you get
 
@@ -57,24 +57,33 @@ The original consumer is
 [Netclaw](https://github.com/netclaw-dev/netclaw)'s approval policy;
 the library is built to be reusable beyond that.
 
-## Quick start
+## Quick start: inspect a result
+
+This example displays parser facts. It is not an authorization policy and does
+not decide that a command is safe. Use the [consumer guide](./docs/CONSUMER_GUIDE.md)
+for the fail-closed, all-occurrence authorization algorithm.
 
 ```csharp
 using ShellSyntaxTree;
 
-var parser = new BashParser();
+var parser = new BashParser(new BashParserOptions
+{
+    WorkingDirectory = Environment.CurrentDirectory,
+});
 var parsed = parser.Parse("cd /repo && rm /etc/passwd");
 
 if (parsed.IsUnparseable)
 {
-    // Safe-fail: prompt the user, deny the command, etc.
     Console.WriteLine($"can't model: {parsed.UnparseableReason}");
     return;
 }
 
-foreach (var clause in parsed.Clauses)
+foreach (var occurrence in parsed.Commands)
 {
-    Console.WriteLine($"{clause.Operator} {clause.Verb.Joined}");
+    var clause = occurrence.Clause;
+    Console.WriteLine(
+        $"{occurrence.ImmediateRole} {clause.Verb.Joined} " +
+        $"complete={occurrence.IsComplete} cwd={occurrence.WorkingDirectory.Kind}");
 
     foreach (var arg in clause.Args.Where(a => a.IsPath))
     {
@@ -82,30 +91,29 @@ foreach (var clause in parsed.Clauses)
         Console.WriteLine($"    {marker}: {arg.Resolved}");
     }
 
-    foreach (var redirect in clause.Redirects.Where(r => !r.IsDynamicSkip))
+    foreach (var effective in occurrence.EffectiveArguments)
     {
-        Console.WriteLine($"    {redirect.Direction}: {redirect.Target}");
+        Console.WriteLine(
+            $"    element[{effective.ClauseElementIndex}]: {effective.Value.Kind}");
+    }
+
+    foreach (var redirect in occurrence.Redirects)
+    {
+        Console.WriteLine(
+            $"    {redirect.Operation}: {redirect.Target.Kind} " +
+            $"complete={redirect.IsComplete}");
     }
 }
-```
-
-Run that against the example input and you get:
-
-```
-None cd
-      path: /repo
-AndIf rm
-    ↳ cwd: /repo
-      path: /etc/passwd
 ```
 
 ## Consumer guide
 
 The [consumer guide](./docs/CONSUMER_GUIDE.md) develops the quick start into
-a production-oriented algorithm: parser selection, safe-fail handling, command
-identity, paths and cwd attribution, redirects, compounds and pipelines, and
-PowerShell-specific alias and dynamic-command behavior. It also links to
-immutable examples from Netclaw's live approval-gate integration.
+the full v0.3 authorization algorithm: parser selection, occurrence traversal,
+bounded effective values, joined cwd state, explicit redirects, safe-fail
+handling, display-tree traversal, migration effects, and PowerShell-specific
+behavior. It also links to immutable examples from Netclaw's live
+approval-gate integration.
 
 ## Public API surface
 
@@ -120,7 +128,11 @@ public abstract record ShellParserOptions { /* HomeDirectory, WorkingDirectory *
 public sealed record BashParserOptions : ShellParserOptions; // InitialStateMode
 public sealed record PwshParserOptions : ShellParserOptions; // InitialStateMode
 
-public sealed record ParsedCommand { /* Source, Clauses, IsUnparseable, … */ }
+public sealed record ParsedCommand { /* Source, Syntax, Commands, Clauses, IsUnparseable, … */ }
+public abstract record ShellSyntaxNode;
+public sealed record CommandOccurrence { /* Clause, role, ancestry, effective values, cwd, redirects, completeness */ }
+public sealed record ShellValueDomain  { /* Exact, FiniteSet, Pattern, or Unknown */ }
+public sealed record RedirectAnalysis  { /* source, operation, target, heredoc facts, completeness */ }
 public sealed record Clause        { /* Operator, Verb, Args, Redirects, Elements, IsSubshell, IsCommandStringWrapped */ }
 public sealed record ClauseElement { /* Raw, Value, Role, source span, verb-relative position, path facts */ }
 public sealed record VerbChain     { /* Tokens, Joined, CanonicalVerb, IsDynamic */ }
@@ -133,9 +145,11 @@ public enum RedirectDirection  { In, Out, Append, ErrOut, ErrAppend }
 public enum CompoundOperator   { None, AndIf, OrIf, Sequence, Pipe }
 ```
 
-Both parsers emit the **same** `ParsedCommand` AST — a consumer walks a
-PowerShell parse exactly as it walks a bash one. A Windows `cmd` parser
-remains deferred.
+Both parsers emit the same `ParsedCommand` projections. Security consumers
+enumerate `Commands`; explainers and visualizers traverse `Syntax`; existing
+v0.2 consumers can migrate from the conservative `Clauses` projection. The
+shell-specific parsers retain different grammar and analysis rules. A Windows
+`cmd` parser remains deferred.
 
 Behavioral contract: [`SPEC.md`](./SPEC.md) (bash + shared surface) and
 [`SPEC.POWERSHELL.md`](./SPEC.POWERSHELL.md) (PowerShell).
@@ -208,6 +222,9 @@ workflow asserts this and fails fast on misformatted tags.
   `ShellParserOptions` base and the additive `VerbChain.CanonicalVerb` /
   `VerbChain.IsDynamic` fields; renames `Clause.IsBashCWrapped` →
   `IsCommandStringWrapped` (breaking — see [`RELEASE_NOTES.md`](./RELEASE_NOTES.md)).
+- **0.3.0** — typed nested syntax, complete command occurrences, bounded value
+  and cwd facts, explicit redirects, Bash `for ... in`, and PowerShell
+  `foreach`, while retaining the v0.2 `Clauses` compatibility projection.
 - **1.0.0** — when an external consumer beyond Netclaw ships against
   it without finding API gaps.
 

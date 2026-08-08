@@ -5,9 +5,11 @@ without executing the command. It is designed for approval gates, CI/CD
 auditors, sandbox planners, audit-log processors, and other tools that need to
 reason about commands before or after execution.
 
-The library is deliberately not a policy engine. It reports clauses, candidate
-verb chains, arguments, paths, redirects, inherited working directories, and
-uncertainty. A consumer decides what those facts mean for its own domain.
+The library is deliberately not a policy engine. It reports typed syntax,
+command occurrences, candidate verb chains, effective arguments, paths,
+redirects, working-directory facts, uncertainty, and conservative v0.2
+compatibility clauses. A consumer decides what those facts mean for its own
+domain.
 
 ## The boundary between parsing and policy
 
@@ -44,14 +46,14 @@ flowchart TD
         D["PwshParser"]
         C --> E["Parse syntax, classify tokens, and resolve static context"]
         D --> E
-        E --> F["ParsedCommand: ordered clauses and elements, semantic projections, cwd, and uncertainty"]
+        E --> F["ParsedCommand: Syntax for display and Commands for authorization"]
     end
 
     subgraph APP["Consumer-owned policy"]
         G{"IsUnparseable or policy-relevant input dynamic?"}
         G -->|Yes| H["Safe-fail: prompt or deny"]
-        G -->|No| I["Walk every clause in source order"]
-        I --> J["Choose command identity and evaluate paths, cwd, and redirects"]
+        G -->|No| I["Walk every command occurrence in source order"]
+        I --> J["Evaluate identity, effective arguments, cwd, and redirects"]
         J --> K{"ALLOW / PROMPT / DENY"}
     end
 
@@ -94,11 +96,11 @@ and grouping can mean different things in Bash and PowerShell.
 Once parsed, a security-oriented consumer normally follows this sequence:
 
 1. Reject or prompt on an unparseable result.
-2. Walk every clause; do not authorize only the first stage of a compound or
-   pipeline.
+2. Walk every command occurrence; do not authorize only the first stage of a
+   compound, pipeline, loop, substitution, or execution region.
 3. Determine a conservative command identity.
-4. Evaluate explicit path arguments, inherited cwd attribution, and redirect
-   targets.
+4. Overlay effective values on authored elements, then evaluate working-
+   directory and redirect facts.
 5. Elevate dynamic or unresolved content when it affects the policy decision.
 6. Apply product-specific rules and produce a decision.
 
@@ -109,47 +111,78 @@ placeholders. ShellSyntaxTree supplies the parsed facts, not those policy APIs.
 var parser = CreateParser(shell, workingDirectory);
 var parsed = parser.Parse(command);
 
-if (parsed.IsUnparseable)
+if (parsed.IsUnparseable || parsed.Commands.Count == 0)
 {
-    // Partial clauses are diagnostic evidence, not authorization evidence.
-    return GateDecision.Prompt(parsed.UnparseableReason ?? "unsupported command shape");
+    // Partial Syntax is diagnostic evidence, not authorization evidence.
+    return GateDecision.Prompt(
+        parsed.UnparseableReason ?? "no complete command occurrences");
 }
 
-foreach (var clause in parsed.Clauses)
+var commandDecision = GateDecision.Allow();
+
+foreach (var occurrence in parsed.Commands)
 {
-    if (clause.Verb.IsDynamic)
+    GateDecision occurrenceDecision;
+
+    if (!occurrence.IsComplete
+        || !IsKnownRole(occurrence.ImmediateRole)
+        || occurrence.Clause.Verb.IsDynamic)
     {
-        return GateDecision.Prompt("command identity is dynamic");
+        occurrenceDecision = GateDecision.Prompt(
+            "command execution is not statically bounded");
+    }
+    else
+    {
+        var gateKey = GetGateKey(occurrence.Clause.Verb);
+        if (gateKey is null)
+        {
+            occurrenceDecision = GateDecision.Prompt(
+                "occurrence has no statically known command");
+        }
+        else
+        {
+            // This application-owned step must interpret the authored
+            // Clause.Elements, overlay EffectiveArguments by
+            // ClauseElementIndex, and apply the complete grammar for gateKey
+            // to every exact or finite candidate.
+            occurrenceDecision = EvaluateOccurrence(gateKey, occurrence);
+        }
     }
 
-    var gateKey = GetGateKey(clause.Verb);
-    if (gateKey is null)
-    {
-        return GateDecision.Prompt("clause has no statically known command");
-    }
-
-    var decision = EvaluateClause(gateKey, clause);
-    if (decision.Outcome != GateOutcome.Allow)
-    {
-        return decision;
-    }
+    // Do not return early on Prompt: a later occurrence may be Deny.
+    commandDecision = MostRestrictive(
+        commandDecision,
+        occurrenceDecision); // Deny > Prompt > Allow
 }
 
-return GateDecision.Allow();
+return commandDecision;
+
+static bool IsKnownRole(CommandOccurrenceRole role) => role is
+    CommandOccurrenceRole.Ordinary
+    or CommandOccurrenceRole.PipelineStage
+    or CommandOccurrenceRole.Condition
+    or CommandOccurrenceRole.Iterator
+    or CommandOccurrenceRole.LoopBody
+    or CommandOccurrenceRole.Branch
+    or CommandOccurrenceRole.Substitution
+    or CommandOccurrenceRole.ExecutionRegion;
 ```
 
-The example returns on the first non-allow result for brevity. A real UI may
-collect every clause decision so the operator can see the complete command.
+`MostRestrictive` is application-owned and must preserve `Deny > Prompt >
+Allow`. The loop deliberately does not short-circuit: a prompt-worthy first
+stage cannot hide a hard deny in a later stage. A UI can retain the per-
+occurrence decisions as well as the aggregate. `EvaluateOccurrence` is also
+consumer-owned: a generic shell parser cannot know whether a token is a Git
+global option, a `sed` program, or a path operand. Within that policy,
+evaluate hard-deny and protected-path rules before reusable grants; stored
+approval must never bypass a deny.
 
-## Planned v0.3 migration contract
+## v0.3 authorization and migration contract
 
-> This section describes the locked v0.3 design and is not an API available in
-> the current v0.2 package. The production example above remains correct until
-> a v0.3 prerelease ships.
-
-v0.3 adds `ParsedCommand.Commands` as the authorization projection and
-`ParsedCommand.Syntax` as the typed display/analysis tree. The migration rules
-are:
+The `0.3.0-alpha` package adds `ParsedCommand.Commands` as the authorization
+projection and `ParsedCommand.Syntax` as the typed display/analysis tree. This
+guide describes the stable v0.3 contract; constructs not yet complete in an
+installed prerelease remain prompt-or-deny cases. The migration rules are:
 
 1. Check `IsUnparseable` first. An unparseable result has empty `Commands` and
    `Clauses`; any partial `Syntax` is diagnostic only.
@@ -226,13 +259,15 @@ interactive session or runspace pool merely to suppress approval prompts.
 `-NoProfile -NonInteractive` alone does not prove the inherited environment,
 startup configuration, or module baseline.
 
-Heredoc and Bash here-string bodies are stdin data, not implicit child commands
-or filesystem paths. Authorize any command substitutions surfaced from an
-expanding heredoc as normal occurrences, then let executable-specific policy
-decide whether the remaining data matters. Complete literal data need not cause
-a prompt merely because it uses `<<`, `<<-`, or `<<<`; unknown data passed to a
-receiver that interprets stdin as code remains policy-sensitive and fails
-closed.
+Under the stable v0.3 contract, heredoc and Bash here-string bodies are stdin
+data, not implicit child commands or filesystem paths. Authorize any command
+substitutions surfaced from an expanding heredoc as normal occurrences, then
+let executable-specific policy decide whether the remaining data matters.
+Complete literal data need not cause a prompt merely because it uses `<<`,
+`<<-`, or `<<<`; unknown data passed to a receiver that interprets stdin as
+code remains policy-sensitive and fails closed. Until the installed package
+publishes complete `HereDocument` or `HereString` facts for an input, keep that
+input on the prompt-or-deny path.
 
 `ParsedCommand.Clauses` remains as a conservative v0.2 compatibility
 projection during migration. For a successful result, the syntax leaf,
@@ -240,14 +275,69 @@ occurrence, and compatibility projection share the same in-memory `Clause`
 instance. Nested authored commands are flattened in source order, no operator
 is invented across structural boundaries, and loop variables remain authored
 as dynamic values rather than being silently substituted into compatibility
-records.
+records. `Clauses` remains supported throughout v0.3, including every v0.3.x
+release; no removal version is scheduled. A later removal would require a
+deliberate minor-version breaking change and release-note migration mapping
+under the repository's `0.x` versioning contract.
 
-The new records change generated equality, hashing, `ToString()`, and default
-serialization output. ShellSyntaxTree does not promise a stable serialized
-wire format for its closed polymorphic syntax family. Consumers that persist
-results should own a versioned DTO or explicit serializer mapping. The full
-compiling v0.3 consumer example replaces this preview when the prerelease API
-lands.
+The new records participate in generated record equality, hashing, and
+`ToString()`. Adding `Syntax` and `Commands` also changes those generated
+results for `ParsedCommand`, even when the compatibility `Clauses` are equal.
+Do not use a parser result's record hash or `ToString()` as a durable approval
+key. ShellSyntaxTree does not promise a stable serialized wire format for its
+closed polymorphic syntax family and does not configure polymorphic JSON
+serialization. Consumers that persist results should map them to a
+consumer-owned, versioned DTO and reject unknown enum values or node kinds
+when reading it.
+
+## Display traversal is not authorization traversal
+
+`ParsedCommand.Syntax` preserves authored nesting for explainers, diagnostics,
+and visualizations. A display can recursively visit `ShellBlockSyntax`,
+`PipelineSyntax`, `ForEachSyntax`, `CommandSubstitutionSyntax`,
+`ExecutionRegionSyntax`, and the other known node types. It must include a
+default branch for a node type or `ShellSyntaxKind` added by a future package.
+
+Do not use that recursive display walk to build an authorization list. The
+library has already projected every supported executable leaf exactly once
+into `ParsedCommand.Commands`, in deterministic order. Walking both surfaces
+double-counts shared `Clause` instances; walking only selected syntax node
+types can omit executable regions. If `IsUnparseable` is true, any partial
+`Syntax` is diagnostic only and both authorization projections are empty.
+
+## Interpreting occurrence analysis
+
+`EffectiveArguments` overlays bounded runtime values onto authored
+`Clause.Elements` by `ClauseElementIndex`; it does not replace the authored
+token or its shell classification. Validate each coordinate before use and
+apply the executable's complete argument grammar to every candidate:
+
+- `Exact` contains one proved value.
+- `FiniteSet` contains 2 through 32 distinct proved values. Every candidate
+  must independently satisfy policy; do not authorize only the first.
+- `Pattern` is a Bash path-shaped glob plus a conservative
+  `CoveringDirectory`. Accept it only when policy understands both the pattern
+  and the full covering scope without enumerating the filesystem.
+- `Unknown` is not an empty string or wildcard grant. Prompt or deny whenever
+  the value can affect identity, option binding, a path, or another
+  policy-sensitive position.
+
+Only the combinations documented above are valid. An empty `Exact`, a
+one-value `FiniteSet`, populated `Values` on `Unknown`, or an unrecognized
+`ShellValueDomainKind` is invalid external data and must fail closed.
+
+`WorkingDirectory` uses the same domain type, but stable v0.3 publishes only
+`Exact` or `Unknown`. `Exact` means all modeled reachable states agree. A
+branch, loop, failed location change, or unmodeled mutation whose exits do not
+agree produces `Unknown`; never substitute the process cwd as a fallback.
+
+Redirect analysis is independent. Require `RedirectAnalysis.IsComplete`, a
+recognized source and operation, valid descriptor combinations, and a value
+domain appropriate to the operation. Evaluate every path-relevant target.
+Descriptor operations are not paths, while heredoc and here-string targets are
+stdin data; executable-specific policy still decides whether that data is
+code. An occurrence can be structurally complete while one argument, cwd, or
+redirect target remains unknown, so test all of these facts separately.
 
 ## Choosing a command identity
 
@@ -389,7 +479,8 @@ write outside an allowed zone:
 echo safe > /etc/profile.d/example.sh
 ```
 
-Walk `Clause.Redirects` independently of `Args`:
+For a v0.2 compatibility consumer, walk `Clause.Redirects` independently of
+`Args`:
 
 ```csharp
 foreach (var redirect in clause.Redirects)
@@ -412,33 +503,73 @@ In v0.3, authorize the parser-owned facts on every occurrence instead of
 re-parsing `ClauseElement.Raw` or the compatibility target:
 
 ```csharp
+var redirectDecision = GateDecision.Allow();
+
 foreach (var redirect in occurrence.Redirects)
 {
-    if (!redirect.IsComplete)
-    {
-        return GateDecision.Prompt("redirect analysis is incomplete");
-    }
+    GateDecision current;
 
-    if (!redirect.IsPathRelevant)
+    if (!redirect.IsComplete
+        || !IsKnownRedirectSource(redirect.Source)
+        || !IsKnownRedirectOperation(redirect.Operation))
     {
-        EvaluateDescriptorOperation(
-            redirect.Source,
-            redirect.Operation,
-            redirect.TargetDescriptor);
-        continue;
+        current = GateDecision.Prompt("redirect analysis is incomplete");
     }
-
-    if (redirect.Target.Kind is not (
+    else if (!redirect.IsPathRelevant)
+    {
+        if (redirect.Operation is RedirectOperation.HereDocument
+            or RedirectOperation.HereString)
+        {
+            // Preserve Target and HereDocument for receiver-specific stdin
+            // policy; this data may be code for the receiving executable.
+            current = EvaluateStdinData(occurrence, redirect);
+        }
+        else
+        {
+            current = EvaluateDescriptorOperation(
+                redirect.Source,
+                redirect.Operation,
+                redirect.TargetDescriptor);
+        }
+    }
+    else if (redirect.Target.Kind is not (
             ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
     {
-        return GateDecision.Prompt("redirect path is unknown");
+        current = GateDecision.Prompt("redirect path is unknown");
+    }
+    else
+    {
+        current = GateDecision.Allow();
+        foreach (var path in redirect.Target.Values)
+        {
+            current = MostRestrictive(current, EvaluatePath(path));
+        }
     }
 
-    foreach (var path in redirect.Target.Values)
-    {
-        EvaluatePath(path);
-    }
+    redirectDecision = MostRestrictive(redirectDecision, current);
 }
+
+return redirectDecision;
+
+static bool IsKnownRedirectSource(RedirectSource source) => source.Kind switch
+{
+    RedirectSourceKind.Default => source.Descriptor is null,
+    RedirectSourceKind.Descriptor => source.Descriptor >= 0,
+    RedirectSourceKind.PowerShellAllStreams => source.Descriptor is null,
+    _ => false,
+};
+
+static bool IsKnownRedirectOperation(RedirectOperation operation) =>
+    operation is RedirectOperation.FileInput
+        or RedirectOperation.FileOutput
+        or RedirectOperation.FileAppend
+        or RedirectOperation.DescriptorDuplicate
+        or RedirectOperation.DescriptorClose
+        or RedirectOperation.DescriptorMove
+        or RedirectOperation.CombinedOutput
+        or RedirectOperation.CombinedOutputAppend
+        or RedirectOperation.HereDocument
+        or RedirectOperation.HereString;
 ```
 
 Completeness and value precision are intentionally independent. For example,
@@ -462,7 +593,8 @@ PowerShell source stream.
 
 ## Compounds, pipelines, and wrapped commands
 
-`ParsedCommand.Clauses` is ordered. Each clause carries the operator that
+The v0.2 compatibility projection `ParsedCommand.Clauses` is ordered. Each
+clause carries the operator that
 preceded it:
 
 - `AndIf`, `OrIf`, and `Sequence` normally introduce a new statement;
@@ -522,8 +654,9 @@ For a security gate, these conditions should prevent a durable automatic
 grant:
 
 - `ParsedCommand.IsUnparseable` is true;
-- the non-empty input produces no clauses;
-- a clause has `Verb.IsDynamic` or no statically known command identity;
+- the non-empty input produces no command occurrences;
+- an occurrence is incomplete or has an unknown role;
+- an occurrence has `Verb.IsDynamic` or no statically known command identity;
 - a dynamic argument or redirect affects a policy-sensitive position;
 - a future package version introduces an enum or AST shape the consumer has
   not mapped.

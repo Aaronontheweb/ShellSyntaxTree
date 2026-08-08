@@ -1,5 +1,17 @@
 #### Unreleased ####
 
+## Consumer migration
+
+- v0.3 security consumers authorize `ParsedCommand.Commands` and use
+  `ParsedCommand.Syntax` only for display and diagnostics. The conservative
+  v0.2 `Clauses` projection remains supported throughout v0.3, including every
+  v0.3.x release; no removal version is scheduled.
+- The additive v0.3 records and `ParsedCommand` members change generated record
+  equality, hashing, `ToString()`, and reflection-based serialization output.
+  ShellSyntaxTree does not define a stable serialized wire format. Persisted
+  results require a consumer-owned, versioned DTO or explicit serializer
+  mapping that fails closed on unknown node and enum values.
+
 #### 0.3.0-alpha 2026-08-08 ####
 
 This prerelease exposes the v0.3 structured-analysis API for Netclaw
