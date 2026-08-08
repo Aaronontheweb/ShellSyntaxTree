@@ -179,6 +179,110 @@ public class PwshExecutionRegionStructuralTests
         Assert.True(continuation.IsComplete);
     }
 
+    [Theory]
+    [InlineData("New-Module { Get-Item child.txt }")]
+    [InlineData("nmo -ScriptBlock { Get-Item child.txt }")]
+    [InlineData("Microsoft.PowerShell.Core\\New-Module { Get-Item child.txt }")]
+    public void New_module_publishes_a_synchronous_initialization_region(string source)
+    {
+        var result = ParseIsolated(source);
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionOrigin.CommandArgument, region.Origin);
+        Assert.Equal(ExecutionRegionPhase.Initialization, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Once, region.Cardinality);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void New_module_body_reads_caller_state_but_host_invalidates_continuation()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; New-Module { " +
+            "Write-Output $x; foreach ($x in 'inner') { } }; " +
+            "Write-Output $x");
+
+        var writes = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .ToArray();
+        Assert.Equal(2, writes.Length);
+        Assert.Equal(
+            new[] { "outer" },
+            Assert.Single(writes[0].EffectiveArguments).Value.Values);
+        Assert.True(writes[0].IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(writes[1].EffectiveArguments).Value.Kind);
+        Assert.False(writes[1].IsComplete);
+    }
+
+    [Theory]
+    [InlineData("OutVariable")]
+    [InlineData("PipelineVariable")]
+    [InlineData("ErrorVariable")]
+    [InlineData("WarningVariable")]
+    [InlineData("InformationVariable")]
+    public void New_module_variable_writers_invalidate_body_input(string parameter)
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; " +
+            $"New-Module -ReturnResult {{ Write-Output $x }} -{parameter} x");
+
+        Assert.False(result.IsUnparseable);
+        var write = Assert.Single(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "Write-Output");
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(write.EffectiveArguments).Value.Kind);
+        Assert.False(write.IsComplete);
+    }
+
+    [Fact]
+    public void New_module_writer_target_invalidates_body_command_resolution()
+    {
+        var result = ParseIsolated(
+            "New-Module -ReturnResult { Compress-Archive a b } " +
+            "-OutVariable PSModuleAutoLoadingPreference");
+
+        Assert.False(result.IsUnparseable);
+        var body = Assert.Single(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "Compress-Archive");
+        Assert.False(body.IsComplete);
+    }
+
+    [Fact]
+    public void Module_qualified_new_module_invalidates_exported_function_continuation()
+    {
+        var result = ParseIsolated(
+            "Microsoft.PowerShell.Core\\New-Module { " +
+            "Set-Item Function:\\git -Value 'Remove-Item child.txt' }; " +
+            "git child.txt");
+
+        Assert.False(result.IsUnparseable);
+        var continuation = result.Commands.Last();
+        Assert.Equal("git", continuation.Clause.Verb.Tokens[0]);
+        Assert.False(continuation.IsComplete);
+    }
+
+    [Fact]
+    public void New_module_joins_body_outcomes_before_host_continuation()
+    {
+        var result = ParseIsolated(
+            "New-Module { Set-Location /maybe } && Get-Item child.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            continuation.WorkingDirectory.Kind);
+        Assert.False(continuation.IsComplete);
+    }
+
     [Fact]
     public void Current_scope_once_receiver_propagates_binding_state()
     {
@@ -613,6 +717,21 @@ public class PwshExecutionRegionStructuralTests
                 ShellValueDomainKind.Unknown,
                 Assert.Single(command.EffectiveArguments).Value.Kind);
         });
+    }
+
+    [Fact]
+    public void New_module_pipeline_state_mutation_fails_atomically()
+    {
+        var result = new PwshParser(new PwshParserOptions
+        {
+            WorkingDirectory = "C:/work",
+            InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+        }).Parse(
+            "New-Module { Write-Output value } | Write-Output -OutVariable x");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Fact]

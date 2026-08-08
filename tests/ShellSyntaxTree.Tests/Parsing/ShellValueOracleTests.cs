@@ -1131,7 +1131,21 @@ public class ShellValueOracleTests
             "Write-Output -OutVariable x | Out-Null; " +
             "$x='start'; Trace-Command -Name ParameterBinding -Expression { " +
             "\"trace-stage=<$x>\" } -PSHost 5>$null | " +
-            "Write-Output -OutVariable x | Out-Null; $x");
+            "Write-Output -OutVariable x | Out-Null; $x; " +
+            "Set-Location $start; $x='outer'; New-Module { " +
+            "Write-Host \"module-body-x=<$x>\"; $x='inner'; " +
+            "Set-Location $target; Set-Alias moduleAlias Get-Date } | Out-Null; " +
+            "\"module-after-x=<$x>\"; " +
+            "\"module-cwd-target=<$((Get-Location).Path -eq $target)>\"; " +
+            "\"module-alias=<$([bool](Get-Alias moduleAlias -ErrorAction Ignore))>\"; " +
+            "Set-Location $start; New-Module { Set-Location $missing " +
+            "-ErrorAction SilentlyContinue } | Out-Null; " +
+            "\"module-failure-status=<$?>\"; " +
+            "\"module-failure-cwd-start=<$((Get-Location).Path -eq $start)>\"; " +
+            "$x='outer'; $null = New-Module -ReturnResult { " +
+            "Write-Host \"module-outvar=<$x>\" } -OutVariable x; " +
+            "$x='start'; New-Module -ReturnResult { Write-Host \"module-stage=<$x>\" } | " +
+            "Write-Output -OutVariable x | Out-Null");
 
         Assert.Equal(
             new[]
@@ -1150,6 +1164,14 @@ public class ShellValueOracleTests
                 "invoke-interleave=<invoke-interleave=<>>",
                 "measure-stage=<>",
                 "trace-stage=<>",
+                "module-body-x=<outer>",
+                "module-after-x=<outer>",
+                "module-cwd-target=<True>",
+                "module-alias=<False>",
+                "module-failure-status=<True>",
+                "module-failure-cwd-start=<True>",
+                "module-outvar=<>",
+                "module-stage=<>",
             },
             Lines(output));
     }
