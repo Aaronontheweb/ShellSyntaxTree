@@ -66,7 +66,7 @@ checked-in corpus.
 |---|---|---|
 | `git` | shell | everything |
 | `gh` CLI | shell | issues, PRs, releases, tag pushes |
-| GitHub Actions | `.github/workflows/` | `pr_validation.yml` (build + test + pack on PR/push), `publish_nuget.yml` (pack + push + release on `v*.*.*` tags) |
+| GitHub Actions | `.github/workflows/` | `pr_validation.yml` (build + test + pack on PR/push), `publish_nuget.yml` (validates bare SemVer tags, then packs, pushes, and releases) |
 | GitHub Dependabot | `.github/dependabot.yml` | NuGet bumps |
 
 ## NuGet
@@ -97,8 +97,8 @@ Required configuration (one-time, on `nuget.org`):
 Required configuration (one-time, in repo settings):
 
 1. **Settings → Environments → New environment** → name `nuget`.
-   Optional protection: restrict deployment to tags matching
-   `v*.*.*`.
+   Optional protection: restrict deployment to bare SemVer release tags such
+   as `0.3.0-alpha`.
 2. **Settings → Secrets and variables → Actions → New repository
    secret** — `NUGET_USER` set to the nuget.org account username
    that owns the package. The legacy `NUGET_KEY` secret can be

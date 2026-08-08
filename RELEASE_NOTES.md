@@ -1,5 +1,34 @@
 #### Unreleased ####
 
+#### 0.3.0-alpha 2026-08-08 ####
+
+This prerelease exposes the v0.3 structured-analysis API for Netclaw
+integration. It keeps the v0.2 compatibility projection for existing
+consumers. Unknown or unsupported forms continue to fail closed.
+
+## Added
+
+- Added `ParsedCommand.Syntax` and `ParsedCommand.Commands`. Consumers can now
+  inspect every supported command occurrence in nested shell structure.
+- Added typed syntax nodes, occurrence roles, ancestry, completeness facts,
+  value domains, and explicit redirect analysis.
+- Added bounded Bash `for ... in` and PowerShell `foreach` analysis. Exact and
+  finite loop values require the documented isolated initial-state modes.
+- Added command-substitution and PowerShell execution-region discovery for the
+  supported v0.3 grammar.
+- Added explicit file, stream, and descriptor redirect facts. Static descriptor
+  operations no longer require a consumer to infer safety from raw text.
+
+## Compatibility and security
+
+- Kept all v0.2 `ParsedCommand.Clauses`, `Clause`, `Arg`, and `Redirect`
+  members. The compatibility projection remains conservative.
+- Kept incomplete occurrences, unknown values, dynamic command identities,
+  and unsupported execution-bearing syntax fail closed.
+- The corpus now contains 268 Bash cases and 417 PowerShell cases. Both corpora
+  pass the PII audit. Every PowerShell input has a real-`pwsh` parse check,
+  and targeted real-Bash tests pin supported Bash semantics.
+
 #### 0.2.0 2026-08-05 ####
 
 This stable release includes all behavior and API surface from the

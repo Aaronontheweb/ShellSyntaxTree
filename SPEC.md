@@ -2451,7 +2451,8 @@ The repo template already has:
 
 Adapt for ShellSyntaxTree:
 
-- **Trigger NuGet publish on tag pattern `v*.*.*`** (e.g. `v0.1.0-alpha`).
+- **Trigger NuGet publish on a bare SemVer tag** (for example,
+  `0.3.0-alpha`). A leading `v` is invalid.
 - **Test job** runs the corpus runner plus all unit tests.
 - **PII audit job** runs the sanitization-pattern scan over `tests/ShellSyntaxTree.Tests/Corpus/`.
 
@@ -2521,7 +2522,7 @@ A natural order for the implementer:
     covering each section. Iterate parser to make all pass.
 13. **Sanitize and seed from real logs** (§14) — script + manual review.
     Add 50-100 more corpus entries.
-14. **Wire CI** (§15). Tag v0.1.0-alpha when corpus is green and PII audit
+14. **Wire CI** (§15). Tag `0.1.0-alpha` when the corpus is green and the PII audit
     passes.
 
 Estimated implementation effort: 600-800 LOC of source + 400-600 LOC of
@@ -2544,7 +2545,7 @@ v0.1.0-alpha ships when **all** of the following hold:
 3. ✅ Corpus has at least 105 entries spanning the categories in §13.
 4. ✅ PII audit scan over `tests/ShellSyntaxTree.Tests/Corpus/bash/*.json` finds zero hits.
 5. ✅ `dotnet test` runs on PR via GitHub Actions and passes.
-6. ✅ Tagging `v0.1.0-alpha` triggers `publish_nuget.yml` and the package
+6. ✅ Tagging `0.1.0-alpha` triggers `publish_nuget.yml` and the package
    appears on nuget.org.
 7. ✅ Netclaw can consume the package via `<PackageReference>` and the
    `IShellParser` resolves at runtime in Netclaw's DI container.

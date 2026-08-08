@@ -203,5 +203,5 @@ dotnet test -c Release
 dotnet pack -c Release -o ./bin/nuget
 
 # Cut a release (manual, then push the tag)
-git tag v0.1.0-alpha && git push origin v0.1.0-alpha
+git tag 0.3.0-alpha && git push origin 0.3.0-alpha
 ```
