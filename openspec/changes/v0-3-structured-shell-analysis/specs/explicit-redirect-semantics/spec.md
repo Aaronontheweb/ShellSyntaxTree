@@ -17,6 +17,26 @@ SHALL be incomplete.
 - **THEN** the source is explicitly PowerShell all streams
 - **THEN** the target is a path-relevant file output rather than a guessed numeric descriptor
 
+#### Scenario: PowerShell static stream merge
+- **WHEN** PowerShell parses `Get-ChildItem 3>&1`
+- **THEN** the source is descriptor `3` and the operation duplicates to descriptor `1`
+- **THEN** the target is not path-relevant
+
+#### Scenario: Unsupported PowerShell redirect grammar fails closed
+- **WHEN** PowerShell receives `< input.txt`, `1>&1`, `2>&3`, or `2>&-`
+- **THEN** the whole parse is unparseable in agreement with the native parser
+- **THEN** no compatibility or explicit redirect fact is guessed from the malformed prefix
+
+#### Scenario: Duplicate PowerShell source redirect fails closed
+- **WHEN** PowerShell receives `> a > b`, `> a 1> b`, `2>&1 2> b`, or `*> a *> b`
+- **THEN** the whole parse is unparseable because one source is redirected twice
+- **THEN** `*> a 2> b` remains valid because all streams and stream `2` are distinct authored sources
+
+#### Scenario: PowerShell null sink spellings agree
+- **WHEN** PowerShell parses either `> $null` or `> ${null}`
+- **THEN** neither spelling is published as a path-relevant file target
+- **THEN** the explicit fact remains incomplete until a discard-sink operation is represented
+
 #### Scenario: Static descriptor duplication
 - **WHEN** Bash parses `dotnet test 2>&1`
 - **THEN** the redirect operation is descriptor duplicate

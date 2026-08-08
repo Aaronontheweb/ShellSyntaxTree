@@ -1,0 +1,155 @@
+{
+  "name": "V03 redirect unreachable relative target",
+  "input": "foreach ($x in @()) { Write-Output x \u003E relative.txt }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "x",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "relative.txt",
+            "isDynamicSkip": true
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 53,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 53,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "x",
+        "bindingRaw": "$x",
+        "bindingSourceStart": 9,
+        "bindingSourceLength": 2,
+        "iterableRaw": "@()",
+        "iterableSourceStart": 15,
+        "iterableSourceLength": 3
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 15,
+        "sourceLength": 3,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 21,
+        "sourceLength": 31,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 22,
+        "sourceLength": 29,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 53
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 53
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 21,
+            "sourceLength": 31
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "operation": "FileOutput",
+            "targetDescriptor": null,
+            "target": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "isPathRelevant": true,
+            "isComplete": true
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "An unreachable relative redirect cannot retain the parser working directory as an exact target."
+}

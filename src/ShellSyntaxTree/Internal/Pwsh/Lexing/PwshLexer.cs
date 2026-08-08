@@ -255,9 +255,10 @@ internal static class PwshLexer
 
     /// <summary>
     /// SPEC.POWERSHELL.md §5: recognize redirect operators, longest-match
-    /// first — <c>&gt;</c>, <c>&gt;&gt;</c>, <c>&lt;</c>; <c>N&gt;</c> /
+    /// first — <c>&gt;</c>, <c>&gt;&gt;</c>; <c>N&gt;</c> /
     /// <c>N&gt;&gt;</c> for stream N in {1..6}; <c>*&gt;</c> / <c>*&gt;&gt;</c>;
-    /// and the stream-merge form <c>N&gt;&amp;M</c>.
+    /// and the stream-merge forms <c>N&gt;&amp;1</c> for N in {2..6} and
+    /// <c>*&gt;&amp;1</c>.
     /// </summary>
     private static bool TryReadRedirect(
         ReadOnlySpan<char> src, int i, out int length, out string? text)
@@ -265,13 +266,13 @@ internal static class PwshLexer
         length = 0;
         text = null;
 
-        var prefixed = false;
+        var prefix = '\0';
         var p = i;
         if (src[i] == '*' || (src[i] >= '1' && src[i] <= '6'))
         {
             if (i + 1 < src.Length && src[i + 1] == '>')
             {
-                prefixed = true;
+                prefix = src[i];
                 p = i + 1;
             }
             else
@@ -290,7 +291,7 @@ internal static class PwshLexer
         if (op == '<')
         {
             // '<' takes no stream prefix.
-            if (prefixed)
+            if (prefix != '\0')
             {
                 return false;
             }
@@ -305,9 +306,11 @@ internal static class PwshLexer
             return false;
         }
 
-        // Stream-merge: '>' '&' digit.
+        // PowerShell only permits non-success streams (or all streams) to
+        // merge into success stream 1.
         if (p + 2 < src.Length && src[p + 1] == '&'
-            && src[p + 2] >= '1' && src[p + 2] <= '6')
+            && src[p + 2] == '1'
+            && (prefix == '*' || prefix is >= '2' and <= '6'))
         {
             length = (p + 3) - i;
             text = src.Slice(i, length).ToString();

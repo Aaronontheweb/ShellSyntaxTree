@@ -295,9 +295,9 @@ value            := word | quoted_string | here_string
                   | hash_literal         // @{ ... }  -> DynamicSkip Arg
                   | splat                // @var      -> DynamicSkip Arg
 redirect         := redirect_op target
-redirect_op      := ">" | ">>" | "<"
+redirect_op      := ">" | ">>"
                   | STREAM ">" | STREAM ">>"          // STREAM in {1..6, *}
-                  | STREAM ">&" STREAM                 // stream merge (2>&1)
+                  | MERGE_SOURCE ">&1"                 // MERGE_SOURCE in {2..6, *}
 target           := word | quoted_string | supported_subexpression | "$null"
 supported_subexpression := "$(" command ")"
 dynamic_command_name := variable | quoted_string | supported_subexpression
@@ -616,9 +616,17 @@ compatibility attribution so an unreachable body cannot leak a parse-time
 location, and a possibly reached mutation cannot leave a false exact path.
 Outcome projection also rebases cwd-dependent compatibility arguments, clause
 elements, redirects, and attribution to an exact occurrence cwd. Unknown joins
-clear those resolutions and retain the `<dynamic-cwd>` marker. Decoded child
+clear those resolutions and retain the `<dynamic-cwd>` marker. Explicit
+redirect targets also become Unknown unless provenance proves that the target
+is cwd-independent; an unreachable body never borrows the parse-time cwd.
+Decoded child
 hosts retain inherited invocation-cwd attribution on their compatibility
-leaves while isolating child exit state.
+leaves while isolating child exit state. A redirect authored outside the
+decoded wrapper payload is evaluated in the invocation scope before child
+launch, so its target may use a bounded parent-loop binding; redirects authored
+inside the decoded payload continue to use child scope. When decoded child
+hosts are nested, an outer redirect retains the outermost invocation scope
+that authored it rather than binding to the nearest decoded child scope.
 
 Stable v0.3 continues to defer `while`, `if`, `elseif`, `else`, `do`, `switch`,
 functions, definitions, class/type bodies, and arbitrary execution-bearing
@@ -727,11 +735,18 @@ Operators terminate the current token without surrounding whitespace —
 
 ### Redirect tokenization
 
-Recognized redirect operators, longest-match first: `>`, `>>`, `<`; `N>` and
+Recognized redirect operators, longest-match first: `>`, `>>`; `N>` and
 `N>>` for stream `N` in `{1,2,3,4,5,6}`; `*>` and `*>>` (all streams); and
-the stream-merge form `N>&N` (e.g. `2>&1`). A redirect target of `$null` is
-recognized as the discard sink. §8 covers how stream numbers map onto the
-`RedirectDirection` enum.
+the stream-merge forms `N>&1` for source stream `N` in `{2,3,4,5,6}` and
+`*>&1`. PowerShell reserves `<` for future use, success stream `1` cannot be
+a merge source, and merge targets other than success stream `1` are syntax
+errors. A redirect target of `$null` or `${null}` is recognized as the discard
+sink. §8 covers how stream numbers map onto the `RedirectDirection` enum.
+
+One command may redirect each source at most once. The unnumbered output
+source and explicit stream `1` are the same source; a merge and a file redirect
+also conflict when they consume the same numbered source. `*` remains its own
+source and may coexist with a numbered redirect, matching native PowerShell.
 
 ---
 
@@ -1098,8 +1113,9 @@ with the PowerShell-specific steps below. Resolution order:
    makes subsequent relative paths `DynamicSkip` (the working-directory-
    unknown mechanism, `SPEC.md` §9).
 
-A redirect target of `$null` sets `Redirect.IsDynamicSkip = true` — it is
-the discard sink, not a file; do not resolve it. The `LooksLikePath`
+A redirect target of `$null` or `${null}` sets
+`Redirect.IsDynamicSkip = true` — it is the discard sink, not a file; do not
+resolve it. The `LooksLikePath`
 heuristic (`SPEC.md` §8) additionally recognizes a leading `FileSystem::` /
 `Microsoft.PowerShell.Core\FileSystem::` qualifier.
 
@@ -1174,22 +1190,24 @@ about which stream produced it:
 
 | PowerShell redirect | `RedirectDirection` |
 |---|---|
-| `<` | `In` |
 | `>`, `1>` | `Out` |
 | `>>`, `1>>` | `Append` |
 | `2>` | `ErrOut` |
 | `2>>` | `ErrAppend` |
 | `3>`–`6>`, `*>` | `Out` (lossy — warning/verbose/debug/information/all) |
 | `3>>`–`6>>`, `*>>` | `Append` (lossy) |
-| stream merge `N>&M` (`2>&1`, `3>&1`, ...) | `ErrOut` when `N` is `2`, else `Out`; `Target` carries `&M` verbatim with `IsDynamicSkip=true` |
+| stream merge `N>&1` for `N` in `2`–`6`, or `*>&1` | `ErrOut` when `N` is `2`, else `Out`; `Target` carries `&1` verbatim with `IsDynamicSkip=true` |
 
 The table above remains the v0.2 `Redirect` compatibility mapping. v0.3 also
 populates `RedirectAnalysis`: `RedirectSourceKind.PowerShellAllStreams`
 preserves `*`, `Descriptor` preserves numeric streams, and `Operation`
-distinguishes file input/output/append from static descriptor duplication,
-close, and move. Static descriptor operations are not path-relevant. A
-variable, substitution, malformed suffix, or otherwise computed descriptor
-target remains unknown or incomplete rather than becoming a static exemption.
+distinguishes file output/append from static descriptor duplication. Static
+descriptor operations are not path-relevant. PowerShell's grammar does not
+admit descriptor close, move, computed merge targets, or file input
+redirection; those spellings make the whole parse unparseable. `$null` and
+`${null}`
+remains an incomplete explicit redirect until the public operation vocabulary
+has a discard-sink representation; consumers must continue to fail closed.
 
 ---
 

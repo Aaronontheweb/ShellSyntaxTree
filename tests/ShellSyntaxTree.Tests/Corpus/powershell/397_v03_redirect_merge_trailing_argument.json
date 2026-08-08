@@ -1,6 +1,6 @@
 {
-  "name": "Redirect debug",
-  "input": "Get-Date 5\u003E debug.txt",
+  "name": "V03 redirect merge trailing argument",
+  "input": "Get-Date 2\u003E\u00261-",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -9,11 +9,18 @@
         "verb": [
           "Get-Date"
         ],
-        "args": [],
+        "args": [
+          {
+            "raw": "-",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
         "redirects": [
           {
-            "direction": "Out",
-            "target": "C:/work/debug.txt"
+            "direction": "ErrOut",
+            "target": "\u00261",
+            "isDynamicSkip": true
           }
         ]
       }
@@ -25,7 +32,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 21,
+        "sourceLength": 14,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -36,7 +43,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 21,
+        "sourceLength": 14,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -53,7 +60,7 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 21
+            "sourceLength": 14
           }
         ],
         "effectiveArguments": [],
@@ -69,23 +76,21 @@
           {
             "redirectIndex": 0,
             "sourceKind": "Descriptor",
-            "sourceDescriptor": 5,
-            "operation": "FileOutput",
-            "targetDescriptor": null,
+            "sourceDescriptor": 2,
+            "operation": "DescriptorDuplicate",
+            "targetDescriptor": 1,
             "target": {
-              "kind": "Exact",
-              "values": [
-                "C:/work/debug.txt"
-              ],
+              "kind": "Unknown",
+              "values": [],
               "pattern": null,
               "coveringDirectory": null
             },
-            "isPathRelevant": true,
+            "isPathRelevant": false,
             "isComplete": true
           }
         ]
       }
     ]
   },
-  "notes": "5\u003E debug stream \u2014 maps lossily to Out."
+  "notes": "PowerShell parses the merge as 2\u003E\u00261 and preserves the trailing hyphen as an argument."
 }

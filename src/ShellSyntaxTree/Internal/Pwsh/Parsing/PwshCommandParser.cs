@@ -850,6 +850,17 @@ internal static partial class PwshCommandParser
                 pendingValueParam = null;
                 pendingNativeFlag = null;
                 pendingAmbiguousBinding = false;
+                if (IsRedirectSourceAlreadyUsed(
+                        elements,
+                        t.OperatorText ?? string.Empty))
+                {
+                    return new ArgResult(
+                        args,
+                        redirects,
+                        elements,
+                        "PowerShell command redirects the same source stream more than once");
+                }
+
                 var consumed = BuildRedirect(
                     body,
                     i,
@@ -1409,6 +1420,12 @@ internal static partial class PwshCommandParser
         error = null;
         var operatorToken = body[opIndex];
         var op = operatorToken.OperatorText ?? string.Empty;
+        if (op == "<")
+        {
+            error = "PowerShell input redirection '<' is reserved for future use";
+            return 1;
+        }
+
         var direction = MapRedirect(op, out var isMerge, out var mergeTarget);
 
         if (isMerge)
@@ -2373,6 +2390,17 @@ internal static partial class PwshCommandParser
                 return false;
             }
 
+            if (IsRedirectSourceAlreadyUsed(
+                    elementList,
+                    body[i].OperatorText ?? string.Empty))
+            {
+                redirects = redirectList;
+                elements = elementList;
+                failure =
+                    "PowerShell command redirects the same source stream more than once";
+                return false;
+            }
+
             var consumed = BuildRedirect(
                 body,
                 i,
@@ -2403,6 +2431,46 @@ internal static partial class PwshCommandParser
         token.Kind == PwshTokenKind.Operator
         && token.OperatorText is not null
         && (token.OperatorText == "<" || token.OperatorText.IndexOf('>') >= 0);
+
+    private static bool IsRedirectSourceAlreadyUsed(
+        IReadOnlyList<ClauseElement> elements,
+        string redirectOperator)
+    {
+        if (redirectOperator == "<")
+        {
+            return false;
+        }
+
+        var source = GetRedirectSourceKey(redirectOperator);
+        foreach (var element in elements)
+        {
+            if (element.Role == ClauseElementRole.Redirect &&
+                GetRedirectSourceKey(element.Raw) == source)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static int GetRedirectSourceKey(string redirectOperator)
+    {
+        if (redirectOperator.Length > 0 && redirectOperator[0] == '*')
+        {
+            return -1;
+        }
+
+        if (redirectOperator.Length > 0 &&
+            redirectOperator[0] is >= '1' and <= '6')
+        {
+            return redirectOperator[0] - '0';
+        }
+
+        // PowerShell's unnumbered output redirect and explicit stream 1 are
+        // the same source for duplicate-redirection validation.
+        return 1;
+    }
 
     private static string? NextTokenValue(List<PwshToken> body, int paramIndex) =>
         paramIndex + 1 < body.Count ? body[paramIndex + 1].Value : null;

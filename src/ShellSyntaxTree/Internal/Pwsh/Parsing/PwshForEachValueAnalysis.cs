@@ -1671,6 +1671,7 @@ internal sealed class PwshForEachValueAnalyzer
         new(ClauseReferenceComparer.Instance);
     private readonly Dictionary<Clause, IReadOnlyList<ExecutionRegionSyntax>>
         _executionRegions = new(ClauseReferenceComparer.Instance);
+    private readonly List<AnalysisContext> _invocationRedirectContexts = new();
     private bool _isComplete = true;
     private int _remainingLoopAnalysisTransitions = MaxLoopAnalysisTransitions;
     private long _executionRegionEffectCount;
@@ -1792,6 +1793,7 @@ internal sealed class PwshForEachValueAnalyzer
             current,
             includeUnresolved: isForEachIncomplete ||
                 current.CommandResolutionInvalidated);
+        var redirects = AnalyzeRedirects(source, current);
         var mayPromote = current.CanPromote &&
             source.HasCompleteValueProvenance &&
             simple.Substitutions.Count == 0 &&
@@ -1802,6 +1804,7 @@ internal sealed class PwshForEachValueAnalyzer
             current,
             source,
             effective,
+            redirects,
             isForEachIncomplete,
             mayPromote);
 
@@ -2662,6 +2665,7 @@ internal sealed class PwshForEachValueAnalyzer
         AnalysisContext input,
         CommandOccurrenceFacts source,
         IReadOnlyList<EffectiveArgument> effective,
+        IReadOnlyList<RedirectAnalysis> redirects,
         bool isForEachIncomplete,
         bool mayPromote)
     {
@@ -2669,7 +2673,8 @@ internal sealed class PwshForEachValueAnalyzer
         {
             EffectiveArguments = effective,
             WorkingDirectory = input.ToWorkingDirectoryDomain(),
-            Redirects = source.Redirects,
+            Redirects = redirects,
+            RedirectTargetProvenance = source.RedirectTargetProvenance,
             CwdPathDependencies = source.CwdPathDependencies,
             ValueProvenance = source.ValueProvenance,
             HasCompleteValueProvenance = source.HasCompleteValueProvenance,
@@ -2691,13 +2696,144 @@ internal sealed class PwshForEachValueAnalyzer
             WorkingDirectory = JoinWorkingDirectories(
                 prior.WorkingDirectory,
                 current.WorkingDirectory),
-            Redirects = source.Redirects,
+            Redirects = JoinRedirects(prior.Redirects, current.Redirects),
+            RedirectTargetProvenance = source.RedirectTargetProvenance,
             CwdPathDependencies = source.CwdPathDependencies,
             ValueProvenance = source.ValueProvenance,
             HasCompleteValueProvenance = source.HasCompleteValueProvenance,
             IsComplete = prior.IsComplete && current.IsComplete,
         };
     }
+
+    private IReadOnlyList<RedirectAnalysis> AnalyzeRedirects(
+        CommandOccurrenceFacts source,
+        AnalysisContext input)
+    {
+        if (source.Redirects.Count == 0 ||
+            source.RedirectTargetProvenance.Count == 0)
+        {
+            return source.Redirects;
+        }
+
+        var rewritten = new RedirectAnalysis[source.Redirects.Count];
+        for (var index = 0; index < rewritten.Length; index++)
+        {
+            rewritten[index] = source.Redirects[index];
+        }
+
+        foreach (var provenance in source.RedirectTargetProvenance)
+        {
+            var evaluationContext = provenance.UsesOutermostInvocationScope &&
+                _invocationRedirectContexts.Count > 0
+                ? _invocationRedirectContexts[0]
+                : input;
+            if (provenance.RedirectIndex < 0 ||
+                provenance.RedirectIndex >= rewritten.Length ||
+                !rewritten[provenance.RedirectIndex].IsPathRelevant ||
+                !evaluationContext.TryEvaluateValue(
+                    provenance.Value,
+                    out var domain) ||
+                domain.Kind is not (
+                    ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
+            {
+                continue;
+            }
+
+            var values = new List<string>();
+            var distinct = new HashSet<string>(StringComparer.Ordinal);
+            var resolutionOptions = _options with
+            {
+                WorkingDirectory = evaluationContext.WorkingDirectory,
+            };
+            var resolvedAll = true;
+            foreach (var candidate in domain.Values)
+            {
+                var resolved = PwshResolver.Resolve(
+                    ShellValue.Literal(candidate),
+                    treatAsPath: true,
+                    resolutionOptions,
+                    workingDirectoryUnknown:
+                        evaluationContext.WorkingDirectory is null,
+                    ShellResolutionConsumer.PowerShellRedirect);
+                if (resolved.Resolved is null || !resolved.IsPath)
+                {
+                    resolvedAll = false;
+                    break;
+                }
+
+                if (distinct.Add(resolved.Resolved))
+                {
+                    values.Add(resolved.Resolved);
+                }
+            }
+
+            rewritten[provenance.RedirectIndex] =
+                rewritten[provenance.RedirectIndex] with
+                {
+                    Target = resolvedAll
+                        ? CreateDomain(values)
+                        : ShellValueDomain.Unknown,
+                };
+        }
+
+        return rewritten;
+    }
+
+    private static IReadOnlyList<RedirectAnalysis> JoinRedirects(
+        IReadOnlyList<RedirectAnalysis> left,
+        IReadOnlyList<RedirectAnalysis> right)
+    {
+        if (left.Count != right.Count)
+        {
+            return Array.Empty<RedirectAnalysis>();
+        }
+
+        var joined = new RedirectAnalysis[left.Count];
+        for (var index = 0; index < joined.Length; index++)
+        {
+            var leftFact = left[index];
+            var rightFact = right[index];
+            if (leftFact.RedirectIndex != rightFact.RedirectIndex ||
+                leftFact.Source != rightFact.Source ||
+                leftFact.Operation != rightFact.Operation ||
+                leftFact.TargetDescriptor != rightFact.TargetDescriptor ||
+                leftFact.IsPathRelevant != rightFact.IsPathRelevant ||
+                leftFact.HereDocument != rightFact.HereDocument)
+            {
+                joined[index] = new RedirectAnalysis
+                {
+                    RedirectIndex = leftFact.RedirectIndex,
+                };
+                continue;
+            }
+
+            joined[index] = leftFact with
+            {
+                Target = JoinDomains(leftFact.Target, rightFact.Target),
+                IsComplete = leftFact.IsComplete && rightFact.IsComplete,
+            };
+        }
+
+        return joined;
+    }
+
+    private static ShellValueDomain CreateDomain(IReadOnlyList<string> values) =>
+        values.Count switch
+        {
+            1 => new ShellValueDomain
+            {
+                Kind = ShellValueDomainKind.Exact,
+                Values = new[] { values[0] },
+            },
+            _ when values.Count > 1 &&
+                values.Count <= ShellAnalysisLimits.MaxValueCandidates =>
+                new ShellValueDomain
+            {
+                Kind = ShellValueDomainKind.FiniteSet,
+                Values = values,
+            },
+            _ => ShellValueDomain.Unknown,
+        };
 
     private PwshFlowResult AnalyzeList(CommandListSyntax list, AnalysisContext input)
     {
@@ -2934,11 +3070,20 @@ internal sealed class PwshForEachValueAnalyzer
         var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
         var childRunspaceProcessEscapeRiskCount =
             _childRunspaceProcessEscapeRiskCount;
-        AnalyzeBlock(
-            group.Body,
-            input.WithoutBindings().Invalidate(
-                unknownCwd: false,
-                invalidateCommandResolution: false));
+        _invocationRedirectContexts.Add(input);
+        try
+        {
+            AnalyzeBlock(
+                group.Body,
+                input.WithoutBindings().Invalidate(
+                    unknownCwd: false,
+                    invalidateCommandResolution: false));
+        }
+        finally
+        {
+            _invocationRedirectContexts.RemoveAt(
+                _invocationRedirectContexts.Count - 1);
+        }
         _executionRegionEffectCount = executionRegionEffectCount;
         _nonRegionStateMutationCount = nonRegionStateMutationCount;
         _locationStateMutationCount = locationStateMutationCount;
@@ -3347,7 +3492,8 @@ internal sealed class PwshForEachValueAnalyzer
             {
                 EffectiveArguments = source.EffectiveArguments,
                 WorkingDirectory = ShellValueDomain.Unknown,
-                Redirects = source.Redirects,
+                Redirects = RewriteRedirectsForUnknownState(source),
+                RedirectTargetProvenance = source.RedirectTargetProvenance,
                 CwdPathDependencies = source.CwdPathDependencies,
                 ValueProvenance = source.ValueProvenance,
                 HasCompleteValueProvenance = source.HasCompleteValueProvenance,
@@ -3450,11 +3596,16 @@ internal sealed class PwshForEachValueAnalyzer
             simple.Clause,
             source,
             out var hasUnresolvedCwdDynamicElement);
+        var redirects = RewriteRedirectFacts(
+            source.Redirects,
+            source.RedirectTargetProvenance,
+            clause);
         facts.Add(clause, new CommandOccurrenceFacts
         {
             EffectiveArguments = source.EffectiveArguments,
             WorkingDirectory = source.WorkingDirectory,
-            Redirects = source.Redirects,
+            Redirects = redirects,
+            RedirectTargetProvenance = source.RedirectTargetProvenance,
             CwdPathDependencies = source.CwdPathDependencies,
             ValueProvenance = source.ValueProvenance,
             HasCompleteValueProvenance = source.HasCompleteValueProvenance,
@@ -3466,6 +3617,61 @@ internal sealed class PwshForEachValueAnalyzer
             Substitutions = substitutions,
             ExecutionRegions = executionRegions,
         };
+    }
+
+    private static IReadOnlyList<RedirectAnalysis> RewriteRedirectFacts(
+        IReadOnlyList<RedirectAnalysis> source,
+        IReadOnlyList<RedirectTargetProvenance> provenance,
+        Clause clause)
+    {
+        if (source.Count == 0)
+        {
+            return source;
+        }
+
+        var rewritten = new RedirectAnalysis[source.Count];
+        for (var index = 0; index < rewritten.Length; index++)
+        {
+            var fact = source[index];
+            if (!fact.IsPathRelevant ||
+                fact.RedirectIndex < 0 ||
+                fact.RedirectIndex >= clause.Redirects.Count)
+            {
+                rewritten[index] = fact;
+                continue;
+            }
+
+            var compatibility = clause.Redirects[fact.RedirectIndex];
+            rewritten[index] = fact with
+            {
+                Target = compatibility.IsDynamicSkip
+                    ? HasRedirectProvenance(provenance, fact.RedirectIndex)
+                        ? fact.Target
+                        : ShellValueDomain.Unknown
+                    : new ShellValueDomain
+                    {
+                        Kind = ShellValueDomainKind.Exact,
+                        Values = new[] { compatibility.Target },
+                    },
+            };
+        }
+
+        return rewritten;
+    }
+
+    private static bool HasRedirectProvenance(
+        IReadOnlyList<RedirectTargetProvenance> provenance,
+        int redirectIndex)
+    {
+        foreach (var item in provenance)
+        {
+            if (item.RedirectIndex == redirectIndex)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private Clause RewriteCwdCompatibility(
@@ -4030,7 +4236,8 @@ internal sealed class PwshForEachValueAnalyzer
                 {
                     EffectiveArguments = effective.ToArray(),
                     WorkingDirectory = ShellValueDomain.Unknown,
-                    Redirects = source.Redirects,
+                    Redirects = RewriteRedirectsForUnknownState(source),
+                    RedirectTargetProvenance = source.RedirectTargetProvenance,
                     CwdPathDependencies = source.CwdPathDependencies,
                     ValueProvenance = source.ValueProvenance,
                     HasCompleteValueProvenance = source.HasCompleteValueProvenance,
@@ -4070,6 +4277,69 @@ internal sealed class PwshForEachValueAnalyzer
                 RecordUnvisitedBindingArguments(substitution.Body, bindingName);
                 break;
         }
+    }
+
+    private IReadOnlyList<RedirectAnalysis> RewriteRedirectsForUnknownState(
+        CommandOccurrenceFacts source)
+    {
+        if (source.Redirects.Count == 0)
+        {
+            return source.Redirects;
+        }
+
+        var redirects = new RedirectAnalysis[source.Redirects.Count];
+        for (var index = 0; index < redirects.Length; index++)
+        {
+            var fact = source.Redirects[index];
+            if (!fact.IsPathRelevant ||
+                !TryGetRedirectProvenance(
+                    source.RedirectTargetProvenance,
+                    fact.RedirectIndex,
+                    out var value))
+            {
+                redirects[index] = fact.IsPathRelevant
+                    ? fact with { Target = ShellValueDomain.Unknown }
+                    : fact;
+                continue;
+            }
+
+            var resolved = PwshResolver.Resolve(
+                value,
+                treatAsPath: true,
+                _options with { WorkingDirectory = null },
+                workingDirectoryUnknown: true,
+                ShellResolutionConsumer.PowerShellRedirect);
+            redirects[index] = fact with
+            {
+                Target = resolved.Resolved is not null && resolved.IsPath
+                    ? new ShellValueDomain
+                    {
+                        Kind = ShellValueDomainKind.Exact,
+                        Values = new[] { resolved.Resolved },
+                    }
+                    : ShellValueDomain.Unknown,
+            };
+        }
+
+        return redirects;
+    }
+
+    private static bool TryGetRedirectProvenance(
+        IReadOnlyList<RedirectTargetProvenance> provenance,
+        int redirectIndex,
+        out ShellValue value)
+    {
+        foreach (var item in provenance)
+        {
+            if (item.RedirectIndex == redirectIndex)
+            {
+                value = item.Value;
+                return true;
+            }
+        }
+
+        value = ShellValue.Literal(string.Empty);
+        return false;
     }
 
     private static bool ReferencesBinding(ShellValue value, string bindingName)

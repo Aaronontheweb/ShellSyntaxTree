@@ -68,8 +68,8 @@
 - [x] 4.2 Classify Bash descriptor duplication, close, and move as static only for the complete literal descriptor grammar.
 - [x] 4.3 Keep variable-driven and otherwise computed Bash descriptor targets unknown or incomplete.
 - [x] 4.4 Lex and classify Bash `&>` and `&>>` independently from background-list operators.
-- [ ] 4.5 Map existing PowerShell stream redirects into the shared explicit model without losing shell-specific stream identity.
-- [ ] 4.6 Add paired direct tests and corpus cases for static, dynamic, malformed, multiple, combined, and file redirects.
+- [x] 4.5 Map existing PowerShell stream redirects into the shared explicit model without losing shell-specific stream identity.
+- [x] 4.6 Add paired direct tests and corpus cases for static, dynamic, malformed, multiple, combined, and file redirects.
   - [x] 4.6a Add Bash direct and executable-corpus cases for static duplicate,
     close, and move; computed descriptor targets; combined output overwrite and
     append; ordinary file redirects; arbitrary numeric source descriptors; and
@@ -77,7 +77,7 @@
     descriptor boundary and inside multi-digit sources follow Bash's pre-token
     removal semantics. Executable-corpus cases pin malformed atomic failure and
     independent occurrence facts for multiple redirects.
-  - [ ] 4.6b Add the paired PowerShell direct and executable-corpus cases when
+  - [x] 4.6b Add the paired PowerShell direct and executable-corpus cases when
     task 4.5 maps its stream model.
 - [ ] 4.7 Verify the explicit model removes the need for raw-prefix inference in a Netclaw integration test.
 

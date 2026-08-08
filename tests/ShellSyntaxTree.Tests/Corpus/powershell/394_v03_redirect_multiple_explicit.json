@@ -1,6 +1,6 @@
 {
-  "name": "Redirect debug",
-  "input": "Get-Date 5\u003E debug.txt",
+  "name": "V03 redirect multiple explicit",
+  "input": "Get-Date \u003E out.txt 2\u003E err.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -13,7 +13,11 @@
         "redirects": [
           {
             "direction": "Out",
-            "target": "C:/work/debug.txt"
+            "target": "C:/work/out.txt"
+          },
+          {
+            "direction": "ErrOut",
+            "target": "C:/work/err.txt"
           }
         ]
       }
@@ -25,7 +29,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 21,
+        "sourceLength": 29,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -36,7 +40,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 21,
+        "sourceLength": 29,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -53,7 +57,7 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 21
+            "sourceLength": 29
           }
         ],
         "effectiveArguments": [],
@@ -68,14 +72,31 @@
         "redirects": [
           {
             "redirectIndex": 0,
-            "sourceKind": "Descriptor",
-            "sourceDescriptor": 5,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
             "operation": "FileOutput",
             "targetDescriptor": null,
             "target": {
               "kind": "Exact",
               "values": [
-                "C:/work/debug.txt"
+                "C:/work/out.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "isPathRelevant": true,
+            "isComplete": true
+          },
+          {
+            "redirectIndex": 1,
+            "sourceKind": "Descriptor",
+            "sourceDescriptor": 2,
+            "operation": "FileOutput",
+            "targetDescriptor": null,
+            "target": {
+              "kind": "Exact",
+              "values": [
+                "C:/work/err.txt"
               ],
               "pattern": null,
               "coveringDirectory": null
@@ -87,5 +108,5 @@
       }
     ]
   },
-  "notes": "5\u003E debug stream \u2014 maps lossily to Out."
+  "notes": "Every file redirect retains authored order, source stream, operation, and exact target."
 }

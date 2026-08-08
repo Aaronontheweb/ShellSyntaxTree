@@ -24,6 +24,9 @@ internal sealed class CommandOccurrenceFacts
     internal IReadOnlyList<RedirectAnalysis> Redirects { get; init; } =
         Array.Empty<RedirectAnalysis>();
 
+    internal IReadOnlyList<RedirectTargetProvenance> RedirectTargetProvenance { get; init; } =
+        Array.Empty<RedirectTargetProvenance>();
+
     internal IReadOnlyList<CwdPathDependency> CwdPathDependencies { get; init; } =
         Array.Empty<CwdPathDependency>();
 
@@ -42,6 +45,17 @@ internal sealed class CommandOccurrenceFacts
 internal readonly record struct ShellValueElementProvenance(
     int ClauseElementIndex,
     ShellValue Value);
+
+/// <summary>
+/// Retains the shell-owned value fragments for one file-redirect target so
+/// bounded state analysis can re-evaluate it without publishing it as an
+/// effective command argument.
+/// </summary>
+internal readonly record struct RedirectTargetProvenance(
+    int RedirectIndex,
+    int ClauseElementIndex,
+    ShellValue Value,
+    bool UsesOutermostInvocationScope);
 
 /// <summary>
 /// Retains resolver-owned path provenance and its exact compatibility

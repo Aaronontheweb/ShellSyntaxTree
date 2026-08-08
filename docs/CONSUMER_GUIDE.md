@@ -408,6 +408,58 @@ PowerShell streams 3-6 and `*>` currently map lossily onto the shared redirect
 enum. The target remains available for path policy, but consumers must not use
 `RedirectDirection` to recover the exact original PowerShell stream.
 
+In v0.3, authorize the parser-owned facts on every occurrence instead of
+re-parsing `ClauseElement.Raw` or the compatibility target:
+
+```csharp
+foreach (var redirect in occurrence.Redirects)
+{
+    if (!redirect.IsComplete)
+    {
+        return GateDecision.Prompt("redirect analysis is incomplete");
+    }
+
+    if (!redirect.IsPathRelevant)
+    {
+        EvaluateDescriptorOperation(
+            redirect.Source,
+            redirect.Operation,
+            redirect.TargetDescriptor);
+        continue;
+    }
+
+    if (redirect.Target.Kind is not (
+            ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
+    {
+        return GateDecision.Prompt("redirect path is unknown");
+    }
+
+    foreach (var path in redirect.Target.Values)
+    {
+        EvaluatePath(path);
+    }
+}
+```
+
+Completeness and value precision are intentionally independent. For example,
+`Get-Date > $name` has a complete file-output operation with an `Unknown`
+target, so path policy still prompts. Under a caller-enforced isolated
+PowerShell initial state, `foreach ($f in @('one.txt','two.txt')) {
+Write-Output x > $f }` can instead expose a finite set of two absolute target
+paths. The loop target is not added to `EffectiveArguments`, because a
+redirect operand is not part of the command's argv.
+
+PowerShell stream facts retain numbered sources and the all-streams selector:
+`3>&1` is a complete non-path descriptor duplication from stream `3` to stream
+`1`, while `*>&1` retains `PowerShellAllStreams`. PowerShell itself rejects
+`< input.txt`, `1>&1`, `2>&3`, and `2>&-`; ShellSyntaxTree therefore marks the
+whole input unparseable rather than borrowing Bash descriptor rules. `$null`
+and `${null}` remain incomplete in the v0.3 model, so consumers must prompt or
+deny until a dedicated discard-sink operation is added. Native-invalid
+duplicate sources such as `> a 1> b` and `2>&1 2> b` also make the whole parse
+unparseable; consumers never need to reconcile competing facts for one
+PowerShell source stream.
+
 ## Compounds, pipelines, and wrapped commands
 
 `ParsedCommand.Clauses` is ordered. Each clause carries the operator that
@@ -428,6 +480,11 @@ verb-based policy should authorize; the surfaced inner clauses are.
 Redirects authored on the outer PowerShell wrapper remain attached to the last
 surfaced clause, so redirect policy still sees paths such as
 `pwsh -Command "git status" > audit.log`.
+The outer redirect is evaluated by the invoking PowerShell scope before child
+launch. It can therefore retain a finite parent-loop target domain even when
+the decoded child occurrence remains incomplete for independent child-runspace
+reasons. A redirect written inside the decoded `-Command` payload uses child
+scope instead.
 
 Supported PowerShell `$()` subexpressions are structural rather than hidden
 opaque values. The containing `SimpleCommandSyntax.Substitutions` records each

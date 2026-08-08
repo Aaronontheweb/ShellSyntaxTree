@@ -428,6 +428,29 @@ internal static class CorpusJson
 
                 commandJson["effectiveArguments"] = effectiveArguments;
                 commandJson["workingDirectory"] = BuildValueDomain(command.WorkingDirectory);
+
+                if (command.Redirects.Count > 0)
+                {
+                    var redirects = new JsonArray();
+                    foreach (var redirect in command.Redirects)
+                    {
+                        redirects.Add(new JsonObject
+                        {
+                            ["redirectIndex"] = redirect.RedirectIndex,
+                            ["sourceKind"] = redirect.Source.Kind.ToString(),
+                            ["sourceDescriptor"] = JsonValue.Create(
+                                redirect.Source.Descriptor),
+                            ["operation"] = redirect.Operation.ToString(),
+                            ["targetDescriptor"] = JsonValue.Create(
+                                redirect.TargetDescriptor),
+                            ["target"] = BuildValueDomain(redirect.Target),
+                            ["isPathRelevant"] = redirect.IsPathRelevant,
+                            ["isComplete"] = redirect.IsComplete,
+                        });
+                    }
+
+                    commandJson["redirects"] = redirects;
+                }
             }
 
             commands.Add(commandJson);

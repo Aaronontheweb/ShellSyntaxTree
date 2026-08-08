@@ -1,0 +1,9 @@
+{
+  "name": "V03 redirect duplicate merge source error",
+  "input": "Get-Date 2\u003E\u00261 2\u003E b",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell command redirects the same source stream more than once"
+  },
+  "notes": "A merge and file redirect cannot both consume error stream 2."
+}

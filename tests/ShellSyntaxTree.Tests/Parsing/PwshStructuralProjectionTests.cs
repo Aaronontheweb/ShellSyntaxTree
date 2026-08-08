@@ -169,10 +169,46 @@ public class PwshStructuralProjectionTests
     }
 
     [Theory]
+    [InlineData("pwsh -Command 'Get-Date'")]
+    [InlineData("pwsh -EncodedCommand RwBlAHQALQBEAGEAdABlAA==")]
+    public void Joined_cwd_keeps_outer_wrapper_redirect_target_unknown(
+        string invocation)
+    {
+        var result = Parse($"Set-Location C:\\maybe; {invocation} > relative.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands[1];
+        Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
+        var compatibility = Assert.Single(command.Clause.Redirects);
+        Assert.True(compatibility.IsDynamicSkip);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
+        Assert.True(redirect.IsComplete);
+        Assert.True(command.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("pwsh -Command 'Get-Date'")]
+    [InlineData("pwsh -EncodedCommand RwBlAHQALQBEAGEAdABlAA==")]
+    public void Success_only_cwd_resolves_outer_wrapper_redirect_target(
+        string invocation)
+    {
+        var result = Parse($"Set-Location C:\\maybe && {invocation} > relative.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = result.Commands[1];
+        Assert.Equal("C:/maybe", Assert.Single(command.WorkingDirectory.Values));
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
+        Assert.Equal("C:/maybe/relative.txt", Assert.Single(redirect.Target.Values));
+        Assert.True(command.IsComplete);
+    }
+
+    [Theory]
     [InlineData("Get-Item child.txt > out.txt")]
     [InlineData("pwsh -Command 'Get-Item child.txt > out.txt'")]
     [InlineData("pwsh -EncodedCommand RwBlAHQALQBJAHQAZQBtACAAYwBoAGkAbABkAC4AdAB4AHQAIAA+ACAAbwB1AHQALgB0AHgAdAA=")]
-    public void Dynamic_provider_failure_promotes_only_static_compatibility_paths(
+    public void Dynamic_provider_failure_promotes_static_paths_and_redirect_facts(
         string invocation)
     {
         var result = Parse($"Set-Location Alias: || {invocation}");
@@ -194,7 +230,11 @@ public class PwshStructuralProjectionTests
         var redirect = Assert.Single(clause.Redirects);
         Assert.False(redirect.IsDynamicSkip);
         Assert.Equal("C:/work/out.txt", redirect.Target);
-        Assert.False(command.IsComplete);
+        Assert.True(command.IsComplete);
+        var redirectFact = Assert.Single(command.Redirects);
+        Assert.Equal(RedirectOperation.FileOutput, redirectFact.Operation);
+        Assert.Equal("C:/work/out.txt", Assert.Single(redirectFact.Target.Values));
+        Assert.True(redirectFact.IsComplete);
     }
 
     [Theory]
@@ -438,7 +478,7 @@ public class PwshStructuralProjectionTests
 
         Assert.Equal(2, result.Commands.Count);
         Assert.True(result.Commands[0].IsComplete);
-        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
         var last = result.Clauses[1];
         Assert.Single(last.Redirects);
         var redirect = last.Elements.Last();
@@ -679,14 +719,18 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
-    public void Redirect_subexpression_is_visible_while_outer_redirect_stays_incomplete()
+    public void Redirect_subexpression_is_visible_while_outer_target_stays_unknown()
     {
         var result = Parse("Get-Content > $(Join-Path C:\\temp out.txt)");
 
         Assert.False(result.IsUnparseable);
         Assert.Equal(new[] { "Join-Path", "Get-Content" }, result.Commands.Select(CommandVerb));
         Assert.True(result.Commands[0].IsComplete);
-        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
+        var redirectFact = Assert.Single(result.Commands[1].Redirects);
+        Assert.Equal(RedirectOperation.FileOutput, redirectFact.Operation);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirectFact.Target.Kind);
+        Assert.True(redirectFact.IsComplete);
         Assert.True(Assert.Single(result.Clauses[1].Redirects).IsDynamicSkip);
     }
 

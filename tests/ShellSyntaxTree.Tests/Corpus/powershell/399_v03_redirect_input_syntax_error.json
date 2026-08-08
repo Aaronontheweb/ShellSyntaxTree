@@ -1,0 +1,9 @@
+{
+  "name": "V03 redirect input syntax error",
+  "input": "Get-Date \u003C input.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell input redirection \u0027\u003C\u0027 is reserved for future use"
+  },
+  "notes": "PowerShell reserves input redirection for future use."
+}

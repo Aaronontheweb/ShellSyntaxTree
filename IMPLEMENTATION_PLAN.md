@@ -318,8 +318,32 @@ priorities.
       they join multi-digit sources. Exact file targets now complete their
       containing occurrence, while cwd or value uncertainty still downgrades
       the redirect and occurrence after abstract-state joins. Direct lexer and
-      parser tests plus executable corpus cases pin the boundary. Next map the
-      PowerShell stream model, then prove the paired Netclaw redirect matrix.
+      parser tests plus executable corpus cases pin the boundary. Next prove
+      the paired Netclaw redirect matrix.
+- [x] Deliver occurrence-level PowerShell explicit redirect facts while
+      preserving the v0.2 compatibility projection. File output and append
+      retain default, numbered, or all-streams sources; the native-only merge
+      grammar preserves sources `2`–`6` or `*` and target descriptor `1`.
+      File targets remain complete when their value domain is Unknown, and an
+      isolated bounded `foreach` can promote redirect targets to exact or
+      finite absolute-path domains without publishing them as command
+      arguments. Live PowerShell 7.6.4 oracle cases correct two obsolete
+      grammar assumptions: `<` is reserved, and `1>&1`, `2>&3`, and `2>&-`
+      are syntax errors. `$null` remains explicit but incomplete because the
+      locked public operation vocabulary has no discard-sink member. Direct
+      tests and the generated executable corpus pin static, dynamic,
+      malformed, multiple, all-streams, merge, suffix-boundary, and loop-bound
+      cases. Adversarial review additionally forced outer wrapper redirect
+      provenance through cwd success/failure joins, native duplicate-source
+      rejection, identical `$null` / `${null}` sink handling, and removal of
+      stale parse-time cwd targets from unreachable relative redirects while
+      retaining cwd-independent absolute targets. A follow-up review also
+      separated parent-owned outer wrapper redirect provenance from decoded
+      child scope, preserving finite parent-loop targets without relaxing the
+      child command's independent completeness. A fourth review extended that
+      ownership through nested quoted and encoded child hosts: the outer
+      redirect now uses the outermost authoring invocation rather than the
+      nearest decoded child. Next prove the paired Netclaw redirect matrix.
 - [ ] Complete PowerShell `foreach` integration and add the
       Netclaw approval-matrix cases. The structural slice now preserves literal
       scalar/array and executable iterator forms, recursively parses bodies,
