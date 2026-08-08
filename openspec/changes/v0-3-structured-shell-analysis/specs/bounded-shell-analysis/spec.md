@@ -653,13 +653,44 @@ execute synchronously in the current scope. In-process `Invoke-Command`
 without `-NoNewScope` isolates ordinary assignment while sharing location;
 `-NoNewScope` shares supported state. The in-process parameter set does not
 support `-AsJob` and is always synchronous/once. Remote/session/SSH/VM/container
-targets, multiple targets, and remote `-AsJob` SHALL retain only facts proved
-from the complete parameter set.
+`Invoke-Command` SHALL start from Unknown remote cwd, bindings, aliases,
+functions, modules, profiles, and command resolution, and SHALL NOT flow remote
+exit state into the invoking host. One complete proved target SHALL publish
+Synchronous timing and Once cardinality. Multiple complete proved targets SHALL
+publish Concurrent timing and Unknown cardinality. Named, inline, and positional
+target arrays SHALL bind consistently. Only a top-level unescaped comma SHALL
+separate targets; quoted, backtick-escaped, and structurally nested commas SHALL
+remain part of one target. An enabled remote `-AsJob`
+or `-InDisconnectedSession` SHALL publish Concurrent timing independently of
+target cardinality. A dynamic target or session collection SHALL otherwise
+retain Unknown timing and Unknown cardinality. Explicit false-valued switches
+SHALL NOT prove concurrency.
 
 #### Scenario: In-process Invoke-Command does not invent AsJob semantics
 - **WHEN** PowerShell parses `Invoke-Command -ScriptBlock { Get-Date }`
 - **THEN** the region is synchronous and activates once
 - **THEN** analysis does not model `-AsJob` as an in-process option
+
+#### Scenario: One remote target has an isolated synchronous region
+- **WHEN** isolated-mode PowerShell parses `Invoke-Command -ComputerName server -ScriptBlock { Get-Item child.txt }; Get-Item host.txt`
+- **THEN** the region timing is Synchronous and its cardinality is Once
+- **THEN** the body working directory and mutable state are Unknown and incomplete
+- **THEN** the following host command retains its exact local state
+
+#### Scenario: Remote asynchronous switches prove only concurrency
+- **WHEN** PowerShell parses a remote invocation with enabled `-AsJob` or `-InDisconnectedSession`
+- **THEN** the execution region timing is Concurrent
+- **THEN** target cardinality is proved independently
+- **THEN** an explicit `:$false` value does not change synchronous single-target scheduling
+
+#### Scenario: Multiple and dynamic remote targets remain bounded
+- **WHEN** PowerShell parses a complete two-computer target list
+- **THEN** the execution region timing is Concurrent and cardinality is Unknown
+- **WHEN** the comma is instead quoted, backtick-escaped, or nested in one hashtable
+- **THEN** it does not prove multiple targets
+- **WHEN** PowerShell instead parses a runtime `-Session $session` target
+- **THEN** timing and cardinality are Unknown unless an enabled asynchronous switch independently proves Concurrent timing
+- **THEN** every remote body command remains visible and incomplete
 
 #### Scenario: Direct invocation origin survives without source text
 - **WHEN** a consumer receives direct call and dot-source execution-region nodes

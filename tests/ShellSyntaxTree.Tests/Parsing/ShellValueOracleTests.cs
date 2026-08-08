@@ -1083,6 +1083,91 @@ public class ShellValueOracleTests
     }
 
     [Fact]
+    public void PowerShell_invoke_command_remote_parameter_metadata_matches_catalog()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$command=Get-Command Invoke-Command; " +
+            "\"default=<$($command.DefaultParameterSet)>\"; " +
+            "foreach($name in 'ComputerName','Session','ConnectionUri','VMId'," +
+            "'VMName','HostName','ContainerId','SSHConnection'){ " +
+            "\"$name=<$($command.Parameters[$name].ParameterType.FullName)>\" }; " +
+            "\"as-job-in-process=<$([bool]($command.ParameterSets | " +
+            "Where-Object Name -eq 'InProcess' | Where-Object { " +
+            "$_.Parameters.Name -contains 'AsJob' }))>\"; " +
+            "\"disconnected-session-set=<$([bool]($command.ParameterSets | " +
+            "Where-Object Name -eq 'Session' | Where-Object { " +
+            "$_.Parameters.Name -contains 'InDisconnectedSession' }))>\"");
+
+        Assert.Equal(
+            new[]
+            {
+                "default=<InProcess>",
+                "ComputerName=<System.String[]>",
+                "Session=<System.Management.Automation.Runspaces.PSSession[]>",
+                "ConnectionUri=<System.Uri[]>",
+                "VMId=<System.Guid[]>",
+                "VMName=<System.String[]>",
+                "HostName=<System.String[]>",
+                "ContainerId=<System.String[]>",
+                "SSHConnection=<System.Collections.Hashtable[]>",
+                "as-job-in-process=<False>",
+                "disconnected-session-set=<False>",
+            },
+            Lines(output));
+    }
+
+    [Fact]
+    public void PowerShell_parameter_arrays_respect_comma_boundaries()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "function Test-Computer { param(" +
+            "[Parameter(Position=0)][string[]]$ComputerName," +
+            "[Parameter(Position=1)][scriptblock]$ScriptBlock) " +
+            "\"inline-count=<$($ComputerName.Count)>\" }; " +
+            "function Test-Positional { param(" +
+            "[Parameter(Position=0)][string[]]$ComputerName," +
+            "[Parameter(Position=1)][scriptblock]$ScriptBlock) " +
+            "\"positional-count=<$($ComputerName.Count)>\" }; " +
+            "function Test-Escaped { param([string[]]$ComputerName) " +
+            "\"escaped-count=<$($ComputerName.Count)>\" }; " +
+            "function Test-Ssh { param([hashtable[]]$SSHConnection) " +
+            "\"ssh-count=<$($SSHConnection.Count)>\" }; " +
+            "Test-Computer -ComputerName:server1, server2 " +
+            "-ScriptBlock { Get-Date }; " +
+            "Test-Positional server1, server2 -ScriptBlock { Get-Date }; " +
+            "Test-Escaped -ComputerName server1`,server2; " +
+            "Test-Ssh -SSHConnection @{HostName='server,corp'}");
+
+        Assert.Equal(
+            new[]
+            {
+                "inline-count=<2>",
+                "positional-count=<2>",
+                "escaped-count=<1>",
+                "ssh-count=<1>",
+            },
+            Lines(output));
+    }
+
+    [Fact]
     public void PowerShell_synchronous_regions_observe_scope_and_pipeline_stage_effects()
     {
         if (!IsAvailable("pwsh"))

@@ -2018,6 +2018,14 @@ internal sealed class PwshForEachValueAnalyzer
                 flow);
         }
 
+        if (binding.ParameterSet == PwshExecutionRegionParameterSet.InvokeRemote)
+        {
+            return AnalyzeRemoteInvokeCommand(
+                regions,
+                receiverInput,
+                flow);
+        }
+
         if (binding.ParameterSet == PwshExecutionRegionParameterSet.NewModuleScriptBlock)
         {
             var bodyInput = PwshPersistentStateMutation.HasVariableWritingArgument(
@@ -2288,6 +2296,37 @@ internal sealed class PwshForEachValueAnalyzer
             : fallback;
     }
 
+    private PwshFlowResult AnalyzeRemoteInvokeCommand(
+        IReadOnlyList<ExecutionRegionSyntax> regions,
+        AnalysisContext receiverInput,
+        PwshFlowResult hostFlow)
+    {
+        var executionRegionEffectCount = _executionRegionEffectCount;
+        var nonRegionStateMutationCount = _nonRegionStateMutationCount;
+        var locationStateMutationCount = _locationStateMutationCount;
+        var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
+        var childRunspaceProcessEscapeRiskCount =
+            _childRunspaceProcessEscapeRiskCount;
+        try
+        {
+            TryAnalyzeRegionSequence(
+                regions,
+                receiverInput.CreateRemoteInput(),
+                out _);
+        }
+        finally
+        {
+            _executionRegionEffectCount = executionRegionEffectCount + regions.Count;
+            _nonRegionStateMutationCount = nonRegionStateMutationCount;
+            _locationStateMutationCount = locationStateMutationCount;
+            _childScopeEscapeRiskCount = childScopeEscapeRiskCount;
+            _childRunspaceProcessEscapeRiskCount =
+                childRunspaceProcessEscapeRiskCount;
+        }
+
+        return hostFlow;
+    }
+
     private PwshFlowResult AnalyzePipelineCallbackRegions(
         PwshExecutionRegionBindingResult binding,
         IReadOnlyList<ExecutionRegionSyntax> regions,
@@ -2521,6 +2560,8 @@ internal sealed class PwshForEachValueAnalyzer
                 AllBindingsAreCompleteWithTiming(
                     binding.Bindings,
                     ExecutionRegionTiming.Concurrent),
+            PwshExecutionRegionParameterSet.InvokeRemote =>
+                AllBindingsAreComplete(binding.Bindings),
             PwshExecutionRegionParameterSet.MeasureExpression or
                 PwshExecutionRegionParameterSet.TraceExpression or
                 PwshExecutionRegionParameterSet.InvokeInProcess or
@@ -2532,6 +2573,25 @@ internal sealed class PwshForEachValueAnalyzer
                     ExecutionRegionTiming.Synchronous),
             _ => false,
         };
+    }
+
+    private static bool AllBindingsAreComplete(
+        IReadOnlyList<PwshExecutionRegionBinding> bindings)
+    {
+        if (bindings.Count == 0)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < bindings.Count; index++)
+        {
+            if (!bindings[index].IsComplete)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool AllBindingsAreCompleteWithTiming(
@@ -4378,6 +4438,19 @@ internal sealed class PwshForEachValueAnalyzer
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 ProcessWideStateInvalidated,
+                Array.Empty<BindingFrame>());
+
+        internal AnalysisContext CreateRemoteInput() =>
+            // The target host or persistent session can have arbitrary cwd,
+            // variables, aliases, functions, modules, and profiles. Its exit
+            // state is isolated from the invoking host.
+            new(
+                workingDirectory: null,
+                canPromote: false,
+                commandResolutionInvalidated: true,
+                allRunspaceCommandResolutionMayReachProcessMutation: false,
+                Array.Empty<string>(),
+                processWideStateInvalidated: false,
                 Array.Empty<BindingFrame>());
 
         internal AnalysisContext CreateChildRunspaceInput() =>
