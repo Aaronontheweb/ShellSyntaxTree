@@ -25,7 +25,7 @@ incomplete executable regions never become authorization evidence.
 - Represent supported nested command structure for Bash and PowerShell.
 - Expose every command that may execute without requiring consumers to walk an
   evolving syntax-node hierarchy.
-- Represent direct, callback, job, parallel, initialization, and deferred
+- Represent direct, callback, job, parallel, initialization, and unknown
   PowerShell script-block execution without treating proved script-block data
   as code.
 - Resolve constrained loop values and shell state only when bounded proof is
@@ -81,8 +81,9 @@ Public syntax nodes derive from one `ShellSyntaxNode` base. The base prevents
 external derivation so ShellSyntaxTree owns the complete node family. Common
 execution structure may use shell-neutral nodes such as blocks, simple
 commands, pipelines, command lists, groups, foreach-style loops, condition
-loops, and branches. A shell-specific public node is preferred whenever a
-shared type would erase material semantics.
+loops, and branches. Condition and branch nodes are reserved vocabulary in
+stable v0.3 rather than parser-emitted grammar. A shell-specific public node is
+preferred whenever a shared type would erase material semantics.
 
 Consumers are not required to exhaustively match node types for authorization.
 They use `Commands`; a consumer that does inspect `Syntax` must fail closed or
@@ -347,7 +348,7 @@ PowerShell script blocks are values whose receiver determines whether, when,
 how often, and where they execute. The former contract treated every ordinary
 script-block argument as inert. That is correct for `Write-Output { ... }` but
 incorrect for `ForEach-Object`, `Where-Object`, `Invoke-Command`, jobs,
-module initialization, event actions, breakpoints, and argument completers.
+module initialization, and potentially custom or deferred receivers.
 It also made `& { ... }` unparseable even though its body is statically
 delimited.
 
@@ -376,7 +377,7 @@ PowerShell 7.6.4 probes demonstrate that these are independent dimensions:
 | `Measure-Command { ... }` / `Trace-Command -Expression { ... }` | shared current scope | shared | synchronous / once |
 | `Start-Job { ... }` | child process state | inherited initial location; exit isolated | concurrent / once |
 | `ForEach-Object -Parallel { ... }` | child runspace state; process-wide effects may escape | inherited initial location; runspace-local exit isolated | concurrent / once per input |
-| event, breakpoint, completion actions | trigger-time state | trigger-time state | deferred / zero or more |
+| unproved receiver or binding | unknown | unknown | unknown |
 
 The shell-specific analyzer owns inbound state, exit propagation, phase
 scheduling, success/failure partitions, and target/runspace differences.
@@ -418,15 +419,16 @@ when parameter or positional order does not match runtime phase order. The
 region's `HostClauseElementIndex` is therefore a correlation coordinate, not
 an execution-order index.
 
-The pinned PowerShell 7 catalog covers direct call and dot-source blocks;
+The stable-v0.3 PowerShell 7 catalog covers direct call and dot-source blocks;
 `ForEach-Object` Begin, Process, End, RemainingScripts, and Parallel;
 `Where-Object -FilterScript`; `Invoke-Command -ScriptBlock`;
 `Measure-Command -Expression`; `Trace-Command -Expression`; `Start-Job`
-ScriptBlock and InitializationScript; `New-Module -ScriptBlock`;
-`Set-PSBreakpoint -Action`; `Register-ObjectEvent -Action`;
-`Register-EngineEvent -Action`; and `Register-ArgumentCompleter -ScriptBlock`.
-The optional inbox `Start-ThreadJob` command is complete only under a pinned
-module baseline. Aliases, supported module-qualified spellings, static call
+ScriptBlock and InitializationScript; and `New-Module -ScriptBlock`.
+Optional-module `Start-ThreadJob` and deferred breakpoint, event, and argument-
+completion bindings are not stable-v0.3 catalog-completeness promises. Existing
+conservative recognition may remain without further expansion. Unproved forms
+follow the unknown-receiver rule and retain visible bodies with incomplete
+facts. Aliases, supported module-qualified spellings, static call
 operator spellings, parameter abbreviations/inline values, positional binding,
 parameter sets, and `ScriptBlock[]` binding use the same static catalog.
 
@@ -727,8 +729,9 @@ unknown occurrence cwd clears those resolutions and retains the dynamic-cwd
 marker, so a parse location taken from the success partition cannot leak into
 an exact failure continuation. Decoded child-host compatibility leaves carry
 the inherited invocation-cwd attribution needed by that projection, while the
-child's exit state remains isolated. General extraction of state primitives
-waits until both language passes are complete and compared under task 8.1.
+child's exit state remains isolated. General extraction of state primitives is
+a post-v0.3 refactor and proceeds only after both language passes demonstrate
+identical behavior.
 
 Parser-owned side facts retain each argument's complete `ShellValue` fragment
 sequence. For every concrete visit, the analyzer re-evaluates all arguments
@@ -820,10 +823,14 @@ The implementation order is:
 5. Validate the new consumer path on existing Netclaw cases.
 6. Add Bash `for ... in` with literal values first.
 7. Add PowerShell `foreach` with literal arrays next.
-8. Extract shared occurrence/value/state machinery proven by both slices.
-9. Add bounded patterns and iterator/substitution command discovery.
-10. Add condition loops and branches in separately testable shell-specific
-   slices.
+8. Add bounded patterns and iterator/substitution command discovery.
+9. Complete explicit redirects, heredoc/here-string facts, consumer guidance,
+   Netclaw migration, and release verification.
+
+Shared occurrence/value/state extraction, condition loops and branches, exact
+optional/deferred PowerShell receivers, and the Web/Mermaid showcase are
+post-v0.3 follow-ups. They proceed only from demonstrated duplication or
+consumer demand and do not gate the stable package.
 
 This order prevents a complete Bash implementation from hardening a
 Bash-shaped public abstraction before PowerShell exercises it.
@@ -922,18 +929,18 @@ into the release specifications before production types are added.
    filesystem. Bash unmatched-glob settings can change whether the loop has
    zero iterations or yields the literal pattern, but neither outcome escapes
    that lexical cover. Every other pattern becomes `Unknown`.
-5. v0.3 does not publish a finite cwd domain. Identical branch exits retain an
-   exact cwd; the first disagreement, unknown mutation, or loop-exit ambiguity
-   produces `Unknown`.
+5. v0.3 does not publish a finite cwd domain. Supported reachable exits retain
+   an exact cwd only when they agree; the first disagreement, unknown mutation,
+   or loop-exit ambiguity produces `Unknown`.
 6. The stable v0.3 grammar includes the existing simple-command grammar,
-   structural projection, Bash `for ... in`, `while` / `until`, and
-   `if` / `elif` / `else`, plus PowerShell `foreach`, `while`, and
-   `if` / `elseif` / `else` within the bounded subsets below. It also preserves
+   structural projection, Bash `for ... in`, and PowerShell `foreach` within
+   the bounded subsets below. It also preserves
    the existing Bash heredoc grammar while adding explicit body, delimiter,
    expansion, and completeness facts, and adds Bash `<<<` here strings.
-   Process substitution, single-`&` background lists, Bash `case`, PowerShell
-   `switch`, arithmetic/C-style loops, implicit Bash positional-parameter
-   loops, and function/definition bodies remain independently gated.
+   Condition loops and branches, process substitution, single-`&` background
+   lists, Bash `case`, PowerShell `switch`, arithmetic/C-style loops, implicit
+   Bash positional-parameter loops, and function/definition bodies remain
+   independently gated.
 7. PowerShell direct and command-bound script blocks use the additive
    `ExecutionRegionSyntax` contract. Origin, phase, timing, and cardinality are public;
    state propagation remains shell-specific and multi-dimensional. The pinned
@@ -1463,8 +1470,6 @@ bash_list_item       := bash_and_or
 bash_and_or          := bash_pipeline (("&&" | "||") bash_pipeline)*
 bash_pipeline        := bash_command ("|" bash_command)*
 bash_command         := bash_for_in
-                      | bash_condition_loop
-                      | bash_if
                       | bash_group
                       | bash_subshell
                       | bash_c_wrapper
@@ -1475,17 +1480,6 @@ bash_for_in          := "for" binding_name "in" iterable_word*
                         list_terminator "do"
                         bash_script(stop = "done")
                         "done"
-
-bash_condition_loop  := ("while" | "until")
-                        bash_script(stop = "do") "do"
-                        bash_script(stop = "done") "done"
-
-bash_if              := "if" bash_script(stop = "then") "then"
-                        bash_script(stop = "elif" | "else" | "fi")
-                        bash_elif* bash_else? "fi"
-bash_elif            := "elif" bash_script(stop = "then") "then"
-                        bash_script(stop = "elif" | "else" | "fi")
-bash_else            := "else" bash_script(stop = "fi")
 
 list_sep             := ";" | NEWLINE
 list_terminator      := ";" | NEWLINE+
@@ -1507,8 +1501,7 @@ existing lexer values and spans.
 |---|---|
 | Existing simple commands, `&&`, `||`, `;`, pipelines, groups, subshells, and static command-string wrappers | Supported and structurally projected |
 | `for name in words; do ...; done` | Supported |
-| `while` / `until` command lists | Supported |
-| `if` / `elif` / `else` command lists | Supported |
+| `while` / `until` and `if` / `elif` / `else` command lists | Deferred; whole result unparseable until command discovery and state joins are specified |
 | Completely delimited `$()` substitution in a supported word, redirect value, iterable, or expanding heredoc body | Inner commands visible; produced value `Unknown` |
 | Legacy backtick command substitution | Whole result unparseable until its distinct escape and nesting rules are modeled |
 | Static path-shaped glob in a supported iterable | `Pattern` only under the locked covering-directory rule |
@@ -1599,8 +1592,6 @@ statements, so only `;` and newline terminate a statement around `foreach`.
 ```text
 pwsh_script(stop)    := pwsh_statement (statement_terminator pwsh_statement)*
 pwsh_statement       := pwsh_foreach
-                      | pwsh_while
-                      | pwsh_if
                       | pwsh_and_or
 
 statement_terminator := ";" | NEWLINE
@@ -1610,14 +1601,6 @@ pwsh_pipeline         := pipeline_element ("|" pipeline_element)*
 
 pwsh_foreach         := "foreach" "(" variable "in" foreach_expression ")"
                         script_block_body
-
-pwsh_while           := "while" "(" condition_pipeline ")"
-                        script_block_body
-
-pwsh_if              := "if" "(" condition_pipeline ")" script_block_body
-                        pwsh_elseif* pwsh_else?
-pwsh_elseif          := "elseif" "(" condition_pipeline ")" script_block_body
-pwsh_else            := "else" script_block_body
 
 foreach_expression   := literal_value
                       | literal_array
@@ -1692,12 +1675,6 @@ receiver/binding creates an unknown incomplete region. A dynamic call operator
 whose block value is not authored inline remains incomplete because no body is
 available.
 
-`condition_pipeline` is limited to a pipeline that the existing command parser
-can delimit completely. Pure literal and comparison expressions may be
-preserved as non-executable condition syntax, but any subexpression, member
-invocation, script block, or other form that can execute while escaping
-complete command discovery makes the whole result unparseable.
-
 | PowerShell construct | Stable v0.3 status |
 |---|---|
 | Existing simple commands, pipelines, statement separators, grouping, and static wrapper / `Invoke-Expression` recursion | Supported and structurally projected |
@@ -1708,8 +1685,7 @@ complete command discovery makes the whole result unparseable.
 | Single-quoted, literal-here-string, or backtick-escaped `$()` text | Literal/opaque data; no invented substitution occurrence |
 | Execution-bearing `@()` / `@{}` outside a completely modeled foreach literal expression | Whole result unparseable until complete command discovery is modeled |
 | `foreach ($name in expression) { ... }` for literal scalar, literal array, or fully delimited pipeline iterables | Supported |
-| `while (condition_pipeline) { ... }` | Supported |
-| `if` / `elseif` / `else` with fully delimited condition pipelines | Supported |
+| `while`, `if`, `elseif`, and `else` | Deferred; whole result unparseable until command discovery and state joins are specified |
 | Pipeline-produced iterator objects | Iterator commands visible; produced values `Unknown` |
 | Cataloged executing script-block arguments | Typed origin/phase/timing/cardinality region; host and body commands visible |
 | Cataloged non-executing script-block data | Existing opaque argument; no invented child execution |

@@ -5,11 +5,6 @@ Every fully parseable result SHALL expose a command-occurrence collection that
 contains each authored simple command that may execute exactly once, regardless
 of whether the command is top-level or nested.
 
-#### Scenario: Commands in mutually exclusive branches
-- **WHEN** Bash parses `if test -f a; then rm a; else echo missing; fi`
-- **THEN** the collection contains `test`, `rm`, and `echo` exactly once each
-- **THEN** the collection does not predict which branch will run
-
 #### Scenario: Loop body occurrence is not multiplied
 - **WHEN** isolated-mode Bash parses `for f in a b c; do echo "$f"; done`
 - **THEN** the authored `echo` command appears once
@@ -90,11 +85,6 @@ partial command and compatibility result.
 - **THEN** the payload remains an authored `DynamicSkip` value
 - **THEN** the command occurrence has `IsComplete=false` and cannot authorize hidden code
 
-#### Scenario: While condition and body roles
-- **WHEN** Bash parses `while curl URL; do sleep 1; done`
-- **THEN** `curl` is identified as a condition occurrence
-- **THEN** `sleep` is identified as a loop-body occurrence
-
 #### Scenario: PowerShell iterator pipeline role
 - **WHEN** PowerShell parses `foreach ($f in Get-ChildItem C:\input) { Remove-Item $f }`
 - **THEN** `Get-ChildItem` is identified as an iterator occurrence
@@ -136,11 +126,6 @@ SHALL NOT omit the body or authorize it as inert data.
 - **WHEN** PowerShell parses `Get-ChildItem | ForEach-Object { Remove-Item $_ }`
 - **THEN** occurrences contain `Get-ChildItem`, `ForEach-Object`, and `Remove-Item` exactly once
 - **THEN** the body occurrence has execution-region ancestry nested beneath the pipeline stage
-
-#### Scenario: Deferred callback remains a may-execute command
-- **WHEN** PowerShell registers a breakpoint, event action, or argument completer with a supported script block
-- **THEN** the registration command and every body command appear exactly once
-- **THEN** projection does not predict how many future triggers occur
 
 #### Scenario: Unknown receiver does not hide a script block
 - **WHEN** a script-block argument's receiver or binding is not statically proved
@@ -187,11 +172,6 @@ the iterator-command collection.
 #### Scenario: Iterator precedes body
 - **WHEN** isolated-mode Bash parses `for f in $(find .); do rm "$f"; done`
 - **THEN** the `find` occurrence precedes the `rm` occurrence
-
-#### Scenario: Branches preserve authored order
-- **WHEN** PowerShell parses an `if` statement with then and else commands
-- **THEN** condition commands precede then-body commands
-- **THEN** then-body commands precede else-body commands in the projection
 
 #### Scenario: Ordinary command substitution precedes its consumer
 - **WHEN** Bash parses `rm "$(find /tmp)"`

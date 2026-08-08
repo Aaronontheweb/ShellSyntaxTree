@@ -401,10 +401,10 @@ complete executable-aware grammar before reusing authorization.
 - **THEN** the authored variable argument remains distinct from its effective value
 - **THEN** the consumer applies the native executable grammar to `--force`
 
-### Requirement: Control-flow state joins conservatively
+### Requirement: Sequential and loop state joins conservatively
 Working-directory and supported variable state SHALL be propagated through
-sequential regions and joined across branches and loop exits. Disagreement
-SHALL never be resolved by arbitrarily choosing one path.
+sequential regions and joined across loop exits. Disagreement SHALL never be
+resolved by arbitrarily choosing one path.
 
 The Bash analyzer SHALL internally partition reachable exit state by command
 success and failure. `&&` SHALL continue from the success partition, `||`
@@ -456,15 +456,6 @@ discovered.
 An unreachable success or failure partition SHALL remain unreachable. The
 analyzer SHALL NOT substitute a joined state for a missing `&&` or `||`
 partition merely to publish exact continuation facts.
-
-#### Scenario: Branch-dependent cwd
-- **WHEN** one branch changes cwd to `/a` and another changes cwd to `/b`
-- **THEN** a following relative path is not resolved solely under `/a` or solely under `/b`
-- **THEN** the cwd is unknown because v0.3 does not publish divergent cwd alternatives
-
-#### Scenario: Identical branch cwd
-- **WHEN** every supported branch exits with the same exact cwd
-- **THEN** the joined cwd remains exact
 
 #### Scenario: Ungated cd failure keeps the prior cwd possible
 - **WHEN** Bash parses `cd /maybe; pwd`
@@ -625,12 +616,13 @@ blocks; `ForEach-Object` Begin, Process, End, RemainingScripts, and Parallel
 binding; `Where-Object -FilterScript`; in-process and remote
 `Invoke-Command -ScriptBlock`; `Measure-Command -Expression`;
 `Trace-Command -Expression`; `Start-Job` ScriptBlock and
-InitializationScript; `New-Module -ScriptBlock`; `Set-PSBreakpoint -Action`;
-`Register-ObjectEvent -Action`; `Register-EngineEvent -Action`; and
-`Register-ArgumentCompleter -ScriptBlock`. The optional inbox
-`Microsoft.PowerShell.ThreadJob` command MAY be complete only when the caller's
-pinned module baseline proves its canonical identity; otherwise it follows the
-unknown-receiver rule.
+InitializationScript; and `New-Module -ScriptBlock`.
+Optional-module `Start-ThreadJob` and deferred breakpoint, event, and argument-
+completion receivers are not stable-v0.3 catalog-completeness requirements.
+Existing conservative recognition MAY remain, but additional module/version or
+trigger-time proof does not gate the release. Every unproved form SHALL follow
+the unknown-receiver rule: its completely parsed body remains visible while
+execution and affected state are incomplete.
 
 Known aliases, supported module-qualified spellings, static call-operator
 spellings, PowerShell parameter prefixes and inline values, positional
@@ -698,8 +690,8 @@ SHALL NOT prove concurrency.
 - **THEN** the consumer can select child-scope or current-scope state flow without reparsing source text
 
 `Start-Job` executes initialization before its main block in a child process;
-`ForEach-Object -Parallel` and a proved `Start-ThreadJob` execute in child
-runspaces. Runspace-local variable and location exit mutation does not flow into
+`ForEach-Object -Parallel` executes in child runspaces. Runspace-local variable
+and location exit mutation does not flow into
 the containing continuation. In-process child runspaces share process-wide
 state such as the environment provider, so a possibly escaping mutation SHALL
 invalidate later host binding, command-resolution, and location facts. It SHALL
@@ -712,10 +704,6 @@ be retained in bounded case-insensitive state. A later matching invocation
 whose identity is not independently proved SHALL be treated as a possible
 process-wide mutation. An ambiguous name, wildcard, or candidate-set overflow
 SHALL fail closed to every unproved command name.
-Breakpoint actions, event actions, and argument completers are deferred and
-may execute zero or more times; their trigger-time cwd and mutable state are
-Unknown unless independently proved. Deferred commands remain in the
-may-execute projection even though registration itself does not execute them.
 
 #### Scenario: Child scope and shared location are independent
 - **WHEN** isolated-mode PowerShell parses `foreach ($x in 'outer') { }; & { Write-Output inner -OutVariable x; Set-Location /tmp }; Write-Output $x; Get-Location`
@@ -732,12 +720,6 @@ may-execute projection even though registration itself does not execute them.
 - **THEN** syntax and occurrence projection retain authored order
 - **THEN** abstract-state execution applies Begin, then Process per input, then End
 - **THEN** facts are joined back to their authored occurrences
-
-#### Scenario: Deferred trigger-time state is unknown
-- **WHEN** an event action contains `Remove-Item relative.txt`
-- **THEN** the action occurrence remains visible
-- **THEN** its trigger-time cwd is Unknown without an independent proof
-- **THEN** no registration-time relative path approval is synthesized
 
 #### Scenario: Ambiguous custom receiver fails closed without hiding the body
 - **WHEN** PowerShell parses `Invoke-Custom { Remove-Item target.txt }` without a proved receiver contract

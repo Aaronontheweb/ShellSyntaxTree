@@ -3,8 +3,8 @@
 ### Requirement: Existing Clause projection remains conservative
 `ParsedCommand.Clauses` SHALL remain available in v0.3 and SHALL contain every
 authored simple command that may execute for a fully parseable result, including
-nested condition, iterator, branch, body, substitution, and execution-region
-commands.
+nested iterator, loop-body, substitution, and execution-region commands from
+the stable-v0.3 grammar.
 
 Existing raw spelling, decoded values, source spans, and unaffected v0.2 leaf
 classifications SHALL remain compatible. A paired real-shell oracle MAY
@@ -92,17 +92,12 @@ recursive syntax traversal to discover executable commands.
 - **THEN** it does not grant scope to the loop keyword itself
 
 #### Scenario: Syntax remains useful for explanation
-- **WHEN** a UI groups approvals by loop or branch
+- **WHEN** a UI groups approvals by loop or execution region
 - **THEN** it may use syntax ancestry for display
 - **THEN** authorization still uses the complete occurrence collection
 
-#### Scenario: Deferred execution is authorized at registration
-- **WHEN** a registration command contains a deferred event, breakpoint, or completion body
-- **THEN** the example authorization algorithm evaluates the registration command and every body occurrence
-- **THEN** it does not wait for the external trigger or omit the deferred body
-
 #### Scenario: Execution metadata does not grant approval
-- **WHEN** an execution region is synchronous, concurrent, or deferred
+- **WHEN** an execution region has known or unknown timing and cardinality
 - **THEN** timing and cardinality remain explanatory shell facts
 - **THEN** the consumer still interprets every authored command occurrence and policy-sensitive value
 

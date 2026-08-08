@@ -9,15 +9,18 @@
 - [x] 1.7 Synchronize PowerShell grammar and analysis deltas into `SPEC.POWERSHELL.md`.
 - [x] 1.8 Update `PROJECT_CONTEXT.md` and `IMPLEMENTATION_PLAN.md` with the accepted v0.3 scope and delivery slices.
 - [x] 1.9 Add a paired Bash and PowerShell design corpus that records current behavior, desired structure, command occurrences, bounded values, redirect facts, compatibility projections, and security invariants.
-- [ ] 1.10 Promote each design case into the executable corpus as its production parser slice lands.
+- [ ] 1.10 Promote every design case for a stable-v0.3 construct into the
+  executable corpus as its production parser slice lands. Retain future-scope
+  design cases as non-gating evidence rather than release work.
 - [x] 1.11 Correct the PowerShell script-block boundary and lock the additive
   execution-region node, origin/phase/timing/cardinality facts, authored-versus-semantic
   ordering, command projection, and independent shell-state analysis contract
   against local PowerShell 7.6.4 oracles.
 - [x] 1.12 Expand the PowerShell design corpus with direct call/dot-source,
   synchronous callback, binder phase, local/remote invocation, child
-  process/runspace, initialization, deferred action, proved data, and unknown
-  receiver cases before production implementation.
+  process/runspace, initialization, proved data, and unknown receiver cases
+  before production implementation. Deferred-action cases remain design-only
+  evidence until separately promoted after v0.3.
 
 ## 2. Resolver Provenance Correction and Shared Preparation
 
@@ -77,7 +80,9 @@
 - [ ] 5.3 Document exact, finite, pattern, unknown, joined-state, redirect, and incomplete-result handling.
 - [ ] 5.4 Document record equality, hashing, `ToString()`, serialization, and `Clauses` compatibility effects.
 - [ ] 5.5 Update the README getting-started and migration examples to direct v0.3 consumers to the command-occurrence API and full consumer guide.
-- [ ] 5.6 Publish a 0.3.0 prerelease containing the structural API before enabling control flow.
+- [ ] 5.6 Publish a 0.3.0 prerelease containing the contracted structural,
+  substitution, redirect, Bash `for`, and PowerShell `foreach` behavior before
+  the downstream migration gate.
 - [ ] 5.7 Migrate Netclaw's existing-command analysis to the occurrence and redirect APIs behind focused regression tests.
 
 ## 6. Bash For-In Vertical Slice
@@ -189,45 +194,26 @@
   - [ ] 7.5b Implement direct `& {}` and `. {}` plus synchronous current-runspace
     regions for ForEach-Object, Where-Object, Measure-Command, Trace-Command,
     in-process Invoke-Command, and New-Module with shell-specific state flow.
-  - [ ] 7.5c Implement Start-Job and initialization, ForEach-Object -Parallel,
-    remote/session Invoke-Command, `-AsJob`, and pinned Start-ThreadJob child
-    process/runspace boundaries conservatively.
-  - [ ] 7.5d Implement deferred breakpoint, event, and argument-completion action
-    regions with trigger-time unknown state and zero-or-more cardinality.
+  - [x] 7.5c Implement Start-Job and initialization, ForEach-Object -Parallel,
+    remote/session Invoke-Command, and `-AsJob` child process/runspace
+    boundaries conservatively. Additional optional-module `Start-ThreadJob`
+    proof is not a stable-v0.3 requirement; unproved forms follow the unknown-
+    receiver rule.
   - [ ] 7.5e Keep proved non-executing script-block data opaque; over-approximate
     unknown receivers/bindings as unknown incomplete regions; fail atomically
     on unsupported interiors or state transfers.
   - [ ] 7.5f Pin authored projection order separately from semantic phase order,
     exact host element coordinates, nested regions, wrappers, pipelines, loops,
     and the 16-container depth boundary.
-  - [ ] 7.5g Either implement a bounded leading `param(...)` declaration and
-    direct-block argument-binding grammar or retain explicit atomic-failure
-    cases for both direct operators and realistic argument completers.
+  - [x] 7.5g Retain explicit atomic-failure behavior for direct-block arguments
+    and leading `param(...)` declarations. Declaration and argument-binding
+    grammar is not required for stable v0.3.
 - [ ] 7.6 Add adversarial cases for object-valued iterables, mutation, dynamic invocation, splatting, and cap overflow.
 - [ ] 7.7 Add PowerShell corpus entries, live `pwsh` oracle coverage, and Netclaw integration cases.
   - Add case-specific `PwshInitialStateMode` support to `PwshCorpusTool` before
     folding isolated-state entries 362+ into its generated manifest.
 
-## 8. Proven Shared Analysis Extraction
-
-- [ ] 8.1 Compare the two working loop implementations and inventory only behaviorally identical analysis steps.
-- [ ] 8.2 Extract shared command-occurrence traversal without coupling shell token consumption.
-- [ ] 8.3 Extract the value-domain lattice, combination cap, and unknown fallback.
-- [ ] 8.4 Extract conservative sequential and branch-state join primitives used identically by both shells.
-- [ ] 8.5 Keep shell-specific iterable, quoting, scoping, expression, and parser code behind explicit adapters.
-- [ ] 8.6 Re-run both complete corpora to prove the extraction is behavior-preserving.
-
-## 9. Condition Loops and Branches
-
-- [ ] 9.1 Add Bash `while` and `until` with condition and body command occurrences.
-- [ ] 9.2 Add Bash `if` / `elif` / `else` with conservative branch-state joins.
-- [ ] 9.3 Defer Bash `case` until after stable v0.3 and add it only after pattern and branch-selection uncertainty is specified.
-- [ ] 9.4 Add PowerShell `while` with the locked condition-pipeline boundary; defer `do` forms until after stable v0.3.
-- [ ] 9.5 Add PowerShell `if` / `elseif` / `else` with conservative branch-state joins.
-- [ ] 9.6 Defer PowerShell `switch` until after stable v0.3 and add it only after string, regex, wildcard, and script-block modes are bounded explicitly.
-- [ ] 9.7 Add paired security scenarios proving every condition and branch command remains visible.
-
-## 10. Heredoc / Here-String Slice and Separately Gated Follow-ups
+## 10. Heredoc / Here-String Slice
 
 - [x] 10.1 Specify heredoc delimiter adjacency and quoting, expansion mode, body provenance, substitutions, tab stripping, completeness, and Bash here-string semantics.
 - [x] 10.2 Preserve existing `<<` / `<<-` behavior and fix quoted-delimiter adjacency without regressing the v0.2 compatibility redirect.
@@ -235,11 +221,6 @@
 - [ ] 10.4 Add Bash `<<<` here-string tokenization, explicit redirect facts, bounded operand analysis, and trailing-newline semantics.
 - [ ] 10.5 Add direct, malformed, quoted/unquoted, tab-stripped, dynamic, and substitution-bearing corpus cases plus real-Bash parse-only validation.
   - [x] 10.5a Add direct, executable-corpus, real-Bash output, and real-Bash parse-only coverage for the bounded substitution-discovery slice; explicit redirect facts and the full heredoc matrix remain pending.
-- [ ] 10.6 After stable v0.3, specify process-substitution command discovery and the unknown produced descriptor/path value before enabling it.
-- [ ] 10.7 After stable v0.3, specify background-list concurrency, ordering, and shell-state boundaries before enabling single `&`.
-- [ ] 10.8 Specify C-style loop and arithmetic hidden-execution behavior before enabling either construct.
-- [ ] 10.9 Keep URL-versus-glob and environment-assignment approval behavior in executable-aware consumer issues unless a shell lexical fact is missing.
-- [ ] 10.10 Reproduce multiline quoted-argument reports against exact parser input before assigning a parser change.
 
 ## 11. Verification and Release
 
@@ -250,5 +231,31 @@
 - [ ] 11.5 Validate the public API field-for-field against the synchronized shared and PowerShell specifications.
 - [ ] 11.6 Validate Netclaw's ordinary-command, redirect, bounded-loop, and unknown-value approval matrices against the prerelease package.
 - [ ] 11.7 Update release notes and remove Netclaw's temporary descriptor workaround only after explicit redirect integration is live.
-- [ ] 11.8 Expand the Web sample with curated complex Bash and PowerShell inputs and snapshot-tested deterministic Mermaid diagrams produced only from canonical syntax, occurrence, and compatibility projections; cover ancestry, redirects, and fail-closed results, escape arbitrary shell labels safely, and emit no raw HTML.
 - [ ] 11.9 Promote stable 0.3.0 only after Linux and Windows CI, package publication, and downstream acceptance succeed.
+
+## Post-v0.3 Backlog (Non-Gating)
+
+These are worthwhile follow-ups, not unfinished tasks in this change:
+
+- Compare the working Bash and PowerShell analyzers and extract only behavior
+  proven identical; keep shell token consumption, quoting, scoping, and
+  expression semantics behind separate adapters.
+- Specify and implement Bash `while`, `until`, `if`, and `elif` plus PowerShell
+  `while`, `if`, and `elseif` in shell-specific vertical slices with paired
+  execution-accounting scenarios.
+- Specify Bash `case` and PowerShell `switch` only after their pattern and
+  branch-selection uncertainty is bounded.
+- Specify process-substitution values and command discovery, background-list
+  concurrency/state, and C-style/arithmetic hidden execution before enabling
+  those constructs.
+- Add exact optional-module `Start-ThreadJob` and deferred breakpoint, event,
+  and argument-completion receiver semantics only when consumer demand
+  justifies a pinned runtime/module contract. Existing conservative recognition
+  may remain; unproved forms keep visible bodies unknown and incomplete.
+- Keep URL-versus-glob, environment-assignment, and multiline reproduction
+  work in executable-aware consumer issues unless an exact missing lexical
+  fact is demonstrated.
+- Expand the Web sample with curated Bash and PowerShell inputs and
+  snapshot-tested deterministic Mermaid diagrams from canonical projections.
+  Escape arbitrary labels and emit no raw HTML; this showcase does not gate
+  package or Netclaw delivery.

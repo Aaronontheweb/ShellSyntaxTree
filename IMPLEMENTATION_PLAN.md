@@ -378,8 +378,8 @@ priorities.
       aliases, supported module qualification, exact and abbreviated/inline
       parameters, positional slots, parameter sets, `ScriptBlock[]`, authored
       ForEach-Object multi-block coordinates, and semantic Begin/Process/End
-      phases. The optional Microsoft.PowerShell.ThreadJob 2.2.0 entry remains
-      incomplete unless its separate module-baseline proof is supplied. Local
+      phases. The optional Microsoft.PowerShell.ThreadJob entry remains an
+      unknown incomplete receiver and no longer gates stable v0.3. Local
       `Invoke-Command -AsJob`, ambiguous prefixes, malformed value binding,
       unproved identities, and unknown receivers retain unknown/incomplete
       facts. Supported catalog-owned module qualifications now pass structural
@@ -448,27 +448,21 @@ priorities.
       authored `Set-Alias Env:...` invocation.
       The generator-owned executable corpus now supports per-entry initial-
       state mode and includes the promoted Parallel and remote/session cases.
-      Pinned child runspace jobs remain before deferred
-      breakpoint/event/completion actions; then unknown
-      receiver and nested/adversarial matrices. Preserve script blocks proved
+      Stable v0.3 stops at the delivered Start-Job, Parallel, and remote/session
+      boundaries. Optional-module Start-ThreadJob and exact deferred
+      breakpoint/event/completion actions are post-v0.3 catalog work; unknown
+      receivers continue to expose incomplete bodies. Preserve script blocks proved
       to be data as opaque values, expose ambiguous bodies with incomplete
       facts, and fail atomically when any potentially executable interior is
       unsupported. Local PowerShell 7.6.4 probes pin variable-versus-location
       independence, semantic phase order, child process/runspace boundaries,
-      registration-versus-trigger timing, and the fact that the in-process
-      `Invoke-Command` parameter set does not support `-AsJob`.
-- [ ] Deliver Bash `for ... in` and PowerShell `foreach` as the first two
-      language-specific vertical slices, then extract only the shared analysis
-      proven by both implementations.
+      boundaries and the fact that the in-process `Invoke-Command` parameter
+      set does not support `-AsJob`.
+- [ ] Complete the stable-v0.3 Bash `for ... in` and PowerShell `foreach`
+      vertical slices without gating release on a shared-analysis refactor.
 - [ ] Build on the delivered bounded Bash heredoc grammar and quoted-delimiter
       adjacency by exposing public body/delimiter/expansion/completeness facts,
       then add a separately tested Bash `<<<` here-string redirect slice.
-- [ ] Near the end of v0.3 delivery, expand the Web sample with curated complex
-      Bash and PowerShell inputs and deterministic Mermaid views of syntax,
-      occurrences, compatibility clauses, ancestry, redirects, and fail-closed
-      outcomes. Keep visualization downstream of the canonical projection so
-      it cannot become a second command-discovery implementation; snapshot the
-      rendering, escape arbitrary shell labels, and emit no raw HTML.
 
 ---
 
@@ -498,4 +492,15 @@ priorities.
 
 ## Parked
 
-*(empty; move items here when scope changes rather than deleting them)*
+- After stable v0.3, consider shared Bash/PowerShell analysis extraction only
+  where the two delivered implementations prove identical behavior.
+- Add Bash and PowerShell condition loops and branches in shell-specific
+  vertical slices; keep `case`, `switch`, process substitution, background
+  lists, and arithmetic independently gated.
+- Add or expand exact optional-module Start-ThreadJob and deferred breakpoint,
+  event, and argument-completion receiver semantics only when consumer demand
+  justifies a pinned contract; existing conservative recognition may remain.
+- Expand the Web sample with curated Bash and PowerShell inputs and
+  snapshot-tested deterministic Mermaid views produced from canonical
+  projections. This remains part of the broader product follow-up, not the
+  stable-v0.3 package or Netclaw migration gate.

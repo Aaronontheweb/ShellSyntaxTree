@@ -1,8 +1,9 @@
 # ShellSyntaxTree — bash & shared-contract Specification
 
 **Status:** v0.2.0 shipped; the accepted v0.3 contract adds structured syntax,
-complete command occurrences, explicit redirect analysis, and bounded control
-flow while retaining the v0.2 compatibility leaves.
+complete command occurrences, explicit redirect analysis, bounded `for` /
+`foreach`, substitutions, and execution regions while retaining the v0.2
+compatibility leaves.
 **Audience:** Whoever (human or agent) works on ShellSyntaxTree.
 **Read this end-to-end before writing any code.**
 **PowerShell support is specified separately in `SPEC.POWERSHELL.md` (v0.2.0);
@@ -203,6 +204,10 @@ public enum RedirectSourceKind { ... }
 public enum RedirectOperation { ... }
 public static class ShellAnalysisLimits { ... }
 ```
+
+`ConditionLoopSyntax`, `ConditionalSyntax`, and `ConditionalBranchSyntax` are
+reserved v0.3 structural vocabulary. The stable-v0.3 parsers do not emit them;
+condition-loop and branch grammar remains fail closed until a later release.
 
 That's the entire public API. **Everything else is internal.** The lexer,
 parser internals, verb tables, resolver — all implementation detail.
@@ -1314,10 +1319,11 @@ quoted_string   := single-quoted | double-quoted
   NOT path-resolved. The parser carries the raw token (e.g. `&1`) on
   `Redirect.Target` and sets `Redirect.IsDynamicSkip = true`. This
   prevents `2>&1` from being incorrectly resolved to `<cwd>/&1`.
-- Function definitions, assignment-prefix commands, `case`/`esac`, C-style or
-  implicit loops, arithmetic execution, process substitution, and single-`&`
-  background lists remain unparseable in stable v0.3 because they can hide
-  executable regions outside the bounded grammar below.
+- Function definitions, assignment-prefix commands, `while` / `until`, `if` /
+  `elif` / `else`, `case`/`esac`, C-style or implicit loops, arithmetic
+  execution, process substitution, and single-`&` background lists remain
+  unparseable in stable v0.3 because they can hide executable regions outside
+  the bounded grammar below.
 
 ### v0.3 structured Bash grammar
 
@@ -1330,8 +1336,6 @@ bash_list_item       := bash_and_or
 bash_and_or          := bash_pipeline (("&&" | "||") bash_pipeline)*
 bash_pipeline        := bash_command ("|" bash_command)*
 bash_command         := bash_for_in
-                      | bash_condition_loop
-                      | bash_if
                       | bash_group
                       | bash_subshell
                       | bash_c_wrapper
@@ -1342,17 +1346,6 @@ bash_for_in          := "for" binding_name "in" iterable_word*
                         bash_script(stop = "done")
                         "done"
 
-bash_condition_loop  := ("while" | "until")
-                        bash_script(stop = "do") "do"
-                        bash_script(stop = "done") "done"
-
-bash_if              := "if" bash_script(stop = "then") "then"
-                        bash_script(stop = "elif" | "else" | "fi")
-                        bash_elif* bash_else? "fi"
-bash_elif            := "elif" bash_script(stop = "then") "then"
-                        bash_script(stop = "elif" | "else" | "fi")
-bash_else            := "else" bash_script(stop = "fi")
-
 list_sep             := ";" | NEWLINE
 list_terminator      := ";" | NEWLINE+
 binding_name         := supported_scalar_binding
@@ -1362,7 +1355,7 @@ iterable_word        := word | quoted_string | supported_substitution
 ```
 
 The supported stable-v0.3 set is the existing simple-command grammar plus
-`for name in words`, `while` / `until`, and `if` / `elif` / `else`. Bash
+`for name in words`. Bash
 accepts additional shell identifiers as loop variables, but this bounded
 grammar fails them closed for the initial-state reasons specified in §2.
 Every fully
@@ -1382,7 +1375,7 @@ rather than changing the v0.2 `VerbChain.IsDynamic` contract, which remains
 PowerShell-specific. Diagnostic `Syntax` may retain the discovered substitution,
 but `Commands` and `Clauses` are empty.
 
-Missing `do`, `done`, `then`, or `fi`; an unsupported substitution whose
+Missing `do` or `done`; an unsupported substitution whose
 commands cannot all be discovered; or any skipped executable region makes the
 entire result unparseable. The parser may preserve a diagnostic syntax tree,
 but it returns empty `Commands` and `Clauses` so consumers cannot authorize a
@@ -2559,10 +2552,12 @@ Stable v0.3 deliberately continues to exclude:
   live-shell evaluation.
 - Executable-specific option, operand, object, revision, or subcommand
   grammars; consumers own those semantics.
-- Bash process substitution, single-`&` background lists, `case`, C-style or
-  implicit positional-parameter loops, arithmetic execution, functions, and
-  definitions until each hidden-execution and state boundary is specified.
-- PowerShell `do`, `switch`, functions, definitions, class/type bodies,
+- Bash `while`, `until`, `if`, `elif`, `else`, process substitution, single-`&`
+  background lists, `case`, C-style or implicit positional-parameter loops,
+  arithmetic execution, functions, and definitions until each hidden-execution
+  and state boundary is specified.
+- PowerShell `while`, `if`, `elseif`, `else`, `do`, `switch`, functions,
+  definitions, class/type bodies,
   arbitrary execution-bearing expressions, and `.ps1` file-content parsing.
 - A stable serialized wire format for the polymorphic v0.3 records.
 - Caller-configurable analysis limits, filesystem-dependent pattern
