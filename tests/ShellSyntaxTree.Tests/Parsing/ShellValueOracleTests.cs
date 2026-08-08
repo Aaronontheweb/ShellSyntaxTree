@@ -1095,19 +1095,34 @@ public class ShellValueOracleTests
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            "$x='outer'; Set-Location /; " +
-            "Invoke-Command { $x='inner'; Set-Location /tmp; Set-Alias zz Get-Date }; " +
-            "\"default-x=<$x>\"; \"default-cwd=<$((Get-Location).Path)>\"; " +
+            "$start=(Get-Location).Path; " +
+            "$temp=[IO.Path]::TrimEndingDirectorySeparator(" +
+            "(Resolve-Path ([IO.Path]::GetTempPath())).Path); " +
+            "$root=[IO.Path]::TrimEndingDirectorySeparator(" +
+            "[IO.Path]::GetPathRoot($start)); " +
+            "$target=if($temp -ne $start){$temp}else{$root}; " +
+            "if(!$target -or $target -eq $start -or " +
+            "!(Test-Path -LiteralPath $target -PathType Container)){throw 'target'}; " +
+            "\"target-distinct=<$($target -ne $start)>\"; " +
+            "$x='outer'; Invoke-Command { " +
+            "$x='inner'; Set-Location $target; Set-Alias zz Get-Date }; " +
+            "\"default-x=<$x>\"; " +
+            "\"default-cwd-target=<$((Get-Location).Path -eq $target)>\"; " +
             "\"default-alias=<$([bool](Get-Alias zz -ErrorAction Ignore))>\"; " +
             "$x='outer'; Invoke-Command -NoNewScope:$false { $x='false-inner' }; " +
-            "\"false-x=<$x>\"; Set-Location /; Invoke-Command -NoNewScope:$true { " +
-            "$x='shared'; Set-Location /tmp; Set-Alias zz Get-Date }; " +
-            "\"shared-x=<$x>\"; \"shared-cwd=<$((Get-Location).Path)>\"; " +
+            "\"false-x=<$x>\"; Set-Location $start; " +
+            "Invoke-Command -NoNewScope:$true { " +
+            "$x='shared'; Set-Location $target; Set-Alias zz Get-Date }; " +
+            "\"shared-x=<$x>\"; " +
+            "\"shared-cwd-target=<$((Get-Location).Path -eq $target)>\"; " +
             "\"shared-alias=<$([bool](Get-Alias zz -ErrorAction Ignore))>\"; " +
-            "Set-Location /; Invoke-Command { " +
-            "Set-Location /definitely-missing-shellsyntaxtree " +
+            "Set-Location $start; " +
+            "$missing=Join-Path $start ('missing-'+[guid]::NewGuid().ToString('N')); " +
+            "if(Test-Path -LiteralPath $missing){throw 'missing'}; " +
+            "Invoke-Command { Set-Location $missing " +
             "-ErrorAction SilentlyContinue }; " +
-            "\"failure-status=<$?>\"; \"failure-cwd=<$((Get-Location).Path)>\"; " +
+            "\"failure-status=<$?>\"; " +
+            "\"failure-cwd-start=<$((Get-Location).Path -eq $start)>\"; " +
             "$x='start'; Invoke-Command -NoNewScope { " +
             "\"invoke-interleave=<$x>\"; \"invoke-interleave=<$x>\" } | " +
             "Write-Output -OutVariable x | Out-Null; $x; " +
@@ -1121,15 +1136,16 @@ public class ShellValueOracleTests
         Assert.Equal(
             new[]
             {
+                "target-distinct=<True>",
                 "default-x=<outer>",
-                "default-cwd=</tmp>",
+                "default-cwd-target=<True>",
                 "default-alias=<False>",
                 "false-x=<outer>",
                 "shared-x=<shared>",
-                "shared-cwd=</tmp>",
+                "shared-cwd-target=<True>",
                 "shared-alias=<True>",
                 "failure-status=<True>",
-                "failure-cwd=</>",
+                "failure-cwd-start=<True>",
                 "invoke-interleave=<>",
                 "invoke-interleave=<invoke-interleave=<>>",
                 "measure-stage=<>",
