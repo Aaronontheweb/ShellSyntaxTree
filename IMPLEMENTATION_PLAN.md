@@ -499,10 +499,9 @@ priorities.
       set does not support `-AsJob`.
 - [ ] Complete the stable-v0.3 Bash `for ... in` and PowerShell `foreach`
       vertical slices without gating release on a shared-analysis refactor.
-- [ ] Publish `0.3.0-alpha` for the Netclaw migration gate. The release branch
-      sets matching package metadata, release notes, and the bare SemVer tag
-      contract. Mark this complete only after the tag workflow publishes the
-      package and GitHub prerelease.
+- [x] Publish `0.3.0-alpha` for the Netclaw migration gate. The bare SemVer tag
+      published the NuGet package, symbol package, and GitHub prerelease from
+      the reviewed merge commit after Linux and Windows CI passed.
 - [ ] Build on the delivered bounded Bash heredoc grammar and quoted-delimiter
       adjacency by exposing public body/delimiter/expansion/completeness facts,
       then add a separately tested Bash `<<<` here-string redirect slice.

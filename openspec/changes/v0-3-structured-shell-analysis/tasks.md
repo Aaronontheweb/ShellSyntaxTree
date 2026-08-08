@@ -89,7 +89,7 @@
 - [ ] 5.3 Document exact, finite, pattern, unknown, joined-state, redirect, and incomplete-result handling.
 - [ ] 5.4 Document record equality, hashing, `ToString()`, serialization, and `Clauses` compatibility effects.
 - [ ] 5.5 Update the README getting-started and migration examples to direct v0.3 consumers to the command-occurrence API and full consumer guide.
-- [ ] 5.6 Publish a 0.3.0 prerelease containing the contracted structural,
+- [x] 5.6 Publish a 0.3.0 prerelease containing the contracted structural,
   substitution, redirect, Bash `for`, and PowerShell `foreach` behavior before
   the downstream migration gate.
 - [ ] 5.7 Migrate Netclaw's existing-command analysis to the occurrence and redirect APIs behind focused regression tests.
@@ -235,8 +235,8 @@
 
 - [ ] 11.1 Add public API default-value, equality, serialization, and unknown-enum compatibility tests.
 - [ ] 11.2 Assert every supported executable region appears exactly once and every unsupported executable region makes the result unparseable.
-- [ ] 11.3 Run the complete Bash and PowerShell corpus suites plus the PII audit.
-- [ ] 11.4 Run `dotnet build -c Release`, `dotnet test -c Release`, `dotnet pack -c Release`, and header verification.
+- [x] 11.3 Run the complete Bash and PowerShell corpus suites plus the PII audit.
+- [x] 11.4 Run `dotnet build -c Release`, `dotnet test -c Release`, `dotnet pack -c Release`, and header verification.
 - [ ] 11.5 Validate the public API field-for-field against the synchronized shared and PowerShell specifications.
 - [ ] 11.6 Validate Netclaw's ordinary-command, redirect, bounded-loop, and unknown-value approval matrices against the prerelease package.
 - [ ] 11.7 Update release notes and remove Netclaw's temporary descriptor workaround only after explicit redirect integration is live.
