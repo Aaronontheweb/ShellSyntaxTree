@@ -1,0 +1,9 @@
+{
+  "name": "V03 redirect non success merge target error",
+  "input": "Get-Date 2\u003E\u00263",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "trailing \u0027\u0026\u0027 background-job operator is not supported in v0.2"
+  },
+  "notes": "PowerShell stream merges may target only success stream 1."
+}

@@ -1,6 +1,6 @@
 {
-  "name": "Redirect debug",
-  "input": "Get-Date 5\u003E debug.txt",
+  "name": "V03 redirect dynamic target",
+  "input": "Get-Date \u003E $name",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -13,7 +13,8 @@
         "redirects": [
           {
             "direction": "Out",
-            "target": "C:/work/debug.txt"
+            "target": "$name",
+            "isDynamicSkip": true
           }
         ]
       }
@@ -25,7 +26,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 21,
+        "sourceLength": 16,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -36,7 +37,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 21,
+        "sourceLength": 16,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -53,7 +54,7 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 21
+            "sourceLength": 16
           }
         ],
         "effectiveArguments": [],
@@ -68,15 +69,13 @@
         "redirects": [
           {
             "redirectIndex": 0,
-            "sourceKind": "Descriptor",
-            "sourceDescriptor": 5,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
             "operation": "FileOutput",
             "targetDescriptor": null,
             "target": {
-              "kind": "Exact",
-              "values": [
-                "C:/work/debug.txt"
-              ],
+              "kind": "Unknown",
+              "values": [],
               "pattern": null,
               "coveringDirectory": null
             },
@@ -87,5 +86,5 @@
       }
     ]
   },
-  "notes": "5\u003E debug stream \u2014 maps lossily to Out."
+  "notes": "The redirect grammar is complete while its runtime target value remains Unknown."
 }

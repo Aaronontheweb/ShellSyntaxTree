@@ -1,6 +1,6 @@
 {
-  "name": "Redirect debug",
-  "input": "Get-Date 5\u003E debug.txt",
+  "name": "V03 redirect merge all streams",
+  "input": "Get-Date *\u003E\u00261",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -13,7 +13,8 @@
         "redirects": [
           {
             "direction": "Out",
-            "target": "C:/work/debug.txt"
+            "target": "\u00261",
+            "isDynamicSkip": true
           }
         ]
       }
@@ -25,7 +26,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 21,
+        "sourceLength": 13,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -36,7 +37,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 21,
+        "sourceLength": 13,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -53,7 +54,7 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 21
+            "sourceLength": 13
           }
         ],
         "effectiveArguments": [],
@@ -68,24 +69,22 @@
         "redirects": [
           {
             "redirectIndex": 0,
-            "sourceKind": "Descriptor",
-            "sourceDescriptor": 5,
-            "operation": "FileOutput",
-            "targetDescriptor": null,
+            "sourceKind": "PowerShellAllStreams",
+            "sourceDescriptor": null,
+            "operation": "DescriptorDuplicate",
+            "targetDescriptor": 1,
             "target": {
-              "kind": "Exact",
-              "values": [
-                "C:/work/debug.txt"
-              ],
+              "kind": "Unknown",
+              "values": [],
               "pattern": null,
               "coveringDirectory": null
             },
-            "isPathRelevant": true,
+            "isPathRelevant": false,
             "isComplete": true
           }
         ]
       }
     ]
   },
-  "notes": "5\u003E debug stream \u2014 maps lossily to Out."
+  "notes": "The all-streams selector remains distinct when merged into success stream 1."
 }

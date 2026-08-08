@@ -485,6 +485,23 @@ partition merely to publish exact continuation facts.
 - **THEN** each reached body occurrence retains the exact incoming cwd
 - **THEN** a structurally present but unreachable body or continuation still receives conservative cwd facts
 
+#### Scenario: Unreachable relative redirect has no parse-time cwd proof
+- **WHEN** isolated-mode PowerShell parses `foreach ($x in @()) { Write-Output x > relative.txt }`
+- **THEN** the body occurrence and its working directory remain incomplete or Unknown
+- **THEN** the explicit redirect target is Unknown rather than the parse-time absolute path
+- **THEN** an authored absolute redirect target may remain exact because it is cwd-independent
+
+#### Scenario: Outer child-host redirect uses parent binding
+- **WHEN** isolated-mode PowerShell parses `foreach ($f in @('one.txt','two.txt')) { pwsh -Command 'Get-Date' > $f }`
+- **THEN** the outer redirect target is the finite set of two parent-cwd paths
+- **THEN** the decoded child command may remain independently incomplete because child runspace facts are not inferred
+- **THEN** an inner redirect authored inside the decoded payload does not inherit the parent loop binding
+
+#### Scenario: Nested child hosts retain outer redirect ownership
+- **WHEN** the preceding outer redirect wraps two or more static `pwsh -Command` or `-EncodedCommand` child hosts
+- **THEN** the outer redirect target still uses the parent loop binding
+- **THEN** it does not bind to the nearest decoded child invocation scope
+
 #### Scenario: Duplicate iteration values retain order
 - **WHEN** isolated-mode Bash parses `for f in a b a; do :; done; printf '%s' "$f"`
 - **THEN** the internal iteration plan retains `a`, `b`, `a` in that order

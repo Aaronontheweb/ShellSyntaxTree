@@ -309,6 +309,10 @@ observations on Linux:
 | Each shell redirects to its escaped-dollar spelling of `$HOME".txt"` | Each creates exactly one file named `$HOME.txt` | Adjacent redirect fragments form one target |
 | Bash redirects unquoted and quoted `*.txt` in a directory with multiple `.txt` files | The unquoted form is an ambiguous redirect; the quoted form creates the literal file `*.txt` | `BashRedirect` requires one proved target and retains quote-sensitive glob eligibility |
 | PowerShell redirects quoted `~`, `*.txt`, `FileSystem::...`, and a FileSystem PSDrive path | Tilde, wildcard, provider, and drive semantics apply after quote removal | `PowerShellRedirect` is Path-like but remains separate from cmdlet and native argument contexts |
+| PowerShell parses `2>&1`, `6>&1`, and `*>&1`, but rejects `1>&1`, `2>&3`, and `*>&2` | Only non-success numbered streams or all streams can merge into success stream `1` | Explicit facts preserve the source stream and descriptor target `1`; all other merge shapes fail closed as syntax errors |
+| PowerShell parses `<` as a reserved-token syntax error | PowerShell 7.6 has no file-input redirection operator | `<` makes the whole parse unparseable rather than producing a compatibility `In` redirect |
+| PowerShell rejects `> a > b`, `> a 1> b`, `2>&1 2> b`, and `*> a *> b`, but accepts `*> a 2> b` | Each exact source may be redirected once; default output and stream `1` are identical while `*` is independent from numbered sources | Duplicate-source validation precedes publication of compatibility or explicit facts |
+| PowerShell treats `$null` and `${null}` as the same redirect sink | Bracing does not turn the automatic null variable into a filename | Both spellings remain explicit but incomplete until the public model has a discard-sink operation |
 
 Task 2.2 converts these probes into deterministic shell-oracle regressions on
 the implementation branch; the design corpus records their desired semantic
@@ -726,10 +730,17 @@ the occurrence analyzer then supplies the authoritative exact-or-unknown cwd
 facts. Outcome projection rebases cwd-dependent compatibility arguments,
 elements, redirects, and attribution when that occurrence cwd is exact. An
 unknown occurrence cwd clears those resolutions and retains the dynamic-cwd
-marker, so a parse location taken from the success partition cannot leak into
-an exact failure continuation. Decoded child-host compatibility leaves carry
+marker. Explicit redirect targets likewise become Unknown unless their
+provenance resolves without a cwd, so a parse location taken from a success or
+unreachable partition cannot leak into an exact failure continuation. Decoded
+child-host compatibility leaves carry
 the inherited invocation-cwd attribution needed by that projection, while the
-child's exit state remains isolated. General extraction of state primitives is
+child's exit state remains isolated. Redirect provenance distinguishes an
+outer wrapper redirect evaluated by the parent before child launch from an
+inner decoded redirect evaluated in child scope; only the outer form may use a
+bounded parent-loop binding. Nested decoded hosts do not change that owner: the
+outer redirect keeps the outermost invocation context that authored it rather
+than using the nearest child context. General extraction of state primitives is
 a post-v0.3 refactor and proceeds only after both language passes demonstrate
 identical behavior.
 

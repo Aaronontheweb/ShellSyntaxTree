@@ -138,10 +138,45 @@ internal static partial class PwshCommandParser
         internal CommandOccurrenceFacts GetFacts(SimpleCommandSyntax simple) =>
             _facts.TryGetValue(simple.Clause, out var facts)
                 ? facts
-                : new CommandOccurrenceFacts
+                : CreateDefaultFacts(simple);
+
+        private CommandOccurrenceFacts CreateDefaultFacts(
+            SimpleCommandSyntax simple)
+        {
+            var redirects = PwshRedirectAnalysis.Analyze(simple.Clause);
+            var redirectProvenance = new List<RedirectTargetProvenance>();
+            var redirectIndex = 0;
+            for (var elementIndex = 0;
+                 elementIndex < simple.Clause.Elements.Count;
+                 elementIndex++)
+            {
+                var element = simple.Clause.Elements[elementIndex];
+                if (element.Role != ClauseElementRole.Redirect)
                 {
-                    IsComplete = IsStructurallyComplete(simple),
-                };
+                    continue;
+                }
+
+                if (TryGetRedirectTargetValue(element, _tokens, out var value) ||
+                    TryGetAuthoredRedirectTargetValue(element, out value))
+                {
+                    redirectProvenance.Add(new RedirectTargetProvenance(
+                        redirectIndex,
+                        elementIndex,
+                        value,
+                        UsesOutermostInvocationScope: true));
+                }
+
+                redirectIndex++;
+            }
+
+            return new CommandOccurrenceFacts
+            {
+                Redirects = redirects,
+                RedirectTargetProvenance = redirectProvenance.ToArray(),
+                IsComplete = IsStructurallyComplete(simple) &&
+                    AreRedirectsComplete(redirects),
+            };
+        }
 
         internal PwshForEachAnalysisPlan? GetForEachPlan(ForEachSyntax forEach) =>
             _forEachPlans.TryGetValue(forEach, out var plan) ? plan : null;
@@ -1709,12 +1744,32 @@ internal static partial class PwshCommandParser
             IReadOnlyList<PwshToken> sourceTokens)
         {
             var provenance = new List<ShellValueElementProvenance>();
+            var redirectProvenance = new List<RedirectTargetProvenance>();
             var hasCompleteProvenance = true;
+            var redirectIndex = 0;
             for (var elementIndex = 0;
                  elementIndex < simple.Clause.Elements.Count;
                  elementIndex++)
             {
                 var element = simple.Clause.Elements[elementIndex];
+                if (element.Role == ClauseElementRole.Redirect)
+                {
+                    if (TryGetRedirectTargetValue(
+                            element,
+                            sourceTokens,
+                            out var redirectValue))
+                    {
+                        redirectProvenance.Add(new RedirectTargetProvenance(
+                            redirectIndex,
+                            elementIndex,
+                            redirectValue,
+                            UsesOutermostInvocationScope: false));
+                    }
+
+                    redirectIndex++;
+                    continue;
+                }
+
                 if (element.Role != ClauseElementRole.Argument)
                 {
                     continue;
@@ -1729,12 +1784,90 @@ internal static partial class PwshCommandParser
                 provenance.Add(new ShellValueElementProvenance(elementIndex, value));
             }
 
+            var redirects = PwshRedirectAnalysis.Analyze(simple.Clause);
             _facts.Add(simple.Clause, new CommandOccurrenceFacts
             {
+                Redirects = redirects,
+                RedirectTargetProvenance = redirectProvenance.ToArray(),
                 ValueProvenance = provenance.ToArray(),
                 HasCompleteValueProvenance = hasCompleteProvenance,
-                IsComplete = IsStructurallyComplete(simple),
+                IsComplete = IsStructurallyComplete(simple) &&
+                    AreRedirectsComplete(redirects),
             });
+        }
+
+        private static bool TryGetRedirectTargetValue(
+            ClauseElement element,
+            IReadOnlyList<PwshToken> sourceTokens,
+            out ShellValue value)
+        {
+            value = ShellValue.Literal(string.Empty);
+            if (element.SourceStart is null || element.SourceLength is null)
+            {
+                return false;
+            }
+
+            var elementStart = element.SourceStart.Value;
+            var elementEnd = elementStart + element.SourceLength.Value;
+            var values = new List<ShellValue>();
+            var sawOperator = false;
+            var targetEnd = -1;
+            foreach (var token in sourceTokens)
+            {
+                var tokenEnd = token.SourceStart + token.SourceLength;
+                if (token.SourceStart < elementStart || tokenEnd > elementEnd)
+                {
+                    continue;
+                }
+
+                if (!sawOperator)
+                {
+                    if (token.SourceStart != elementStart ||
+                        token.Kind != PwshTokenKind.Operator)
+                    {
+                        return false;
+                    }
+
+                    sawOperator = true;
+                    continue;
+                }
+
+                targetEnd = tokenEnd;
+                values.Add(token.ResolverValue ??
+                    ShellValue.Literal(token.Value, token.SourceStart, token.SourceLength));
+            }
+
+            if (!sawOperator || values.Count == 0 || targetEnd != elementEnd)
+            {
+                return false;
+            }
+
+            value = values.Count == 1 ? values[0] : ShellValue.Concat(values);
+            return true;
+        }
+
+        private static bool TryGetAuthoredRedirectTargetValue(
+            ClauseElement element,
+            out ShellValue value)
+        {
+            value = ShellValue.Literal(string.Empty);
+            if (element.SourceStart is null || element.SourceLength is null)
+            {
+                return false;
+            }
+
+            var localTokens = PwshLexer.Tokenize(element.Raw);
+            foreach (var token in localTokens)
+            {
+                if (token.Kind == PwshTokenKind.UnparseableSentinel)
+                {
+                    return false;
+                }
+            }
+
+            var significant = FilterSignificant(localTokens);
+            var shifted = ShiftTokens(significant, element.SourceStart.Value);
+            return TryGetRedirectTargetValue(element, shifted, out value);
         }
 
         private static bool TryGetElementValue(
@@ -2214,8 +2347,7 @@ internal static partial class PwshCommandParser
     private static bool IsStructurallyComplete(SimpleCommandSyntax simple)
     {
         var clause = simple.Clause;
-        if (clause.Redirects.Count > 0 ||
-            clause.Verb.IsDynamic ||
+        if (clause.Verb.IsDynamic ||
             clause.Verb.Tokens.Count == 0)
         {
             return false;
@@ -2231,6 +2363,20 @@ internal static partial class PwshCommandParser
             if (element.Kind == ArgKind.DynamicSkip &&
                 (element.Raw.IndexOf("@(", StringComparison.Ordinal) >= 0 ||
                  element.Raw.IndexOf("@{", StringComparison.Ordinal) >= 0))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool AreRedirectsComplete(
+        IReadOnlyList<RedirectAnalysis> redirects)
+    {
+        foreach (var redirect in redirects)
+        {
+            if (!redirect.IsComplete)
             {
                 return false;
             }

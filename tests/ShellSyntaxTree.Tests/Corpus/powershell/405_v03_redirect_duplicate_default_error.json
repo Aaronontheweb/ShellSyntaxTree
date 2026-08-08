@@ -1,0 +1,9 @@
+{
+  "name": "V03 redirect duplicate default error",
+  "input": "Get-Date \u003E a \u003E b",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell command redirects the same source stream more than once"
+  },
+  "notes": "PowerShell rejects a second redirect of the default output stream."
+}

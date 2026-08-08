@@ -1080,12 +1080,89 @@ public class PwshForEachStructuralTests
     }
 
     [Fact]
-    public void Redirect_binding_stays_incomplete_until_redirect_analysis_lands()
+    public void Redirect_binding_resolves_to_a_bounded_path_domain()
     {
-        var result = ParseIsolated("foreach ($f in 'out.txt') { Write-Output x > $f }");
+        var result = ParseIsolated(
+            "foreach ($f in @('one.txt', 'two.txt')) { Write-Output x > $f }");
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
-        Assert.False(Assert.Single(result.Commands).IsComplete);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.FiniteSet, redirect.Target.Kind);
+        Assert.Equal(
+            new[] { "C:/work/one.txt", "C:/work/two.txt" },
+            redirect.Target.Values);
+        Assert.True(redirect.IsComplete);
+    }
+
+    [Fact]
+    public void Outer_wrapper_redirect_uses_parent_loop_binding_domain()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in @('one.txt', 'two.txt')) { " +
+            "pwsh -Command 'Get-Date' > $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.False(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.FiniteSet, redirect.Target.Kind);
+        Assert.Equal(
+            new[] { "C:/work/one.txt", "C:/work/two.txt" },
+            redirect.Target.Values);
+        Assert.True(redirect.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("pwsh -Command \"pwsh -Command 'Get-Date'\"")]
+    [InlineData("pwsh -EncodedCommand cAB3AHMAaAAgAC0ARQBuAGMAbwBkAGUAZABDAG8AbQBtAGEAbgBkACAAUgB3AEIAbABBAEgAUQBBAEwAUQBCAEUAQQBHAEUAQQBkAEEAQgBsAEEAQQA9AD0A")]
+    public void Nested_wrapper_redirect_uses_outermost_parent_loop_binding_domain(
+        string wrapper)
+    {
+        var result = ParseIsolated(
+            "foreach ($f in @('one.txt', 'two.txt')) { " +
+            $"{wrapper} > $f }}");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.False(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.FiniteSet, redirect.Target.Kind);
+        Assert.Equal(
+            new[] { "C:/work/one.txt", "C:/work/two.txt" },
+            redirect.Target.Values);
+        Assert.True(redirect.IsComplete);
+    }
+
+    [Fact]
+    public void Unreachable_relative_redirect_does_not_retain_parse_time_cwd()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in @()) { Write-Output x > relative.txt }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.False(command.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
+        Assert.True(Assert.Single(command.Clause.Redirects).IsDynamicSkip);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
+        Assert.True(redirect.IsComplete);
+    }
+
+    [Fact]
+    public void Unreachable_absolute_redirect_remains_cwd_independent()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in @()) { Write-Output x > C:\\fixed.txt }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.False(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
+        Assert.Equal("C:/fixed.txt", Assert.Single(redirect.Target.Values));
     }
 
     private static ParsedCommand Parse(string source) => new PwshParser(
