@@ -1243,7 +1243,7 @@ public class ShellValueOracleTests
     [Fact]
     public void PowerShell_start_job_prefixed_home_expansion_remains_relative()
     {
-        if (!IsAvailable("pwsh"))
+        if (OperatingSystem.IsWindows() || !IsAvailable("pwsh"))
         {
             return;
         }
