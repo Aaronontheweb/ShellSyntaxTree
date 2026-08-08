@@ -7,17 +7,112 @@
     "clauses": [
       {
         "operator": "None",
-        "verb": ["Set-Location"],
+        "verb": [
+          "Set-Location"
+        ],
         "args": [
-          { "raw": "C:\\tmp", "kind": "Literal", "isPath": true, "resolved": "C:/tmp" }
+          {
+            "raw": "C:\\tmp",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/tmp"
+          }
         ],
         "redirects": []
       },
       {
         "operator": "Sequence",
-        "verb": ["Get-Location"],
+        "verb": [
+          "Get-Location"
+        ],
         "args": [],
         "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 57,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 57,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 43,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": "None",
+        "bindingName": "f",
+        "bindingRaw": "$f",
+        "bindingSourceStart": 9,
+        "bindingSourceLength": 2,
+        "iterableRaw": "@()",
+        "iterableSourceStart": 15,
+        "iterableSourceLength": 3
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 2,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 15,
+        "sourceLength": 3,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 2,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 21,
+        "sourceLength": 21,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 4,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 22,
+        "sourceLength": 19,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 45,
+        "sourceLength": 12,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
       }
     ],
     "commands": [
@@ -26,24 +121,72 @@
         "immediateRole": "LoopBody",
         "isComplete": false,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 57 },
-          { "ancestorKind": "CommandList", "region": "Statement", "childIndex": 0, "sourceStart": 0, "sourceLength": 57 },
-          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 43 },
-          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 21, "sourceLength": 21 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 57
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 57
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 43
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 21,
+            "sourceLength": 21
+          }
         ],
         "effectiveArguments": [],
-        "workingDirectory": { "kind": "Unknown", "values": [] }
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       },
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 57 },
-          { "ancestorKind": "CommandList", "region": "Statement", "childIndex": 1, "sourceStart": 0, "sourceLength": 57 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 57
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 57
+          }
         ],
         "effectiveArguments": [],
-        "workingDirectory": { "kind": "Exact", "values": ["C:/work"] }
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       }
     ]
   },

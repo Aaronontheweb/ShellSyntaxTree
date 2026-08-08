@@ -34,20 +34,27 @@ internal static class CorpusJson
         bool includeElements,
         bool includeStructure,
         bool includeOptionalAssertions,
-        bool includeV03Assertions)
+        bool includeV03Assertions,
+        PwshInitialStateMode? powerShellInitialStateMode = null)
     {
         var obj = new JsonObject
         {
             ["name"] = name,
             ["input"] = input,
-            ["expected"] = BuildExpected(
-                parsed,
-                includeElements,
-                includeStructure,
-                includeOptionalAssertions,
-                includeV03Assertions),
-            ["notes"] = notes,
         };
+
+        if (powerShellInitialStateMode is PwshInitialStateMode initialStateMode)
+        {
+            obj["powerShellInitialStateMode"] = initialStateMode.ToString();
+        }
+
+        obj["expected"] = BuildExpected(
+            parsed,
+            includeElements,
+            includeStructure,
+            includeOptionalAssertions,
+            includeV03Assertions);
+        obj["notes"] = notes;
 
         if (parsed.IsUnparseable && outOfScope)
         {

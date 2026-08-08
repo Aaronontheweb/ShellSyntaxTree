@@ -529,7 +529,7 @@ The version-pinned PowerShell 7 catalog covers:
 | `ForEach-Object -Begin` | Begin | Synchronous | Once | current runspace |
 | `ForEach-Object -Process` / `-RemainingScripts` | Process, with binder-assigned Begin/End where applicable | Synchronous | OncePerInputObject | current runspace |
 | `ForEach-Object -End` | End | Synchronous | Once | current runspace |
-| `ForEach-Object -Parallel` | Process | Concurrent | OncePerInputObject | child runspace; exit isolated |
+| `ForEach-Object -Parallel` | Process | Concurrent | OncePerInputObject | child runspace; runspace-local exit isolated; process-wide effects conservative |
 | `Where-Object -FilterScript` | Filter | Synchronous | OncePerInputObject | current runspace |
 | in-process `Invoke-Command -ScriptBlock` | Main | Synchronous | Once | child scope unless `-NoNewScope`; shared location |
 | remote/session/SSH/VM/container `Invoke-Command` | Main | proved from complete parameter set | Unknown unless targets are proved | remote/child state; exit isolated |
@@ -539,6 +539,22 @@ The version-pinned PowerShell 7 catalog covers:
 | `New-Module -ScriptBlock` | Initialization | Synchronous | Once | module state; current-runspace effects analyzed separately |
 | `Set-PSBreakpoint -Action`, event `-Action` | Action | Deferred | ZeroOrMore | trigger-time state Unknown without proof |
 | `Register-ArgumentCompleter -ScriptBlock` | Completion | Deferred | ZeroOrMore | completion-time state Unknown without proof |
+
+Parallel child runspaces do not inherit ordinary caller variables or aliases,
+and their runspace-local variable and location exit state does not flow into the
+host continuation. They do share process-wide state such as the environment
+provider. A supported or unknown child mutation that may affect such state
+invalidates later host binding, command-resolution, and location facts. It also
+invalidates later child-activation facts even with `-UseNewRunspace`, because a
+fresh runspace is not a fresh process.
+Runspace `global:` variable, function, alias, and location state remains local
+to that runspace and does not by itself invalidate the host. Once child command
+resolution is mutated, however, an exact changed alias or function name is
+retained in bounded case-insensitive state. A later matching invocation whose
+identity is no longer proved is a possible process-wide mutation and receives
+the same conservative invalidation unless its identity is independently proved.
+An ambiguous changed name, wildcard, or candidate-set overflow collapses to all
+unproved command names rather than guessing.
 
 The optional inbox `Microsoft.PowerShell.ThreadJob\Start-ThreadJob` follows
 the initialization/main child-runspace model only when the caller's pinned

@@ -1,0 +1,738 @@
+{
+  "name": "V03 foreach object parallel function provider escape",
+  "input": "1 | ForEach-Object -Parallel { Set-Item Function:global:sstProviderSet { Set-Item @args }; sstProviderSet Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F child }; Get-Item host.txt",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "1"
+        ],
+        "args": [],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "1",
+            "value": "1",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 1,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "ForEach-Object"
+        ],
+        "args": [
+          {
+            "raw": "-Parallel",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "{ Set-Item Function:global:sstProviderSet { Set-Item @args }; sstProviderSet Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F child }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "ForEach-Object",
+            "value": "ForEach-Object",
+            "role": "Verb",
+            "sourceStart": 4,
+            "sourceLength": 14,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-Parallel",
+            "value": "-Parallel",
+            "role": "Argument",
+            "sourceStart": 19,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "{ Set-Item Function:global:sstProviderSet { Set-Item @args }; sstProviderSet Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F child }",
+            "value": "{ Set-Item Function:global:sstProviderSet { Set-Item @args }; sstProviderSet Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F child }",
+            "role": "Argument",
+            "sourceStart": 29,
+            "sourceLength": 126,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Item"
+        ],
+        "args": [
+          {
+            "raw": "Function:global:sstProviderSet",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "{ Set-Item @args }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Set-Item",
+            "value": "Set-Item",
+            "role": "Verb",
+            "sourceStart": 31,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "Function:global:sstProviderSet",
+            "value": "Function:global:sstProviderSet",
+            "role": "Argument",
+            "sourceStart": 40,
+            "sourceLength": 30,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "{ Set-Item @args }",
+            "value": "{ Set-Item @args }",
+            "role": "Argument",
+            "sourceStart": 71,
+            "sourceLength": 18,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Item"
+        ],
+        "args": [
+          {
+            "raw": "@args",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Set-Item",
+            "value": "Set-Item",
+            "role": "Verb",
+            "sourceStart": 73,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "@args",
+            "value": "@args",
+            "role": "Argument",
+            "sourceStart": 82,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "sstProviderSet"
+        ],
+        "args": [
+          {
+            "raw": "Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "child",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "sstProviderSet",
+            "value": "sstProviderSet",
+            "role": "Verb",
+            "sourceStart": 91,
+            "sourceLength": 14,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F",
+            "value": "Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F",
+            "role": "Argument",
+            "sourceStart": 106,
+            "sourceLength": 41,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "child",
+            "value": "child",
+            "role": "Argument",
+            "sourceStart": 148,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Get-Item"
+        ],
+        "args": [
+          {
+            "raw": "host.txt",
+            "kind": "Literal",
+            "isPath": true
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Get-Item",
+            "value": "Get-Item",
+            "role": "Verb",
+            "sourceStart": 157,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "host.txt",
+            "value": "host.txt",
+            "role": "Argument",
+            "sourceStart": 166,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 174,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 174,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Pipeline",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 155,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 2,
+        "region": "PipelineStage",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 1,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 2,
+        "region": "PipelineStage",
+        "childIndex": 1,
+        "sourceStart": 4,
+        "sourceLength": 151,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ExecutionRegion",
+        "parentIndex": 4,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 29,
+        "sourceLength": 126,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "executionOrigin": "CommandArgument",
+        "hostClauseElementIndex": 2,
+        "executionPhase": "Process",
+        "executionTiming": "Concurrent",
+        "executionCardinality": "OncePerInputObject"
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 5,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 30,
+        "sourceLength": 124,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 6,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 31,
+        "sourceLength": 122,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 7,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 31,
+        "sourceLength": 58,
+        "clauseIndex": 2,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "ExecutionRegion",
+        "parentIndex": 8,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 71,
+        "sourceLength": 18,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "executionOrigin": "CommandArgument",
+        "hostClauseElementIndex": 2,
+        "executionPhase": "Unknown",
+        "executionTiming": "Unknown",
+        "executionCardinality": "Unknown"
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 9,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 72,
+        "sourceLength": 16,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 10,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 73,
+        "sourceLength": 14,
+        "clauseIndex": 3,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 7,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 91,
+        "sourceLength": 62,
+        "clauseIndex": 4,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 157,
+        "sourceLength": 17,
+        "clauseIndex": 5,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 155
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 155
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "ExecutionRegion",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 155
+          },
+          {
+            "ancestorKind": "ExecutionRegion",
+            "region": "ExecutionRegion",
+            "childIndex": 0,
+            "sourceStart": 29,
+            "sourceLength": 126
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 30,
+            "sourceLength": 124
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 31,
+            "sourceLength": 122
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 3,
+        "immediateRole": "ExecutionRegion",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 155
+          },
+          {
+            "ancestorKind": "ExecutionRegion",
+            "region": "ExecutionRegion",
+            "childIndex": 0,
+            "sourceStart": 29,
+            "sourceLength": 126
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 30,
+            "sourceLength": 124
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 31,
+            "sourceLength": 122
+          },
+          {
+            "ancestorKind": "ExecutionRegion",
+            "region": "ExecutionRegion",
+            "childIndex": 0,
+            "sourceStart": 71,
+            "sourceLength": 18
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 72,
+            "sourceLength": 16
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 4,
+        "immediateRole": "ExecutionRegion",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 155
+          },
+          {
+            "ancestorKind": "ExecutionRegion",
+            "region": "ExecutionRegion",
+            "childIndex": 0,
+            "sourceStart": 29,
+            "sourceLength": 126
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 30,
+            "sourceLength": 124
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 31,
+            "sourceLength": 122
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 5,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 174
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 174
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "Function-provider scope syntax is normalized to the callable name before checking whether a later child invocation can write process-wide state."
+}

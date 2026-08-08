@@ -188,7 +188,9 @@
         "effectiveArguments": [],
         "workingDirectory": {
           "kind": "Exact",
-          "values": ["C:/work"],
+          "values": [
+            "C:/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         }
@@ -216,7 +218,9 @@
         "effectiveArguments": [],
         "workingDirectory": {
           "kind": "Exact",
-          "values": ["C:/work"],
+          "values": [
+            "C:/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         }

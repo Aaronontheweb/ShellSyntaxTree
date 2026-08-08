@@ -180,6 +180,301 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Theory]
+    [InlineData("1 | ForEach-Object -Parallel { Get-Item child.txt }")]
+    [InlineData("1 | % -Parallel { Get-Item child.txt } -AsJob")]
+    [InlineData(
+        "1 | Microsoft.PowerShell.Core\\ForEach-Object " +
+        "-Parallel { Get-Item child.txt }")]
+    public void Parallel_publishes_a_concurrent_per_input_child_runspace_region(
+        string source)
+    {
+        var result = ParseIsolated(source);
+
+        var pipeline = Assert.IsType<PipelineSyntax>(Assert.Single(result.Syntax.Statements));
+        var host = Assert.IsType<SimpleCommandSyntax>(pipeline.Stages[1]);
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionOrigin.CommandArgument, region.Origin);
+        Assert.Equal(ExecutionRegionPhase.Process, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Concurrent, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.OncePerInputObject, region.Cardinality);
+        Assert.Equal(3, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void Parallel_inherits_location_but_not_bindings_and_isolates_child_exit()
+    {
+        var result = ParseIsolated(
+            "foreach ($x in 'outer') { }; 1 | ForEach-Object -Parallel { " +
+            "Write-Output $x; Get-Item child.txt; Set-Location /tmp; " +
+            "foreach ($x in 'inner') { } }; Write-Output $x; Get-Item host.txt");
+
+        var writes = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
+            .ToArray();
+        Assert.Equal(2, writes.Length);
+        Assert.Empty(writes[0].EffectiveArguments);
+        Assert.Equal("$x", Assert.Single(writes[0].Clause.Args).Raw);
+        Assert.Equal(
+            new[] { "outer" },
+            Assert.Single(writes[1].EffectiveArguments).Value.Values);
+
+        var items = result.Commands
+            .Where(command => command.Clause.Verb.Tokens[0] == "Get-Item")
+            .ToArray();
+        Assert.Equal(2, items.Length);
+        Assert.All(items, item => Assert.Equal(
+            new[] { "C:/work" },
+            item.WorkingDirectory.Values));
+        Assert.All(writes.Concat(items), command => Assert.True(command.IsComplete));
+    }
+
+    [Fact]
+    public void Parallel_process_wide_provider_mutation_invalidates_host_observations()
+    {
+        var result = ParseIsolated(
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Item Env:SST_PARALLEL_PATH child }; Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.False(continuation.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            continuation.WorkingDirectory.Kind);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" -UseNewRunspace")]
+    public void Parallel_unproved_child_command_can_escape_process_state(
+        string runspaceOption)
+    {
+        var result = ParseIsolated(
+            "1 | ForEach-Object -Parallel { Set-Alias sstSet Set-Item; " +
+            "sstSet Env:SST_PARALLEL_ALIAS_ESCAPE_91F62F1F child }" +
+            runspaceOption + "; Get-Item host.txt");
+
+        var rebound = Assert.Single(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "sstSet");
+        Assert.False(rebound.IsComplete);
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.False(continuation.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            continuation.WorkingDirectory.Kind);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(" -UseNewRunspace")]
+    public void Parallel_rebound_mutator_can_escape_process_state(
+        string runspaceOption)
+    {
+        var result = ParseIsolated(
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Alias -Name Set-Alias -Value Set-Item; " +
+            "Set-Alias Env:SST_PARALLEL_REBOUND_MUTATOR_91F62F1F child }" +
+            runspaceOption + "; Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.False(continuation.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            continuation.WorkingDirectory.Kind);
+    }
+
+    [Theory]
+    [InlineData("Set-Item Alias:sstProviderSet Set-Item")]
+    [InlineData("Set-Item Alias::sstProviderSet Set-Item")]
+    [InlineData(
+        "Set-Item Function:global:sstProviderSet { Set-Item @args }")]
+    [InlineData(
+        "Set-Item Function::sstProviderSet { Set-Item @args }")]
+    public void Parallel_provider_rebinding_can_escape_process_state(
+        string mutation)
+    {
+        var result = ParseIsolated(
+            $"1 | ForEach-Object -Parallel {{ {mutation}; " +
+            "sstProviderSet Env:SST_PARALLEL_PROVIDER_ESCAPE_91F62F1F child }; " +
+            "Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.False(continuation.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            continuation.WorkingDirectory.Kind);
+    }
+
+    [Fact]
+    public void Parallel_provider_qualification_preserves_additional_name_colons()
+    {
+        var result = ParseIsolated(
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Item Alias:::sstProviderSet Set-Item; " +
+            "sstProviderSet Env:SST_PARALLEL_PROVIDER_COLON_91F62F1F child }; " +
+            "Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.True(continuation.IsComplete);
+        Assert.Equal(
+            new[] { "C:/work" },
+            continuation.WorkingDirectory.Values);
+    }
+
+    [Fact]
+    public void Parallel_unproved_inline_alias_name_fails_closed()
+    {
+        var result = ParseIsolated(
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Alias -Name:$n -Value Set-Item; " +
+            "Set-Alias Env:SST_PARALLEL_DYNAMIC_ALIAS_91F62F1F child }; " +
+            "Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.False(continuation.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            continuation.WorkingDirectory.Kind);
+    }
+
+    [Fact]
+    public void Parallel_exact_rebinding_does_not_taint_unrelated_mutator_names()
+    {
+        var result = ParseIsolated(
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Alias other Set-Item; Set-Alias untouched Write-Output }; " +
+            "Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.True(continuation.IsComplete);
+        Assert.Equal(
+            new[] { "C:/work" },
+            continuation.WorkingDirectory.Values);
+    }
+
+    [Theory]
+    [InlineData("", ShellValueDomainKind.Unknown, false)]
+    [InlineData(" -UseNewRunspace", ShellValueDomainKind.Exact, true)]
+    public void Parallel_pooled_rebinding_can_escape_on_a_later_activation(
+        string runspaceOption,
+        ShellValueDomainKind expectedCwdKind,
+        bool expectedComplete)
+    {
+        var result = ParseIsolated(
+            "1,2 | ForEach-Object -Parallel { " +
+            "sstSet Env:SST_PARALLEL_LATER_ESCAPE_91F62F1F child; " +
+            "Set-Alias sstSet Set-Item } -ThrottleLimit 1" +
+            runspaceOption + "; Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.Equal(expectedComplete, continuation.IsComplete);
+        Assert.Equal(expectedCwdKind, continuation.WorkingDirectory.Kind);
+    }
+
+    [Theory]
+    [InlineData("Set-Variable sstChild child -Scope Global")]
+    [InlineData("Remove-Item Function:sstChild")]
+    [InlineData("Remove-Item Alias:sstChild")]
+    public void Parallel_runspace_local_mutation_does_not_escape_to_host(
+        string mutation)
+    {
+        var result = ParseIsolated(
+            $"1 | ForEach-Object -Parallel {{ {mutation} }}; " +
+            "Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.True(continuation.IsComplete);
+        Assert.Equal(
+            new[] { "C:/work" },
+            continuation.WorkingDirectory.Values);
+    }
+
+    [Fact]
+    public void Parallel_child_local_provider_mutation_stays_isolated()
+    {
+        var result = ParseIsolated(
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Item Variable:x child }; Get-Item host.txt");
+
+        var continuation = result.Commands.Last();
+        Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
+        Assert.True(continuation.IsComplete);
+        Assert.Equal(
+            new[] { "C:/work" },
+            continuation.WorkingDirectory.Values);
+    }
+
+    [Fact]
+    public void Parallel_child_runspace_does_not_inherit_host_alias_mutation()
+    {
+        var result = ParseIsolated(
+            "Set-Alias Measure-Command Write-Output; 1 | " +
+            "Microsoft.PowerShell.Core\\ForEach-Object -Parallel { " +
+            "Measure-Command { Get-Date } }");
+
+        var childMeasure = Assert.Single(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "Measure-Command");
+        Assert.True(childMeasure.IsComplete);
+        Assert.True(result.Commands.Last().IsComplete);
+    }
+
+    [Fact]
+    public void Parallel_pooled_runspace_command_mutation_joins_later_activations()
+    {
+        var result = ParseIsolated(
+            "1,2 | ForEach-Object -Parallel { " +
+            "Measure-Command { Get-Date }; " +
+            "Set-Alias Measure-Command Write-Output } -ThrottleLimit 1");
+
+        var measure = Assert.Single(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "Measure-Command");
+        Assert.False(measure.IsComplete);
+    }
+
+    [Fact]
+    public void Parallel_use_new_runspace_keeps_activations_independent()
+    {
+        var result = ParseIsolated(
+            "1,2 | ForEach-Object -Parallel { " +
+            "Measure-Command { Get-Date }; " +
+            "Set-Alias Measure-Command Write-Output } " +
+            "-ThrottleLimit 1 -UseNewRunspace");
+
+        var measure = Assert.Single(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "Measure-Command");
+        Assert.True(measure.IsComplete);
+        Assert.True(result.Commands.Last().IsComplete);
+    }
+
+    [Fact]
+    public void Parallel_use_new_runspace_joins_process_wide_child_effects()
+    {
+        var result = ParseIsolated(
+            "1,2 | ForEach-Object -Parallel { git status; " +
+            "Set-Item Env:PATH child } -ThrottleLimit 1 -UseNewRunspace");
+
+        var git = Assert.Single(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "git");
+        Assert.False(git.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, git.WorkingDirectory.Kind);
+    }
+
+    [Theory]
     [InlineData("Start-Job -ScriptBlock { Get-Item child.txt }")]
     [InlineData("sajb { Get-Item child.txt }")]
     [InlineData("Microsoft.PowerShell.Core\\Start-Job { Get-Item child.txt }")]

@@ -1328,6 +1328,164 @@ public class ShellValueOracleTests
         Assert.StartsWith("5.1.", output, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void PowerShell_parallel_child_runspace_boundaries_match_the_model()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$start=(Get-Location).Path; $x='outer'; " +
+            "$job=1 | ForEach-Object -Parallel { " +
+            "\"child-cwd=<$((Get-Location).Path -eq $using:start)>\"; " +
+            "\"child-x=<$x>\"; \"child-using=<$using:x>\"; " +
+            "Set-Item Env:SST_PARALLEL_BOUNDARY_91F62F1F child; " +
+            "Set-Location ([IO.Path]::GetPathRoot((Get-Location).Path)); " +
+            "$x='child'; exit 7 } -AsJob; " +
+            "Receive-Job -Job $job -Wait; " +
+            "\"host-cwd=<$((Get-Location).Path -eq $start)>\"; " +
+            "\"host-x=<$x>\"; " +
+            "\"host-env=<$env:SST_PARALLEL_BOUNDARY_91F62F1F>\"; " +
+            "\"job-state=<$($job.State)>\"; " +
+            "Remove-Job -Job $job");
+
+        Assert.Equal(
+            new[]
+            {
+                "child-cwd=<True>",
+                "child-x=<>",
+                "child-using=<outer>",
+                "host-cwd=<True>",
+                "host-x=<outer>",
+                "host-env=<child>",
+                "job-state=<Completed>",
+            },
+            Lines(output));
+    }
+
+    [Fact]
+    public void PowerShell_parallel_runspace_reuse_matches_the_binding_switch()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "1,2 | ForEach-Object -Parallel { " +
+            "\"pooled-$_=<$([bool](Get-Alias sstParallelAlias " +
+            "-ErrorAction Ignore))>\"; " +
+            "Set-Alias sstParallelAlias Get-Date } -ThrottleLimit 1; " +
+            "1,2 | ForEach-Object -Parallel { " +
+            "\"fresh-$_=<$([bool](Get-Alias sstParallelAlias " +
+            "-ErrorAction Ignore))>\"; " +
+            "Set-Alias sstParallelAlias Get-Date } " +
+            "-ThrottleLimit 1 -UseNewRunspace; " +
+            "Remove-Item Env:SST_PARALLEL_FRESH_91F62F1F -ErrorAction Ignore; " +
+            "1,2 | ForEach-Object -Parallel { " +
+            "\"fresh-env-$_=<$env:SST_PARALLEL_FRESH_91F62F1F>\"; " +
+            "Set-Item Env:SST_PARALLEL_FRESH_91F62F1F child } " +
+            "-ThrottleLimit 1 -UseNewRunspace");
+
+        Assert.Equal(
+            new[]
+            {
+                "pooled-1=<False>",
+                "pooled-2=<True>",
+                "fresh-1=<False>",
+                "fresh-2=<False>",
+                "fresh-env-1=<>",
+                "fresh-env-2=<child>",
+            },
+            Lines(output));
+    }
+
+    [Fact]
+    public void PowerShell_parallel_process_escape_and_runspace_local_scope_match_the_model()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Remove-Item Env:SST_PARALLEL_ALIAS_ESCAPE_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Alias sstSet Set-Item; " +
+            "sstSet Env:SST_PARALLEL_ALIAS_ESCAPE_91F62F1F child }; " +
+            "\"alias-env=<$env:SST_PARALLEL_ALIAS_ESCAPE_91F62F1F>\"; " +
+            "Remove-Item Env:SST_PARALLEL_REBOUND_MUTATOR_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Alias -Name Set-Alias -Value Set-Item; " +
+            "Set-Alias Env:SST_PARALLEL_REBOUND_MUTATOR_91F62F1F child } " +
+            "-UseNewRunspace; " +
+            "\"rebound-mutator-env=" +
+            "<$env:SST_PARALLEL_REBOUND_MUTATOR_91F62F1F>\"; " +
+            "Remove-Item Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Item Function:global:sstProviderSet { Set-Item @args }; " +
+            "sstProviderSet Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F child }; " +
+            "\"function-env=<$env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F>\"; " +
+            "Remove-Item Env:SST_PARALLEL_DOUBLE_ALIAS_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Item Alias::sstDoubleAlias Set-Item; " +
+            "sstDoubleAlias Env:SST_PARALLEL_DOUBLE_ALIAS_91F62F1F child }; " +
+            "\"double-alias-env=<$env:SST_PARALLEL_DOUBLE_ALIAS_91F62F1F>\"; " +
+            "Remove-Item Env:SST_PARALLEL_DOUBLE_FUNCTION_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Item Function::sstDoubleFunction { Set-Item @args }; " +
+            "sstDoubleFunction Env:SST_PARALLEL_DOUBLE_FUNCTION_91F62F1F child }; " +
+            "\"double-function-env=" +
+            "<$env:SST_PARALLEL_DOUBLE_FUNCTION_91F62F1F>\"; " +
+            "$global:SST_PARALLEL_LOCAL_91F62F1F='host'; " +
+            "1 | ForEach-Object -Parallel { " +
+            "Set-Variable SST_PARALLEL_LOCAL_91F62F1F child -Scope Global }; " +
+            "\"global-var=<$global:SST_PARALLEL_LOCAL_91F62F1F>\"; " +
+            "Remove-Item Env:SST_PARALLEL_ALIAS_ESCAPE_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "Remove-Item Env:SST_PARALLEL_REBOUND_MUTATOR_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "Remove-Item Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "Remove-Item Env:SST_PARALLEL_DOUBLE_ALIAS_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "Remove-Item Env:SST_PARALLEL_DOUBLE_FUNCTION_91F62F1F " +
+            "-ErrorAction Ignore; " +
+            "Remove-Variable SST_PARALLEL_LOCAL_91F62F1F -Scope Global " +
+            "-ErrorAction Ignore");
+
+        Assert.Equal(
+            new[]
+            {
+                "alias-env=<child>",
+                "rebound-mutator-env=<child>",
+                "function-env=<child>",
+                "double-alias-env=<child>",
+                "double-function-env=<child>",
+                "global-var=<host>",
+            },
+            Lines(output));
+    }
+
     private static bool IsAvailable(string executable)
     {
         try
