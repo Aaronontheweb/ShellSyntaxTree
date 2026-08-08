@@ -1,11 +1,11 @@
 {
   "name": "V03 foreach automatic binding gated",
-  "input": "foreach ($HOME in @('x')) { Write-Output $HOME }",
+  "input": "foreach ($HOME in @(\u0027x\u0027)) { Write-Output $HOME }",
   "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "built-in"
+    "unparseableReasonContains": "PowerShell foreach binding collides with a reserved or stateful built-in variable"
   },
-  "oracleExpectation": "OutOfScope",
-  "notes": "A fresh host still has built-in automatic and read-only variables."
+  "notes": "A fresh host still has built-in automatic and read-only variables.",
+  "oracleExpectation": "OutOfScope"
 }

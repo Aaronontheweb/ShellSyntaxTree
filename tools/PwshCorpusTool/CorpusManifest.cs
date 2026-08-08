@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using ShellSyntaxTree;
 
 namespace ShellSyntaxTree.Tools.PwshCorpus;
 
@@ -27,7 +28,8 @@ internal sealed record ManifestEntry(
     bool IncludeStructure = false,
     bool IncludeOptionalAssertions = false,
     bool IncludeV03Assertions = false,
-    string? DisplayName = null)
+    string? DisplayName = null,
+    PwshInitialStateMode? PowerShellInitialStateMode = null)
 {
     /// <summary>Explicit display name when supplied; otherwise derived from the slug.</summary>
     public string Name =>
@@ -74,6 +76,31 @@ internal static class CorpusManifest
             IncludeStructure: true,
             IncludeV03Assertions: true);
 
+    private static ManifestEntry VI(string slug, string input, string notes) =>
+        new(
+            slug,
+            input,
+            notes,
+            false,
+            ManifestTransform.None,
+            IncludeStructure: true,
+            IncludeV03Assertions: true,
+            PowerShellInitialStateMode:
+                PwshInitialStateMode.IsolatedNonInteractiveNoProfile);
+
+    private static ManifestEntry VIE(string slug, string input, string notes) =>
+        new(
+            slug,
+            input,
+            notes,
+            false,
+            ManifestTransform.None,
+            IncludeElements: true,
+            IncludeStructure: true,
+            IncludeV03Assertions: true,
+            PowerShellInitialStateMode:
+                PwshInitialStateMode.IsolatedNonInteractiveNoProfile);
+
     private static ManifestEntry A(string slug, string name, string input, string notes) =>
         new(
             slug,
@@ -86,6 +113,16 @@ internal static class CorpusManifest
 
     private static ManifestEntry Oos(string slug, string input, string notes) =>
         new(slug, input, notes, true, ManifestTransform.None);
+
+    private static ManifestEntry OosI(string slug, string input, string notes) =>
+        new(
+            slug,
+            input,
+            notes,
+            true,
+            ManifestTransform.None,
+            PowerShellInitialStateMode:
+                PwshInitialStateMode.IsolatedNonInteractiveNoProfile);
 
     private static ManifestEntry Enc(string slug, string decoded, string notes, bool oos = false) =>
         new(slug, decoded, notes, oos, ManifestTransform.EncodeCommand);
@@ -888,5 +925,71 @@ internal static class CorpusManifest
         Oos("v03_foreach_provider_qualified_iterator_mutation_gated",
             "foreach ($x in $(Set-Item 'Microsoft.PowerShell.Core\\Alias::wipe' Remove-Item; wipe victim)) { }",
             "Provider-qualified iterator mutation cannot publish a later alias invocation as complete."),
+        VI("v03_foreach_isolated_exact_scalar",
+            "foreach ($f in 'a.txt') { Remove-Item -LiteralPath $f }",
+            "The explicit constrained-host contract permits one exact loop binding proof."),
+        VI("v03_foreach_isolated_finite_array",
+            "foreach ($f in @('a.txt', 'b.txt', 'a.txt')) { Write-Output $F }",
+            "PowerShell variable lookup is case-insensitive and the public finite domain removes duplicates."),
+        VI("v03_foreach_isolated_nested_composition",
+            "foreach ($outer in 'left') { foreach ($inner in @('a','b')) { Write-Output \"$OUTER/$Inner\" } }",
+            "Distinct active bindings compose without evaluating PowerShell expressions."),
+        VI("v03_foreach_pipeline_objects_unknown",
+            "foreach ($f in Get-ChildItem C:\\input) { Write-Output $f }",
+            "Pipeline output remains an object domain and is never guessed into strings."),
+        VI("v03_foreach_candidate_overflow_unknown",
+            "foreach ($f in @('v01','v02','v03','v04','v05','v06','v07','v08','v09','v10','v11','v12','v13','v14','v15','v16','v17','v18','v19','v20','v21','v22','v23','v24','v25','v26','v27','v28','v29','v30','v31','v32','v33')) { Write-Output $f }",
+            "The candidate cap collapses atomically to Unknown and never truncates the set."),
+        OosI("v03_foreach_automatic_binding_gated",
+            "foreach ($HOME in @('x')) { Write-Output $HOME }",
+            "A fresh host still has built-in automatic and read-only variables."),
+        VI("v03_foreach_null_object_unknown",
+            "foreach ($f in @($null)) { Write-Output $f }",
+            "An array containing null visits once but proves no string value."),
+        VI("v03_foreach_ordered_persistent_binding",
+            "foreach ($f in @('a','b','a')) { Write-Output $f }; Write-Output $f",
+            "The internal visit plan retains a,b,a while the body exposes the distinct finite set and the current-scope continuation sees final a."),
+        VI("v03_foreach_empty_preserves_cwd",
+            "foreach ($f in @()) { Set-Location C:\\tmp }; Get-Location",
+            "The unreachable body stays visible and incomplete, performs no state transition, and cannot leak parser-time cwd attribution into the continuation."),
+        VI("v03_foreach_location_failure_join",
+            "foreach ($d in @('C:\\a', 'C:\\b')) { Set-Location $d }; Get-ChildItem file.txt",
+            "Every candidate is evaluated, but Set-Location failure and divergent successful targets force the body-input join and continuation cwd to Unknown."),
+        Oos("v03_foreach_transition_budget_gated",
+            "foreach ($a in @('a01','a02','a03','a04','a05','a06','a07','a08','a09','a10','a11','a12','a13','a14','a15','a16','a17')) { foreach ($b in @('b01','b02','b03','b04','b05','b06','b07','b08','b09','b10','b11','b12','b13','b14','b15','b16','b17')) { foreach ($c in @('c01','c02','c03','c04','c05','c06','c07','c08','c09','c10','c11','c12','c13','c14','c15')) { Write-Output \"$a$b$c\" } } }",
+            "The valid PowerShell source exceeds the shared 4096 loop-body transition budget and fails atomically without a partial authorization projection."),
+        VIE("v03_foreach_object_parallel_region",
+            "Get-ChildItem | ForEach-Object -Parallel { Remove-Item $_ }",
+            "Parallel exposes a concurrent child-runspace region while the pipeline object remains unresolved."),
+        VIE("v03_foreach_object_parallel_process_state_escape",
+            "1 | ForEach-Object -Parallel { Set-Item Env:SST_PARALLEL_PATH child }; Get-Item host.txt",
+            "A process-wide child provider mutation keeps every command visible and invalidates later host facts."),
+        VIE("v03_foreach_object_parallel_fresh_process_state_escape",
+            "1,2 | ForEach-Object -Parallel { git status; Set-Item Env:PATH child } -ThrottleLimit 1 -UseNewRunspace",
+            "Fresh child runspaces still join process-wide effects from earlier activations."),
+        VIE("v03_foreach_object_parallel_rebound_process_escape",
+            "1 | ForEach-Object -Parallel { Set-Alias sstSet Set-Item; sstSet Env:SST_PARALLEL_ALIAS_ESCAPE_91F62F1F child }; Get-Item host.txt",
+            "A child invocation reached after command-resolution mutation may hide a process-wide environment write."),
+        VIE("v03_foreach_object_parallel_runspace_global_isolated",
+            "1 | ForEach-Object -Parallel { Set-Variable sstChild child -Scope Global }; Get-Item host.txt",
+            "Runspace-global variable state remains isolated from the host process continuation."),
+        VIE("v03_foreach_object_parallel_rebound_mutator_escape",
+            "1 | ForEach-Object -Parallel { Set-Alias -Name Set-Alias -Value Set-Item; Set-Alias Env:SST_PARALLEL_REBOUND_MUTATOR_91F62F1F child } -UseNewRunspace; Get-Item host.txt",
+            "An exact alias mutation can rebind a later authored mutator into a process-wide provider write within the same fresh child runspace."),
+        VIE("v03_foreach_object_parallel_unrelated_rebinding_isolated",
+            "1 | ForEach-Object -Parallel { Set-Alias other Set-Item; Set-Alias untouched Write-Output }; Get-Item host.txt",
+            "Bounded exact-name tracking keeps unrelated runspace-local alias mutations from invalidating host process facts."),
+        VIE("v03_foreach_object_parallel_function_provider_escape",
+            "1 | ForEach-Object -Parallel { Set-Item Function:global:sstProviderSet { Set-Item @args }; sstProviderSet Env:SST_PARALLEL_FUNCTION_ESCAPE_91F62F1F child }; Get-Item host.txt",
+            "Function-provider scope syntax is normalized to the callable name before checking whether a later child invocation can write process-wide state."),
+        VIE("v03_foreach_object_parallel_double_colon_alias_escape",
+            "1 | ForEach-Object -Parallel { Set-Item Alias::sstDoubleAlias Set-Item; sstDoubleAlias Env:SST_PARALLEL_DOUBLE_ALIAS_91F62F1F child }; Get-Item host.txt",
+            "The provider-qualified double-colon spelling mutates the unprefixed alias name and can hide a process-wide child write."),
+        VIE("v03_foreach_object_parallel_double_colon_function_escape",
+            "1 | ForEach-Object -Parallel { Set-Item Function::sstDoubleFunction { Set-Item @args }; sstDoubleFunction Env:SST_PARALLEL_DOUBLE_FUNCTION_91F62F1F child }; Get-Item host.txt",
+            "The provider-qualified double-colon spelling mutates the unprefixed function name and can hide a process-wide child write."),
+        VIE("v03_foreach_object_parallel_provider_name_colon_precision",
+            "1 | ForEach-Object -Parallel { Set-Item Alias:::sstProviderSet Set-Item; sstProviderSet Env:SST_PARALLEL_PROVIDER_COLON_91F62F1F child }; Get-Item host.txt",
+            "Only the provider-qualification colon is removed; an additional authored colon remains part of the alias name and does not taint the unprefixed invocation."),
     };
 }

@@ -1,17 +1,87 @@
 {
   "name": "V03 foreach isolated finite array",
-  "input": "foreach ($f in @('a.txt', 'b.txt', 'a.txt')) { Write-Output $F }",
+  "input": "foreach ($f in @(\u0027a.txt\u0027, \u0027b.txt\u0027, \u0027a.txt\u0027)) { Write-Output $F }",
   "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["Write-Output"],
+        "verb": [
+          "Write-Output"
+        ],
         "args": [
-          { "raw": "$F", "kind": "EnvVar", "isPath": false }
+          {
+            "raw": "$F",
+            "kind": "EnvVar",
+            "isPath": false
+          }
         ],
         "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 64,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 64,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "f",
+        "bindingRaw": "$f",
+        "bindingSourceStart": 9,
+        "bindingSourceLength": 2,
+        "iterableRaw": "@(\u0027a.txt\u0027, \u0027b.txt\u0027, \u0027a.txt\u0027)",
+        "iterableSourceStart": 15,
+        "iterableSourceLength": 28
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 15,
+        "sourceLength": 28,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 46,
+        "sourceLength": 17,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 47,
+        "sourceLength": 15,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
       }
     ],
     "commands": [
@@ -20,19 +90,50 @@
         "immediateRole": "LoopBody",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 64 },
-          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 64 },
-          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 46, "sourceLength": 17 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 64
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 64
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 46,
+            "sourceLength": 17
+          }
         ],
         "effectiveArguments": [
           {
             "clauseElementIndex": 1,
             "value": {
               "kind": "FiniteSet",
-              "values": ["a.txt", "b.txt"]
+              "values": [
+                "a.txt",
+                "b.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
             }
           }
-        ]
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       }
     ]
   },

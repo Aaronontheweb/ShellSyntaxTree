@@ -1,17 +1,127 @@
 {
   "name": "V03 foreach isolated nested composition",
-  "input": "foreach ($outer in 'left') { foreach ($inner in @('a','b')) { Write-Output \"$OUTER/$Inner\" } }",
+  "input": "foreach ($outer in \u0027left\u0027) { foreach ($inner in @(\u0027a\u0027,\u0027b\u0027)) { Write-Output \u0022$OUTER/$Inner\u0022 } }",
   "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["Write-Output"],
+        "verb": [
+          "Write-Output"
+        ],
         "args": [
-          { "raw": "\"$OUTER/$Inner\"", "kind": "DynamicSkip", "isPath": false }
+          {
+            "raw": "\u0022$OUTER/$Inner\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
         ],
         "redirects": []
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 94,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 94,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "outer",
+        "bindingRaw": "$outer",
+        "bindingSourceStart": 9,
+        "bindingSourceLength": 6,
+        "iterableRaw": "\u0027left\u0027",
+        "iterableSourceStart": 19,
+        "iterableSourceLength": 6
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 19,
+        "sourceLength": 6,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 28,
+        "sourceLength": 65,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 29,
+        "sourceLength": 63,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "inner",
+        "bindingRaw": "$inner",
+        "bindingSourceStart": 38,
+        "bindingSourceLength": 6,
+        "iterableRaw": "@(\u0027a\u0027,\u0027b\u0027)",
+        "iterableSourceStart": 48,
+        "iterableSourceLength": 10
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 4,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 48,
+        "sourceLength": 10,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 4,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 61,
+        "sourceLength": 30,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 6,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 62,
+        "sourceLength": 28,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
       }
     ],
     "commands": [
@@ -20,21 +130,64 @@
         "immediateRole": "LoopBody",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 94 },
-          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 94 },
-          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 28, "sourceLength": 65 },
-          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 29, "sourceLength": 63 },
-          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 61, "sourceLength": 30 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 94
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 94
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 28,
+            "sourceLength": 65
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 29,
+            "sourceLength": 63
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 61,
+            "sourceLength": 30
+          }
         ],
         "effectiveArguments": [
           {
             "clauseElementIndex": 1,
             "value": {
               "kind": "FiniteSet",
-              "values": ["left/a", "left/b"]
+              "values": [
+                "left/a",
+                "left/b"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
             }
           }
-        ]
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       }
     ]
   },

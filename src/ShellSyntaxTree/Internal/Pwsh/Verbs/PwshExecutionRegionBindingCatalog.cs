@@ -94,6 +94,8 @@ internal sealed record PwshExecutionRegionBindingResult
 
     internal bool HasNoNewScope { get; init; }
 
+    internal bool HasUseNewRunspace { get; init; }
+
     internal int? WorkingDirectoryElementIndex { get; init; }
 
     internal int WorkingDirectoryValueOffset { get; init; }
@@ -453,6 +455,8 @@ internal static class PwshExecutionRegionBindingCatalog
             HasExplicitInputObject = arguments.HasNamed("InputObject"),
             HasNoNewScope = receiver == PwshExecutionRegionReceiver.InvokeCommand &&
                 arguments.IsSwitchEnabled("NoNewScope"),
+            HasUseNewRunspace = receiver == PwshExecutionRegionReceiver.ForEachObject &&
+                arguments.IsSwitchEnabled("UseNewRunspace"),
             WorkingDirectoryElementIndex = receiver == PwshExecutionRegionReceiver.StartJob
                 ? arguments.FirstNamedArgumentElementIndex("WorkingDirectory")
                 : null,

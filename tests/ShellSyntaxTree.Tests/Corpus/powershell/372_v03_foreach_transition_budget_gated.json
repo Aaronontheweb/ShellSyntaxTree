@@ -1,10 +1,10 @@
 {
   "name": "V03 foreach transition budget gated",
-  "input": "foreach ($a in @('a01','a02','a03','a04','a05','a06','a07','a08','a09','a10','a11','a12','a13','a14','a15','a16','a17')) { foreach ($b in @('b01','b02','b03','b04','b05','b06','b07','b08','b09','b10','b11','b12','b13','b14','b15','b16','b17')) { foreach ($c in @('c01','c02','c03','c04','c05','c06','c07','c08','c09','c10','c11','c12','c13','c14','c15')) { Write-Output \"$a$b$c\" } } }",
+  "input": "foreach ($a in @(\u0027a01\u0027,\u0027a02\u0027,\u0027a03\u0027,\u0027a04\u0027,\u0027a05\u0027,\u0027a06\u0027,\u0027a07\u0027,\u0027a08\u0027,\u0027a09\u0027,\u0027a10\u0027,\u0027a11\u0027,\u0027a12\u0027,\u0027a13\u0027,\u0027a14\u0027,\u0027a15\u0027,\u0027a16\u0027,\u0027a17\u0027)) { foreach ($b in @(\u0027b01\u0027,\u0027b02\u0027,\u0027b03\u0027,\u0027b04\u0027,\u0027b05\u0027,\u0027b06\u0027,\u0027b07\u0027,\u0027b08\u0027,\u0027b09\u0027,\u0027b10\u0027,\u0027b11\u0027,\u0027b12\u0027,\u0027b13\u0027,\u0027b14\u0027,\u0027b15\u0027,\u0027b16\u0027,\u0027b17\u0027)) { foreach ($c in @(\u0027c01\u0027,\u0027c02\u0027,\u0027c03\u0027,\u0027c04\u0027,\u0027c05\u0027,\u0027c06\u0027,\u0027c07\u0027,\u0027c08\u0027,\u0027c09\u0027,\u0027c10\u0027,\u0027c11\u0027,\u0027c12\u0027,\u0027c13\u0027,\u0027c14\u0027,\u0027c15\u0027)) { Write-Output \u0022$a$b$c\u0022 } } }",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "exceeded limits"
+    "unparseableReasonContains": "PowerShell structural syntax exceeded limits or contained invalid parser-owned facts"
   },
-  "oracleExpectation": "OutOfScope",
-  "notes": "The valid PowerShell source exceeds the shared 4096 loop-body transition budget and fails atomically without a partial authorization projection."
+  "notes": "The valid PowerShell source exceeds the shared 4096 loop-body transition budget and fails atomically without a partial authorization projection.",
+  "oracleExpectation": "OutOfScope"
 }

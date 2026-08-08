@@ -486,6 +486,581 @@ internal static class PwshPersistentStateMutation
         return !hasLocalProviderTarget;
     }
 
+    internal static bool MayEscapeChildRunspaceProcess(
+        Clause clause,
+        IReadOnlyList<EffectiveArgument> effectiveArguments)
+    {
+        var verb = GetCanonicalVerb(clause);
+        if (verb is null)
+        {
+            return true;
+        }
+
+        if (IsInvokeExpression(verb) ||
+            verb.Equals("Import-Module", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("New-Module", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Import-PSSession", StringComparison.OrdinalIgnoreCase))
+        {
+            // These commands can execute module or expression code in-process.
+            return true;
+        }
+
+        return IsProviderStateMutation(
+                verb,
+                clause,
+                effectiveArguments,
+                failOnUnproved: true) &&
+            HasMutableOrUnprovedProviderTarget(
+                verb,
+                clause,
+                effectiveArguments,
+                failOnUnproved: true,
+                selection: StateProviderSelection.Environment);
+    }
+
+    internal static bool TryGetCommandResolutionMutation(
+        Clause clause,
+        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        out bool invalidatesAll,
+        out IReadOnlyList<string> commandNames)
+    {
+        invalidatesAll = false;
+        commandNames = Array.Empty<string>();
+        var verb = GetCanonicalVerb(clause);
+        if (verb is null)
+        {
+            invalidatesAll = true;
+            return true;
+        }
+
+        if (IsInvokeExpression(verb) ||
+            verb.Equals("Import-Alias", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Import-Module", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("New-Module", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Remove-Module", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Import-PSSession", StringComparison.OrdinalIgnoreCase))
+        {
+            invalidatesAll = true;
+            return true;
+        }
+
+        if (verb.Equals("Set-Alias", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("New-Alias", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Remove-Alias", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TryGetAliasMutationNames(
+                    verb,
+                    clause,
+                    effectiveArguments,
+                    out commandNames))
+            {
+                invalidatesAll = true;
+            }
+
+            return true;
+        }
+
+        if (!IsProviderStateMutation(
+                verb,
+                clause,
+                effectiveArguments,
+                failOnUnproved: true))
+        {
+            return false;
+        }
+
+        if (verb.Equals("Rename-Item", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Move-Item", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Copy-Item", StringComparison.OrdinalIgnoreCase))
+        {
+            if (HasMutableOrUnprovedProviderTarget(
+                    verb,
+                    clause,
+                    effectiveArguments,
+                    failOnUnproved: true,
+                    selection: StateProviderSelection.CommandResolution))
+            {
+                // Both the source and destination can affect command lookup.
+                invalidatesAll = true;
+                return true;
+            }
+
+            return false;
+        }
+
+        return TryGetProviderMutationNames(
+            verb,
+            clause,
+            effectiveArguments,
+            out invalidatesAll,
+            out commandNames);
+    }
+
+    private static bool TryGetAliasMutationNames(
+        string verb,
+        Clause clause,
+        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        out IReadOnlyList<string> commandNames)
+    {
+        var names = new List<string>();
+        var positionalIndex = 0;
+        var pendingParameter = AliasParameterRole.None;
+        foreach (var elementWithIndex in EnumerateArguments(clause))
+        {
+            var element = elementWithIndex.Element;
+            var elementIndex = elementWithIndex.Index;
+            if (IsOpaqueSplat(element))
+            {
+                commandNames = Array.Empty<string>();
+                return false;
+            }
+
+            if (element.IsFlag)
+            {
+                if (!TryGetParameterName(element, out var parameter))
+                {
+                    commandNames = Array.Empty<string>();
+                    return false;
+                }
+
+                pendingParameter = ClassifyAliasParameter(parameter);
+                var separator = FindParameterValueSeparator(element.Value);
+                if (separator >= 0)
+                {
+                    if (pendingParameter == AliasParameterRole.Name &&
+                        !TryAddInlineAliasCommandNames(
+                            element,
+                            elementIndex,
+                            separator,
+                            effectiveArguments,
+                            names))
+                    {
+                        commandNames = Array.Empty<string>();
+                        return false;
+                    }
+
+                    pendingParameter = AliasParameterRole.None;
+                }
+
+                continue;
+            }
+
+            var selectsName = pendingParameter == AliasParameterRole.Name ||
+                pendingParameter == AliasParameterRole.None &&
+                (positionalIndex == 0 ||
+                 verb.Equals("Remove-Alias", StringComparison.OrdinalIgnoreCase));
+            if (pendingParameter == AliasParameterRole.Unknown ||
+                selectsName && !TryAddCommandNames(
+                    element,
+                    elementIndex,
+                    effectiveArguments,
+                    names))
+            {
+                commandNames = Array.Empty<string>();
+                return false;
+            }
+
+            if (pendingParameter == AliasParameterRole.None)
+            {
+                positionalIndex++;
+            }
+
+            pendingParameter = AliasParameterRole.None;
+        }
+
+        if (pendingParameter is AliasParameterRole.Name or AliasParameterRole.Unknown ||
+            names.Count == 0)
+        {
+            commandNames = Array.Empty<string>();
+            return false;
+        }
+
+        commandNames = names.ToArray();
+        return true;
+    }
+
+    private static bool TryAddInlineAliasCommandNames(
+        ClauseElement element,
+        int elementIndex,
+        int separator,
+        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        List<string> names)
+    {
+        if (element.Kind is not (ArgKind.DynamicSkip or ArgKind.EnvVar))
+        {
+            return TryAddCommandName(
+                element.Value.Substring(separator + 1),
+                names);
+        }
+
+        if (!TryGetExactElementValues(
+                element,
+                elementIndex,
+                effectiveArguments,
+                out var values))
+        {
+            return false;
+        }
+
+        foreach (var value in values)
+        {
+            var valueSeparator = FindParameterValueSeparator(value);
+            var commandName = valueSeparator >= 0
+                ? value.Substring(valueSeparator + 1)
+                : value;
+            if (!TryAddCommandName(commandName, names))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryGetProviderMutationNames(
+        string verb,
+        Clause clause,
+        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        out bool invalidatesAll,
+        out IReadOnlyList<string> commandNames)
+    {
+        invalidatesAll = false;
+        var names = new List<string>();
+        var positionalIndex = 0;
+        var pendingParameter = ProviderParameterRole.None;
+        foreach (var elementWithIndex in EnumerateArguments(clause))
+        {
+            var element = elementWithIndex.Element;
+            var elementIndex = elementWithIndex.Index;
+            if (IsOpaqueSplat(element))
+            {
+                invalidatesAll = true;
+                commandNames = Array.Empty<string>();
+                return true;
+            }
+
+            if (element.IsFlag)
+            {
+                var separator = element.Value.IndexOf(':');
+                var parameter = separator < 0
+                    ? element.Value
+                    : element.Value.Substring(0, separator);
+                pendingParameter = ClassifyProviderParameter(parameter);
+                if (separator >= 0)
+                {
+                    if (CanSelectProvider(pendingParameter) &&
+                        !TryAddProviderCommandNames(
+                            element,
+                            elementIndex,
+                            effectiveArguments,
+                            names,
+                            out _))
+                    {
+                        invalidatesAll = true;
+                        commandNames = Array.Empty<string>();
+                        return true;
+                    }
+
+                    pendingParameter = ProviderParameterRole.None;
+                }
+
+                continue;
+            }
+
+            var couldSelectProvider = CanSelectProvider(pendingParameter) ||
+                pendingParameter == ProviderParameterRole.None &&
+                IsProviderTargetPosition(verb, positionalIndex);
+            if (couldSelectProvider &&
+                !TryAddProviderCommandNames(
+                    element,
+                    elementIndex,
+                    effectiveArguments,
+                    names,
+                    out _))
+            {
+                invalidatesAll = true;
+                commandNames = Array.Empty<string>();
+                return true;
+            }
+
+            if (pendingParameter == ProviderParameterRole.None)
+            {
+                positionalIndex++;
+            }
+
+            pendingParameter = ProviderParameterRole.None;
+        }
+
+        if (CanSelectProvider(pendingParameter))
+        {
+            invalidatesAll = true;
+            commandNames = Array.Empty<string>();
+            return true;
+        }
+
+        commandNames = names.ToArray();
+        return names.Count > 0;
+    }
+
+    private static bool TryAddProviderCommandNames(
+        ClauseElement element,
+        int elementIndex,
+        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        List<string> names,
+        out bool selectedCommandProvider)
+    {
+        selectedCommandProvider = false;
+        if (!TryGetExactElementValues(
+                element,
+                elementIndex,
+                effectiveArguments,
+                out var values))
+        {
+            return false;
+        }
+
+        foreach (var value in values)
+        {
+            if (!TryGetCommandNameFromProviderPath(value, out var commandName))
+            {
+                continue;
+            }
+
+            selectedCommandProvider = true;
+            if (!TryAddCommandName(commandName, names))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryAddCommandNames(
+        ClauseElement element,
+        int elementIndex,
+        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        List<string> names)
+    {
+        if (!TryGetExactElementValues(
+                element,
+                elementIndex,
+                effectiveArguments,
+                out var values))
+        {
+            return false;
+        }
+
+        foreach (var value in values)
+        {
+            if (!TryAddCommandName(value, names))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool TryGetExactElementValues(
+        ClauseElement element,
+        int elementIndex,
+        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        out IReadOnlyList<string> values)
+    {
+        foreach (var effective in effectiveArguments)
+        {
+            if (effective.ClauseElementIndex != elementIndex)
+            {
+                continue;
+            }
+
+            if (effective.Value.Kind is not (
+                    ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet) ||
+                effective.Value.Values.Count == 0)
+            {
+                values = Array.Empty<string>();
+                return false;
+            }
+
+            values = effective.Value.Values;
+            return true;
+        }
+
+        if (element.Kind is ArgKind.DynamicSkip or ArgKind.EnvVar)
+        {
+            values = Array.Empty<string>();
+            return false;
+        }
+
+        values = new[] { element.Value };
+        return true;
+    }
+
+    private static bool TryAddCommandName(string value, List<string> names)
+    {
+        value = TrimMatchingQuotes(value);
+        if (value.Length == 0 ||
+            value.IndexOfAny(new[] { '*', '?', '[', ']', ',', '/', '\\' }) >= 0)
+        {
+            return false;
+        }
+
+        foreach (var existing in names)
+        {
+            if (existing.Equals(value, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        if (names.Count == ShellAnalysisLimits.MaxValueCandidates)
+        {
+            return false;
+        }
+
+        names.Add(value);
+        return true;
+    }
+
+    private static bool TryGetCommandNameFromProviderPath(
+        string value,
+        out string commandName)
+    {
+        value = TrimMatchingQuotes(value);
+        if (value.Length > 1 && value[0] == '-')
+        {
+            var separator = FindParameterValueSeparator(value);
+            if (separator < 0 || separator + 1 == value.Length)
+            {
+                commandName = string.Empty;
+                return false;
+            }
+
+            value = TrimMatchingQuotes(value.Substring(separator + 1));
+        }
+
+        var providerPath = value;
+        if (!HasCommandResolutionStateProviderPrefix(providerPath))
+        {
+            var providerStart = Math.Max(
+                value.LastIndexOf('\\'),
+                value.LastIndexOf('/')) + 1;
+            providerPath = value.Substring(providerStart);
+        }
+
+        var isFunction = providerPath.StartsWith(
+            "Function:",
+            StringComparison.OrdinalIgnoreCase);
+        var prefixLength = providerPath.StartsWith(
+            "Alias:",
+            StringComparison.OrdinalIgnoreCase)
+                ? "Alias:".Length
+                : isFunction
+                    ? "Function:".Length
+                    : 0;
+        if (prefixLength == 0 || prefixLength == providerPath.Length)
+        {
+            commandName = string.Empty;
+            return false;
+        }
+
+        commandName = providerPath.Substring(prefixLength);
+        if (commandName.Length > 0 && commandName[0] == ':')
+        {
+            // PowerShell accepts Provider::name as the provider-qualified form.
+            // Additional colons belong to the authored command name.
+            commandName = commandName.Substring(1);
+        }
+
+        commandName = commandName.TrimStart('/', '\\');
+        if (isFunction)
+        {
+            commandName = TrimFunctionScope(commandName);
+        }
+
+        return true;
+    }
+
+    private static string TrimFunctionScope(string commandName)
+    {
+        var separator = commandName.IndexOf(':');
+        if (separator <= 0)
+        {
+            return commandName;
+        }
+
+        var scope = commandName.Substring(0, separator);
+        return scope.Equals("Global", StringComparison.OrdinalIgnoreCase) ||
+            scope.Equals("Script", StringComparison.OrdinalIgnoreCase) ||
+            scope.Equals("Local", StringComparison.OrdinalIgnoreCase) ||
+            scope.Equals("Private", StringComparison.OrdinalIgnoreCase)
+                ? commandName.Substring(separator + 1)
+                : commandName;
+    }
+
+    private static int FindParameterValueSeparator(string value)
+    {
+        var colon = value.IndexOf(':', 1);
+        var equals = value.IndexOf('=', 1);
+        if (colon < 0)
+        {
+            return equals;
+        }
+
+        return equals < 0 ? colon : Math.Min(colon, equals);
+    }
+
+    private static AliasParameterRole ClassifyAliasParameter(string parameter)
+    {
+        if (IsAcceptedPrefix(parameter, "Name", minimumLength: 1))
+        {
+            return AliasParameterRole.Name;
+        }
+
+        if (IsAcceptedPrefix(parameter, "Value", minimumLength: 1) ||
+            IsAcceptedPrefix(parameter, "Description", minimumLength: 1) ||
+            IsAcceptedPrefix(parameter, "Option", minimumLength: 1) ||
+            IsAcceptedPrefix(parameter, "Scope", minimumLength: 1) ||
+            parameter.Equals("ErrorAction", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("ErrorVariable", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("InformationAction", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("InformationVariable", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("OutBuffer", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("OutVariable", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("PipelineVariable", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("ProgressAction", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("WarningAction", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("WarningVariable", StringComparison.OrdinalIgnoreCase))
+        {
+            return AliasParameterRole.NonName;
+        }
+
+        if (parameter.Equals("Force", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("PassThru", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("WhatIf", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("Confirm", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("Verbose", StringComparison.OrdinalIgnoreCase) ||
+            parameter.Equals("Debug", StringComparison.OrdinalIgnoreCase))
+        {
+            return AliasParameterRole.None;
+        }
+
+        return AliasParameterRole.Unknown;
+    }
+
+    private static IEnumerable<(ClauseElement Element, int Index)> EnumerateArguments(
+        Clause clause)
+    {
+        for (var index = 0; index < clause.Elements.Count; index++)
+        {
+            if (clause.Elements[index].Role == ClauseElementRole.Argument)
+            {
+                yield return (clause.Elements[index], index);
+            }
+        }
+    }
+
     internal static bool HasVariableWritingArgument(Clause clause)
     {
         var verb = GetCanonicalVerb(clause);
@@ -783,7 +1358,8 @@ internal static class PwshPersistentStateMutation
         string verb,
         Clause clause,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
-        bool failOnUnproved)
+        bool failOnUnproved,
+        StateProviderSelection selection = StateProviderSelection.AnyMutable)
     {
         var positionalIndex = 0;
         var pendingParameter = ProviderParameterRole.None;
@@ -809,7 +1385,8 @@ internal static class PwshPersistentStateMutation
                             element,
                             elementIndex,
                             effectiveArguments,
-                            failOnUnproved))
+                            failOnUnproved,
+                            selection))
                     {
                         return true;
                     }
@@ -828,7 +1405,8 @@ internal static class PwshPersistentStateMutation
                     element,
                     elementIndex,
                     effectiveArguments,
-                    failOnUnproved))
+                    failOnUnproved,
+                    selection))
             {
                 return true;
             }
@@ -851,12 +1429,13 @@ internal static class PwshPersistentStateMutation
         ClauseElement element,
         int elementIndex,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
-        bool failOnUnproved)
+        bool failOnUnproved,
+        StateProviderSelection selection)
     {
-        if (IsMutableStateProviderPath(element.Value) ||
-            IsMutableStateProviderPath(element.Raw) ||
+        if (IsSelectedStateProviderPath(element.Value, selection) ||
+            IsSelectedStateProviderPath(element.Raw, selection) ||
             element.Resolved is not null &&
-            IsMutableStateProviderPath(element.Resolved))
+            IsSelectedStateProviderPath(element.Resolved, selection))
         {
             return true;
         }
@@ -882,7 +1461,7 @@ internal static class PwshPersistentStateMutation
 
             foreach (var value in effective.Value.Values)
             {
-                if (IsMutableStateProviderPath(value))
+                if (IsSelectedStateProviderPath(value, selection))
                 {
                     return true;
                 }
@@ -893,6 +1472,17 @@ internal static class PwshPersistentStateMutation
 
         return true;
     }
+
+    private static bool IsSelectedStateProviderPath(
+        string value,
+        StateProviderSelection selection) => selection switch
+        {
+            StateProviderSelection.Environment =>
+                IsEnvironmentStateProviderPath(value),
+            StateProviderSelection.CommandResolution =>
+                IsCommandResolutionStateProviderPath(value),
+            _ => IsMutableStateProviderPath(value),
+        };
 
     private static ProviderParameterRole ClassifyProviderParameter(string parameter)
     {
@@ -972,6 +1562,72 @@ internal static class PwshPersistentStateMutation
             providerPath.StartsWith("Environment:", StringComparison.OrdinalIgnoreCase) ||
             providerPath.StartsWith("Env:", StringComparison.OrdinalIgnoreCase);
 
+    private static bool IsEnvironmentStateProviderPath(string value)
+    {
+        value = TrimMatchingQuotes(value);
+        if (HasEnvironmentStateProviderPrefix(value))
+        {
+            return true;
+        }
+
+        if (value.Length > 1 && value[0] == '-')
+        {
+            var parameterSeparator = value.IndexOf(':');
+            if (parameterSeparator > 1 && parameterSeparator + 1 < value.Length)
+            {
+                var inlineValue = TrimMatchingQuotes(
+                    value.Substring(parameterSeparator + 1));
+                if (HasEnvironmentStateProviderPrefix(inlineValue))
+                {
+                    return true;
+                }
+            }
+        }
+
+        var providerStart = Math.Max(
+            value.LastIndexOf('\\'),
+            value.LastIndexOf('/')) + 1;
+        return providerStart > 0 &&
+            HasEnvironmentStateProviderPrefix(value.Substring(providerStart));
+    }
+
+    private static bool HasEnvironmentStateProviderPrefix(string providerPath) =>
+        providerPath.StartsWith("Environment:", StringComparison.OrdinalIgnoreCase) ||
+        providerPath.StartsWith("Env:", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCommandResolutionStateProviderPath(string value)
+    {
+        value = TrimMatchingQuotes(value);
+        if (HasCommandResolutionStateProviderPrefix(value))
+        {
+            return true;
+        }
+
+        if (value.Length > 1 && value[0] == '-')
+        {
+            var parameterSeparator = value.IndexOf(':');
+            if (parameterSeparator > 1 && parameterSeparator + 1 < value.Length)
+            {
+                var inlineValue = TrimMatchingQuotes(
+                    value.Substring(parameterSeparator + 1));
+                if (HasCommandResolutionStateProviderPrefix(inlineValue))
+                {
+                    return true;
+                }
+            }
+        }
+
+        var providerStart = Math.Max(
+            value.LastIndexOf('\\'),
+            value.LastIndexOf('/')) + 1;
+        return providerStart > 0 &&
+            HasCommandResolutionStateProviderPrefix(value.Substring(providerStart));
+    }
+
+    private static bool HasCommandResolutionStateProviderPrefix(string providerPath) =>
+        providerPath.StartsWith("Alias:", StringComparison.OrdinalIgnoreCase) ||
+        providerPath.StartsWith("Function:", StringComparison.OrdinalIgnoreCase);
+
     private static string TrimMatchingQuotes(string value) =>
         value.Length >= 2 &&
         value[0] is '\'' or '"' &&
@@ -985,6 +1641,21 @@ internal static class PwshPersistentStateMutation
         Target,
         NonTarget,
         Unknown,
+    }
+
+    private enum AliasParameterRole
+    {
+        None,
+        Name,
+        NonName,
+        Unknown,
+    }
+
+    private enum StateProviderSelection
+    {
+        AnyMutable,
+        Environment,
+        CommandResolution,
     }
 }
 
@@ -1006,6 +1677,7 @@ internal sealed class PwshForEachValueAnalyzer
     private long _nonRegionStateMutationCount;
     private long _locationStateMutationCount;
     private long _childScopeEscapeRiskCount;
+    private long _childRunspaceProcessEscapeRiskCount;
     private bool _pipelineStageMayReceiveInput;
     private bool _pipelineStageEffectsMayReachRegionBodies;
 
@@ -1043,6 +1715,9 @@ internal sealed class PwshForEachValueAnalyzer
                 canPromote: options.InitialStateMode ==
                     PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
                 commandResolutionInvalidated: false,
+                allRunspaceCommandResolutionMayReachProcessMutation: false,
+                Array.Empty<string>(),
+                processWideStateInvalidated: false,
                 new List<BindingFrame>()));
         if (!analyzer._isComplete)
         {
@@ -1130,6 +1805,21 @@ internal sealed class PwshForEachValueAnalyzer
             isForEachIncomplete,
             mayPromote);
 
+        var hasCommandResolutionMutation =
+            PwshPersistentStateMutation.TryGetCommandResolutionMutation(
+                simple.Clause,
+                effective,
+                out var invalidatesAllCommandNames,
+                out var mutatedCommandNames);
+        if (simple.Clause.Verb.IsDynamic ||
+            current.MayResolveCommandToProcessMutation(simple.Clause) &&
+            !IsCommandIdentityProven(simple.Clause, current))
+        {
+            // An invocation reached after alias/function/module mutation can be
+            // any in-process command, including one that writes Env: state.
+            _childRunspaceProcessEscapeRiskCount++;
+        }
+
         var location = AnalyzeSetLocation(simple, current);
         if (location is not null)
         {
@@ -1140,6 +1830,10 @@ internal sealed class PwshForEachValueAnalyzer
                     effective,
                     out var locationEffectUnknownCwd))
             {
+                var mayEscapeChildRunspaceProcess =
+                    PwshPersistentStateMutation.MayEscapeChildRunspaceProcess(
+                        simple.Clause,
+                        effective);
                 if (PwshPersistentStateMutation.MayEscapeChildScope(
                         simple.Clause,
                         effective))
@@ -1147,13 +1841,30 @@ internal sealed class PwshForEachValueAnalyzer
                     _childScopeEscapeRiskCount++;
                 }
 
+                if (mayEscapeChildRunspaceProcess)
+                {
+                    _childRunspaceProcessEscapeRiskCount++;
+                }
+
                 var flow = location.Value;
                 return ApplyExecutionRegionEffect(simple, current, new PwshFlowResult(
                     flow.OnSuccess is AnalysisContext success
-                        ? success.Invalidate(locationEffectUnknownCwd)
+                        ? ApplyPersistentStateInvalidation(
+                            success,
+                            locationEffectUnknownCwd,
+                            hasCommandResolutionMutation,
+                            invalidatesAllCommandNames,
+                            mutatedCommandNames,
+                            mayEscapeChildRunspaceProcess)
                         : null,
                     flow.OnFailure is AnalysisContext failure
-                        ? failure.Invalidate(locationEffectUnknownCwd)
+                        ? ApplyPersistentStateInvalidation(
+                            failure,
+                            locationEffectUnknownCwd,
+                            hasCommandResolutionMutation,
+                            invalidatesAllCommandNames,
+                            mutatedCommandNames,
+                            mayEscapeChildRunspaceProcess)
                         : null));
             }
 
@@ -1164,10 +1875,15 @@ internal sealed class PwshForEachValueAnalyzer
         {
             _nonRegionStateMutationCount++;
             _childScopeEscapeRiskCount++;
+            _childRunspaceProcessEscapeRiskCount++;
             return ApplyExecutionRegionEffect(
                 simple,
                 current,
-                PwshFlowResult.Both(current.Invalidate(unknownCwd: true)));
+                PwshFlowResult.Both(
+                    current
+                        .Invalidate(unknownCwd: true)
+                        .WithRunspaceCommandResolutionProcessRisk()
+                        .WithProcessWideStateInvalidated()));
         }
 
         if (PwshPersistentStateMutation.TryGetEffect(
@@ -1176,6 +1892,10 @@ internal sealed class PwshForEachValueAnalyzer
                 out var unknownCwd))
         {
             _nonRegionStateMutationCount++;
+            var mayEscapeChildRunspaceProcess =
+                PwshPersistentStateMutation.MayEscapeChildRunspaceProcess(
+                    simple.Clause,
+                    effective);
             if (PwshPersistentStateMutation.MayEscapeChildScope(
                     simple.Clause,
                     effective))
@@ -1183,13 +1903,45 @@ internal sealed class PwshForEachValueAnalyzer
                 _childScopeEscapeRiskCount++;
             }
 
+            if (mayEscapeChildRunspaceProcess)
+            {
+                _childRunspaceProcessEscapeRiskCount++;
+            }
+
             return ApplyExecutionRegionEffect(
                 simple,
                 current,
-                PwshFlowResult.Both(current.Invalidate(unknownCwd)));
+                PwshFlowResult.Both(ApplyPersistentStateInvalidation(
+                    current,
+                    unknownCwd,
+                    hasCommandResolutionMutation,
+                    invalidatesAllCommandNames,
+                    mutatedCommandNames,
+                    mayEscapeChildRunspaceProcess)));
         }
 
         return ApplyExecutionRegionEffect(simple, current, PwshFlowResult.Both(current));
+    }
+
+    private static AnalysisContext ApplyPersistentStateInvalidation(
+        AnalysisContext input,
+        bool unknownCwd,
+        bool hasCommandResolutionMutation,
+        bool invalidatesAllCommandNames,
+        IReadOnlyList<string> mutatedCommandNames,
+        bool mayEscapeChildRunspaceProcess)
+    {
+        var invalidated = input.Invalidate(unknownCwd);
+        if (hasCommandResolutionMutation)
+        {
+            invalidated = invalidated.WithRunspaceCommandResolutionProcessRisk(
+                invalidatesAllCommandNames,
+                mutatedCommandNames);
+        }
+
+        return mayEscapeChildRunspaceProcess
+            ? invalidated.WithProcessWideStateInvalidated()
+            : invalidated;
     }
 
     private PwshFlowResult ApplyExecutionRegionEffect(
@@ -1245,6 +1997,15 @@ internal sealed class PwshForEachValueAnalyzer
                 binding,
                 regions,
                 regionInput,
+                flow);
+        }
+
+        if (binding.ParameterSet == PwshExecutionRegionParameterSet.ForEachParallel)
+        {
+            return AnalyzeForEachParallel(
+                binding,
+                regions,
+                receiverInput,
                 flow);
         }
 
@@ -1330,6 +2091,8 @@ internal sealed class PwshForEachValueAnalyzer
         var nonRegionStateMutationCount = _nonRegionStateMutationCount;
         var locationStateMutationCount = _locationStateMutationCount;
         var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
+        var childRunspaceProcessEscapeRiskCount =
+            _childRunspaceProcessEscapeRiskCount;
         try
         {
             var child = CreateStartJobInput(simple, binding, receiverInput);
@@ -1352,9 +2115,89 @@ internal sealed class PwshForEachValueAnalyzer
             _nonRegionStateMutationCount = nonRegionStateMutationCount;
             _locationStateMutationCount = locationStateMutationCount;
             _childScopeEscapeRiskCount = childScopeEscapeRiskCount;
+            _childRunspaceProcessEscapeRiskCount =
+                childRunspaceProcessEscapeRiskCount;
         }
 
         return hostFlow;
+    }
+
+    private PwshFlowResult AnalyzeForEachParallel(
+        PwshExecutionRegionBindingResult binding,
+        IReadOnlyList<ExecutionRegionSyntax> regions,
+        AnalysisContext receiverInput,
+        PwshFlowResult hostFlow)
+    {
+        var executionRegionEffectCount = _executionRegionEffectCount;
+        var nonRegionStateMutationCount = _nonRegionStateMutationCount;
+        var locationStateMutationCount = _locationStateMutationCount;
+        var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
+        var childRunspaceProcessEscapeRiskCount =
+            _childRunspaceProcessEscapeRiskCount;
+        var childRunspaceProcessMayEscape = false;
+        try
+        {
+            var childInput = receiverInput.CreateChildRunspaceInput();
+            if (TryAnalyzeRegionSequence(regions, childInput, out var childExit))
+            {
+                var firstVisitMayEscape =
+                    _childRunspaceProcessEscapeRiskCount >
+                    childRunspaceProcessEscapeRiskCount;
+                if (firstVisitMayEscape ||
+                    !binding.HasUseNewRunspace &&
+                    childExit.HasRunspaceCommandResolutionProcessRisk)
+                {
+                    // Pooled runspaces retain local command-resolution mutation;
+                    // fresh runspaces still share process-wide child effects.
+                    var repeatedInput = childInput
+                        .Invalidate(unknownCwd: firstVisitMayEscape)
+                        .WithConditionalProcessWideStateInvalidation(
+                            firstVisitMayEscape)
+                        .WithoutBindings();
+                    if (!binding.HasUseNewRunspace)
+                    {
+                        repeatedInput = repeatedInput
+                            .WithRunspaceCommandResolutionProcessRisk(childExit);
+                    }
+
+                    TryAnalyzeRegionSequence(
+                        regions,
+                        repeatedInput,
+                        out _);
+                }
+            }
+
+            childRunspaceProcessMayEscape =
+                _childRunspaceProcessEscapeRiskCount >
+                childRunspaceProcessEscapeRiskCount;
+        }
+        finally
+        {
+            _executionRegionEffectCount = executionRegionEffectCount + regions.Count;
+            _nonRegionStateMutationCount = nonRegionStateMutationCount;
+            _locationStateMutationCount = locationStateMutationCount;
+            _childScopeEscapeRiskCount = childScopeEscapeRiskCount;
+            _childRunspaceProcessEscapeRiskCount =
+                childRunspaceProcessEscapeRiskCount +
+                (childRunspaceProcessMayEscape ? 1 : 0);
+        }
+
+        if (!childRunspaceProcessMayEscape)
+        {
+            return hostFlow;
+        }
+
+        return new PwshFlowResult(
+            hostFlow.OnSuccess is AnalysisContext success
+                ? success
+                    .Invalidate(unknownCwd: true)
+                    .WithProcessWideStateInvalidated()
+                : null,
+            hostFlow.OnFailure is AnalysisContext failure
+                ? failure
+                    .Invalidate(unknownCwd: true)
+                    .WithProcessWideStateInvalidated()
+                : null);
     }
 
     private AnalysisContext CreateStartJobInput(
@@ -1362,9 +2205,7 @@ internal sealed class PwshForEachValueAnalyzer
         PwshExecutionRegionBindingResult binding,
         AnalysisContext receiverInput)
     {
-        var child = receiverInput
-            .Invalidate(unknownCwd: false, invalidateCommandResolution: false)
-            .WithoutBindings();
+        var child = receiverInput.CreateChildProcessInput();
         if (binding.WorkingDirectoryElementIndex is not int elementIndex)
         {
             return child;
@@ -1566,11 +2407,15 @@ internal sealed class PwshForEachValueAnalyzer
         var nonRegionStateMutationCount = _nonRegionStateMutationCount;
         var locationStateMutationCount = _locationStateMutationCount;
         var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
+        var childRunspaceProcessEscapeRiskCount =
+            _childRunspaceProcessEscapeRiskCount;
         TryAnalyzeRegionSequence(regions, input, out _);
         _executionRegionEffectCount = executionRegionEffectCount;
         _nonRegionStateMutationCount = nonRegionStateMutationCount;
         _locationStateMutationCount = locationStateMutationCount;
         _childScopeEscapeRiskCount = childScopeEscapeRiskCount;
+        _childRunspaceProcessEscapeRiskCount =
+            childRunspaceProcessEscapeRiskCount;
     }
 
     private PwshFlowResult AnalyzeExecutionRegionBody(
@@ -1669,6 +2514,10 @@ internal sealed class PwshForEachValueAnalyzer
         {
             PwshExecutionRegionParameterSet.StartJobScriptBlock =>
                 !binding.HasExplicitPSVersion &&
+                AllBindingsAreCompleteWithTiming(
+                    binding.Bindings,
+                    ExecutionRegionTiming.Concurrent),
+            PwshExecutionRegionParameterSet.ForEachParallel =>
                 AllBindingsAreCompleteWithTiming(
                     binding.Bindings,
                     ExecutionRegionTiming.Concurrent),
@@ -1944,6 +2793,7 @@ internal sealed class PwshForEachValueAnalyzer
             commandIdentityProven: true);
         return binding.Status == PwshExecutionRegionBindingStatus.ProvedExecution &&
             binding.ParameterSet is PwshExecutionRegionParameterSet.ForEachScriptBlock or
+                PwshExecutionRegionParameterSet.ForEachParallel or
                 PwshExecutionRegionParameterSet.WhereScriptBlock or
                 PwshExecutionRegionParameterSet.InvokeInProcess or
                 PwshExecutionRegionParameterSet.MeasureExpression or
@@ -2022,6 +2872,8 @@ internal sealed class PwshForEachValueAnalyzer
         var nonRegionStateMutationCount = _nonRegionStateMutationCount;
         var locationStateMutationCount = _locationStateMutationCount;
         var childScopeEscapeRiskCount = _childScopeEscapeRiskCount;
+        var childRunspaceProcessEscapeRiskCount =
+            _childRunspaceProcessEscapeRiskCount;
         AnalyzeBlock(
             group.Body,
             input.WithoutBindings().Invalidate(
@@ -2031,6 +2883,8 @@ internal sealed class PwshForEachValueAnalyzer
         _nonRegionStateMutationCount = nonRegionStateMutationCount;
         _locationStateMutationCount = locationStateMutationCount;
         _childScopeEscapeRiskCount = childScopeEscapeRiskCount;
+        _childRunspaceProcessEscapeRiskCount =
+            childRunspaceProcessEscapeRiskCount;
         return PwshFlowResult.Both(input);
     }
 
@@ -2095,6 +2949,18 @@ internal sealed class PwshForEachValueAnalyzer
         var restored = childScopeMayEscape
             ? input.Invalidate(unknownCwd: false)
             : input;
+        if (childScopeMayEscape &&
+            bodyExit.Value.HasRunspaceCommandResolutionProcessRisk)
+        {
+            restored = restored.WithRunspaceCommandResolutionProcessRisk(
+                bodyExit.Value);
+        }
+
+        if (bodyExit.Value.ProcessWideStateInvalidated)
+        {
+            restored = restored.WithProcessWideStateInvalidated();
+        }
+
         if (!locationMutated && string.Equals(
                 bodyExit.Value.WorkingDirectory,
                 input.WorkingDirectory,
@@ -3331,16 +4197,25 @@ internal sealed class PwshForEachValueAnalyzer
     private readonly struct AnalysisContext
     {
         private readonly IReadOnlyList<BindingFrame> _bindings;
+        private readonly IReadOnlyList<string> _runspaceProcessMutationCommandNames;
 
         internal AnalysisContext(
             string? workingDirectory,
             bool canPromote,
             bool commandResolutionInvalidated,
+            bool allRunspaceCommandResolutionMayReachProcessMutation,
+            IReadOnlyList<string> runspaceProcessMutationCommandNames,
+            bool processWideStateInvalidated,
             IReadOnlyList<BindingFrame> bindings)
         {
             WorkingDirectory = workingDirectory;
             CanPromote = canPromote;
             CommandResolutionInvalidated = commandResolutionInvalidated;
+            AllRunspaceCommandResolutionMayReachProcessMutation =
+                allRunspaceCommandResolutionMayReachProcessMutation;
+            _runspaceProcessMutationCommandNames =
+                runspaceProcessMutationCommandNames;
+            ProcessWideStateInvalidated = processWideStateInvalidated;
             _bindings = bindings;
         }
 
@@ -3349,6 +4224,41 @@ internal sealed class PwshForEachValueAnalyzer
         internal bool CanPromote { get; }
 
         internal bool CommandResolutionInvalidated { get; }
+
+        internal bool AllRunspaceCommandResolutionMayReachProcessMutation { get; }
+
+        internal bool ProcessWideStateInvalidated { get; }
+
+        internal bool HasRunspaceCommandResolutionProcessRisk =>
+            AllRunspaceCommandResolutionMayReachProcessMutation ||
+            _runspaceProcessMutationCommandNames.Count > 0;
+
+        internal bool MayResolveCommandToProcessMutation(Clause clause)
+        {
+            if (ProcessWideStateInvalidated ||
+                AllRunspaceCommandResolutionMayReachProcessMutation)
+            {
+                return true;
+            }
+
+            if (clause.Verb.Tokens.Count != 1)
+            {
+                return _runspaceProcessMutationCommandNames.Count > 0;
+            }
+
+            var authoredName = clause.Verb.Tokens[0];
+            foreach (var commandName in _runspaceProcessMutationCommandNames)
+            {
+                if (commandName.Equals(
+                        authoredName,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         internal AnalysisContext Invalidate(
             bool unknownCwd,
@@ -3362,6 +4272,9 @@ internal sealed class PwshForEachValueAnalyzer
                     unknownCwd ? null : WorkingDirectory,
                     false,
                     commandResolutionInvalidated,
+                    AllRunspaceCommandResolutionMayReachProcessMutation,
+                    _runspaceProcessMutationCommandNames,
+                    ProcessWideStateInvalidated,
                     _bindings);
             }
 
@@ -3377,14 +4290,106 @@ internal sealed class PwshForEachValueAnalyzer
                 unknownCwd ? null : WorkingDirectory,
                 false,
                 commandResolutionInvalidated,
+                AllRunspaceCommandResolutionMayReachProcessMutation,
+                _runspaceProcessMutationCommandNames,
+                ProcessWideStateInvalidated,
                 unknown);
         }
+
+        internal AnalysisContext WithRunspaceCommandResolutionProcessRisk() =>
+            new(
+                WorkingDirectory,
+                CanPromote,
+                commandResolutionInvalidated: true,
+                allRunspaceCommandResolutionMayReachProcessMutation: true,
+                Array.Empty<string>(),
+                ProcessWideStateInvalidated,
+                _bindings);
+
+        internal AnalysisContext WithRunspaceCommandResolutionProcessRisk(
+            bool invalidatesAll,
+            IReadOnlyList<string> commandNames)
+        {
+            if (invalidatesAll)
+            {
+                return WithRunspaceCommandResolutionProcessRisk();
+            }
+
+            if (AllRunspaceCommandResolutionMayReachProcessMutation ||
+                commandNames.Count == 0)
+            {
+                return this;
+            }
+
+            var names = MergeCommandNames(
+                _runspaceProcessMutationCommandNames,
+                commandNames,
+                out var exceededLimit);
+            return exceededLimit
+                ? WithRunspaceCommandResolutionProcessRisk()
+                : new AnalysisContext(
+                    WorkingDirectory,
+                    CanPromote,
+                    commandResolutionInvalidated: true,
+                    allRunspaceCommandResolutionMayReachProcessMutation: false,
+                    names,
+                    ProcessWideStateInvalidated,
+                    _bindings);
+        }
+
+        internal AnalysisContext WithRunspaceCommandResolutionProcessRisk(
+            AnalysisContext source) =>
+            source.AllRunspaceCommandResolutionMayReachProcessMutation
+                ? WithRunspaceCommandResolutionProcessRisk()
+                : WithRunspaceCommandResolutionProcessRisk(
+                    invalidatesAll: false,
+                    source._runspaceProcessMutationCommandNames);
+
+        internal AnalysisContext WithProcessWideStateInvalidated() =>
+            new(
+                WorkingDirectory,
+                CanPromote,
+                commandResolutionInvalidated: true,
+                AllRunspaceCommandResolutionMayReachProcessMutation,
+                _runspaceProcessMutationCommandNames,
+                processWideStateInvalidated: true,
+                _bindings);
+
+        internal AnalysisContext WithConditionalProcessWideStateInvalidation(
+            bool invalidated) => invalidated
+                ? WithProcessWideStateInvalidated()
+                : this;
 
         internal AnalysisContext WithoutBindings() =>
             new(
                 WorkingDirectory,
                 CanPromote,
                 CommandResolutionInvalidated,
+                AllRunspaceCommandResolutionMayReachProcessMutation,
+                _runspaceProcessMutationCommandNames,
+                ProcessWideStateInvalidated,
+                Array.Empty<BindingFrame>());
+
+        internal AnalysisContext CreateChildProcessInput() =>
+            new(
+                WorkingDirectory,
+                canPromote: false,
+                commandResolutionInvalidated: ProcessWideStateInvalidated,
+                allRunspaceCommandResolutionMayReachProcessMutation: false,
+                Array.Empty<string>(),
+                ProcessWideStateInvalidated,
+                Array.Empty<BindingFrame>());
+
+        internal AnalysisContext CreateChildRunspaceInput() =>
+            // Caller aliases and ordinary variables do not initialize a Parallel
+            // child runspace; explicit $using: values remain conservatively unknown.
+            new(
+                WorkingDirectory,
+                CanPromote,
+                commandResolutionInvalidated: ProcessWideStateInvalidated,
+                allRunspaceCommandResolutionMayReachProcessMutation: false,
+                Array.Empty<string>(),
+                ProcessWideStateInvalidated,
                 Array.Empty<BindingFrame>());
 
         internal AnalysisContext WithCwd(string? workingDirectory) =>
@@ -3392,6 +4397,9 @@ internal sealed class PwshForEachValueAnalyzer
                 workingDirectory,
                 CanPromote,
                 CommandResolutionInvalidated,
+                AllRunspaceCommandResolutionMayReachProcessMutation,
+                _runspaceProcessMutationCommandNames,
+                ProcessWideStateInvalidated,
                 _bindings);
 
         internal AnalysisContext WithBinding(
@@ -3414,6 +4422,9 @@ internal sealed class PwshForEachValueAnalyzer
                 WorkingDirectory,
                 CanPromote,
                 CommandResolutionInvalidated,
+                AllRunspaceCommandResolutionMayReachProcessMutation,
+                _runspaceProcessMutationCommandNames,
+                ProcessWideStateInvalidated,
                 bindings);
         }
 
@@ -3669,9 +4680,24 @@ internal sealed class PwshForEachValueAnalyzer
                     StringComparison.Ordinal) ||
                 CanPromote != other.CanPromote ||
                 CommandResolutionInvalidated != other.CommandResolutionInvalidated ||
+                AllRunspaceCommandResolutionMayReachProcessMutation !=
+                    other.AllRunspaceCommandResolutionMayReachProcessMutation ||
+                ProcessWideStateInvalidated != other.ProcessWideStateInvalidated ||
+                _runspaceProcessMutationCommandNames.Count !=
+                    other._runspaceProcessMutationCommandNames.Count ||
                 _bindings.Count != other._bindings.Count)
             {
                 return false;
+            }
+
+            foreach (var commandName in _runspaceProcessMutationCommandNames)
+            {
+                if (!ContainsCommandName(
+                        other._runspaceProcessMutationCommandNames,
+                        commandName))
+                {
+                    return false;
+                }
             }
 
             foreach (var binding in _bindings)
@@ -3721,6 +4747,14 @@ internal sealed class PwshForEachValueAnalyzer
                         : JoinDomains(leftBinding.Domain, rightBinding.Domain)));
             }
 
+            var commandNames = MergeCommandNames(
+                left._runspaceProcessMutationCommandNames,
+                right._runspaceProcessMutationCommandNames,
+                out var commandNameLimitExceeded);
+            var invalidatesAllCommandNames =
+                left.AllRunspaceCommandResolutionMayReachProcessMutation ||
+                right.AllRunspaceCommandResolutionMayReachProcessMutation ||
+                commandNameLimitExceeded;
             return new AnalysisContext(
                 string.Equals(
                     left.WorkingDirectory,
@@ -3731,7 +4765,59 @@ internal sealed class PwshForEachValueAnalyzer
                 left.CanPromote && right.CanPromote,
                 left.CommandResolutionInvalidated ||
                     right.CommandResolutionInvalidated,
+                invalidatesAllCommandNames,
+                invalidatesAllCommandNames
+                    ? Array.Empty<string>()
+                    : commandNames,
+                left.ProcessWideStateInvalidated ||
+                    right.ProcessWideStateInvalidated,
                 bindings);
+        }
+
+        private static IReadOnlyList<string> MergeCommandNames(
+            IReadOnlyList<string> left,
+            IReadOnlyList<string> right,
+            out bool exceededLimit)
+        {
+            exceededLimit = false;
+            var names = new List<string>(left.Count + right.Count);
+            foreach (var commandName in left)
+            {
+                names.Add(commandName);
+            }
+
+            foreach (var commandName in right)
+            {
+                if (ContainsCommandName(names, commandName))
+                {
+                    continue;
+                }
+
+                if (names.Count == ShellAnalysisLimits.MaxValueCandidates)
+                {
+                    exceededLimit = true;
+                    return Array.Empty<string>();
+                }
+
+                names.Add(commandName);
+            }
+
+            return names.ToArray();
+        }
+
+        private static bool ContainsCommandName(
+            IReadOnlyList<string> commandNames,
+            string expected)
+        {
+            foreach (var commandName in commandNames)
+            {
+                if (commandName.Equals(expected, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         internal static AnalysisContext Widen(

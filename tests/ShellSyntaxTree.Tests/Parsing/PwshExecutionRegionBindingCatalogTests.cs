@@ -282,6 +282,11 @@ public class PwshExecutionRegionBindingCatalogTests
         var binding = Assert.Single(result.Bindings);
         Assert.Equal(ExecutionRegionTiming.Concurrent, binding.Timing);
         Assert.Equal(ExecutionRegionCardinality.OncePerInputObject, binding.Cardinality);
+        Assert.False(result.HasUseNewRunspace);
+
+        var fresh = Bind(
+            "ForEach-Object -Parallel { Get-Date } -UseNewRunspace");
+        Assert.True(fresh.HasUseNewRunspace);
     }
 
     [Fact]

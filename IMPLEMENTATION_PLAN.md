@@ -350,7 +350,7 @@ priorities.
       delivered for ordinary, adjacent, quoted, here-string, redirect, standalone,
       call-operator, dynamic-identity, and host-wrapper positions, with
       current-scope state propagation and bounded expression rejection pinned
-      by the 372-entry executable corpus.
+      by the 383-entry executable corpus.
 - [ ] Deliver typed PowerShell script-block execution regions before calling
       tasks 7.5-7.7 complete. The corrected contract adds an execution-region
       syntax node with independent origin, phase, timing, and cardinality rather than a
@@ -425,8 +425,27 @@ priorities.
       proved child-process isolation while their body analysis stays fail
       closed; an explicit alternate `-PSVersion` remains visible but incomplete
       because it falls outside the pinned PowerShell 7 runtime model.
-      Child runspace jobs and parallel
-      blocks; deferred breakpoint/event/completion actions; then unknown
+      `ForEach-Object -Parallel` now publishes a concurrent per-input child-
+      runspace region, inherits the captured caller location, starts without
+      caller bindings or alias mutations, and isolates runspace-local child
+      exit from the host continuation, including `-AsJob`. Pooled-runspace command-
+      resolution mutation is joined across later activations; `-UseNewRunspace`
+      keeps activations independent. Live PowerShell probes pin both behaviors,
+      including the process-wide environment-provider exception: a possibly
+      escaping child mutation invalidates later host binding, command-
+      resolution, and location facts and also poisons later child activations
+      under `-UseNewRunspace`, which resets runspace-local but not process-wide
+      state. Runspace-global variables, functions, aliases, and location remain
+      isolated. The analyzer retains a bounded, case-insensitive set of exact
+      alias/function names whose identity changed and treats only matching later
+      invocations as possible process escapes; an ambiguous mutation or set
+      overflow fails closed to every unproved command name. This includes a
+      mutator such as `Set-Alias` being rebound to `Set-Item` before a later
+      authored `Set-Alias Env:...` invocation.
+      The generator-owned executable corpus now supports per-entry initial-
+      state mode and includes the promoted Parallel design case. Pinned child
+      runspace jobs and remote/session invocation remain before deferred
+      breakpoint/event/completion actions; then unknown
       receiver and nested/adversarial matrices. Preserve script blocks proved
       to be data as opaque values, expose ambiguous bodies with incomplete
       facts, and fail atomically when any potentially executable interior is

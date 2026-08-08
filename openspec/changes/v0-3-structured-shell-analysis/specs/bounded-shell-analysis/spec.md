@@ -668,7 +668,19 @@ from the complete parameter set.
 
 `Start-Job` executes initialization before its main block in a child process;
 `ForEach-Object -Parallel` and a proved `Start-ThreadJob` execute in child
-runspaces. Their exit mutation does not flow into the containing continuation.
+runspaces. Runspace-local variable and location exit mutation does not flow into
+the containing continuation. In-process child runspaces share process-wide
+state such as the environment provider, so a possibly escaping mutation SHALL
+invalidate later host binding, command-resolution, and location facts. It SHALL
+also invalidate later child-activation facts under `-UseNewRunspace`, which
+creates a fresh runspace but not a fresh process.
+Runspace `global:` variables, functions, aliases, and location SHALL remain
+runspace-local and SHALL NOT by themselves invalidate host facts. After child
+command resolution is mutated, each exact changed alias or function name SHALL
+be retained in bounded case-insensitive state. A later matching invocation
+whose identity is not independently proved SHALL be treated as a possible
+process-wide mutation. An ambiguous name, wildcard, or candidate-set overflow
+SHALL fail closed to every unproved command name.
 Breakpoint actions, event actions, and argument completers are deferred and
 may execute zero or more times; their trigger-time cwd and mutable state are
 Unknown unless independently proved. Deferred commands remain in the

@@ -374,7 +374,7 @@ PowerShell 7.6.4 probes demonstrate that these are independent dimensions:
 | local `Invoke-Command { ... }` | child scope unless `-NoNewScope` | shared | synchronous / once |
 | `Measure-Command { ... }` / `Trace-Command -Expression { ... }` | shared current scope | shared | synchronous / once |
 | `Start-Job { ... }` | child process state | inherited initial location; exit isolated | concurrent / once |
-| `ForEach-Object -Parallel { ... }` | child runspace state | inherited initial location; exit isolated | concurrent / once per input |
+| `ForEach-Object -Parallel { ... }` | child runspace state; process-wide effects may escape | inherited initial location; runspace-local exit isolated | concurrent / once per input |
 | event, breakpoint, completion actions | trigger-time state | trigger-time state | deferred / zero or more |
 
 The shell-specific analyzer owns inbound state, exit propagation, phase
@@ -382,6 +382,22 @@ scheduling, success/failure partitions, and target/runspace differences.
 Occurrence facts expose the effective result. This keeps the public structural
 API narrow while avoiding the false claim that variables and location always
 share one boundary.
+
+An in-process child runspace is not a process boundary. Ordinary variables,
+aliases, and PowerShell location are runspace-local, but environment-provider
+mutation is process-wide and can affect the host and sibling runspaces. The
+analyzer therefore invalidates later host binding, command-resolution, and
+location facts after any possibly escaping child effect. The same invalidation
+applies to later activations under `-UseNewRunspace`: the switch removes pooled
+runspace-local state, but it does not create a separate process.
+Runspace `global:` variables, functions, aliases, and location remain
+runspace-local and do not themselves poison host facts. Exact alias/function
+names changed inside a child are retained in a bounded, case-insensitive set;
+only a matching subsequent invocation whose identity is not independently
+proved is treated as a possible process-wide mutation. Ambiguous names,
+wildcards, and set overflow collapse to all unproved command names. This
+prevents both an alias to `Set-Item` and a rebound `Set-Alias` mutator from
+hiding an environment-provider write without tainting unrelated names.
 
 `SimpleCommandSyntax.ExecutionRegions` preserves authored script-block order.
 The analyzer separately applies semantic phase order. PowerShell's binder can

@@ -20,12 +20,15 @@ using ShellSyntaxTree.Tools.PwshCorpus;
 //                          resolver settings as the executable corpus.
 
 // The corpus runner pins these resolver knobs; generation must match.
-var options = new PwshParserOptions
-{
-    HomeDirectory = "C:/Users/user",
-    WorkingDirectory = "C:/work",
-};
-var parser = new PwshParser(options);
+static PwshParser CreatePwshParser(PwshInitialStateMode? initialStateMode = null) =>
+    new(new PwshParserOptions
+    {
+        HomeDirectory = "C:/Users/user",
+        WorkingDirectory = "C:/work",
+        InitialStateMode = initialStateMode ?? PwshInitialStateMode.Unknown,
+    });
+
+var parser = CreatePwshParser();
 var bashParser = new BashParser(new BashParserOptions
 {
     HomeDirectory = "/home/test",
@@ -68,7 +71,7 @@ int Generate(string outputDir)
     foreach (var entry in entries)
     {
         var input = entry.ResolveInput();
-        var parsed = parser.Parse(input);
+        var parsed = CreatePwshParser(entry.PowerShellInitialStateMode).Parse(input);
         var json = CorpusJson.BuildEntry(
             entry.Name,
             input,
@@ -78,7 +81,8 @@ int Generate(string outputDir)
             entry.IncludeElements,
             entry.IncludeStructure,
             entry.IncludeOptionalAssertions,
-            entry.IncludeV03Assertions);
+            entry.IncludeV03Assertions,
+            entry.PowerShellInitialStateMode);
         var fileName = $"{index:D3}_{entry.Slug}.json";
         File.WriteAllText(Path.Combine(outputDir, fileName), json);
         index++;
