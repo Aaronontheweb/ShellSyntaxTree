@@ -17,11 +17,11 @@ fail-closed behavior for incomplete analysis.
   model, with shell-specific front ends producing one shared structural
   contract where their semantics actually coincide.
 - Add a library-owned command-occurrence projection containing every command
-  that may execute, including condition, iterator, branch, loop-body, wrapped,
-  substitution, and PowerShell script-block execution-region commands.
+  that may execute in supported grammar, including iterator, loop-body,
+  wrapped, substitution, and PowerShell script-block execution-region commands.
 - Correct the PowerShell script-block boundary: represent direct invocation,
   current-runspace callbacks, child-runspace/process jobs, module
-  initialization, and deferred actions as typed execution regions while
+  initialization, and unknown receivers as typed execution regions while
   retaining proved non-executing script-block data as opaque values. Origin,
   phase, timing, and cardinality are public structural facts; variable,
   location, command-resolution, runspace, and process propagation remain
@@ -46,13 +46,22 @@ fail-closed behavior for incomplete analysis.
   that check `IsUnparseable` continue to fail closed and do not silently miss
   nested executable commands. Unparseable results expose no command or clause
   authorization projection.
-- Expand grammar in vertical slices: Bash `for ... in`, PowerShell `foreach`,
-  then the locked condition loops and branches. Preserve the existing Bash
+- Expand grammar in vertical slices through Bash `for ... in` and PowerShell
+  `foreach`. Preserve the existing Bash
   heredoc grammar while adding body, delimiter, and expansion facts, and add
   Bash `<<<` here-string semantics. Process substitution, background lists,
-  C-style loops, arithmetic, Bash `case`, and PowerShell `switch` remain
-  independently gated by explicit executable-region and value-semantics
-  requirements.
+  condition loops and branches, C-style loops, arithmetic, Bash `case`, and
+  PowerShell `switch` remain fail-closed follow-ups rather than stable-v0.3
+  release requirements.
+- Bound the stable-v0.3 PowerShell receiver catalog to direct invocation,
+  synchronous current-runspace callbacks, `Start-Job`, `ForEach-Object
+  -Parallel`, and local or remote `Invoke-Command` forms already needed by the
+  validating consumer. Optional `Start-ThreadJob` module/version proof and
+  exact deferred breakpoint, event, and argument-completion semantics remain
+  follow-ups. Existing conservative recognition may remain, but no additional
+  catalog expansion gates v0.3. Unproved receivers still expose completely
+  delimited bodies as incomplete execution regions, so this scope reduction
+  does not hide commands.
 - Keep executable-specific option and operand interpretation, authorization
   policy, and durable approval scope consumer-owned.
 - Update `docs/CONSUMER_GUIDE.md` and the README usage path so security gates
@@ -107,3 +116,10 @@ short-term containment; a v0.3 integration must switch authorization traversal
 to the command-occurrence projection and retain strict or prompt behavior for
 unknown executable shapes. No native dependency or command execution is
 introduced.
+
+Stable v0.3 is outcome-gated, not backlog-gated. Shared-analysis refactoring,
+additional shell grammar, exact optional/deferred PowerShell receiver semantics,
+and the Web/Mermaid showcase remain useful follow-ups, but they do not block the
+consumer migration or stable package once the contracted security behavior is
+verified. Already-merged conservative behavior may remain; it is not a promise
+to expand adjacent catalog or grammar surface during v0.3.

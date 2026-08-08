@@ -3,13 +3,16 @@
 ### Requirement: Parsed commands expose authored nested structure
 Every fully parsed command SHALL expose one library-owned syntax root that
 preserves the authored nesting and source order of supported command lists,
-pipelines, groups, simple commands, loops, and branches.
+pipelines, groups, simple commands, substitutions, execution regions, and
+foreach loops.
 
 The public syntax family SHALL be a closed hierarchy of records derived from
 `ShellSyntaxNode`. Every node SHALL expose a `ShellSyntaxKind` discriminant and
 zero SHALL mean `Unknown`. The locked family SHALL include block, simple
 command, pipeline, command list, group, foreach, condition loop, conditional,
 conditional branch, command substitution, and execution-region nodes.
+Condition-loop and conditional node kinds are reserved structural vocabulary;
+stable v0.3 does not emit them because their grammar remains fail closed.
 
 #### Scenario: Existing flat command receives a structural root
 - **WHEN** either parser parses `git status && dotnet test`
@@ -159,12 +162,6 @@ that `SimpleCommandSyntax` and SHALL identify the exact script-block
 - **THEN** the whole parse is unparseable until bounded declaration grammar is implemented
 - **THEN** a realistic argument completer is not partially authorized from only its post-declaration body
 
-#### Scenario: Deferred action is still authorization-visible
-- **WHEN** PowerShell parses `Register-EngineEvent -SourceIdentifier ready -Action { Remove-Item marker.txt }`
-- **THEN** the host command appears before the action body in the occurrence projection
-- **THEN** the action region is `Deferred` with `ZeroOrMore` cardinality
-- **THEN** `Remove-Item` remains authorization-visible even though registration does not execute it
-
 #### Scenario: Known non-executing script-block data stays data
 - **WHEN** a constrained canonical-command context parses `Write-Output { Remove-Item target.txt }`
 - **THEN** the script block remains one opaque compatibility argument
@@ -224,21 +221,6 @@ expressions into a false shared expression grammar.
 - **WHEN** a loop is lifted from decoded wrapper content without an exact mapping to the outer source
 - **THEN** the iterable raw text remains available
 - **THEN** its outer source start and length are null
-
-### Requirement: Condition loops and branches preserve executable regions
-The parser SHALL preserve the condition, every branch body, and the
-continuation after each supported Bash or PowerShell condition loop or branch
-as distinct structural regions.
-
-#### Scenario: Bash while condition contains a command
-- **WHEN** Bash parses `while curl https://example.invalid/ready; do echo waiting; done`
-- **THEN** the condition block contains the `curl` command
-- **THEN** the body block contains the `echo` command
-
-#### Scenario: PowerShell branch preserves both alternatives
-- **WHEN** PowerShell parses `if (Test-Path a.txt) { Remove-Item a.txt } else { Write-Output missing }`
-- **THEN** the condition, then body, and else body remain distinct regions
-- **THEN** no branch is discarded based on predicted runtime behavior
 
 ### Requirement: Source ranges are exact or explicitly unavailable
 Each direct-source structural node SHALL carry a source range into

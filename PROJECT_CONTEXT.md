@@ -80,23 +80,28 @@ zero-native-deps .NET parser sized to what security gates actually need.
 - Add a closed, strongly typed syntax-node hierarchy while retaining existing
   `Clause` leaves.
 - Add a library-owned command-occurrence projection for security consumers so
-  every potentially executable iterator, condition, branch, substitution, and
-  body command is evaluated exactly once.
+  every potentially executable iterator, substitution, execution-region, and
+  body command in the supported grammar is evaluated exactly once.
 - Add typed PowerShell execution regions for direct call/dot-source blocks,
-  synchronous callbacks, jobs/parallel runspaces, initialization, and deferred
-  actions. Public origin/phase/timing/cardinality facts remain separate from
+  synchronous callbacks, jobs/parallel runspaces, and initialization. Public
+  origin/phase/timing/cardinality facts remain separate from
   shell-specific variable, location, command-resolution, runspace, and process
   state analysis; proved script-block data stays opaque and unknown receivers
   conservatively expose incomplete bodies.
 - Add fixed, non-executing value and state analysis: at most 32 candidates, at
   most 16 structural container levels, and the existing wrapper depth of 5.
-- Deliver Bash `for ... in` and PowerShell `foreach` first, then the locked
-  `while` and `if` subsets independently for each shell. Shared lowering and
-  analysis are extracted only after both front ends prove identical behavior.
+- Deliver Bash `for ... in` and PowerShell `foreach` in stable v0.3. Condition
+  loops, branches, and shared-analysis extraction are post-v0.3 work and do
+  not gate the validating consumer migration.
 - Preserve existing Bash heredocs and add explicit body/expansion facts plus
   Bash `<<<` here strings. Keep process substitution, background lists, Bash
-  `case`, PowerShell `switch`, arithmetic/C-style loops, and definitions
-  independently gated.
+  condition loops and branches, `case`, PowerShell condition loops and
+  branches, arithmetic/C-style loops, and definitions independently gated.
+- Keep optional-module `Start-ThreadJob` and exact deferred breakpoint, event,
+  and argument-completion receiver semantics outside the stable-v0.3 catalog.
+  Existing conservative recognition may remain; unproved receivers still
+  expose completely delimited bodies as incomplete regions and therefore
+  remain fail closed.
 - Treat `openspec/changes/v0-3-structured-shell-analysis/` and its paired design
   corpus as the review authority until the accepted contract is synchronized
   into `SPEC.md` and `SPEC.POWERSHELL.md` with the production API change.

@@ -1,8 +1,8 @@
 # ShellSyntaxTree — PowerShell Specification (through v0.3)
 
 **Status:** v0.2.0 shipped; the accepted v0.3 contract adds bounded PowerShell
-`foreach`, `while`, and `if` structure plus shared command-occurrence and
-explicit redirect analysis.
+`foreach` structure plus shared command-occurrence and explicit redirect
+analysis.
 **Audience:** Whoever (human or agent) implements, consumes, or maintains the
 ShellSyntaxTree PowerShell parser.
 **Read `SPEC.md` (the bash and shared-contract specification) end-to-end
@@ -17,7 +17,7 @@ It is **not** a PowerShell interpreter. It does not execute, expand, or
 evaluate commands. It returns the same structured AST a consumer already
 walks for bash. The parsing scope is **Pipeline-aware** (§4): linear
 command pipelines parse; stable v0.3 also supports only the explicitly bounded
-`foreach`, `while`, and `if` subsets below. Other script-level constructs mark
+`foreach` subset below. Other script-level constructs mark
 `IsUnparseable`.
 
 `SPEC.md` is the canonical home of the shared public API, AST, sanitization
@@ -74,13 +74,13 @@ syntax (§5) are all PowerShell 7 semantics. The `pwsh` validation oracle
 
 ### v0.3 extension
 
-Stable v0.3 adds structured projection for bounded `foreach`, `while`, and
-`if` statements; exposes iterator, condition, branch, and body commands
-exactly once; derives exact or finite string values only from proved literal
+Stable v0.3 adds structured projection for bounded `foreach` statements;
+exposes iterator and body commands exactly once; derives exact or finite string
+values only from proved literal
 iterables; and joins location and supported binding state conservatively.
 Pipeline-produced objects and unsupported expressions remain unknown without
-execution. `do`, `switch`, definitions, and arbitrary script evaluation stay
-outside the supported grammar.
+execution. `while`, `if`, `elseif`, `else`, `do`, `switch`, definitions, and
+arbitrary script evaluation stay outside the supported grammar.
 
 ---
 
@@ -389,8 +389,6 @@ terminators.
 ```text
 pwsh_script(stop)    := pwsh_statement (statement_terminator pwsh_statement)*
 pwsh_statement       := pwsh_foreach
-                      | pwsh_while
-                      | pwsh_if
                       | pwsh_and_or
 
 statement_terminator := ";" | NEWLINE
@@ -400,14 +398,6 @@ pwsh_pipeline         := pipeline_element ("|" pipeline_element)*
 
 pwsh_foreach         := "foreach" "(" variable "in" foreach_expression ")"
                         script_block_body
-
-pwsh_while           := "while" "(" condition_pipeline ")"
-                        script_block_body
-
-pwsh_if              := "if" "(" condition_pipeline ")" script_block_body
-                        pwsh_elseif* pwsh_else?
-pwsh_elseif          := "elseif" "(" condition_pipeline ")" script_block_body
-pwsh_else            := "else" script_block_body
 
 foreach_expression   := literal_value
                       | literal_array
@@ -537,8 +527,6 @@ The version-pinned PowerShell 7 catalog covers:
 | `Start-Job -InitializationScript` | Initialization | Concurrent | Once | child process before Main |
 | `Start-Job -ScriptBlock` | Main | Concurrent | Once | child process; exit isolated |
 | `New-Module -ScriptBlock` | Initialization | Synchronous | Once | module state; current-runspace effects analyzed separately |
-| `Set-PSBreakpoint -Action`, event `-Action` | Action | Deferred | ZeroOrMore | trigger-time state Unknown without proof |
-| `Register-ArgumentCompleter -ScriptBlock` | Completion | Deferred | ZeroOrMore | completion-time state Unknown without proof |
 
 Remote `Invoke-Command` bodies begin with Unknown working directory, bindings,
 aliases, functions, modules, profiles, and command resolution. Local parser
@@ -570,10 +558,12 @@ the same conservative invalidation unless its identity is independently proved.
 An ambiguous changed name, wildcard, or candidate-set overflow collapses to all
 unproved command names rather than guessing.
 
-The optional inbox `Microsoft.PowerShell.ThreadJob\Start-ThreadJob` follows
-the initialization/main child-runspace model only when the caller's pinned
-module baseline proves that identity. Otherwise it follows the unknown
-receiver rule.
+Optional-module `Start-ThreadJob` and deferred breakpoint, event, and argument-
+completion receivers are not stable-v0.3 catalog-completeness promises.
+Existing conservative recognition may remain, but additional module/version or
+trigger-time proof does not gate the release. Every unproved form follows the
+unknown-receiver rule: completely parsed bodies remain visible with incomplete
+execution and state facts.
 
 Aliases, supported module-qualified spellings, static call-operator spellings,
 parameter abbreviations and inline values, positional binding, parameter-set
@@ -585,9 +575,11 @@ runtime order.
 
 `ExecutionRegionTiming` and `ExecutionRegionCardinality` are not scope facts.
 Variable, location, command-resolution, runspace, and process propagation are
-analyzed independently. Deferred actions remain authorization-visible at
-registration, but relative paths use trigger-time Unknown cwd unless another
-proof exists. A constrained canonical `Write-Output { Remove-Item x }`
+analyzed independently. Cataloged receivers may retain already-proved
+scheduling facts without making further catalog expansion release-gating.
+Unproved receiver, binding, or state facts remain Unknown rather than borrowing
+registration-time state. A
+constrained canonical `Write-Output { Remove-Item x }`
 remains opaque data and does not invent a `Remove-Item` occurrence.
 
 A leading `param(...)` declaration inside any execution region remains outside
@@ -595,16 +587,9 @@ the stable-v0.3 body grammar and makes the whole parse unparseable. This
 deliberately limits realistic argument-completer and directly invoked blocks
 until parameter declaration and block-argument binding are modeled together.
 
-`condition_pipeline` is limited to a pipeline the existing parser can delimit
-completely. A subexpression, member invocation, script block, or other form
-that may execute outside complete command discovery makes the whole result
-unparseable. Missing delimiters and every unsupported executable region also
-produce empty `Commands` and `Clauses`; partial `Syntax` is diagnostic only.
-
 PowerShell scope and location state remain shell-specific. Grouping `( ... )`
-does not isolate location. Branch exits retain an exact cwd only when every
-supported alternative agrees; disagreement becomes `Unknown`. Loop exits
-include the zero-iteration state. The parser does not publish a finite cwd set.
+does not isolate location. Foreach exits include the zero-iteration state. The
+parser does not publish a finite cwd set.
 
 `foreach` assignments use a case-insensitive persistent binding map rather than
 lexical push/pop restoration. A proved nonempty ordered iterable leaves its
@@ -635,9 +620,9 @@ clear those resolutions and retain the `<dynamic-cwd>` marker. Decoded child
 hosts retain inherited invocation-cwd attribution on their compatibility
 leaves while isolating child exit state.
 
-Stable v0.3 continues to defer `do`, `switch`, functions, definitions,
-class/type bodies, and arbitrary execution-bearing expressions outside the
-bounded forms above.
+Stable v0.3 continues to defer `while`, `if`, `elseif`, `else`, `do`, `switch`,
+functions, definitions, class/type bodies, and arbitrary execution-bearing
+expressions outside the bounded forms above.
 
 ---
 
@@ -1452,7 +1437,7 @@ in **`SPEC.md` §11**.
    here-string, unterminated `<# ... #>` block comment, unbalanced `{ }` /
    `$( )` / `@( )` / `@{ }`, unbalanced grouping `( )`.
 2. **Unsupported control-flow at statement/verb position** — `switch`, `for`,
-   `do`, `until`, or an `if`, `elseif`, `else`, `foreach`, or `while` form
+   `do`, `until`, `if`, `elseif`, `else`, or `while`, plus any `foreach` form
    outside the bounded stable-v0.3 grammar in §4.
 3. **Definition keywords** — `function`, `filter`, `workflow`,
    `configuration`, `class`, `enum`.
@@ -1815,8 +1800,8 @@ v0.2.0 ships when **all** of these hold:
 
 ## 18. Out of Scope
 
-- PowerShell control flow outside stable v0.3's bounded `foreach`, `while`,
-  and `if` subsets — including `do` and `switch`.
+- PowerShell control flow outside stable v0.3's bounded `foreach` subset,
+  including `while`, `if`, `elseif`, `else`, `do`, and `switch`.
 - `function`/`filter`/`class`/`enum` definitions,
   `param()`/`begin`/`process`/`end` blocks, `trap`, and `DATA`.
 - `.ps1` script-file parsing.
