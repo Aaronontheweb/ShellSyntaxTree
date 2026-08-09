@@ -101,6 +101,17 @@ internal static class CorpusManifest
             PowerShellInitialStateMode:
                 PwshInitialStateMode.IsolatedNonInteractiveNoProfile);
 
+    private static ManifestEntry VE(string slug, string input, string notes) =>
+        new(
+            slug,
+            input,
+            notes,
+            false,
+            ManifestTransform.None,
+            IncludeElements: true,
+            IncludeStructure: true,
+            IncludeV03Assertions: true);
+
     private static ManifestEntry A(string slug, string name, string input, string notes) =>
         new(
             slug,
@@ -1094,5 +1105,22 @@ internal static class CorpusManifest
             "foreach ($f in @('one.txt', 'two.txt')) { pwsh -EncodedCommand " +
             B64("pwsh -EncodedCommand " + B64("Get-Date")) + " > $f }",
             "Nested encoded wrappers retain the invocation scope that owns the outer redirect."),
+        VI("v03_script_block_proved_data",
+            "Write-Output { Remove-Item target.txt }",
+            "A proved canonical data receiver keeps a script block opaque instead of inventing a Remove-Item command occurrence."),
+        VE("v03_script_block_unknown_receiver",
+            "Invoke-Custom { Remove-Item target.txt }",
+            "An unproved receiver over-approximates the script block as an incomplete execution region so its nested command remains visible."),
+        VIE("v03_invoke_command_local_region",
+            "Invoke-Command { Remove-Item secret.txt }",
+            "A proved local Invoke-Command receiver exposes its positional script block as one synchronous execution region."),
+        VIE("v03_module_qualified_data_exact_alias",
+            "Set-Alias 'Microsoft.PowerShell.Utility\\Write-Output' Invoke-Command; " +
+            "Microsoft.PowerShell.Utility\\Write-Output { Remove-Item victim.txt }",
+            "An exact alias can shadow a module-qualified-looking token, so the nested command remains visible and incomplete."),
+        VIE("v03_data_receiver_canonical_alias_mutation",
+            "Set-Alias Write-Output Invoke-Command; " +
+            "echo { Remove-Item victim.txt }",
+            "A mutation of an alias canonical target also invalidates the authored alias receiver and keeps the nested command visible."),
     };
 }

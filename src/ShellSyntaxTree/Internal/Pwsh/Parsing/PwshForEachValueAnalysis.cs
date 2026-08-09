@@ -1715,7 +1715,11 @@ internal sealed class PwshForEachValueAnalyzer
                 initialWorkingDirectory,
                 canPromote: options.InitialStateMode ==
                     PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+                hasConstrainedCommandResolutionBaseline:
+                    options.InitialStateMode ==
+                    PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
                 commandResolutionInvalidated: false,
+                commandResolutionInvalidatedBeyondTrackedMutations: false,
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 processWideStateInvalidated: false,
@@ -1934,7 +1938,9 @@ internal sealed class PwshForEachValueAnalyzer
         IReadOnlyList<string> mutatedCommandNames,
         bool mayEscapeChildRunspaceProcess)
     {
-        var invalidated = input.Invalidate(unknownCwd);
+        var invalidated = input.Invalidate(
+            unknownCwd,
+            invalidateCommandResolution: !hasCommandResolutionMutation);
         if (hasCommandResolutionMutation)
         {
             invalidated = invalidated.WithRunspaceCommandResolutionProcessRisk(
@@ -1957,12 +1963,21 @@ internal sealed class PwshForEachValueAnalyzer
             return flow;
         }
 
-        var commandIdentityProven = IsCommandIdentityProven(
+        var receiverIdentityProven = IsExecutionRegionReceiverIdentityProven(
             simple.Clause,
             receiverInput);
         var binding = PwshExecutionRegionBindingCatalog.Bind(
             simple.Clause,
-            commandIdentityProven);
+            receiverIdentityProven);
+        if (binding.Status == PwshExecutionRegionBindingStatus.ProvedData)
+        {
+            RecordExecutionRegions(
+                simple.Clause,
+                Array.Empty<ExecutionRegionSyntax>(),
+                simple.ExecutionRegions);
+            return flow;
+        }
+
         if (!IsSupportedExecutionRegionReceiver(binding) ||
             !TryApplyExecutionRegionBindings(simple, binding, out var regions))
         {
@@ -1971,7 +1986,7 @@ internal sealed class PwshForEachValueAnalyzer
                 simple.ExecutionRegions,
                 simple.ExecutionRegions);
             _executionRegionEffectCount++;
-            if (commandIdentityProven &&
+            if (receiverIdentityProven &&
                 binding.Receiver == PwshExecutionRegionReceiver.StartJob)
             {
                 return flow;
@@ -2499,10 +2514,16 @@ internal sealed class PwshForEachValueAnalyzer
             return true;
         }
 
-        return clause.Verb.Tokens.Count == 1 &&
-            PwshExecutionRegionBindingCatalog.IsSupportedModuleQualifiedCommand(
-                clause.Verb.Tokens[0]);
+        return !input.CommandResolutionInvalidatedBeyondTrackedMutations &&
+            !input.MayResolveCommandToProcessMutation(clause);
     }
+
+    private static bool IsExecutionRegionReceiverIdentityProven(
+        Clause clause,
+        AnalysisContext input) =>
+        input.HasConstrainedCommandResolutionBaseline &&
+        !input.CommandResolutionInvalidatedBeyondTrackedMutations &&
+        !input.MayResolveCommandToProcessMutation(clause);
 
     private void RecordExecutionRegions(
         Clause clause,
@@ -4532,7 +4553,9 @@ internal sealed class PwshForEachValueAnalyzer
         internal AnalysisContext(
             string? workingDirectory,
             bool canPromote,
+            bool hasConstrainedCommandResolutionBaseline,
             bool commandResolutionInvalidated,
+            bool commandResolutionInvalidatedBeyondTrackedMutations,
             bool allRunspaceCommandResolutionMayReachProcessMutation,
             IReadOnlyList<string> runspaceProcessMutationCommandNames,
             bool processWideStateInvalidated,
@@ -4540,7 +4563,11 @@ internal sealed class PwshForEachValueAnalyzer
         {
             WorkingDirectory = workingDirectory;
             CanPromote = canPromote;
+            HasConstrainedCommandResolutionBaseline =
+                hasConstrainedCommandResolutionBaseline;
             CommandResolutionInvalidated = commandResolutionInvalidated;
+            CommandResolutionInvalidatedBeyondTrackedMutations =
+                commandResolutionInvalidatedBeyondTrackedMutations;
             AllRunspaceCommandResolutionMayReachProcessMutation =
                 allRunspaceCommandResolutionMayReachProcessMutation;
             _runspaceProcessMutationCommandNames =
@@ -4553,7 +4580,11 @@ internal sealed class PwshForEachValueAnalyzer
 
         internal bool CanPromote { get; }
 
+        internal bool HasConstrainedCommandResolutionBaseline { get; }
+
         internal bool CommandResolutionInvalidated { get; }
+
+        internal bool CommandResolutionInvalidatedBeyondTrackedMutations { get; }
 
         internal bool AllRunspaceCommandResolutionMayReachProcessMutation { get; }
 
@@ -4577,10 +4608,15 @@ internal sealed class PwshForEachValueAnalyzer
             }
 
             var authoredName = clause.Verb.Tokens[0];
+            var canonicalName = clause.Verb.CanonicalVerb;
             foreach (var commandName in _runspaceProcessMutationCommandNames)
             {
                 if (commandName.Equals(
                         authoredName,
+                        StringComparison.OrdinalIgnoreCase) ||
+                    canonicalName is not null &&
+                    commandName.Equals(
+                        canonicalName,
                         StringComparison.OrdinalIgnoreCase))
                 {
                     return true;
@@ -4601,7 +4637,10 @@ internal sealed class PwshForEachValueAnalyzer
                 return new AnalysisContext(
                     unknownCwd ? null : WorkingDirectory,
                     false,
+                    HasConstrainedCommandResolutionBaseline,
                     commandResolutionInvalidated,
+                    CommandResolutionInvalidatedBeyondTrackedMutations ||
+                        invalidateCommandResolution,
                     AllRunspaceCommandResolutionMayReachProcessMutation,
                     _runspaceProcessMutationCommandNames,
                     ProcessWideStateInvalidated,
@@ -4619,7 +4658,10 @@ internal sealed class PwshForEachValueAnalyzer
             return new AnalysisContext(
                 unknownCwd ? null : WorkingDirectory,
                 false,
+                HasConstrainedCommandResolutionBaseline,
                 commandResolutionInvalidated,
+                CommandResolutionInvalidatedBeyondTrackedMutations ||
+                    invalidateCommandResolution,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 ProcessWideStateInvalidated,
@@ -4630,7 +4672,9 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
+                HasConstrainedCommandResolutionBaseline,
                 commandResolutionInvalidated: true,
+                commandResolutionInvalidatedBeyondTrackedMutations: true,
                 allRunspaceCommandResolutionMayReachProcessMutation: true,
                 Array.Empty<string>(),
                 ProcessWideStateInvalidated,
@@ -4660,7 +4704,9 @@ internal sealed class PwshForEachValueAnalyzer
                 : new AnalysisContext(
                     WorkingDirectory,
                     CanPromote,
+                    HasConstrainedCommandResolutionBaseline,
                     commandResolutionInvalidated: true,
+                    CommandResolutionInvalidatedBeyondTrackedMutations,
                     allRunspaceCommandResolutionMayReachProcessMutation: false,
                     names,
                     ProcessWideStateInvalidated,
@@ -4679,7 +4725,9 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
+                HasConstrainedCommandResolutionBaseline,
                 commandResolutionInvalidated: true,
+                commandResolutionInvalidatedBeyondTrackedMutations: true,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 processWideStateInvalidated: true,
@@ -4694,7 +4742,9 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
+                HasConstrainedCommandResolutionBaseline,
                 CommandResolutionInvalidated,
+                CommandResolutionInvalidatedBeyondTrackedMutations,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 ProcessWideStateInvalidated,
@@ -4704,7 +4754,10 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 canPromote: false,
+                hasConstrainedCommandResolutionBaseline: false,
                 commandResolutionInvalidated: ProcessWideStateInvalidated,
+                commandResolutionInvalidatedBeyondTrackedMutations:
+                    ProcessWideStateInvalidated,
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 ProcessWideStateInvalidated,
@@ -4717,7 +4770,9 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 workingDirectory: null,
                 canPromote: false,
+                hasConstrainedCommandResolutionBaseline: false,
                 commandResolutionInvalidated: true,
+                commandResolutionInvalidatedBeyondTrackedMutations: true,
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 processWideStateInvalidated: false,
@@ -4729,7 +4784,10 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
+                HasConstrainedCommandResolutionBaseline,
                 commandResolutionInvalidated: ProcessWideStateInvalidated,
+                commandResolutionInvalidatedBeyondTrackedMutations:
+                    ProcessWideStateInvalidated,
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 ProcessWideStateInvalidated,
@@ -4739,7 +4797,9 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 workingDirectory,
                 CanPromote,
+                HasConstrainedCommandResolutionBaseline,
                 CommandResolutionInvalidated,
+                CommandResolutionInvalidatedBeyondTrackedMutations,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 ProcessWideStateInvalidated,
@@ -4764,7 +4824,9 @@ internal sealed class PwshForEachValueAnalyzer
             return new AnalysisContext(
                 WorkingDirectory,
                 CanPromote,
+                HasConstrainedCommandResolutionBaseline,
                 CommandResolutionInvalidated,
+                CommandResolutionInvalidatedBeyondTrackedMutations,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 ProcessWideStateInvalidated,
@@ -5022,7 +5084,11 @@ internal sealed class PwshForEachValueAnalyzer
                     other.WorkingDirectory,
                     StringComparison.Ordinal) ||
                 CanPromote != other.CanPromote ||
+                HasConstrainedCommandResolutionBaseline !=
+                    other.HasConstrainedCommandResolutionBaseline ||
                 CommandResolutionInvalidated != other.CommandResolutionInvalidated ||
+                CommandResolutionInvalidatedBeyondTrackedMutations !=
+                    other.CommandResolutionInvalidatedBeyondTrackedMutations ||
                 AllRunspaceCommandResolutionMayReachProcessMutation !=
                     other.AllRunspaceCommandResolutionMayReachProcessMutation ||
                 ProcessWideStateInvalidated != other.ProcessWideStateInvalidated ||
@@ -5106,8 +5172,12 @@ internal sealed class PwshForEachValueAnalyzer
                     ? left.WorkingDirectory
                     : null,
                 left.CanPromote && right.CanPromote,
+                left.HasConstrainedCommandResolutionBaseline &&
+                    right.HasConstrainedCommandResolutionBaseline,
                 left.CommandResolutionInvalidated ||
                     right.CommandResolutionInvalidated,
+                left.CommandResolutionInvalidatedBeyondTrackedMutations ||
+                    right.CommandResolutionInvalidatedBeyondTrackedMutations,
                 invalidatesAllCommandNames,
                 invalidatesAllCommandNames
                     ? Array.Empty<string>()

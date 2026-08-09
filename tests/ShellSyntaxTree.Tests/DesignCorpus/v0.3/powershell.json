@@ -550,28 +550,30 @@
     },
     {
       "id": "pwsh-ordinary-scriptblock-argument",
-      "concern": "Executable-specific script-block data remains opaque",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
+      "concern": "Proved local Invoke-Command exposes its positional script block as executable",
       "input": "Invoke-Command { Remove-Item secret.txt }",
       "current": { "isUnparseable": false },
       "desired": {
         "syntax": [
           { "id": "root", "kind": "Block", "slot": "Root" },
           { "id": "invoke", "kind": "SimpleCommand", "parent": "root", "slot": "Statement", "commandIndex": 0 },
-          { "id": "scriptBlock", "kind": "OpaqueArgument", "parent": "invoke", "slot": "Argument" }
+          { "id": "region", "kind": "ExecutionRegion", "parent": "invoke", "slot": "ExecutionRegion", "hostClauseElementIndex": 1, "executionOrigin": "CommandArgument", "executionPhase": "Main", "executionTiming": "Synchronous", "executionCardinality": "Once" },
+          { "id": "body", "kind": "Block", "parent": "region", "slot": "Body" },
+          { "id": "remove", "kind": "SimpleCommand", "parent": "body", "slot": "Statement", "commandIndex": 1 }
         ],
         "commands": [
           {
             "authoredVerb": "Invoke-Command",
             "immediateRole": "Ordinary",
             "ancestry": ["root"],
-            "isComplete": true,
-            "effectiveValues": [
-              { "sourceElement": "{ Remove-Item secret.txt }", "kind": "Unknown", "isPolicySensitive": true }
-            ]
-          }
+            "isComplete": true
+          },
+          { "authoredVerb": "Remove-Item", "immediateRole": "ExecutionRegion", "ancestry": ["root", "region", "body"], "isComplete": true }
         ],
-        "compatibility": { "verbs": ["Invoke-Command"], "preservesAuthoredDynamicValues": true },
-        "securityInvariants": ["OpaqueDataNotExecuted", "UnknownPolicyValueFailsClosed"]
+        "compatibility": { "verbs": ["Invoke-Command", "Remove-Item"], "preservesAuthoredDynamicValues": true },
+        "securityInvariants": ["AllCommandsVisible"]
       }
     },
     {
@@ -2189,6 +2191,7 @@
     },
     {
       "id": "pwsh-script-block-proved-data",
+      "compatibilityProjectionLanded": true,
       "concern": "Canonical Write-Output consumes a script block as data rather than executing its contents",
       "input": "Write-Output { Remove-Item target.txt }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
@@ -2204,10 +2207,12 @@
         ],
         "compatibility": { "verbs": ["Write-Output"], "preservesAuthoredDynamicValues": true },
         "securityInvariants": ["AllCommandsVisible", "OpaqueDataNotExecuted"]
-      }
+      },
+      "notes": "The same classification for a module-qualified spelling still requires a constrained baseline and bounded proof that no exact alias shadowed that authored name."
     },
     {
       "id": "pwsh-script-block-unknown-receiver",
+      "compatibilityProjectionLanded": true,
       "concern": "Unknown receiver over-approximates a script-block argument as executable",
       "input": "Invoke-Custom { Remove-Item target.txt }",
       "current": { "isUnparseable": false },

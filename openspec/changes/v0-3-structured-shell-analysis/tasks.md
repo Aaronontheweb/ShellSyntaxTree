@@ -230,9 +230,17 @@
     boundaries conservatively. Additional optional-module `Start-ThreadJob`
     proof is not a stable-v0.3 requirement; unproved forms follow the unknown-
     receiver rule.
-  - [ ] 7.5e Keep proved non-executing script-block data opaque; over-approximate
+  - [x] 7.5e Keep proved non-executing script-block data opaque; over-approximate
     unknown receivers/bindings as unknown incomplete regions; fail atomically
     on unsupported interiors or state transfers.
+    - Isolated-state canonical, alias, and supported module-qualified
+      `Write-Output` receivers keep script blocks opaque only while bounded
+      command-resolution state proves that exact authored spelling unchanged.
+      PowerShell permits an alias whose name is itself module-qualified-looking,
+      so default state or a matching observed mutation downgrades to an unknown
+      incomplete region. Executable-corpus entries pin proved data, an unknown
+      receiver, proved local `Invoke-Command`, the exact module-qualified-
+      looking alias boundary, and canonical-target invalidation through `echo`.
   - [ ] 7.5f Pin authored projection order separately from semantic phase order,
     exact host element coordinates, nested regions, wrappers, pipelines, loops,
     and the 16-container depth boundary.
@@ -241,8 +249,9 @@
     grammar is not required for stable v0.3.
 - [ ] 7.6 Add adversarial cases for object-valued iterables, mutation, dynamic invocation, splatting, and cap overflow.
 - [ ] 7.7 Add PowerShell corpus entries, live `pwsh` oracle coverage, and Netclaw integration cases.
-  - Add case-specific `PwshInitialStateMode` support to `PwshCorpusTool` before
-    folding isolated-state entries 362+ into its generated manifest.
+  - `PwshCorpusTool` now supports case-specific `PwshInitialStateMode`; keep
+    promoting the remaining stable execution-region and adversarial cases into
+    its generated manifest, then add the Netclaw PowerShell policy matrix.
 
 ## 10. Heredoc / Here-String Slice
 

@@ -18,6 +18,13 @@ public class PwshExecutionRegionBindingCatalogTests
         WorkingDirectory = "C:/work",
     });
 
+    private static readonly PwshParser IsolatedParser = new(new PwshParserOptions
+    {
+        HomeDirectory = "C:/Users/user",
+        WorkingDirectory = "C:/work",
+        InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+    });
+
     [Theory]
     [InlineData("% { Get-Date }", "ForEachObject",
         "ForEachScriptBlock", ExecutionRegionPhase.Process,
@@ -90,16 +97,24 @@ public class PwshExecutionRegionBindingCatalogTests
     }
 
     [Fact]
-    public void Module_qualified_receiver_is_admitted_once_body_emission_is_guaranteed()
+    public void Module_qualified_catalog_lookup_is_separate_from_identity_proof()
     {
         var resolved = PwshExecutionRegionBindingCatalog.TryResolveStaticCommandName(
             "Microsoft.PowerShell.Core\\ForEach-Object",
             out var canonical);
-        var parsed = Parser.Parse(
+        var conservative = Parser.Parse(
+            "Microsoft.PowerShell.Core\\ForEach-Object { Remove-Item victim.txt }");
+        var parsed = IsolatedParser.Parse(
             "Microsoft.PowerShell.Core\\ForEach-Object { Remove-Item victim.txt }");
 
         Assert.True(resolved);
         Assert.Equal("ForEach-Object", canonical);
+        Assert.Equal(
+            ExecutionRegionPhase.Unknown,
+            Assert.Single(
+                Assert.IsType<SimpleCommandSyntax>(
+                    Assert.Single(conservative.Syntax.Statements))
+                .ExecutionRegions).Phase);
         Assert.False(parsed.IsUnparseable);
         Assert.Equal(2, parsed.Commands.Count);
         Assert.Equal(2, parsed.Clauses.Count);

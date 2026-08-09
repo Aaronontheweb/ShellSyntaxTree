@@ -256,10 +256,9 @@ priorities.
       roles, ancestry, completeness, nullable decoded spans, compatibility
       operators, and exact shared `Clause` identity. The strict DTO rejects
       unknown fields and always requires unparseable projections to be empty.
-      The PowerShell manifest owns the first 361 entries and round-trips them
-      exactly; isolated-state v0.3 entries 362-372 remain explicitly curated
-      until the generator accepts a case-specific initial-state mode. Explicit
-      false/null assertions remain opt-in and generator-preserved.
+      The PowerShell manifest owns all 422 entries and round-trips them exactly,
+      including case-specific isolated-state inputs. Explicit false/null
+      assertions remain opt-in and generator-preserved.
 - [x] Deliver the first Bash `$()` substitution slice for supported
       simple-command arguments and redirect targets. Direct tests and corpus
       entries pin multiple and nested ordering, exact ancestry/spans, isolated
@@ -402,7 +401,7 @@ priorities.
       delivered for ordinary, adjacent, quoted, here-string, redirect, standalone,
       call-operator, dynamic-identity, and host-wrapper positions, with
       current-scope state propagation and bounded expression rejection pinned
-      by the 393-entry executable corpus. Remote/session/SSH/VM/container
+      by the generated executable corpus. Remote/session/SSH/VM/container
       `Invoke-Command` now starts from arbitrary child state, isolates all exit
       effects, publishes synchronous/once only for one proved target, and
       publishes concurrent timing for multiple targets or enabled asynchronous
@@ -437,8 +436,10 @@ priorities.
       facts. Supported catalog-owned module qualifications now pass structural
       admission because every possible body remains visible; the occurrence
       analyzer still withholds typed receiver facts after an observed command-
-      resolution mutation unless the authored module qualification proves the
-      identity independently. The first direct-operator sub-slice now handles
+      resolution mutation unless bounded mutation provenance proves the exact
+      authored spelling unaffected. PowerShell permits an exact alias whose
+      name looks module-qualified, so module qualification is not independent
+      identity proof. The first direct-operator sub-slice now handles
       currently supported command interiors in typed synchronous `& {}` and
       `. {}` regions without synthetic host commands. It isolates ordinary
       direct-call binding and command-resolution exit mutation, invalidates
@@ -503,10 +504,15 @@ priorities.
       Stable v0.3 stops at the delivered Start-Job, Parallel, and remote/session
       boundaries. Optional-module Start-ThreadJob and exact deferred
       breakpoint/event/completion actions are post-v0.3 catalog work; unknown
-      receivers continue to expose incomplete bodies. Preserve script blocks proved
-      to be data as opaque values, expose ambiguous bodies with incomplete
-      facts, and fail atomically when any potentially executable interior is
-      unsupported. Local PowerShell 7.6.4 probes pin variable-versus-location
+      receivers continue to expose incomplete bodies. Script blocks consumed
+      by a proved canonical, alias, or supported module-qualified `Write-Output`
+      receiver now remain opaque data under constrained, bounded command-
+      resolution state. Unknown receivers and exact identities changed by
+      observed alias mutation expose incomplete executable bodies instead.
+      Generated corpus entries 418-422 pin proved data, the fail-closed unknown
+      receiver, proved local `Invoke-Command`, and the exact module-qualified-
+      looking and canonical-target alias boundaries; unsupported potentially
+      executable interiors still fail atomically. Local PowerShell 7.6.4 probes pin variable-versus-location
       independence, semantic phase order, child process/runspace boundaries,
       boundaries and the fact that the in-process `Invoke-Command` parameter
       set does not support `-AsJob`.
