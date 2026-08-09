@@ -12,6 +12,34 @@
   results require a consumer-owned, versioned DTO or explicit serializer
   mapping that fails closed on unknown node and enum values.
 
+#### 0.3.0-alpha.2 2026-08-09 ####
+
+This prerelease completes the stable-v0.3 boundary between PowerShell script
+blocks proved to be data and blocks that may execute. It does not change the
+public v0.3 API surface, and the conservative v0.2 projection remains
+available.
+
+## Added
+
+- Keep script blocks passed to a proved `Write-Output` receiver opaque under a
+  constrained PowerShell baseline instead of inventing nested command
+  occurrences.
+- Preserve unknown script-block receivers as visible, incomplete execution
+  regions, and expose proved local `Invoke-Command` bodies as synchronous
+  command occurrences.
+
+## Security and compatibility
+
+- Require bounded command-resolution proof before classifying a script block as
+  data. Default runspace state remains conservative.
+- Track exact command mutations through authored and canonical alias identities.
+  This prevents exact module-qualified-looking aliases and `echo` alias chains
+  from hiding an executable script block.
+- Preserve unrelated-name precision and reset runspace-local mutations at fresh
+  parallel child-runspace boundaries without clearing process-wide uncertainty.
+- Expand the generated PowerShell corpus to 422 entries, all validated against
+  the live PowerShell parser and the PII audit.
+
 #### 0.3.0-alpha.1 2026-08-09 ####
 
 This prerelease refreshes the Netclaw validation package with the Bash
