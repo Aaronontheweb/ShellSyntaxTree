@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash wrapped execution-bearing builtin fails closed",
+  "input": "command -p -- builtin -- eval 'printf marker >&2'",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "execution-bearing builtin"
+  },
+  "notes": "Exact command and builtin dispatch wrappers are recursively unwrapped before the global execution-bearing builtin catalog is applied.",
+  "oracleExpectation": "OutOfScope"
+}

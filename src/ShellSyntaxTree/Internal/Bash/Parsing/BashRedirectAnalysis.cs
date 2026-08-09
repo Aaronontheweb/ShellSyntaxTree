@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
+using ShellSyntaxTree.Internal.Bash.Lexing;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
@@ -17,6 +18,18 @@ namespace ShellSyntaxTree.Internal.Bash.Parsing;
 internal static class BashRedirectAnalysis
 {
     internal static IReadOnlyList<RedirectAnalysis> Analyze(Clause clause)
+        => AnalyzeCore(clause, source: null, sourceTokens: null);
+
+    internal static IReadOnlyList<RedirectAnalysis> Analyze(
+        Clause clause,
+        string source,
+        IReadOnlyList<BashToken> sourceTokens)
+        => AnalyzeCore(clause, source, sourceTokens);
+
+    private static IReadOnlyList<RedirectAnalysis> AnalyzeCore(
+        Clause clause,
+        string? source,
+        IReadOnlyList<BashToken>? sourceTokens)
     {
         if (clause.Redirects.Count == 0)
         {
@@ -36,7 +49,12 @@ internal static class BashRedirectAnalysis
         for (var index = 0; index < result.Length; index++)
         {
             result[index] = index < elements.Count
-                ? Analyze(index, clause.Redirects[index], elements[index])
+                ? Analyze(
+                    index,
+                    clause.Redirects[index],
+                    elements[index],
+                    source,
+                    sourceTokens)
                 : Incomplete(index);
         }
 
@@ -46,14 +64,32 @@ internal static class BashRedirectAnalysis
     private static RedirectAnalysis Analyze(
         int redirectIndex,
         Redirect compatibility,
-        ClauseElement element)
+        ClauseElement element,
+        string? authoredSource,
+        IReadOnlyList<BashToken>? sourceTokens)
     {
-        if (!TryReadOperator(element.Raw, out var source, out var operation, out var length))
+        if (!TryReadOperator(
+                element.Raw,
+                out var redirectSource,
+                out var operation,
+                out var length))
         {
             return Incomplete(redirectIndex);
         }
 
         var authoredTarget = element.Raw.Substring(length).TrimStart();
+        if (operation == RedirectOperation.HereDocument)
+        {
+            return AnalyzeHereDocument(
+                redirectIndex,
+                authoredSource,
+                sourceTokens,
+                element,
+                redirectSource,
+                stripLeadingTabs: element.Raw.AsSpan(0, length)
+                    .EndsWith("<<-", StringComparison.Ordinal));
+        }
+
         if (operation is RedirectOperation.FileInput or
             RedirectOperation.FileOutput or
             RedirectOperation.FileAppend &&
@@ -61,7 +97,7 @@ internal static class BashRedirectAnalysis
         {
             return AnalyzeDescriptorTarget(
                 redirectIndex,
-                source,
+                redirectSource,
                 authoredTarget,
                 element.Value);
         }
@@ -71,7 +107,7 @@ internal static class BashRedirectAnalysis
             return new RedirectAnalysis
             {
                 RedirectIndex = redirectIndex,
-                Source = source,
+                Source = redirectSource,
             };
         }
 
@@ -79,7 +115,7 @@ internal static class BashRedirectAnalysis
         return new RedirectAnalysis
         {
             RedirectIndex = redirectIndex,
-            Source = source,
+            Source = redirectSource,
             Operation = operation,
             Target = isComplete
                 ? new ShellValueDomain
@@ -91,6 +127,74 @@ internal static class BashRedirectAnalysis
             IsPathRelevant = true,
             IsComplete = isComplete,
         };
+    }
+
+    private static RedirectAnalysis AnalyzeHereDocument(
+        int redirectIndex,
+        string? source,
+        IReadOnlyList<BashToken>? sourceTokens,
+        ClauseElement element,
+        RedirectSource redirectSource,
+        bool stripLeadingTabs)
+    {
+        if (source is null || sourceTokens is null ||
+            element.SourceStart is null || element.SourceLength is null)
+        {
+            return Incomplete(redirectIndex);
+        }
+
+        var elementEnd = element.SourceStart.Value + element.SourceLength.Value;
+        foreach (var token in sourceTokens)
+        {
+            if (token.HeredocBodyValue is null ||
+                token.HeredocBodyStart is null ||
+                token.HeredocBodyLength is null ||
+                token.SourceStart + token.SourceLength != elementEnd)
+            {
+                continue;
+            }
+
+            var bodyStart = token.HeredocBodyStart.Value;
+            var bodyLength = token.HeredocBodyLength.Value;
+            if (token.SourceStart < element.SourceStart.Value ||
+                token.SourceStart + token.SourceLength > source.Length ||
+                bodyStart < 0 || bodyLength < 0 ||
+                bodyStart + bodyLength > source.Length)
+            {
+                return Incomplete(redirectIndex);
+            }
+
+            var hereDocument = new HereDocumentAnalysis
+            {
+                Delimiter = new ShellSourceFragment
+                {
+                    Raw = source.Substring(token.SourceStart, token.SourceLength),
+                    SourceStart = token.SourceStart,
+                    SourceLength = token.SourceLength,
+                },
+                Body = new ShellSourceFragment
+                {
+                    Raw = source.Substring(bodyStart, bodyLength),
+                    SourceStart = bodyStart,
+                    SourceLength = bodyLength,
+                },
+                ExpansionMode = token.IsHeredocDelimiterQuoted
+                    ? HereDocumentExpansionMode.Literal
+                    : HereDocumentExpansionMode.Expand,
+                StripLeadingTabs = stripLeadingTabs,
+                IsComplete = true,
+            };
+            return new RedirectAnalysis
+            {
+                RedirectIndex = redirectIndex,
+                Source = redirectSource,
+                Operation = RedirectOperation.HereDocument,
+                HereDocument = hereDocument,
+                IsComplete = redirectSource.Kind != RedirectSourceKind.Unknown,
+            };
+        }
+
+        return Incomplete(redirectIndex);
     }
 
     private static RedirectAnalysis AnalyzeDescriptorTarget(
@@ -193,22 +297,35 @@ internal static class BashRedirectAnalysis
 
         if (descriptorText.Length > 0)
         {
-            if (!int.TryParse(
+            if (int.TryParse(
                     descriptorText.ToString(),
                     NumberStyles.None,
                     CultureInfo.InvariantCulture,
-                    out var descriptor) ||
-                descriptor < 0)
+                    out var descriptor) &&
+                descriptor >= 0)
+            {
+                source = new RedirectSource
+                {
+                    Kind = RedirectSourceKind.Descriptor,
+                    Descriptor = descriptor,
+                };
+            }
+            else
             {
                 source = new RedirectSource();
+                if (raw.AsSpan(operatorStart).StartsWith("<<-", StringComparison.Ordinal))
+                {
+                    operation = RedirectOperation.HereDocument;
+                    length = operatorStart + 3;
+                }
+                else if (raw.AsSpan(operatorStart).StartsWith("<<", StringComparison.Ordinal))
+                {
+                    operation = RedirectOperation.HereDocument;
+                    length = operatorStart + 2;
+                }
+
                 return true;
             }
-
-            source = new RedirectSource
-            {
-                Kind = RedirectSourceKind.Descriptor,
-                Descriptor = descriptor,
-            };
         }
 
         if (raw.AsSpan(operatorStart).StartsWith(">>", StringComparison.Ordinal))
@@ -227,12 +344,14 @@ internal static class BashRedirectAnalysis
 
         if (raw.AsSpan(operatorStart).StartsWith("<<-", StringComparison.Ordinal))
         {
+            operation = RedirectOperation.HereDocument;
             length = operatorStart + 3;
             return true;
         }
 
         if (raw.AsSpan(operatorStart).StartsWith("<<", StringComparison.Ordinal))
         {
+            operation = RedirectOperation.HereDocument;
             length = operatorStart + 2;
             return true;
         }

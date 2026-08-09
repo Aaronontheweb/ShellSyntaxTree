@@ -1069,7 +1069,7 @@ public class BashStructuralProjectionTests
         Assert.False(result.IsUnparseable);
         Assert.Equal(new[] { "printf body", "cat" }, result.Commands.Select(CommandVerb));
         Assert.True(result.Commands[0].IsComplete);
-        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
         var outer = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Equal(0, outer.SourceStart);
         Assert.Equal(source.Length, outer.SourceLength);
@@ -1077,6 +1077,216 @@ public class BashStructuralProjectionTests
         Assert.Equal(source.IndexOf("$(", System.StringComparison.Ordinal), substitution.SourceStart);
         Assert.Equal("$(printf body)".Length, substitution.SourceLength);
         Assert.Equal(CommandOccurrenceRole.Substitution, result.Commands[0].ImmediateRole);
+    }
+
+    [Fact]
+    public void Literal_heredoc_publishes_authored_data_and_retains_compatibility_redirect()
+    {
+        const string source = "cat > output.txt <<'EOF'\nhello\nEOF\n";
+
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var occurrence = Assert.Single(result.Commands);
+        Assert.True(occurrence.IsComplete);
+        Assert.Equal(2, occurrence.Redirects.Count);
+
+        var redirect = occurrence.Redirects[1];
+        Assert.Equal(1, redirect.RedirectIndex);
+        Assert.Equal(RedirectSourceKind.Default, redirect.Source.Kind);
+        Assert.Null(redirect.Source.Descriptor);
+        Assert.Equal(RedirectOperation.HereDocument, redirect.Operation);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
+        Assert.False(redirect.IsPathRelevant);
+        Assert.True(redirect.IsComplete);
+
+        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
+        Assert.Equal("'EOF'", hereDocument.Delimiter.Raw);
+        Assert.Equal(source.IndexOf("'EOF'", System.StringComparison.Ordinal),
+            hereDocument.Delimiter.SourceStart);
+        Assert.Equal("'EOF'".Length, hereDocument.Delimiter.SourceLength);
+        Assert.Equal("hello\n", hereDocument.Body.Raw);
+        Assert.Equal(source.IndexOf("hello", System.StringComparison.Ordinal),
+            hereDocument.Body.SourceStart);
+        Assert.Equal("hello\n".Length, hereDocument.Body.SourceLength);
+        Assert.Equal(HereDocumentExpansionMode.Literal, hereDocument.ExpansionMode);
+        Assert.False(hereDocument.StripLeadingTabs);
+        Assert.True(hereDocument.IsComplete);
+
+        var compatibility = occurrence.Clause.Redirects[1];
+        Assert.Equal(RedirectDirection.In, compatibility.Direction);
+        Assert.Equal("<<EOF>", compatibility.Target);
+        Assert.False(compatibility.IsDynamicSkip);
+        var element = occurrence.Clause.Elements.Last(item =>
+            item.Role == ClauseElementRole.Redirect);
+        Assert.Equal("<<'EOF'", element.Raw);
+        Assert.Equal("EOF", element.Value);
+        Assert.False(element.IsPath);
+    }
+
+    [Fact]
+    public void Expanding_heredoc_publishes_complete_body_and_substitution_facts()
+    {
+        const string source = "cat <<EOF\nbefore $(id) after\nEOF";
+
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(new[] { "id", "cat" }, result.Commands.Select(CommandVerb));
+        var consumer = result.Commands[1];
+        Assert.True(consumer.IsComplete);
+        var redirect = Assert.Single(consumer.Redirects);
+        Assert.Equal(RedirectOperation.HereDocument, redirect.Operation);
+        Assert.True(redirect.IsComplete);
+        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
+        Assert.Equal("EOF", hereDocument.Delimiter.Raw);
+        Assert.Equal("before $(id) after\n", hereDocument.Body.Raw);
+        Assert.Equal(HereDocumentExpansionMode.Expand, hereDocument.ExpansionMode);
+        Assert.True(hereDocument.IsComplete);
+        Assert.Equal(CommandOccurrenceRole.Substitution, result.Commands[0].ImmediateRole);
+    }
+
+    [Fact]
+    public void Simple_parameter_in_expanding_heredoc_remains_complete_data()
+    {
+        const string source = "cat <<EOF\n${value}\nEOF";
+
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var redirect = Assert.Single(Assert.Single(result.Commands).Redirects);
+        Assert.True(redirect.IsComplete);
+        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
+        Assert.Equal("${value}\n", hereDocument.Body.Raw);
+        Assert.Equal(HereDocumentExpansionMode.Expand, hereDocument.ExpansionMode);
+        Assert.True(hereDocument.IsComplete);
+    }
+
+    [Fact]
+    public void Tab_stripping_heredoc_retains_authored_tabs_in_body_provenance()
+    {
+        const string source = "cat <<-EOF\n\tvalue\n\tEOF";
+
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var redirect = Assert.Single(Assert.Single(result.Commands).Redirects);
+        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
+        Assert.Equal(RedirectOperation.HereDocument, redirect.Operation);
+        Assert.Equal("\tvalue\n", hereDocument.Body.Raw);
+        Assert.Equal(source.IndexOf("\tvalue", System.StringComparison.Ordinal),
+            hereDocument.Body.SourceStart);
+        Assert.True(hereDocument.StripLeadingTabs);
+        Assert.Equal(HereDocumentExpansionMode.Expand, hereDocument.ExpansionMode);
+        Assert.True(hereDocument.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("cat 2<<EOF\nbody\nEOF", 2, false)]
+    [InlineData("cat 10<<-EOF\n\tbody\n\tEOF", 10, true)]
+    [InlineData("cat 1\\\n0<<EOF\nbody\nEOF", 10, false)]
+    public void Numeric_source_heredoc_preserves_descriptor_and_body_semantics(
+        string source,
+        int sourceDescriptor,
+        bool stripLeadingTabs)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var occurrence = Assert.Single(result.Commands);
+        Assert.True(occurrence.IsComplete);
+        var redirect = Assert.Single(occurrence.Redirects);
+        Assert.Equal(RedirectSourceKind.Descriptor, redirect.Source.Kind);
+        Assert.Equal(sourceDescriptor, redirect.Source.Descriptor);
+        Assert.Equal(RedirectOperation.HereDocument, redirect.Operation);
+        Assert.True(redirect.IsComplete);
+        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
+        Assert.Equal("EOF", hereDocument.Delimiter.Raw);
+        Assert.Equal(stripLeadingTabs ? "\tbody\n" : "body\n", hereDocument.Body.Raw);
+        Assert.Equal(stripLeadingTabs, hereDocument.StripLeadingTabs);
+        Assert.True(hereDocument.IsComplete);
+
+        var compatibility = Assert.Single(occurrence.Clause.Redirects);
+        Assert.Equal(RedirectDirection.In, compatibility.Direction);
+        Assert.Equal("<<EOF>", compatibility.Target);
+        Assert.False(compatibility.IsDynamicSkip);
+    }
+
+    [Fact]
+    public void Overflow_numeric_source_heredoc_preserves_body_but_remains_incomplete()
+    {
+        var result = Parse("cat 999999999999999999999<<EOF\nbody\nEOF");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var occurrence = Assert.Single(result.Commands);
+        Assert.False(occurrence.IsComplete);
+        var redirect = Assert.Single(occurrence.Redirects);
+        Assert.Equal(RedirectSourceKind.Unknown, redirect.Source.Kind);
+        Assert.Equal(RedirectOperation.HereDocument, redirect.Operation);
+        Assert.False(redirect.IsComplete);
+        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
+        Assert.Equal("body\n", hereDocument.Body.Raw);
+        Assert.True(hereDocument.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("cat <<EOF\nEOF", "")]
+    [InlineData("cat <<EOF\r\nbody\r\nEOF", "body\r\n")]
+    public void Heredoc_body_fragment_preserves_empty_and_crlf_source(
+        string source,
+        string expectedBody)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var redirect = Assert.Single(Assert.Single(result.Commands).Redirects);
+        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
+        Assert.Equal(expectedBody, hereDocument.Body.Raw);
+        Assert.Equal(expectedBody.Length, hereDocument.Body.SourceLength);
+        Assert.Equal(source.IndexOf('\n') + 1, hereDocument.Body.SourceStart);
+        Assert.True(redirect.IsComplete);
+        Assert.True(hereDocument.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("E\\OF", "E\\OF")]
+    [InlineData("E\"OF\"", "E\"OF\"")]
+    public void Escaped_or_mixed_quoted_delimiter_publishes_literal_mode(
+        string delimiter,
+        string expectedRaw)
+    {
+        var source = "cat <<" + delimiter + "\n$value\nEOF";
+
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var redirect = Assert.Single(Assert.Single(result.Commands).Redirects);
+        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
+        Assert.Equal(expectedRaw, hereDocument.Delimiter.Raw);
+        Assert.Equal("$value\n", hereDocument.Body.Raw);
+        Assert.Equal(HereDocumentExpansionMode.Literal, hereDocument.ExpansionMode);
+        Assert.True(hereDocument.IsComplete);
+    }
+
+    [Fact]
+    public void Decoded_wrapper_heredoc_retains_raw_data_without_outer_source_offsets()
+    {
+        const string source = "bash -c \"cat <<'EOF'\nhello\nEOF\"";
+
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var occurrence = Assert.Single(result.Commands);
+        Assert.True(occurrence.Clause.IsCommandStringWrapped);
+        var redirect = Assert.Single(occurrence.Redirects);
+        Assert.True(redirect.IsComplete);
+        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
+        Assert.Equal("'EOF'", hereDocument.Delimiter.Raw);
+        Assert.Equal("hello\n", hereDocument.Body.Raw);
+        Assert.Null(hereDocument.Delimiter.SourceStart);
+        Assert.Null(hereDocument.Delimiter.SourceLength);
+        Assert.Null(hereDocument.Body.SourceStart);
+        Assert.Null(hereDocument.Body.SourceLength);
     }
 
     [Theory]
@@ -1200,6 +1410,9 @@ public class BashStructuralProjectionTests
     [InlineData("cat <<A <<B\na\nA\nb\nB")]
     [InlineData("cat <<EOF\n`id`\nEOF")]
     [InlineData("cat <<EOF\n$((1+1))\nEOF")]
+    [InlineData("cat <<EOF\n$[x]\nEOF")]
+    [InlineData("cat <<EOF\n${x@P}\nEOF")]
+    [InlineData("cat <<EOF\n${x:-$(id)}\nEOF")]
     [InlineData("cat <<EOF\n$\\\n(id)\nEOF")]
     [InlineData("cat <<EOF\n$(id\nEOF")]
     [InlineData("cat <<EOF\n$(id)\n")]

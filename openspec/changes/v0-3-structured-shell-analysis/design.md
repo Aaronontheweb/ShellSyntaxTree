@@ -543,6 +543,30 @@ later scope that can observe it. A decoded `bash -c` after `export` therefore
 enters with `Unknown` initial variable state, while a cwd-only transfer retains
 the caller's variable-state assertion.
 
+This state proof applies to every simple Bash parameter dereference, not only
+to loop assignment. A syntactically simple `$name` or `${name}` can execute
+when `name` is a nameref whose target contains an arithmetic array subscript.
+For example, a prior `declare -n x='a[$(hidden)0]'` makes `${x}` evaluate the
+subscript and execute `hidden`, even though the declaration operand was quoted
+data. `Unknown` initial state therefore cannot classify a variable
+dereference as fully accounted for. `IsolatedNonInteractive` may do so only
+before any reachable unmodeled variable mutation, or for a binding whose
+ordinary-scalar attributes are modeled explicitly. The produced value may
+still be `Unknown`; variable-attribute safety and value exactness remain
+independent facts.
+
+Stable v0.3 does not add a partial expression evaluator for Bash builtins.
+Direct or statically wrapped `eval`, `source` / `.`, `trap`, `let`, `declare`,
+`typeset`, `local`, `readonly`, `export`, `unset`, `read`, `readarray`,
+`mapfile`, `getopts`, and `set` forms fail the complete parse closed, as does
+`printf -v`. These commands can execute argument text directly, evaluate
+arithmetic, install deferred execution, or assign through attributes whose
+state is not proved. Exact `command` and `builtin` dispatch wrappers are
+recursively unwrapped; dynamic or invalid wrapper grammar fails closed rather
+than bypassing the catalog. Ordinary `printf` without `-v` remains supported.
+A later additive grammar may admit individually proved query or assignment
+forms without weakening this stable boundary.
+
 PowerShell needs the same explicit boundary for different reasons.
 `PwshParserOptions.InitialStateMode` defaults to `Unknown`, which permits
 structural discovery but withholds exact or finite `foreach` binding proofs.

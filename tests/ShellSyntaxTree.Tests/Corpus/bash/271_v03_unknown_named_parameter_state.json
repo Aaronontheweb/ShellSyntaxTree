@@ -1,0 +1,11 @@
+{
+  "name": "v0.3 Bash unknown-state named parameter expansion fails closed",
+  "input": "printf '%s' \"$value\"",
+  "bashInitialStateMode": "Unknown",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "variable-attribute state"
+  },
+  "notes": "Without a caller-proved isolated initial state, even a simple named parameter may carry integer or nameref execution semantics.",
+  "oracleExpectation": "OutOfScope"
+}

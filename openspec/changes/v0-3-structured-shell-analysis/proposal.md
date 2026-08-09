@@ -29,6 +29,11 @@ fail-closed behavior for incomplete analysis.
 - Add conservative value and shell-state analysis that distinguishes exact,
   finite, bounded-symbolic, and unknown facts without executing commands or
   enumerating the filesystem.
+- Require proved Bash variable-attribute state before treating a simple
+  parameter dereference as non-executable. Stable v0.3 fails closed on
+  unmodeled shell builtins that can evaluate, assign through, or defer
+  argument text, because nameref and arithmetic attributes can otherwise turn
+  quoted data into hidden execution.
 - Preserve resolver-relevant lexical fragments, typed expansion identity and
   cardinality, operation-specific transform eligibility, opaque cause, and
   consumer/binding context through decoding so escaped or

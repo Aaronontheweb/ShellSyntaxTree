@@ -280,6 +280,16 @@ mode for every later region that can observe it. In particular, a decoded
 the option is not blindly copied into the child. Cwd-only state changes retain
 the caller's initial-variable assertion.
 
+The same attribute-state proof governs every simple named-parameter
+dereference. With `BashInitialStateMode.Unknown`, `$name` and `${name}` are
+unparseable because an ambient nameref can evaluate an arithmetic array
+subscript and execute authored command text. In isolated mode, a fresh-process
+variable before reachable source mutation may remain an unknown value while
+still being proved free of recursive variable attributes. A modeled ordinary
+loop binding retains its explicit proof. Positional and special parameters
+that cannot carry variable attributes keep their existing typed cardinality
+rules.
+
 Even in isolated mode, the v0.3 bounded loop grammar accepts only ordinary
 lowercase scalar binding names matching `[a-z][a-z0-9_]*`, excluding
 `auto_resume` and `histchars`. `_`, uppercase names, and every name outside
@@ -791,12 +801,17 @@ variable values to `Unknown` rather than selecting one path.
 
 `cd` and `chdir` use the effective argument vector for the current visit.
 `pushd` and `popd` may be recognized only with unknown success cwd until the
-directory stack is modeled. Variable mutators (`read`, `unset`, `printf -v`,
-`export`, `declare`, and equivalents), `eval`, `source` / `.`, and
-execution-bearing `trap` make the complete loop region unparseable. The same is
-true for `break`, `continue`, `return`, `exit`, and `exec` until their transfers
-are implemented. Recognition recursively unwraps statically proved `command`
-and `builtin` dispatch; a wrapper must not bypass the rejection.
+directory stack is modeled. Unmodeled execution-bearing or
+attribute-mutating builtins fail the complete parse closed globally, not only
+inside loops. The stable catalog is `eval`, `source` / `.`, `trap`, `let`,
+`declare`, `typeset`, `local`, `readonly`, `export`, `unset`, `read`,
+`readarray`, `mapfile`, `getopts`, and `set`, plus `printf -v`. These forms can
+evaluate argument text, install deferred execution, or assign through
+unproved integer, nameref, or array attributes. Recognition recursively
+unwraps statically proved `command` and `builtin` dispatch; dynamic or invalid
+wrapper grammar fails closed. Ordinary `printf` without `-v` remains
+supported. `break`, `continue`, `return`, `exit`, and `exec` remain loop-region
+failures until their transfers are implemented.
 
 Substitutions and subshells inherit the current variable/cwd state but discard
 their state changes on exit. Decoded Bash command wrappers inherit invocation
@@ -1305,17 +1320,20 @@ quoted_string   := single-quoted | double-quoted
 - v0.2 recognizes heredocs (`<<EOF ... EOF`) as redirect syntax while the
   body is skipped. Stable v0.3 preserves delimiter, body, expansion mode,
   tab-stripping mode, and completeness through `HereDocumentAnalysis`.
-  The bounded grammar accepts one terminal `<<` / `<<-` redirect on a command
-  header, with optional whitespace or a trailing comment after the delimiter.
+  The bounded grammar accepts one terminal `<<` / `<<-` redirect, including a
+  literal numeric source descriptor such as `3<<EOF`, on a command header,
+  with optional whitespace or a trailing comment after the delimiter.
   Additional header tokens, pipelines, and queued heredocs are unparseable
   until their body-association grammar is modeled. Quote removal determines
   the delimiter spelling; any quoted or escaped delimiter fragment makes the
   body literal. In an expanding body, unescaped `$()` substitutions are
   executable even when their spelling is surrounded by quote characters,
   because heredoc body quotes are data rather than shell quoting syntax.
-  Escaped substitutions remain literal. Legacy backticks, arithmetic
-  expansion, line continuations that could hide a substitution boundary, and
-  incomplete substitutions make the whole result unparseable.
+  Escaped substitutions remain literal. Legacy backticks, `$((...))` and
+  obsolete `$[...]` arithmetic expansion, prompt-transformed `${name@P}` or
+  other parameter operators, line continuations that could hide a
+  substitution boundary, and incomplete substitutions make the whole result
+  unparseable.
 - Redirect targets matching the POSIX fd-dup / fd-close shorthand —
   `&N`, `&N-`, or `&-` (where `N` is one or more decimal digits) — are
   NOT path-resolved. The parser carries the raw token (e.g. `&1`) on
@@ -1365,6 +1383,9 @@ delimited `$()` command substitution in a supported simple-command argument,
 redirect value, iterable, or expanding heredoc body is recursively parsed and
 exposes its inner commands; its produced value remains `Unknown`. A nested
 substitution is recursively attached to the nearest containing simple command.
+Simple `$name` and `${name}` forms additionally require the proved
+variable-attribute state from §2; syntactic simplicity alone is not evidence
+that dereferencing a nameref cannot execute an array subscript.
 Legacy backtick substitution becomes unparseable in v0.3 until its distinct
 escape and nesting rules can be mapped without guessing. A Bash path-shaped
 glob may produce a `Pattern` only when its exact static covering directory is
@@ -1399,7 +1420,7 @@ The lexer produces tokens consumed by the parser. Token kinds:
   the quote delimiters from the token value. Example: `"hello world"`
   becomes the token value `hello world`.
 - **OPERATOR** — `&&`, `||`, `;`, `|`, `>`, `>>`, `<`, numeric-descriptor
-  forms such as `2>`, `3>>`, and `10<`, `&>`, `&>>`,
+  forms such as `2>`, `3>>`, `10<`, `3<<`, and `4<<-`, `&>`, `&>>`,
   `(`, `)`, `<<`, `<<-`.
 - **WHITESPACE** — one or more spaces, tabs, or newlines (newlines inside
   a heredoc body are not emitted as ordinary tokens; the delimiter token
@@ -1419,9 +1440,9 @@ The lexer produces tokens consumed by the parser. Token kinds:
   Expanding-heredoc substitutions use the same opaque fragment semantics but
   remain attached to the delimiter token rather than entering the ordinary
   command-token stream.
-- **UNPARSEABLE_SENTINEL** — `$((expr))` arithmetic expansion or any
-  operator-bearing parameter expansion such as `${var:-$(cmd)}` or
-  `${var//pat/repl}`. The lexer skips past
+- **UNPARSEABLE_SENTINEL** — `$((expr))` or obsolete `$[expr]` arithmetic
+  expansion, or any operator-bearing parameter expansion such as
+  `${var:-$(cmd)}`, `${var//pat/repl}`, or `${var@P}`. The lexer skips past
   the matching close (`))` or `}` respectively) and emits a sentinel
   whose reason names the rejected construct. The parser consumes this
   token by setting outer `ParsedCommand.IsUnparseable = true` (see §11).
@@ -2306,6 +2327,11 @@ Each file:
   "notes": "Optional explanation of edge case being captured."
 }
 ```
+
+An entry may set `bashInitialStateMode` to `Unknown` or
+`IsolatedNonInteractive` when the expected result depends on the caller-proved
+Bash variable-state contract. When omitted, the Bash corpus runner uses
+`IsolatedNonInteractive`. The field is rejected outside the Bash corpus.
 
 An entry may add an `elements` list to a clause to pin the complete
 `Clause.Elements` projection (`raw`, `value`, `role`, `sourceStart`,

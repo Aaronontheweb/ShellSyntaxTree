@@ -257,6 +257,11 @@ syntax SHALL be diagnostic evidence only.
 - **WHEN** Bash encounters a single-`&` background list in v0.3
 - **THEN** the whole result is unparseable until concurrency and state boundaries are specified
 
+#### Scenario: Unmodeled execution-bearing Bash builtin
+- **WHEN** Bash encounters a direct or statically dispatch-wrapped builtin whose arguments can execute, defer, or recursively evaluate authored text
+- **THEN** the whole result is unparseable until that builtin's state and execution semantics are modeled
+- **THEN** no complete outer occurrence hides the unmodeled executable region
+
 #### Scenario: Ordinary PowerShell script-block argument
 - **WHEN** PowerShell parses a script block for a canonical receiver proved not to execute that argument
 - **THEN** it remains an opaque dynamic argument

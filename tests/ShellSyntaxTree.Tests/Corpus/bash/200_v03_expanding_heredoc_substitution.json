@@ -116,7 +116,31 @@
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "operation": "HereDocument",
+            "hereDocument": {
+              "delimiter": {
+                "raw": "EOF",
+                "sourceStart": 6,
+                "sourceLength": 3
+              },
+              "body": {
+                "raw": "$(id)\n",
+                "sourceStart": 10,
+                "sourceLength": 6
+              },
+              "expansionMode": "Expand",
+              "stripLeadingTabs": false,
+              "isComplete": true
+            },
+            "isPathRelevant": false,
+            "isComplete": true
+          }
+        ],
         "ancestry": [
           {
             "ancestorKind": "Block",

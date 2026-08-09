@@ -34,12 +34,20 @@ public class CorpusRunnerTests
         Assert.NotNull(entry);
         Assert.False(string.IsNullOrEmpty(entry.Name), $"Corpus entry {fileName} has no name.");
         Assert.NotNull(entry.Expected);
+        if (shell != "bash")
+        {
+            Assert.Null(entry.BashInitialStateMode);
+        }
+
         if (shell != "powershell")
         {
             Assert.Null(entry.PowerShellInitialStateMode);
         }
 
-        var actual = CreateParser(shell, entry.PowerShellInitialStateMode).Parse(entry.Input);
+        var actual = CreateParser(
+            shell,
+            entry.BashInitialStateMode,
+            entry.PowerShellInitialStateMode).Parse(entry.Input);
         AstAssert.Equal(entry.Expected!, actual, $"{shell}/{fileName}");
         AssertClauseElementInvariants(actual, $"{shell}/{fileName}");
         AssertAuthoredTokenCoverage(shell, actual, $"{shell}/{fileName}");
@@ -871,13 +879,15 @@ public class CorpusRunnerTests
     /// </summary>
     internal static IShellParser CreateParser(
         string shell,
+        BashInitialStateMode? bashInitialStateMode = null,
         PwshInitialStateMode? powerShellInitialStateMode = null) => shell switch
         {
             "bash" => new BashParser(new BashParserOptions
             {
                 HomeDirectory = "/home/test",
                 WorkingDirectory = "/work",
-                InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
+                InitialStateMode = bashInitialStateMode ??
+                    BashInitialStateMode.IsolatedNonInteractive,
             }),
             "powershell" => new PwshParser(new PwshParserOptions
             {
@@ -942,6 +952,8 @@ public sealed record CorpusEntry
     public string Name { get; init; } = "";
 
     public string Input { get; init; } = "";
+
+    public BashInitialStateMode? BashInitialStateMode { get; init; }
 
     public PwshInitialStateMode? PowerShellInitialStateMode { get; init; }
 
@@ -1055,9 +1067,33 @@ public sealed record ExpectedRedirectAnalysis
 
     public ExpectedValueDomain Target { get; init; } = new();
 
+    public ExpectedHereDocumentAnalysis? HereDocument { get; init; }
+
     public bool IsPathRelevant { get; init; }
 
     public bool IsComplete { get; init; }
+}
+
+public sealed record ExpectedHereDocumentAnalysis
+{
+    public ExpectedSourceFragment Delimiter { get; init; } = new();
+
+    public ExpectedSourceFragment Body { get; init; } = new();
+
+    public HereDocumentExpansionMode ExpansionMode { get; init; }
+
+    public bool StripLeadingTabs { get; init; }
+
+    public bool IsComplete { get; init; }
+}
+
+public sealed record ExpectedSourceFragment
+{
+    public string Raw { get; init; } = "";
+
+    public int? SourceStart { get; init; }
+
+    public int? SourceLength { get; init; }
 }
 
 public sealed record ExpectedEffectiveArgument

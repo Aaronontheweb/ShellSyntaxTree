@@ -3,8 +3,8 @@
   "input": "for f in a; do :; done; unset f; echo \"$f\"",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "invalid parser-owned facts"
+    "unparseableReasonContains": "execution-bearing builtin"
   },
-  "notes": "Loop bindings persist after done; an unsupported later unset cannot leave a stale exact effective value.",
+  "notes": "Loop bindings persist after done; unset is globally rejected until its variable-attribute effects are modeled.",
   "oracleExpectation": "OutOfScope"
 }

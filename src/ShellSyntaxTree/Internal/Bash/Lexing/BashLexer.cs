@@ -27,7 +27,7 @@ namespace ShellSyntaxTree.Internal.Bash.Lexing;
 ///         <see cref="OpaqueRegionScanner"/>. Both are emitted as a single
 ///         <see cref="BashTokenKind.OpaqueSubstitution"/> token.</item>
 ///   <item>Constructs SPEC §1 calls non-goals — arithmetic expansion
-///         <c>$((…))</c> and complex parameter expansion
+///         <c>$((…))</c> / <c>$[…]</c> and complex parameter expansion
 ///         <c>${var//pat/repl}</c> — emit a
 ///         <see cref="BashTokenKind.UnparseableSentinel"/>. The parser
 ///         lifts that sentinel into <c>ParsedCommand.IsUnparseable</c>.</item>
@@ -133,9 +133,9 @@ internal static class BashLexer
                 // Heredoc handling: when we just emitted `<<` or `<<-`, the
                 // *next* word is the delimiter and the body that follows the
                 // first newline must be skipped per SPEC §4.
-                if (opText == "<<" || opText == "<<-")
+                if (IsHeredocOperator(opText))
                 {
-                    i = ConsumeHeredoc(src, i, opText, tokens);
+                    i = ConsumeHeredoc(src, i, opText!, tokens);
                 }
 
                 continue;
@@ -200,6 +200,12 @@ internal static class BashLexer
                     }
 
                     i = ConsumeCommandSubstitution(src, i, tokens);
+                    continue;
+                }
+
+                if (next == '[')
+                {
+                    i = ConsumeObsoleteArithmetic(src, i, tokens);
                     continue;
                 }
 
@@ -391,8 +397,18 @@ internal static class BashLexer
 
             if (src[descriptorEnd] == '<')
             {
-                length = descriptorEnd - i + 1;
-                text = descriptor.ToString() + "<";
+                var redirectLength = 1;
+                if (descriptorEnd + 1 < src.Length && src[descriptorEnd + 1] == '<')
+                {
+                    redirectLength = descriptorEnd + 2 < src.Length &&
+                        src[descriptorEnd + 2] == '-'
+                            ? 3
+                            : 2;
+                }
+
+                length = descriptorEnd - i + redirectLength;
+                text = descriptor.ToString() +
+                    (redirectLength == 3 ? "<<-" : redirectLength == 2 ? "<<" : "<");
                 return true;
             }
         }
@@ -458,6 +474,27 @@ internal static class BashLexer
             ? index + 3
             : index + 2;
         return true;
+    }
+
+    internal static bool IsHeredocOperator(string? operatorText)
+    {
+        if (string.IsNullOrEmpty(operatorText))
+        {
+            return false;
+        }
+
+        var operatorStart = 0;
+        while (operatorStart < operatorText!.Length &&
+               operatorText[operatorStart] is >= '0' and <= '9')
+        {
+            operatorStart++;
+        }
+
+        var remaining = operatorText.Length - operatorStart;
+        return remaining >= 2 &&
+               operatorText[operatorStart] == '<' &&
+               operatorText[operatorStart + 1] == '<' &&
+               (remaining == 2 || remaining == 3 && operatorText[operatorStart + 2] == '-');
     }
 
     private static bool CanStartNumericDescriptor(IReadOnlyList<BashToken> tokens)
@@ -953,6 +990,25 @@ internal static class BashLexer
         return start + length;
     }
 
+    private static int ConsumeObsoleteArithmetic(
+        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
+    {
+        var scan = OpaqueRegionScanner.Scan(src, start + 1, '[', ']');
+        var endInclusive = scan.Closed ? scan.EndIndex : src.Length - 1;
+        var length = endInclusive - start + 1;
+        var reason = scan.Closed
+            ? "obsolete arithmetic expansion '$[…]': not supported in v0.3"
+            : "unterminated obsolete arithmetic expansion '$[…]': not supported in v0.3";
+        tokens.Add(new BashToken(
+            BashTokenKind.UnparseableSentinel,
+            src.Slice(start, length).ToString(),
+            null,
+            start,
+            length,
+            reason));
+        return start + length;
+    }
+
     private static bool TryConsumeComplexParamExpansion(
         ReadOnlySpan<char> src, int start, List<BashToken> tokens, out int afterBrace)
     {
@@ -1057,42 +1113,27 @@ internal static class BashLexer
                 continue;
             }
 
-            // $( and ${...//...} terminate the word — they emit their own
-            // tokens. Simple ${VAR}, $VAR, $$ etc. are absorbed.
+            // Unsupported expansion forms terminate the word so the outer
+            // tokenizer can emit one fail-closed sentinel at their exact
+            // authored boundary. Simple ${VAR}, $VAR, $$ etc. are absorbed.
             if (c == '$' && i + 1 < src.Length)
             {
                 var next = src[i + 1];
-                if (next == '(') break;
+                if (next is '(' or '[') break;
                 if (next == '{')
                 {
-                    // Decide complex vs simple by looking for a '/' in the body.
                     var openBrace = i + 1;
                     var scan = OpaqueRegionScanner.Scan(src, openBrace, '{', '}');
                     if (!scan.Closed) break; // let outer loop emit the sentinel
 
-                    var bodyHasSlash = false;
-                    for (var k = openBrace + 1; k < scan.EndIndex; k++)
-                    {
-                        if (src[k] == '/') { bodyHasSlash = true; break; }
-                    }
-
-                    if (bodyHasSlash) break;
-
-                    if (TryAppendBashExpansion(
-                            src, ref i, value, allowFieldSplit: true, out var error))
-                    {
-                        if (error is not null)
-                        {
-                            break;
-                        }
-
-                        continue;
-                    }
+                    var body = src.Slice(openBrace + 1, scan.EndIndex - openBrace - 1);
+                    if (!IsSimpleBracedParameterName(body)) break;
                 }
 
                 if (TryAppendBashExpansion(
-                        src, ref i, value, allowFieldSplit: true, out _))
+                        src, ref i, value, allowFieldSplit: true, out var error))
                 {
+                    if (error is not null) break;
                     continue;
                 }
             }
@@ -1157,6 +1198,13 @@ internal static class BashLexer
         }
 
         var next = src[start + 1];
+        if (next == '[')
+        {
+            error = "obsolete arithmetic expansion '$[…]': not supported in v0.3";
+            index = src.Length;
+            return true;
+        }
+
         if (next == '(')
         {
             if (start + 2 < src.Length && src[start + 2] == '(')
@@ -1451,7 +1499,7 @@ internal static class BashLexer
 
         var bodyStart = j;
 
-        var stripTabs = opText == "<<-";
+        var stripTabs = opText.EndsWith("<<-", StringComparison.Ordinal);
         while (j <= src.Length)
         {
             // Read the next line: from j to the next '\n' or end-of-input.
@@ -1509,6 +1557,9 @@ internal static class BashLexer
                 tokens[delimiterIndex] = tokens[delimiterIndex] with
                 {
                     HeredocBodyValue = bodyValue,
+                    HeredocBodyStart = bodyStart,
+                    HeredocBodyLength = bodyLength,
+                    IsHeredocDelimiterQuoted = delimiterQuoted,
                     HeredocSourceEnd = lineEnd,
                 };
 
@@ -1675,31 +1726,26 @@ internal static class BashLexer
                 return false;
             }
 
-            if (character == '$' && index + 1 < bodyEnd && src[index + 1] == '(')
+            if (character == '$')
             {
-                if (index + 2 < bodyEnd && src[index + 2] == '(')
+                var afterExpansion = index;
+                if (TryAppendBashExpansion(
+                        src.Slice(0, bodyEnd),
+                        ref afterExpansion,
+                        builder,
+                        allowFieldSplit: false,
+                        out var expansionError))
                 {
-                    value = builder.Build();
-                    error = "arithmetic expansion '$((…))' not supported in heredoc body";
-                    return false;
-                }
+                    if (expansionError is not null)
+                    {
+                        value = builder.Build();
+                        error = expansionError;
+                        return false;
+                    }
 
-                var scan = ScanCommandSubstitution(src, index + 1);
-                if (!scan.Closed || scan.EndIndex >= bodyEnd)
-                {
-                    value = builder.Build();
-                    error = scan.Error ?? "unbalanced command substitution in heredoc body";
-                    return false;
+                    index = afterExpansion;
+                    continue;
                 }
-
-                var substitutionLength = scan.EndIndex - index + 1;
-                builder.AppendOpaque(
-                    src.Slice(index, substitutionLength).ToString(),
-                    ShellOpaqueCause.CommandSubstitution,
-                    index,
-                    substitutionLength);
-                index += substitutionLength;
-                continue;
             }
 
             builder.AppendLiteral(character, index, 1);

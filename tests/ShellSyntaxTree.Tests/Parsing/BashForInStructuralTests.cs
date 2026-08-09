@@ -141,14 +141,14 @@ public class BashForInStructuralTests
     [Theory]
     [InlineData("eval \"cd /a\"; for f in x; do rm -- \"$f\" rel.txt; done")]
     [InlineData("trap \"f=x\" DEBUG; for f in a b; do echo \"$f\"; done")]
-    public void Loop_after_prior_shell_state_mutation_fails_atomically(string source)
+    public void Execution_bearing_builtin_before_loop_fails_atomically(string source)
     {
         var result = Parse(source);
 
         Assert.True(result.IsUnparseable);
         Assert.Empty(result.Commands);
         Assert.Empty(result.Clauses);
-        Assert.Contains("shell-state mutation", result.UnparseableReason!);
+        Assert.Contains("execution-bearing builtin", result.UnparseableReason!);
     }
 
     [Theory]
@@ -820,7 +820,10 @@ public class BashForInStructuralTests
         Assert.True(result.IsUnparseable);
         Assert.Empty(result.Commands);
         Assert.Empty(result.Clauses);
-        Assert.Contains("mutation or control transfer", result.UnparseableReason!);
+        Assert.True(
+            result.UnparseableReason!.Contains("mutation or control transfer") ||
+            result.UnparseableReason.Contains("execution-bearing builtin"),
+            result.UnparseableReason);
     }
 
     [Theory]
@@ -972,7 +975,7 @@ public class BashForInStructuralTests
     }
 
     [Fact]
-    public void Decoded_loop_fails_after_outer_variable_state_mutation()
+    public void Export_before_decoded_loop_fails_at_the_global_execution_boundary()
     {
         var result = Parse(
             "export f=ambient; bash -c 'for f in a; do printf %s \"$f\"; done'");
@@ -980,18 +983,18 @@ public class BashForInStructuralTests
         Assert.True(result.IsUnparseable);
         Assert.Empty(result.Commands);
         Assert.Empty(result.Clauses);
-        Assert.Contains("isolated non-interactive initial state", result.UnparseableReason!);
+        Assert.Contains("execution-bearing builtin", result.UnparseableReason!);
     }
 
     [Fact]
-    public void Decoded_nonloop_command_remains_visible_after_outer_export()
+    public void Export_before_decoded_nonloop_command_fails_at_the_global_execution_boundary()
     {
         var result = Parse("export f=ambient; bash -c 'printf ok'");
 
-        Assert.False(result.IsUnparseable, result.UnparseableReason);
-        Assert.Equal(
-            new[] { "export", "printf" },
-            result.Commands.Select(command => command.Clause.Verb.Tokens[0]));
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("execution-bearing builtin", result.UnparseableReason!);
     }
 
     private static ClauseElement EffectiveValueElement(

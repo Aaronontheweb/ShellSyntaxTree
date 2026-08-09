@@ -3,7 +3,8 @@
   "input": "export f=ambient; bash -c 'for f in a; do printf %s \"$f\"; done'",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "isolated non-interactive initial state"
+    "unparseableReasonContains": "execution-bearing builtin"
   },
-  "notes": "A decoded wrapper cannot reuse isolated loop assumptions after the outer source changes inherited variable state."
+  "notes": "Export is globally rejected until its variable-attribute effects are modeled, before a decoded wrapper can reuse isolated loop assumptions.",
+  "oracleExpectation": "OutOfScope"
 }

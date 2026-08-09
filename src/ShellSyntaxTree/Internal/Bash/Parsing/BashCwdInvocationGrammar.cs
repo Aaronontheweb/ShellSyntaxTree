@@ -10,11 +10,103 @@ namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
 internal static class BashCwdInvocationGrammar
 {
+    private static readonly HashSet<string> ExecutionBearingBuiltins =
+        new(StringComparer.Ordinal)
+        {
+            ".",
+            "declare",
+            "eval",
+            "export",
+            "getopts",
+            "let",
+            "local",
+            "mapfile",
+            "read",
+            "readarray",
+            "readonly",
+            "set",
+            "source",
+            "trap",
+            "typeset",
+            "unset",
+        };
+
     internal static BashDispatchKind Classify(
         Clause clause,
         out IReadOnlyList<int> cwdArgumentElementIndices)
     {
         cwdArgumentElementIndices = Array.Empty<int>();
+        var words = CollectWords(clause);
+        var dispatch = ParseDispatch(clause, words);
+        if (dispatch.IsQuery)
+        {
+            return BashDispatchKind.Query;
+        }
+
+        if (!dispatch.IsSupported || dispatch.TargetWordIndex is null)
+        {
+            return BashDispatchKind.None;
+        }
+
+        var targetWordIndex = dispatch.TargetWordIndex.Value;
+        var target = clause.Elements[words[targetWordIndex]];
+        if (target.Value is not ("cd" or "chdir"))
+        {
+            return BashDispatchKind.None;
+        }
+
+        var arguments = new int[words.Count - targetWordIndex - 1];
+        for (var argumentIndex = 0; argumentIndex < arguments.Length; argumentIndex++)
+        {
+            arguments[argumentIndex] = words[targetWordIndex + argumentIndex + 1];
+        }
+
+        cwdArgumentElementIndices = arguments;
+        return BashDispatchKind.CwdTransfer;
+    }
+
+    internal static BashExecutionBoundaryKind ClassifyExecutionBoundary(Clause clause)
+    {
+        var words = CollectWords(clause);
+        var dispatch = ParseDispatch(clause, words);
+        if (!dispatch.IsSupported)
+        {
+            return dispatch.HasWrapper
+                ? BashExecutionBoundaryKind.UnsupportedDispatch
+                : BashExecutionBoundaryKind.Allowed;
+        }
+
+        if (dispatch.IsQuery)
+        {
+            return BashExecutionBoundaryKind.Query;
+        }
+
+        if (dispatch.TargetWordIndex is not { } targetWordIndex)
+        {
+            return BashExecutionBoundaryKind.Allowed;
+        }
+
+        var target = clause.Elements[words[targetWordIndex]];
+        if (ExecutionBearingBuiltins.Contains(target.Value))
+        {
+            return BashExecutionBoundaryKind.ExecutionBearingBuiltin;
+        }
+
+        if (target.Value == "printf" && targetWordIndex + 1 < words.Count)
+        {
+            var firstArgument = clause.Elements[words[targetWordIndex + 1]];
+            if (!IsStaticWord(firstArgument) ||
+                firstArgument.Value.StartsWith("-v", StringComparison.Ordinal))
+            {
+                return BashExecutionBoundaryKind.ExecutionBearingBuiltin;
+            }
+        }
+
+        return BashExecutionBoundaryKind.Allowed;
+    }
+
+    private static IReadOnlyList<int> CollectWords(Clause clause)
+    {
         var words = new List<int>();
         for (var index = 0; index < clause.Elements.Count; index++)
         {
@@ -24,17 +116,26 @@ internal static class BashCwdInvocationGrammar
             }
         }
 
+        return words;
+    }
+
+    private static BashDispatchAnalysis ParseDispatch(
+        Clause clause,
+        IReadOnlyList<int> words)
+    {
         var wordIndex = 0;
+        var hasWrapper = false;
         while (wordIndex < words.Count)
         {
             var element = clause.Elements[words[wordIndex]];
             if (!IsStaticWord(element))
             {
-                return BashDispatchKind.None;
+                return new BashDispatchAnalysis(false, false, hasWrapper, null);
             }
 
             if (element.Value == "command")
             {
+                hasWrapper = true;
                 wordIndex++;
                 var optionsEnded = false;
                 while (wordIndex < words.Count && !optionsEnded)
@@ -42,7 +143,7 @@ internal static class BashCwdInvocationGrammar
                     var option = clause.Elements[words[wordIndex]];
                     if (!IsStaticWord(option))
                     {
-                        return BashDispatchKind.None;
+                        return new BashDispatchAnalysis(false, false, true, null);
                     }
 
                     if (option.Value == "--")
@@ -71,14 +172,14 @@ internal static class BashCwdInvocationGrammar
                                 query = true;
                                 break;
                             default:
-                                return BashDispatchKind.None;
+                                return new BashDispatchAnalysis(false, false, true, null);
                         }
                     }
 
                     wordIndex++;
                     if (query)
                     {
-                        return BashDispatchKind.Query;
+                        return new BashDispatchAnalysis(true, true, true, null);
                     }
                 }
 
@@ -87,13 +188,14 @@ internal static class BashCwdInvocationGrammar
 
             if (element.Value == "builtin")
             {
+                hasWrapper = true;
                 wordIndex++;
                 if (wordIndex < words.Count)
                 {
                     var option = clause.Elements[words[wordIndex]];
                     if (!IsStaticWord(option))
                     {
-                        return BashDispatchKind.None;
+                        return new BashDispatchAnalysis(false, false, true, null);
                     }
 
                     if (option.Value == "--")
@@ -102,35 +204,27 @@ internal static class BashCwdInvocationGrammar
                     }
                     else if (option.Value.Length > 1 && option.Value[0] == '-')
                     {
-                        return BashDispatchKind.None;
+                        return new BashDispatchAnalysis(false, false, true, null);
                     }
                 }
 
                 continue;
             }
 
-            if (element.Value is not ("cd" or "chdir"))
-            {
-                return BashDispatchKind.None;
-            }
-
-            var arguments = new int[words.Count - wordIndex - 1];
-            for (var argumentIndex = 0;
-                 argumentIndex < arguments.Length;
-                 argumentIndex++)
-            {
-                arguments[argumentIndex] = words[wordIndex + argumentIndex + 1];
-            }
-
-            cwdArgumentElementIndices = arguments;
-            return BashDispatchKind.CwdTransfer;
+            return new BashDispatchAnalysis(true, false, hasWrapper, wordIndex);
         }
 
-        return BashDispatchKind.None;
+        return new BashDispatchAnalysis(true, false, hasWrapper, null);
     }
 
     private static bool IsStaticWord(ClauseElement element) =>
         element.Kind == ArgKind.Literal;
+
+    private readonly record struct BashDispatchAnalysis(
+        bool IsSupported,
+        bool IsQuery,
+        bool HasWrapper,
+        int? TargetWordIndex);
 }
 
 internal enum BashDispatchKind
@@ -138,4 +232,12 @@ internal enum BashDispatchKind
     None,
     Query,
     CwdTransfer,
+}
+
+internal enum BashExecutionBoundaryKind
+{
+    Allowed,
+    Query,
+    ExecutionBearingBuiltin,
+    UnsupportedDispatch,
 }
