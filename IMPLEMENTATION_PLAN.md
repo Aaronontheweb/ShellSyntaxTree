@@ -528,10 +528,12 @@ priorities.
       Linux and Windows PR validation passed. It carries the bounded Bash
       heredoc, command-resolution mutation, and here-string slices merged after
       the first alpha without changing the public API.
-- [ ] Publish `0.3.0-alpha.2` for the Netclaw PowerShell policy matrix after
-      Linux and Windows validate the reviewed proved-data receiver slice. The
-      package must include exact module-qualified-looking alias and canonical
-      alias-target shadowing defenses without changing the public API.
+- [x] Published `0.3.0-alpha.2` for the Netclaw PowerShell policy matrix after
+      Linux and Windows validated the reviewed proved-data receiver slice. The
+      [NuGet package](https://www.nuget.org/packages/ShellSyntaxTree/0.3.0-alpha.2)
+      and [GitHub prerelease](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0-alpha.2)
+      include exact module-qualified-looking alias and canonical alias-target
+      shadowing defenses without changing the public API.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
