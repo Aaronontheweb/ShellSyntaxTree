@@ -139,9 +139,12 @@ SHALL NOT omit the body or authorize it as inert data.
 - **THEN** `Commands` and `Clauses` are empty
 
 ### Requirement: Occurrence completeness is explicit
-Each occurrence SHALL state whether its command identity, structural ancestry,
-and parser-owned shell analysis are complete. No incomplete occurrence SHALL
-be sufficient authorization evidence.
+Each occurrence SHALL state whether its authored command identity, structural
+ancestry, executable-region discovery, and parser-owned authored shell analysis
+are complete. Completeness SHALL NOT claim that ambient aliases, functions,
+modules, profiles, executable lookup, or inherited environment select a
+particular runtime implementation. No incomplete occurrence SHALL be sufficient
+authorization evidence.
 
 #### Scenario: Dynamic command identity
 - **WHEN** PowerShell parses a supported structure whose body invokes `& $exe arg`
@@ -158,12 +161,11 @@ be sufficient authorization evidence.
 - **THEN** the `Write-Output` occurrence may be structurally complete
 - **THEN** its effective `$item` value remains unknown because pipeline objects are not evaluated
 
-#### Scenario: Unknown PowerShell identity preserves compatibility evidence
+#### Scenario: Ambient PowerShell resolution does not erase authored completeness
 - **WHEN** default-mode PowerShell parses `Write-Output victim.txt`
 - **THEN** one v0.2 compatibility `Clause` remains visible
-- **THEN** the v0.3 occurrence is incomplete because ambient command resolution may shadow the authored name
-- **WHEN** the same source is parsed under the constrained isolated-host contract
-- **THEN** the occurrence command identity is complete
+- **THEN** the v0.3 occurrence is complete for the authored `Write-Output` identity
+- **THEN** runtime shadowing remains outside the approval-grammar proof
 
 ### Requirement: Source order is deterministic
 The occurrence collection SHALL be ordered by authored command occurrence,

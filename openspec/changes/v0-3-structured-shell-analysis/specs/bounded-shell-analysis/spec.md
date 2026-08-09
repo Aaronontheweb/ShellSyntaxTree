@@ -119,12 +119,12 @@ retain their existing meanings.
 - **THEN** `-LiteralPath` still applies quoted tilde, provider-qualifier, and PSDrive semantics
 - **THEN** the parser does not enumerate the filesystem for any form
 
-#### Scenario: Path-shaped PowerShell command names remain shadowable
-- **WHEN** isolated-mode PowerShell parses an explicit native or `.ps1` path command before any command-resolution mutation
-- **THEN** its spelling may supply the candidate native-versus-PowerShell argument-binding semantics
-- **WHEN** a matching alias mutation has been observed, or the command executes in an unconstrained decoded child
-- **THEN** path spelling alone does not prove command identity or argument-binding semantics
-- **THEN** a shell-sensitive effective value remains Unknown
+#### Scenario: Path-shaped PowerShell commands use authored semantics
+- **WHEN** PowerShell parses an explicit native or `.ps1` path command
+- **THEN** its spelling supplies the authored native-versus-PowerShell argument-binding semantics
+- **THEN** ambient aliases, functions, modules, profiles, and executable lookup do not make the occurrence incomplete
+- **WHEN** a matching source-level command-resolution mutation has been observed
+- **THEN** later affected binding semantics remain incomplete unless the mutation is modeled exactly
 
 #### Scenario: Decoded host profiles can mutate home facts
 - **WHEN** isolated-mode PowerShell decodes a child `pwsh -Command` or `-EncodedCommand` payload that references `$HOME` or `$env:USERPROFILE`
@@ -304,43 +304,40 @@ reserved syntax.
 - **WHEN** Bash parses `coproc exec /bin/rm target.txt`
 - **THEN** the whole result is unparseable until coprocess structure and timing are modeled
 
-### Requirement: PowerShell loop proofs require an explicit initial-runspace contract
-`PwshParserOptions.InitialStateMode` SHALL default to `Unknown`. In that mode,
-the parser MAY expose supported `foreach` structure and command occurrences,
-but SHALL NOT publish an exact or finite loop-binding proof whose semantics
-could be changed by ambient runspace state.
+### Requirement: PowerShell approvals prove authored commands, not ambient resolution
+`PwshParserOptions.InitialStateMode` SHALL default to `Unknown` and SHALL remain
+source and binary compatible. Neither that default nor an ambient alias,
+function, module, profile, executable lookup, or inherited variable SHALL by
+itself make a static authored command occurrence incomplete. The parser SHALL
+prove that it discovered the executable syntax submitted by the caller; it
+SHALL NOT claim to prove the runtime command selected by the host.
 
-`IsolatedNonInteractiveNoProfile` SHALL be an explicit caller assertion that
-the complete source runs in a newly spawned noninteractive PowerShell process,
-profiles are disabled, and the runspace has not been reused or initialized by
-uncontrolled caller variables, aliases, functions, or modules. The caller SHALL
-also control startup configuration and the inherited environment. Module
-auto-loading SHALL be disabled, or available modules and module search paths
-SHALL be pinned to the same reviewed baseline used by policy. A fixed bootstrap
-MAY establish those constraints only when it cannot define or mutate loop-bound
-variables or policy-relevant command identities. `-NoProfile -NonInteractive`
-alone SHALL NOT satisfy the contract. Exact and finite
-binding analysis SHALL remain limited to ordinary unscoped names that do not
-case-insensitively collide with automatic, constant, read-only, typed,
-validated, preference, or configuration variables known to the supported
-PowerShell runtime. The preference inventory SHALL include documented lazy and
-configuration-dependent names even when a fresh `Get-Variable` inventory omits
-them.
-Scoped/provider binding forms SHALL fail closed.
+`Unknown` mode SHALL keep a loop-dependent effective value `Unknown` when an
+ambient typed, validated, read-only, or constant binding could coerce or reject
+the assignment. The surrounding static command occurrence MAY remain complete;
+value precision is independent from authored executable discovery.
+
+`IsolatedNonInteractiveNoProfile` SHALL assert that the complete source runs in
+a newly spawned noninteractive PowerShell process with profiles disabled and
+without a reused or caller-initialized runspace. It SHALL permit exact or finite
+literal values for ordinary unscoped bindings. It SHALL NOT require a pinned
+module, alias, function, `PATH`, or executable-resolution baseline. The
+supported-name boundary SHALL continue to exclude automatic, constant,
+read-only, preference, configuration, scoped, and provider bindings whose
+special semantics are visible from the submitted binding name.
 
 Current-runspace groups, `$()`, and static `Invoke-Expression` payloads SHALL
-share supported binding, command-resolution, and cwd state. A decoded child
-PowerShell host SHALL NOT inherit the parent's fresh-state assertion unless
-that invocation independently proves the complete constrained-host contract.
-Host flags alone SHALL NOT prove the launch environment or module baseline.
-Recognized variable, alias, function, or module mutation SHALL invalidate later proofs in
-every observing scope; cwd-only mutation SHALL retain the independent
-initial-state assertion.
+share supported authored binding and cwd state. Decoded child hosts SHALL clear
+host-dependent value facts that are not independently proved, but SHALL retain
+complete static authored command occurrences. Recognized source-level variable,
+alias, function, or module mutation SHALL invalidate later affected proofs in
+every observing scope; cwd-only mutation SHALL retain independent authored
+binding facts.
 
 #### Scenario: Computed Invoke-Expression invalidates current-runspace state
 - **WHEN** isolated-mode PowerShell parses `foreach ($f in 'safe.txt') { }; Invoke-Expression $code; git $f`
 - **THEN** the computed payload remains an incomplete occurrence
-- **THEN** the later `git` occurrence has Unknown working directory and effective `$f` value and is incomplete because the payload can mutate location, variables, aliases, functions, or modules
+- **THEN** the later `git` occurrence has Unknown working directory and effective `$f` value and is incomplete because the authored payload can hide commands and mutate location, variables, aliases, functions, or modules
 - **THEN** the canonical alias, static call-operator spelling, and supported module-qualified spelling have the same effect
 - **WHEN** a computed `Invoke-Expression` occurs inside a bounded `foreach` region whose transfer cannot be modeled
 - **THEN** the complete parse fails atomically rather than retaining stale loop state
@@ -357,13 +354,13 @@ initial-state assertion.
 - **THEN** the second command occurrence is incomplete because authored identity `git` is no longer proved
 - **THEN** this invalidation applies without requiring the command to be inside or after a loop
 
-#### Scenario: Unknown ambient identity preserves leaves and invalidates continuation state
+#### Scenario: Ambient identity uncertainty preserves authored completeness
 - **WHEN** default-mode PowerShell parses `Write-Output victim.txt; Get-Content relative.txt`
 - **THEN** default ambient-state uncertainty alone does not invent an observed mutation or discard the v0.2 compatibility leaves
-- **THEN** both v0.3 authorization occurrences are incomplete because their command identities are not proved
-- **THEN** the second occurrence has unknown cwd and path-dependent facts because the first invocation may resolve to arbitrary in-process code
+- **THEN** both v0.3 authorization occurrences are complete authored command occurrences
+- **THEN** the second occurrence retains parser-owned cwd and path facts because ambient runtime resolution is outside the approval proof
 - **WHEN** default-mode PowerShell parses `Get-ChildItem | Remove-Item`
-- **THEN** the unproved pipeline fails atomically until pipeline state propagation is modeled
+- **THEN** both static authored pipeline stages remain visible and complete unless another authored fact is dynamic or unsupported
 
 #### Scenario: Imported session proxies invalidate command identity
 - **WHEN** PowerShell parses `Import-PSSession $session -CommandName git -AllowClobber; git child.txt`
@@ -399,19 +396,21 @@ initial-state assertion.
 - **THEN** quoted call-operator spelling and built-in cmdlets with unapproved verbs cannot bypass the same rule
 - **THEN** `Microsoft.PowerShell.Utility\Invoke-Expression` remains the one separately modeled module-qualified wrapper
 
-#### Scenario: Unknown ambient PowerShell state withholds a finite proof
+#### Scenario: Unknown ambient PowerShell state keeps effective values unknown
 - **WHEN** default-mode PowerShell parses `foreach ($f in @('a','b')) { Remove-Item -LiteralPath $f }`
-- **THEN** the loop structure and body command may remain visible
-- **THEN** the body occurrence is incomplete rather than assuming `$f` is an ordinary string binding
+- **THEN** the loop structure and body command remain visible and complete
+- **THEN** the body occurrence's effective `$f` value is Unknown
+- **THEN** the parser does not mistake authored iterable text for a runtime value when an ambient binding can coerce or reject it
 
 #### Scenario: Isolated no-profile runspace permits an ordinary binding proof
-- **WHEN** the caller selects `IsolatedNonInteractiveNoProfile` for a newly spawned constrained host and parses `foreach ($f in @('a','b')) { Write-Output $f }`
+- **WHEN** the caller selects `IsolatedNonInteractiveNoProfile` for a newly spawned noninteractive no-profile host and parses `foreach ($f in @('a','b')) { Write-Output $f }`
 - **THEN** the bounded analyzer may publish the finite string domain `a`, `b`
+- **THEN** no pinned module or command-resolution baseline is required
 
-#### Scenario: Typed or read-only ambient binding is not erased by syntax
+#### Scenario: Typed or read-only ambient binding is an executor externality
 - **WHEN** a reused runspace already contains `[int]$f` or a read-only `$f` and parses a loop that assigns string values
-- **THEN** default-mode analysis does not claim the authored strings are the effective loop values
-- **THEN** selecting isolated mode for that reused runspace would violate the caller contract
+- **THEN** the static body command may remain complete
+- **THEN** its loop-dependent effective value is Unknown rather than the authored string text
 
 #### Scenario: Built-in preference binding is not an ordinary string slot
 - **WHEN** isolated-mode PowerShell parses a loop binding named `ConfirmPreference`, `ErrorActionPreference`, or another known built-in preference or configuration variable
@@ -420,8 +419,8 @@ initial-state assertion.
 
 #### Scenario: Child host does not inherit the parent's assertion
 - **WHEN** isolated-mode PowerShell parses a supported `pwsh -NoProfile -Command` child containing a `foreach`
-- **THEN** the child receives `Unknown` initial state unless the child invocation independently proves the complete constrained-host environment
-- **THEN** `-NoProfile` by itself does not prove the inherited environment or module baseline
+- **THEN** the child retains complete authored commands and ordinary literal loop values
+- **THEN** the child does not inherit exact environment, home, provider, or cwd facts that were not independently proved
 
 #### Scenario: Current-runspace evaluation shares state
 - **WHEN** a supported `$()` or static `Invoke-Expression` region mutates a loop-relevant binding or command-resolution fact
@@ -637,7 +636,7 @@ partition merely to publish exact continuation facts.
 #### Scenario: Outer child-host redirect uses parent binding
 - **WHEN** isolated-mode PowerShell parses `foreach ($f in @('one.txt','two.txt')) { pwsh -Command 'Get-Date' > $f }`
 - **THEN** the outer redirect target is the finite set of two parent-cwd paths
-- **THEN** the decoded child command may remain independently incomplete because child runspace facts are not inferred
+- **THEN** the decoded child `Get-Date` remains a complete authored command even though child host facts are not inferred
 - **THEN** an inner redirect authored inside the decoded payload does not inherit the parent loop binding
 
 #### Scenario: Nested child hosts retain outer redirect ownership
@@ -828,7 +827,7 @@ SHALL NOT prove concurrency.
 #### Scenario: One remote target has an isolated synchronous region
 - **WHEN** isolated-mode PowerShell parses `Invoke-Command -ComputerName server -ScriptBlock { Get-Item child.txt }; Get-Item host.txt`
 - **THEN** the region timing is Synchronous and its cardinality is Once
-- **THEN** the body working directory and mutable state are Unknown and incomplete
+- **THEN** the body command is complete while its working directory and host-dependent state remain Unknown
 - **THEN** the following host command retains its exact local state
 
 #### Scenario: Remote asynchronous switches prove only concurrency
@@ -844,7 +843,7 @@ SHALL NOT prove concurrency.
 - **THEN** it does not prove multiple targets
 - **WHEN** PowerShell instead parses a runtime `-Session $session` target
 - **THEN** timing and cardinality are Unknown unless an enabled asynchronous switch independently proves Concurrent timing
-- **THEN** every remote body command remains visible and incomplete
+- **THEN** every static remote body command remains visible and complete while the target-dependent region facts remain Unknown
 
 #### Scenario: Direct invocation origin survives without source text
 - **WHEN** a consumer receives direct call and dot-source execution-region nodes

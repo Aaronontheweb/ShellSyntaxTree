@@ -19,6 +19,12 @@ fail-closed behavior for incomplete analysis.
 - Add a library-owned command-occurrence projection containing every command
   that may execute in supported grammar, including iterator, loop-body,
   wrapped, substitution, and PowerShell script-block execution-region commands.
+- Define authorization completeness over authored shell syntax. A complete
+  occurrence proves that the parser discovered and classified the submitted
+  executable region; it does not prove the runtime executable selected by
+  aliases, functions, modules, profiles, `PATH`, or other ambient host state.
+  Consumers authorize the visible authored command and keep runtime command
+  resolution outside the grammar proof boundary for both Bash and PowerShell.
 - Correct the PowerShell script-block boundary: represent direct invocation,
   current-runspace callbacks, child-runspace/process jobs, module
   initialization, and unknown receivers as typed execution regions while
@@ -74,6 +80,10 @@ fail-closed behavior for incomplete analysis.
   does not hide commands.
 - Keep executable-specific option and operand interpretation, authorization
   policy, and durable approval scope consumer-owned.
+- Keep ambient runtime command resolution and other executor externalities
+  consumer- and host-owned. Explicit source-level mutations, computed command
+  identities, hidden execution, and unsupported constructs remain parser-owned
+  fail-closed boundaries.
 - Update `docs/CONSUMER_GUIDE.md` and the README usage path so security gates
   authorize the complete command-occurrence projection and use the syntax tree
   only for structure, display, and specialized analysis.

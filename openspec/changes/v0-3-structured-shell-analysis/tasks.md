@@ -173,20 +173,31 @@
     and the shared structural-depth cap.
 - [x] 7.2 Emit iterator and loop-body occurrences plus conservative compatibility clauses.
   - Iterator pipelines and direct `$()` are recursively visible with authored
-    roles and ancestry. Every loop-body occurrence remains incomplete until
-    tasks 7.3 and 7.4 prove binding values and runspace state; recognized
-    iterator/body state or command-resolution mutation and dynamic invocation
-    fail atomically. Current-scope continuations after a loop remain incomplete;
-    isolated child-host loops do not taint their outer continuation.
+    roles and ancestry. The initial structural slice emitted incomplete body
+    occurrences until tasks 7.3 and 7.4 added binding and runspace analysis.
+    Alpha.3 still leaves default-mode occurrences incomplete for ambient
+    resolution; task 7.2c corrects that behavior. Explicit iterator/body state
+    mutation and dynamic invocation remain strict, and isolated child-host
+    loops do not taint their outer continuation.
 - [x] 7.2a Add the explicit `PwshInitialStateMode` contract and safe default
   before value analysis. Lock the constrained noninteractive no-profile host
   and module baseline, current-runspace sharing, child-host noninheritance,
   mutation invalidation, and ambient typed/read-only binding hazards in the
-  canonical specs and case-specific design corpus.
+  canonical specs and case-specific design corpus. The ambient-resolution
+  portion of this completed alpha.3 design is superseded by 7.2b; the public API
+  remains compatible.
+- [x] 7.2b Correct the approval boundary so PowerShell matches Bash's
+  authored-command model: ambient runtime resolution is outside occurrence
+  completeness, while explicit source mutations, computed identities, hidden
+  execution, and unsupported syntax remain strict. Preserve the existing
+  `PwshInitialStateMode` API shape.
+- [ ] 7.2c Implement authored-command completeness for default-mode static
+  PowerShell commands, pipelines, decoded children, and known script-block
+  receivers without weakening explicit mutation or dynamic-execution checks.
 - [x] 7.3 Derive exact and finite string domains without treating pipeline objects as literal strings.
   - The PowerShell-specific value pass consumes lexer provenance, composes
     case-insensitive distinct active bindings, publishes bounded literal
-    scalar/array domains only under the explicit isolated-runspace contract,
+    scalar/array domains under the alpha.3 isolated-runspace contract,
     and collapses object, null, unsupported, and over-cap values to Unknown.
     The internal plan retains ordered duplicate visits and an exact authored
     count separately from its public set summary; unknown object iterables are
@@ -194,7 +205,9 @@
     atomically; a pinned documented preference inventory covers lazy names and a
     live PowerShell 7.x oracle guards the fresh-host inventory. Decoded
     child hosts, current-runspace wrappers, redirect values, same-name nested
-    overwrites, and post-loop state remain conservative for tasks 7.4-7.6.
+    overwrites, and post-loop state remain conservative for tasks 7.4-7.6. The
+    authored-command correction leaves this effective-value contract intact;
+    isolated mode no longer implies a pinned command-resolution baseline.
 - [x] 7.4 Propagate PowerShell scope and location state according to the locked statement semantics.
   - The PowerShell-specific abstract-state pass now owns case-insensitive
     persistent bindings, ordered/empty/zero-or-more execution, occurrence joins,
@@ -236,14 +249,14 @@
     - Supported non-pipeline bodies remain visible and incomplete. An interior
       pipeline whose stage identity is unproved fails the whole parse atomically
       with empty authorization projections.
-    - Isolated-state canonical, alias, and supported module-qualified
-      `Write-Output` receivers keep script blocks opaque only while bounded
-      command-resolution state proves that exact authored spelling unchanged.
-      PowerShell permits an alias whose name is itself module-qualified-looking,
-      so default state or a matching observed mutation downgrades to an unknown
-      incomplete region. Executable-corpus entries pin proved data, an unknown
-      receiver, proved local `Invoke-Command`, the exact module-qualified-
-      looking alias boundary, and canonical-target invalidation through `echo`.
+    - Alpha.3 kept canonical, alias, and supported module-qualified
+      `Write-Output` receivers opaque only under constrained state. Task 7.2c
+      supersedes the ambient-state part: static authored receivers stay data in
+      default mode, while a matching observed source-level mutation still
+      downgrades to an unknown incomplete region. Executable-corpus entries pin
+      proved data, an unknown receiver, proved local `Invoke-Command`, the exact
+      module-qualified-looking mutation boundary, and canonical-target
+      invalidation through `echo`.
   - [ ] 7.5f Pin authored projection order separately from semantic phase order,
     exact host element coordinates, nested regions, wrappers, pipelines, loops,
     and the 16-container depth boundary.

@@ -17,6 +17,18 @@ priorities.
 > below). What remains is the downstream Netclaw integration, which needs
 > actions outside this repository.
 
+- [ ] **v0.3 authored-command approval correction.** Treat PowerShell and Bash
+      approval completeness consistently: prove every authored executable
+      region, but do not require proof of ambient aliases, functions, modules,
+      profiles, executable lookup, or inherited environment state. Preserve the
+      existing `PwshInitialStateMode` API. Next update default-mode PowerShell
+      occurrence completeness while keeping loop-dependent effective values
+      Unknown unless fresh-process state is proved, expand the executable
+      corpus, and prove the Netclaw approval matrix. Explicit
+      source mutation, computed identity, hidden execution, unknown receiver
+      semantics, unsupported constructs, and policy-sensitive unknown values,
+      paths, cwd, or redirects remain strict.
+
 ### Implemented (SPEC.POWERSHELL.md §16 phases 1–14) — done
 
 - [x] **1. Public-API surface** — `ShellParserOptions` base; `BashParserOptions`
@@ -285,9 +297,9 @@ priorities.
       local state; and invalidate home, cwd, environment, and command-binding
       facts after uninspected `.ps1` execution. Decoded wrappers rebuild value
       provenance from preserved inner raw spelling, reset child-process state,
-      retain explicit native/script binding candidates only when constrained
-      command-resolution state proves them unshadowed, clear profile-mutable
-      automatic HOME and environment facts, and carry a bounded
+      retain explicit native/script binding candidates only when the alpha.3
+      constrained command-resolution state proves them unshadowed, clear
+      profile-mutable automatic HOME and environment facts, and carry a bounded
       invocation-owner depth for current, intermediate, and root-owned
       redirects. Parser-owned binding provenance now distinguishes path-shaped
       native/script candidates, constrained cmdlets and aliases, and ambiguous
@@ -295,10 +307,12 @@ priorities.
       blocks are excluded from host effective argv, and
       unknown non-pipeline receivers retain visible, incomplete bodies and
       invalidate subsequent state without discarding v0.2 leaves; unproved
-      pipelines fail atomically. Authorization completeness now requires the
-      explicit constrained command-resolution baseline, including after
-      decoded-host boundaries. Execution-region and loop/state design promotions remain, so
-      OpenSpec task 1.10 stays open.
+      pipelines fail atomically. Alpha.3 authorization completeness requires
+      the explicit constrained command-resolution baseline, including after
+      decoded-host boundaries. The v0.3 authored-command approval correction
+      above supersedes that behavior and is pending implementation.
+      Execution-region and loop/state design promotions remain, so OpenSpec
+      task 1.10 stays open.
 - [x] Deliver the first Bash `$()` substitution slice for supported
       simple-command arguments and redirect targets. Direct tests and corpus
       entries pin multiple and nested ordering, exact ancestry/spans, isolated
@@ -402,18 +416,18 @@ priorities.
       projects iterator and loop-body ancestry, survives decoded wrappers, and
       fails closed on dynamic iterables, iterator/body state or
       command-resolution mutation, malformed boundaries, and depth overflow.
-      Loop-body and current-scope post-loop occurrences intentionally remain
-      incomplete; isolated child-host loops do not taint their outer continuation.
-      Before publishing exact or finite values, add an explicit PowerShell
-      initial-runspace contract and wrapper-state metadata: ambient typed,
-      read-only, scoped, alias, function, and module state can change binding
-      assignment and command resolution, while child hosts inherit no fresh
-      state guarantee unless their own invocation proves it. The additive
-      `PwshInitialStateMode` API and safe-default contract are now locked;
-      `-NoProfile -NonInteractive` alone is explicitly insufficient without a
-      controlled startup, inherited environment, and module baseline. Design
-      cases select the mode individually and pin default `Unknown`. The first
-      value-analysis pass now consumes that contract, retains parser-owned
+      Alpha.3 leaves default-mode loop-body and current-scope post-loop
+      occurrences incomplete; the authored-command correction will make static
+      occurrences complete without weakening explicit mutation or dynamic
+      execution checks. Isolated child-host loops do not taint their outer
+      continuation.
+      Alpha.3 added an explicit PowerShell initial-runspace contract and
+      wrapper-state metadata. The additive `PwshInitialStateMode` API remains
+      locked. The v0.3 authored-command correction no longer requires isolated
+      mode for static command completeness and removes its old pinned-module
+      implication; loop-dependent effective values still require the fresh-
+      process assertion. The first value-analysis pass consumes that contract,
+      retains parser-owned
       argument provenance, proves quoted scalar and literal-array domains,
       retains ordered duplicate visits separately from public set summaries,
       guards a pinned documented preference inventory plus fresh-host built-ins

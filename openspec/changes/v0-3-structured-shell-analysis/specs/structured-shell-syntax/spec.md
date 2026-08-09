@@ -163,7 +163,7 @@ that `SimpleCommandSyntax` and SHALL identify the exact script-block
 - **THEN** a realistic argument completer is not partially authorized from only its post-declaration body
 
 #### Scenario: Known non-executing script-block data stays data
-- **WHEN** a constrained canonical-command context parses `Write-Output { Remove-Item target.txt }`
+- **WHEN** PowerShell parses the static authored command `Write-Output { Remove-Item target.txt }`
 - **THEN** the script block remains one opaque compatibility argument
 - **THEN** no execution region or `Remove-Item` occurrence is invented
 
