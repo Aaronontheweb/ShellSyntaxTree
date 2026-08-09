@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash coprocess form fails closed before nested command",
+  "input": "coproc git status",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "reserved execution syntax"
+  },
+  "notes": "A coprocess starts asynchronous execution with pipe state that stable v0.3 does not model, so its command body cannot be treated as an ordinary complete command.",
+  "oracleExpectation": "OutOfScope"
+}
