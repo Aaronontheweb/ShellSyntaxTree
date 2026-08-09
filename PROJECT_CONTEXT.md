@@ -91,6 +91,11 @@ zero-native-deps .NET parser sized to what security gates actually need.
   unproved pipeline inside such a region fails the whole parse atomically.
 - Add fixed, non-executing value and state analysis: at most 32 candidates, at
   most 16 structural container levels, and the existing wrapper depth of 5.
+- Define occurrence completeness over authored executable syntax for both
+  shells. Ambient aliases, functions, modules, profiles, executable lookup,
+  inherited variables, and other host externalities do not make static authored
+  commands incomplete. Explicit mutations and hidden or computed execution in
+  the submitted source remain fail closed.
 - Deliver Bash `for ... in` and PowerShell `foreach` in stable v0.3. Condition
   loops, branches, and shared-analysis extraction are post-v0.3 work and do
   not gate the validating consumer migration.

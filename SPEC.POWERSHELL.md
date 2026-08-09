@@ -115,7 +115,7 @@ public abstract record ShellParserOptions
 /// = ... }` still compiles.</summary>
 public sealed record BashParserOptions : ShellParserOptions;
 
-/// <summary>Declares which ambient PowerShell runspace facts the caller can prove.</summary>
+/// <summary>Compatibility option for PowerShell initial host-state analysis.</summary>
 public enum PwshInitialStateMode
 {
     Unknown,
@@ -419,55 +419,42 @@ direct execution region, cataloged execution-bearing argument, or conservative
 unknown-receiver region. A proved non-executing script-block argument remains
 one opaque `DynamicSkip` value and does not invent child execution.
 
-Publishing those exact or finite values also requires
-`PwshInitialStateMode.IsolatedNonInteractiveNoProfile`. The default `Unknown`
-mode still exposes the complete supported structure, but loop-body occurrences
-whose safety depends on the binding remain incomplete. The isolated mode is a
-caller assertion that the complete source runs in a newly spawned,
-non-interactive, no-profile PowerShell process with no reused or
-uncontrolled caller-initialized runspace state. Startup configuration and the
-inherited environment must also be controlled: module auto-loading is disabled,
-or available modules and module search paths are pinned to the same reviewed
-baseline used by policy. `-NoProfile -NonInteractive` alone is insufficient.
-A fixed bootstrap may establish those constraints only when it cannot define
-or mutate loop-bound variables or policy-relevant command identities. The mode
-does not permit assumptions about an interactive session, a runspace pool,
-profiles, startup scripts, or uncontrolled ambient variables, aliases,
-functions, and modules.
+`PwshInitialStateMode.Unknown` remains the default and does not publish exact or
+finite loop-dependent effective values. An ambient typed, validated, read-only,
+or constant binding may coerce or reject the assignment, so authored iterable
+text is not a proved runtime argument. The surrounding static command
+occurrence may still be complete because value precision is independent.
 
-Even under that assertion, only ordinary unscoped binding names that do not
-case-insensitively collide with PowerShell's automatic, constant, read-only,
-typed, validated, preference, or configuration variables are eligible.
-Scoped/provider bindings such as `$global:x`, `$script:x`, `$private:x`, and
-`$env:X` fail the loop region closed. A built-in or ambient binding therefore
-cannot coerce, reject, or otherwise alter a value the analyzer presents as an
-exact string, or change host behavior as a side effect of loop assignment.
-The supported preference-variable inventory is pinned to PowerShell's
-`about_Preference_Variables` reference rather than inferred only from variables
-materialized by a fresh host; lazy and configuration-dependent names remain
-ineligible even when `Get-Variable` does not initially enumerate them.
+`IsolatedNonInteractiveNoProfile` asserts that the complete source runs in a
+newly spawned noninteractive PowerShell process with profiles disabled and no
+reused or caller-initialized runspace. It permits exact or finite values for
+ordinary unscoped bindings. It does not assert a pinned module, alias, function,
+`PATH`, or executable-resolution baseline; those runtime externalities are
+outside authored-command completeness.
+
+Only ordinary unscoped binding names that do not case-insensitively collide
+with PowerShell's automatic, constant, read-only, preference, or configuration
+variables are eligible. Scoped/provider bindings such as `$global:x`,
+`$script:x`, `$private:x`, and `$env:X` fail the loop region closed. These
+special names are visible in the submitted source and can change host behavior.
+Typed and validated ambient bindings are the reason default-mode effective
+values stay `Unknown`; the parser never reports authored text as a proved
+runtime value when coercion or rejection is possible.
 
 Parenthesized groups, `$()`, and static `Invoke-Expression` execute in the
-current runspace and share supported binding, command-resolution, and location
-state. Decoded `pwsh -Command` and `pwsh -EncodedCommand` payloads run in child
-hosts and do not inherit the parent's fresh-state assertion unless their own
-invocation independently proves the complete constrained-host contract; host
-flags alone do not prove the launch environment or module baseline.
-An uncontrolled child profile can mutate automatic `$HOME` and environment
-variables before the payload runs, so decoded children do not inherit exact
-facts for `$HOME` or `$env:USERPROFILE`. Provider/native tilde initialization
-is tracked independently. Path-shaped command names are also shadowable by
-aliases; an explicit native or `.ps1` spelling is a binding candidate, not an
-identity proof, until constrained command-resolution state proves it
-unmodified. Default ambient uncertainty preserves ordinary v0.2 compatibility
-leaves, but it leaves the v0.3 authorization occurrence incomplete and
-binding-dependent effective values unknown. An unproved
-invocation may be arbitrary in-process code, so it invalidates subsequent
-observable state; an unproved pipeline fails atomically until pipeline state
-propagation is modeled.
-Recognized variable, alias, function, or module mutation invalidates later
-proofs in every observing scope; cwd-only mutation retains the independent
-initial-state assertion.
+current runspace and share supported authored binding and location state.
+Decoded `pwsh -Command` and `pwsh -EncodedCommand` payloads do not inherit exact
+`$HOME`, environment, provider, or cwd facts unless those facts are
+independently proved. They do retain complete static authored command
+occurrences. Path-shaped native or `.ps1` spellings use their authored binding
+classification; ambient alias, function, module, profile, and executable
+resolution is outside the approval-grammar proof.
+
+Recognized source-level variable, alias, function, or module mutation
+invalidates later affected proofs in every observing scope. A computed or
+otherwise hidden invocation remains incomplete and may invalidate later state;
+an unmodeled explicit pipeline writer fails atomically. Cwd-only mutation
+retains independent authored-binding facts.
 
 Mutation is recognized from the effective parameter vector as well as the
 verb. Common parameter writers `-OutVariable` / `-ov`, `-PipelineVariable` /
@@ -543,10 +530,11 @@ The version-pinned PowerShell 7 catalog covers:
 | `Start-Job -ScriptBlock` | Main | Concurrent | Once | child process; exit isolated |
 | `New-Module -ScriptBlock` | Initialization | Synchronous | Once | module state; current-runspace effects analyzed separately |
 
-Remote `Invoke-Command` bodies begin with Unknown working directory, bindings,
-aliases, functions, modules, profiles, and command resolution. Local parser
-state is not an inheritance proof for a remote host or persistent session, and
-remote exit state never flows into the invoking host continuation. A complete
+Remote `Invoke-Command` bodies begin with Unknown working directory and
+host-dependent values. Their static authored command occurrences remain
+complete; local parser state is not an inheritance proof for a remote host or
+persistent session, and remote exit state never flows into the invoking host
+continuation. A complete
 literal, quoted, URI, GUID, or hashtable target proves one activation. A
 complete top-level comma-separated target list, whether named, inline, or
 positional, proves concurrent scheduling but maps to public cardinality
@@ -584,11 +572,11 @@ fails atomically.
 Aliases, supported module-qualified spellings, static call-operator spellings,
 parameter abbreviations and inline values, positional binding, parameter-set
 selection, and `ScriptBlock[]` binding resolve through the same static catalog.
-Catalog lookup is not identity proof: PowerShell permits an alias whose exact
-name looks module-qualified. A constrained baseline plus bounded mutation
-provenance must prove the authored spelling unchanged before a catalog entry
-can classify a script block as non-executing data. Mutation matching covers
-both the authored spelling and its known canonical alias target.
+Catalog lookup classifies the authored command for approval; it is not a claim
+about ambient runtime resolution. A catalog entry may classify a script block
+as non-executing data unless an explicit source-level mutation has invalidated
+that authored receiver proof. Mutation matching covers both the authored
+spelling and its known canonical alias target.
 PowerShell's special multiple-script-block binding for `ForEach-Object` assigns
 Begin, Process, and End phases semantically; authored syntax and occurrence
 projection remain in source order while the analyzer schedules phases in
@@ -598,9 +586,8 @@ runtime order.
 Variable, location, command-resolution, runspace, and process propagation are
 analyzed independently. Cataloged receivers may retain already-proved
 scheduling facts without making further catalog expansion release-gating.
-Unproved receiver, binding, or state facts remain Unknown rather than borrowing
-registration-time state. A
-constrained canonical `Write-Output { Remove-Item x }`
+Unproved receiver, binding, or authored state facts remain Unknown rather than
+borrowing runtime state. A static authored `Write-Output { Remove-Item x }`
 remains opaque data and does not invent a `Remove-Item` occurrence.
 
 A leading `param(...)` declaration inside any execution region remains outside
@@ -1199,9 +1186,9 @@ never emitted as an unrelated argument.
 Exact `$HOME` and `$env:USERPROFILE` composition requires the corresponding
 current-runspace or environment fact. A decoded child with uncontrolled profile
 startup has neither fact even when its parent was analyzed under the isolated
-mode. Native-versus-cmdlet path interpretation likewise requires constrained,
-unmutated command resolution; PowerShell permits aliases whose names are
-explicit native or `.ps1` paths.
+mode. Native-versus-cmdlet path interpretation uses the authored command
+spelling and parser tables; ambient runtime shadowing does not erase that
+classification. An explicit source-level mutation may invalidate it.
 
 When every fragment, transformation, binding fact, cwd/home fact, and
 consumer fact is exact, mixed literal and expandable fragments compose to one
@@ -1461,9 +1448,9 @@ lists, pipelines, loops, groups, and substitutions, including built-in
 cmdlets such as `Tee-Object` whose verb is not in the approved-verb table. The
 supported module-qualified exceptions are
 `Microsoft.PowerShell.Utility\Invoke-Expression` and the version-pinned §4
-execution-region receiver catalog under its constrained command-resolution
-contract. A quoted string is a command
-identity only when preceded by the call operator `&`; otherwise it is an
+execution-region receiver catalog under its authored-receiver contract. A
+quoted string is a command identity only when preceded by the call operator
+`&`; otherwise it is an
 unsupported expression. Any dynamic command identity invalidates following
 location attribution because it can resolve to current-scope code that calls
 `Set-Location`.

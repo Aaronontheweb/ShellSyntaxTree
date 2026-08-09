@@ -123,7 +123,7 @@ public sealed record BashParserOptions : ShellParserOptions
     public BashInitialStateMode InitialStateMode { get; init; }
 }
 
-/// <summary>Declares which ambient PowerShell runspace facts the caller can prove.</summary>
+/// <summary>Compatibility option for PowerShell initial host-state analysis.</summary>
 public enum PwshInitialStateMode
 {
     Unknown,
@@ -299,62 +299,49 @@ as `RANDOM`, `LINENO`, `HOME`, `PATH`, `CDPATH`, and `IFS`. The boundary is
 extend-only: a later version may add a proved variable-state model or
 additional explicitly reviewed ordinary names.
 
-`PwshInitialStateMode.Unknown` is likewise the safe default. In this mode the
-parser may expose `foreach` structure and commands, but it does not publish an
-exact or finite loop-binding proof. Ambient PowerShell variables can be typed,
-read-only, constant, scoped, or validated, and ambient aliases, functions, and
-modules can change command resolution. Treating a loop assignment as a plain
-string assignment without excluding those facts would be unsound.
+`PwshInitialStateMode.Unknown` is the default. PowerShell authorization uses
+the same boundary as Bash authorization: it proves the static authored command
+and every authored executable region, not the runtime implementation selected
+through aliases, functions, modules, profiles, executable lookup, inherited
+variables, or other ambient host state. Ambient uncertainty alone therefore
+does not make a static command occurrence incomplete and does not poison later
+authored command occurrences.
 
-`PwshInitialStateMode.IsolatedNonInteractiveNoProfile` is an explicit caller
-assertion that the complete source is executed by a newly spawned,
-non-interactive PowerShell process with profiles disabled and without a reused
-or uncontrolled caller-initialized runspace. The caller must also control
-startup configuration and the inherited environment: module auto-loading must
-be disabled, or the available modules and module search paths must be pinned to
-the same reviewed baseline used by policy. `-NoProfile -NonInteractive` alone
-does not establish this contract. A fixed bootstrap may establish these
-constraints only when it cannot define or mutate loop-bound variables or
-policy-relevant command identities.
+`PwshInitialStateMode.Unknown` does not publish an exact or finite
+loop-dependent effective value. An ambient typed, validated, read-only, or
+constant binding may coerce or reject an assignment, so the authored iterable
+text is not a proved runtime argument. The surrounding static command
+occurrence may still be complete; value precision is a separate fact.
 
-The mode does not erase PowerShell's built-in variable state. Exact and finite
-binding proofs remain limited to ordinary unscoped variable names that do not
-collide, case-insensitively, with automatic, constant, read-only, typed,
-validated, preference, or configuration bindings known to the supported
-PowerShell runtime. A `foreach` assignment to a built-in preference variable
-can coerce an authored string into an enum or reject it, and can change host
-behavior independently of the loop value; it is therefore not an ordinary
-string binding. Documented preference names remain excluded even when they are
-lazy or configuration-dependent and therefore absent from a fresh
-`Get-Variable` inventory. Scoped/provider forms such as `$global:x`, `$script:x`, and
-`$env:X` are outside the bounded loop-binding grammar.
+`PwshInitialStateMode.IsolatedNonInteractiveNoProfile` is a caller assertion
+that the complete source runs in a newly spawned noninteractive PowerShell
+process with profiles disabled and without a reused or caller-initialized
+runspace. It permits exact or finite loop-dependent values for ordinary
+unscoped names. It does not assert a pinned module, alias, function, `PATH`, or
+executable-resolution baseline, because those runtime externalities are outside
+authored-command completeness.
 
-The assertion applies only to the host that the caller actually constrains.
+The bounded grammar remains limited to ordinary unscoped variable names that
+do not collide, case-insensitively, with automatic, constant, read-only,
+preference, or configuration bindings known to the supported PowerShell
+runtime. Scoped/provider forms such as `$global:x`, `$script:x`, and `$env:X`
+remain outside the bounded loop-binding grammar.
+
 Current-runspace regions such as `( ... )`, `$()`, and a static
-`Invoke-Expression` payload share supported variable, command-resolution, and
-location state. A decoded `pwsh -Command` or `pwsh -EncodedCommand` child does
-not inherit the assertion unless its own invocation contract independently
-proves the complete constrained-host environment, not merely `-NoProfile`.
-The decoded child also does not inherit exact `$HOME` or environment-variable
-facts: an uncontrolled profile can mutate either before the payload runs.
-Configured provider/native tilde state remains a separate process-initialization
-fact. An explicit native or `.ps1` path spelling supplies only an argument-
-binding candidate because PowerShell aliases can shadow path-shaped names; the
-candidate becomes a proof only under constrained, unmutated command-resolution
-state. Default ambient uncertainty alone does not invent an observed mutation
-or discard the v0.2 compatibility leaves. It does make the v0.3 authorization
-occurrence incomplete because command identity is
-not proved; binding-dependent effective values remain `Unknown` as well. Since
-that occurrence may resolve to arbitrary in-process code, subsequent observable
-runspace state is unknown. An unproved pipeline fails atomically until pipeline
-state propagation is modeled.
-Recognized mutation of variables,
-aliases, functions, or modules invalidates later proofs wherever PowerShell
-scope rules make the mutation observable. Cwd-only state changes retain the
-independent initial-runspace assertion. A computed `Invoke-Expression` payload
-can mutate every one of those facts in the current runspace; it therefore
-invalidates later binding and command-resolution proofs and makes later cwd
-attribution unknown.
+`Invoke-Expression` payload share supported authored binding and location
+state. A decoded `pwsh -Command` or `pwsh -EncodedCommand` child does not
+inherit exact `$HOME`, environment, provider, or cwd facts unless those facts
+are independently proved, but it retains complete static authored command
+occurrences. Explicit native, `.ps1`, cmdlet, alias, and module-qualified
+spellings use their authored parser classification even though runtime state
+may shadow them.
+
+Recognized source-level mutation of variables, aliases, functions, or modules
+invalidates later affected proofs wherever PowerShell scope rules make the
+mutation observable. A computed `Invoke-Expression` payload can hide commands
+and mutate current-runspace facts; it therefore invalidates later binding and
+cwd proofs and remains incomplete. Cwd-only state changes retain independent
+authored-binding facts.
 
 Variable mutation recognition includes argument-vector binding, not only the
 invoked verb. The PowerShell common parameters `-OutVariable` / `-ov`,
@@ -671,6 +658,16 @@ public static class ShellAnalysisLimits
 }
 ```
 
+`IsComplete` proves that the parser discovered the complete authored
+executable region, assigned its structural ancestry, and completed every
+parser-owned authored-syntax check. It does not prove which runtime executable
+an ambient alias, function, module, profile, `PATH`, or inherited environment
+will select. Static authored command identities remain complete under that
+external uncertainty. Computed identities, hidden executable text, and
+unsupported regions remain incomplete or make the whole result unparseable.
+After an explicit source-level mutation that the parser cannot model, affected
+later identities or values remain incomplete.
+
 `Commands` contains one entry per authored simple command that may execute,
 not one per predicted runtime iteration. `Ancestry` is ordered outermost to
 innermost, excludes the simple-command leaf, and retains every enclosing
@@ -825,7 +822,8 @@ unwraps statically proved `command` and `builtin` dispatch; dynamic or invalid
 wrapper grammar fails closed. Ordinary `printf` without `-v` remains
 supported.
 
-Command-resolution state is independent from variable attributes and cwd.
+Authored command-resolution mutation is independent from variable attributes
+and cwd.
 `exec` fails the complete parse closed globally because it replaces the shell
 or makes commandless redirections persistent. Mutating or ambiguous `hash`,
 `alias`, `unalias`, `shopt`, and `enable` forms likewise fail globally before a
@@ -2656,10 +2654,12 @@ What a v0.3 Netclaw-style security consumer expects from this library:
 2. The consumer evaluates every `CommandOccurrence`, including condition,
    iterator, branch, body, substitution, and pipeline-stage occurrences.
    `Syntax` may group the UI but is not the command-discovery API.
-3. An incomplete occurrence, dynamic verb, unknown or unrecognized role,
+3. An incomplete occurrence, dynamic authored verb, unknown or unrecognized role,
    ancestry kind, value kind, redirect kind, or policy-sensitive fact prompts
    or denies. Unknown executable operands are never dropped to reuse a broader
-   approval.
+   approval. Ambient runtime resolution does not by itself make a static
+   authored occurrence incomplete; the approval covers the command text the
+   user was shown.
 4. For every exact or finite effective value, the consumer reapplies the
    shell's binding rules and the complete executable-specific grammar at the
    candidate's authored position. A finite shell proof is not authorization;

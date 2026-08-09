@@ -202,6 +202,13 @@ installed prerelease remain prompt-or-deny cases. The migration rules are:
    scope, cwd, or redirects. A structurally complete occurrence may still have
    an unknown value; those are separate facts.
 
+This authorization is about authored shell syntax. `IsComplete` means the
+parser found and classified every executable region in the submitted command;
+it does not promise which runtime executable an ambient alias, function,
+module, profile, `PATH`, or inherited environment will select. Netclaw-style
+gates show the submitted command to the user and authorize that visible command.
+They are not responsible for reconstructing every externality in the host.
+
 Bash loop-variable proofs also require an execution-environment assertion.
 `BashInitialStateMode.Unknown` is the safe default and makes a bounded `for`
 region unparseable: the parser cannot discover whether an ambient variable is
@@ -243,21 +250,18 @@ Unmodeled unquoted `time`, `!`, `coproc`, and `{ ...; }` syntax follows the
 same rule because those constructs can hide nested or current-shell execution;
 quoted spellings and external `/usr/bin/time` do not acquire reserved syntax.
 
-PowerShell authorization proofs require the parallel but shell-specific
-assertion. `PwshInitialStateMode.Unknown` is the safe default: the parser can
-still expose supported non-pipeline structure and preserve v0.2 compatibility
-leaves, but ambient typed, validated, read-only, scoped, alias, function, and
-module state prevents both a closed-world binding proof and a complete v0.3
-command-identity proof. An unproved invocation invalidates subsequent cwd,
-value, redirect, and command-resolution facts; an unproved pipeline fails
-atomically until pipeline state propagation is modeled. Select
-`IsolatedNonInteractiveNoProfile` only when the caller
-executes the complete source in a newly spawned noninteractive PowerShell
-process with profiles disabled and no reused or uncontrolled caller-initialized
-runspace. The launch must also disable module auto-loading or pin available
-modules and module search paths to the same reviewed baseline used by policy.
-A fixed bootstrap may establish those constraints only if it cannot define or
-mutate loop-bound variables or policy-relevant command identities:
+PowerShell follows the same authored-command boundary. The safe default is
+`PwshInitialStateMode.Unknown`, and ordinary static commands remain complete in
+that mode. Ambient aliases, functions, modules, profiles, executable lookup,
+and other host state do not make every visible command dynamic. A
+loop-dependent effective value remains `Unknown` in default mode because an
+ambient typed or validated variable can coerce or reject the assignment.
+
+Select `IsolatedNonInteractiveNoProfile` only when the complete source runs in
+a newly spawned noninteractive PowerShell process with profiles disabled and no
+reused or caller-initialized runspace. That assertion permits exact or finite
+ordinary literal `foreach` values. It does not require pinned modules or a
+reviewed command-resolution baseline:
 
 ```csharp
 var parser = new PwshParser(new PwshParserOptions
@@ -267,15 +271,21 @@ var parser = new PwshParser(new PwshParserOptions
 });
 ```
 
-Approval reuse based on `ParsedCommand.Commands` therefore requires this
-constrained command-resolution baseline, not merely a loop-value assertion.
-The assertion does not automatically cross `pwsh -Command` or
-`pwsh -EncodedCommand`; a child host needs its own independently proved launch
-contract. By contrast, `( ... )`, `$()`, and static `Invoke-Expression` share
-the current runspace and its mutations. Never select isolated mode for an
-interactive session or runspace pool merely to suppress approval prompts.
-`-NoProfile -NonInteractive` alone does not prove the inherited environment,
-startup configuration, or module baseline.
+Static-command approval reuse based on `ParsedCommand.Commands` does not
+require the isolated mode. A decoded child host keeps complete static authored commands, but it does
+not inherit exact environment, home, provider, or cwd facts that were not
+independently proved. `( ... )`, `$()`, and static `Invoke-Expression` share
+current-runspace authored state. Never select isolated mode merely to suppress
+approval prompts.
+
+The parser still treats facts visible in the submitted source as security
+boundaries. Computed invocation such as `& $exe`, computed
+`Invoke-Expression`, hidden executable text, explicit alias/function/module
+mutation, unsupported constructs, and unknown script-block receiver semantics
+remain incomplete or unparseable. Hard-deny and protected-path checks still run
+before approval reuse. Unknown values, paths, cwd, and redirects remain strict
+when they affect policy even if the surrounding command occurrence is
+structurally complete.
 
 Under the stable v0.3 contract, heredoc and Bash here-string bodies are stdin
 data, not implicit child commands or filesystem paths. Authorize any command
@@ -358,6 +368,11 @@ code. An occurrence can be structurally complete while one argument, cwd, or
 redirect target remains unknown, so test all of these facts separately.
 
 ## Choosing a command identity
+
+Choose the identity from the authored syntax. Runtime command discovery is an
+executor concern. A consumer does not need to enumerate profiles, modules,
+aliases, functions, or `PATH` before it can ask the user to approve the command
+that will be submitted to the shell.
 
 For PowerShell aliases, prefer the canonical cmdlet identity while retaining
 the token the user typed for display:
@@ -592,8 +607,9 @@ static bool IsKnownRedirectOperation(RedirectOperation operation) =>
 
 Completeness and value precision are intentionally independent. For example,
 `Get-Date > $name` has a complete file-output operation with an `Unknown`
-target, so path policy still prompts. Under a caller-enforced isolated
-PowerShell initial state, `foreach ($f in @('one.txt','two.txt')) {
+target, so path policy still prompts. Under an isolated fresh-process
+PowerShell initial state,
+`foreach ($f in @('one.txt','two.txt')) {
 Write-Output x > $f }` can instead expose a finite set of two absolute target
 paths. The loop target is not added to `EffectiveArguments`, because a
 redirect operand is not part of the command's argv.
@@ -632,9 +648,9 @@ surfaced clause, so redirect policy still sees paths such as
 `pwsh -Command "git status" > audit.log`.
 The outer redirect is evaluated by the invoking PowerShell scope before child
 launch. It can therefore retain a finite parent-loop target domain even when
-the decoded child occurrence remains incomplete for independent child-runspace
-reasons. A redirect written inside the decoded `-Command` payload uses child
-scope instead.
+the decoded child has unknown host-dependent values. A static decoded child
+command remains a complete authored occurrence. A redirect written inside the
+decoded `-Command` payload uses child scope instead.
 
 Supported PowerShell `$()` subexpressions are structural rather than hidden
 opaque values. The containing `SimpleCommandSyntax.Substitutions` records each
