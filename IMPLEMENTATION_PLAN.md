@@ -321,17 +321,16 @@ priorities.
       parser tests plus executable corpus cases pin the boundary. Next prove
       the paired Netclaw redirect matrix.
 - [x] Migrate Netclaw's Bash approval path to `0.3.0-alpha`. Netclaw PR
-      [#5](https://github.com/Aaronontheweb/netclaw/pull/5) enumerates every
+      [#1835](https://github.com/netclaw-dev/netclaw/pull/1835) enumerates every
       `CommandOccurrence`, consumes complete ancestry, cwd, compatibility
       argument/path, and explicit redirect facts, and removes the temporary raw
-      descriptor inference. Focused security tests and the 120-case approval
+      descriptor inference. Focused security tests and the 166-case approval
       matrix pin ordinary commands, pipelines, wrappers, static and dynamic
       redirects, cwd joins, symlink boundaries, POSIX shell payloads, and
       hard-deny precedence. Unknown or incomplete occurrence and redirect facts
       and dynamic or unresolved compatibility arguments remain fail closed.
-      Follow-up PR [#6](https://github.com/Aaronontheweb/netclaw/pull/6)
-      keeps stable macOS root aliases usable while scanning authored redirect
-      segments before lexical normalization can erase symlink traversal.
+      Cross-platform test fixtures canonicalize platform temporary roots while
+      production symlink checks remain unchanged.
       Bounded Bash loop approval cases and the separate PowerShell consumer
       migration remain the next downstream gates.
 - [x] Deliver occurrence-level PowerShell explicit redirect facts while

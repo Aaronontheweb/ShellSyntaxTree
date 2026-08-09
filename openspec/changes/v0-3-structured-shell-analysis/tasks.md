@@ -87,13 +87,12 @@
     task 4.5 maps its stream model.
 - [x] 4.7 Verify the explicit model removes the need for raw-prefix inference in a Netclaw integration test.
   - Netclaw PR
-    [#5](https://github.com/Aaronontheweb/netclaw/pull/5) consumes typed
+    [#1835](https://github.com/netclaw-dev/netclaw/pull/1835) consumes typed
     descriptor duplicate, move, close, combined-output, and file-target facts.
     It removes the temporary raw descriptor-prefix workaround and pins static,
-    computed, malformed, and future-enum forms in focused security tests.
-    Follow-up PR [#6](https://github.com/Aaronontheweb/netclaw/pull/6)
-    preserves macOS system path aliases without trusting writable symlinks or
-    allowing lexical normalization to erase authored parent traversal.
+    computed, malformed, and future-enum forms in focused security tests. Its
+    cross-platform fixtures preserve production symlink rejection rather than
+    weakening that fail-closed check for macOS temporary-path aliases.
 
 ## 5. Consumer Migration Baseline
 
@@ -108,14 +107,14 @@
   the downstream migration gate.
 - [x] 5.7 Migrate Netclaw's existing-command analysis to the occurrence and redirect APIs behind focused regression tests.
   - Netclaw PR
-    [#5](https://github.com/Aaronontheweb/netclaw/pull/5) migrates the Bash
+    [#1835](https://github.com/netclaw-dev/netclaw/pull/1835) migrates the Bash
     approval path to `ParsedCommand.Commands`, complete ancestry and cwd facts,
     compatibility argument/path facts, and explicit redirects. Unknown or
     incomplete identity, ancestry, cwd, or redirect facts and dynamic or
-    unresolved compatibility arguments still fail closed. The 120-case
+    unresolved compatibility arguments still fail closed. The 166-case
     approval matrix and focused security tests cover
     ordinary commands, wrappers, pipelines, cwd attribution, redirects,
-    symlinks, authored redirect-path traversal, and hard-deny precedence.
+    symlinks, wrapper-prefix executables, and hard-deny precedence.
 
 ## 6. Bash For-In Vertical Slice
 
