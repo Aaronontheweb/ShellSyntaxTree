@@ -26,7 +26,7 @@ internal enum BashTokenKind
     /// <summary>One of the bash operators recognized in v0.1: <c>&amp;&amp;</c>,
     /// <c>||</c>, <c>;</c>, <c>|</c>, <c>&gt;</c>, <c>&gt;&gt;</c>,
     /// <c>&lt;</c>, <c>2&gt;</c>, <c>2&gt;&gt;</c>, <c>(</c>, <c>)</c>,
-    /// <c>&lt;&lt;</c>, <c>&lt;&lt;-</c>. The literal text is in
+    /// <c>&lt;&lt;</c>, <c>&lt;&lt;-</c>, <c>&lt;&lt;&lt;</c>. The literal text is in
     /// <see cref="BashToken.OperatorText"/>.</summary>
     Operator,
 

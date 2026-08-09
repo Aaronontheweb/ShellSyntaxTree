@@ -1207,12 +1207,17 @@ internal sealed class BashAbstractStateAnalyzer
         }
 
         var clause = RewriteClause(simple.Clause, input, sourceFacts.CwdPathDependencies);
-        var redirects = RewriteRedirectFacts(sourceFacts.Redirects, clause);
+        var redirects = RewriteRedirectFacts(
+            sourceFacts.Redirects,
+            sourceFacts.RedirectTargetProvenance,
+            input.Bindings,
+            clause);
         facts.Add(clause, new CommandOccurrenceFacts
         {
             EffectiveArguments = CreateEffectiveArguments(simple.Clause),
             WorkingDirectory = input.ToDomain(),
             Redirects = redirects,
+            RedirectTargetProvenance = sourceFacts.RedirectTargetProvenance,
             CwdPathDependencies = sourceFacts.CwdPathDependencies,
             ValueProvenance = sourceFacts.ValueProvenance,
             IsComplete = sourceFacts.IsComplete && AreRedirectsComplete(redirects),
@@ -1435,6 +1440,8 @@ internal sealed class BashAbstractStateAnalyzer
 
     private static IReadOnlyList<RedirectAnalysis> RewriteRedirectFacts(
         IReadOnlyList<RedirectAnalysis> source,
+        IReadOnlyList<RedirectTargetProvenance> provenance,
+        BashLoopBindingContext bindings,
         Clause clause)
     {
         if (source.Count == 0)
@@ -1446,6 +1453,18 @@ internal sealed class BashAbstractStateAnalyzer
         for (var index = 0; index < rewritten.Length; index++)
         {
             var fact = source[index];
+            if (fact.Operation == RedirectOperation.HereString)
+            {
+                rewritten[index] = fact with
+                {
+                    Target = RewriteHereStringTarget(
+                        fact,
+                        provenance,
+                        bindings),
+                };
+                continue;
+            }
+
             if (!fact.IsPathRelevant ||
                 fact.RedirectIndex < 0 ||
                 fact.RedirectIndex >= clause.Redirects.Count)
@@ -1469,6 +1488,45 @@ internal sealed class BashAbstractStateAnalyzer
         }
 
         return rewritten;
+    }
+
+    private static ShellValueDomain RewriteHereStringTarget(
+        RedirectAnalysis fact,
+        IReadOnlyList<RedirectTargetProvenance> provenance,
+        BashLoopBindingContext bindings)
+    {
+        foreach (var candidate in provenance)
+        {
+            if (candidate.RedirectIndex != fact.RedirectIndex)
+            {
+                continue;
+            }
+
+            if (!bindings.TryAnalyzeEffectiveValue(candidate.Value, out var domain))
+            {
+                return fact.Target;
+            }
+
+            if (domain.Kind is not (
+                    ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
+            {
+                return ShellValueDomain.Unknown;
+            }
+
+            var values = new string[domain.Values.Count];
+            for (var index = 0; index < values.Length; index++)
+            {
+                values[index] = domain.Values[index] + "\n";
+            }
+
+            return new ShellValueDomain
+            {
+                Kind = domain.Kind,
+                Values = values,
+            };
+        }
+
+        return fact.Target;
     }
 
     private static bool AreRedirectsComplete(IReadOnlyList<RedirectAnalysis> redirects)

@@ -1439,8 +1439,8 @@ The lexer produces tokens consumed by the parser. Token kinds:
   the quote delimiters from the token value. Example: `"hello world"`
   becomes the token value `hello world`.
 - **OPERATOR** — `&&`, `||`, `;`, `|`, `>`, `>>`, `<`, numeric-descriptor
-  forms such as `2>`, `3>>`, `10<`, `3<<`, and `4<<-`, `&>`, `&>>`,
-  `(`, `)`, `<<`, `<<-`.
+  forms such as `2>`, `3>>`, `10<`, `3<<`, `4<<-`, and `5<<<`, `&>`,
+  `&>>`, `(`, `)`, `<<`, `<<-`, `<<<`.
 - **WHITESPACE** — one or more spaces, tabs, or newlines (newlines inside
   a heredoc body are not emitted as ordinary tokens; the delimiter token
   retains the body's resolver fragments and authored extent). A whitespace run that
@@ -1500,12 +1500,13 @@ The lexer produces tokens consumed by the parser. Token kinds:
 Operators terminate the current token. `cd /tmp&&ls` lexes as
 `[cd, /tmp, &&, ls]` — no whitespace required around operators. The lexer
 must handle this. A numeric descriptor is an operator prefix only when its
-digits begin at a shell-token boundary and become adjacent to `<`, `>`, or
-`>>` after Bash removes unquoted line continuations. Continuations may join
-digit fragments or the descriptor and operator; LF and CRLF spellings retain
-their authored span while producing the same descriptor. Digits joined to an
-ordinary, quoted, or escaped word remain part of that word; `command3>file`
-therefore uses command name `command3` and a default-source `>` redirect.
+digits begin at a shell-token boundary and become adjacent to `<`, `>`, `>>`,
+`<<`, `<<-`, or `<<<` after Bash removes unquoted line continuations.
+Continuations may join digit fragments or the descriptor and operator; LF and
+CRLF spellings retain their authored span while producing the same descriptor.
+Digits joined to an ordinary, quoted, or escaped word remain part of that word;
+`command3>file` therefore uses command name `command3` and a default-source `>`
+redirect.
 
 ### Comment handling
 
@@ -1513,8 +1514,8 @@ therefore uses command name `command3` and a default-source `>` redirect.
   that runs to (but does not include) the next newline. A word boundary
   is: start of input, or the position immediately after a whitespace
   run, a newline, an operator (`&&`, `||`, `;`, `|`, `>`, `>>`, `<`,
-  a numeric descriptor adjacent to `>`, `>>`, or `<`, `&>`, `&>>`, `(`,
-  `)`, `<<`, `<<-`), a quoted string, or an opaque
+  a numeric descriptor adjacent to `>`, `>>`, `<`, `<<`, `<<-`, or `<<<`,
+  `&>`, `&>>`, `(`, `)`, `<<`, `<<-`, `<<<`), a quoted string, or an opaque
   substitution. Equivalently: `#` is comment-start everywhere the
   outer lexer dispatch loop sits, because every other lexer rule has
   already consumed its territory before `#` is considered.

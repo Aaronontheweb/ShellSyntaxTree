@@ -66,6 +66,7 @@ internal static partial class BashCommandParser
             command,
             CreateDependencySets(projection.Commands, analyzedFacts),
             CreateValueProvenanceSets(projection.Commands, analyzedFacts),
+            CreateRedirectProvenanceSets(projection.Commands, analyzedFacts),
             analyzedForInPlans);
     }
 
@@ -103,6 +104,24 @@ internal static partial class BashCommandParser
         return sets;
     }
 
+    private static IReadOnlyList<RedirectTargetProvenanceSet>
+        CreateRedirectProvenanceSets(
+            IReadOnlyList<CommandOccurrence> commands,
+            Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory)
+    {
+        var sets = new RedirectTargetProvenanceSet[commands.Count];
+        for (var index = 0; index < sets.Length; index++)
+        {
+            var clause = commands[index].Clause;
+            var facts = factsFactory(new SimpleCommandSyntax { Clause = clause });
+            sets[index] = new RedirectTargetProvenanceSet(
+                clause,
+                facts.RedirectTargetProvenance);
+        }
+
+        return sets;
+    }
+
     private static BashParseResult StructuralFailure(
         string source,
         string? reason,
@@ -118,6 +137,7 @@ internal static partial class BashCommandParser
             },
             Array.Empty<CwdPathDependencySet>(),
             Array.Empty<ShellValueProvenanceSet>(),
+            Array.Empty<RedirectTargetProvenanceSet>(),
             Array.Empty<BashForInAnalysisPlanReference>());
 
     private sealed class StructuralCoordinator
@@ -1286,12 +1306,21 @@ internal static partial class BashCommandParser
             BashParserOptions parseOptions)
         {
             var valueProvenance = new List<ShellValueElementProvenance>();
+            var redirectProvenance = new List<RedirectTargetProvenance>();
             var cwdPathDependencies = new List<CwdPathDependency>();
+            var redirectAnalysis = BashRedirectAnalysis.Analyze(
+                simple.Clause,
+                _source,
+                sourceTokens);
+            var redirectIndex = 0;
             for (var elementIndex = 0;
                  elementIndex < simple.Clause.Elements.Count;
                  elementIndex++)
             {
                 var element = simple.Clause.Elements[elementIndex];
+                var currentRedirectIndex = element.Role == ClauseElementRole.Redirect
+                    ? redirectIndex++
+                    : -1;
                 if (!TryGetElementValue(element, sourceTokens, out var value))
                 {
                     continue;
@@ -1304,6 +1333,17 @@ internal static partial class BashCommandParser
                         value));
                 }
 
+                if (currentRedirectIndex >= 0 &&
+                    currentRedirectIndex < redirectAnalysis.Count &&
+                    redirectAnalysis[currentRedirectIndex].Operation ==
+                        RedirectOperation.HereString)
+                {
+                    redirectProvenance.Add(new RedirectTargetProvenance(
+                        currentRedirectIndex,
+                        elementIndex,
+                        BashRedirectAnalysis.NormalizeHereStringOperand(value),
+                        UsesOutermostInvocationScope: false));
+                }
             }
 
             foreach (var pathResolution in pathResolutions)
@@ -1323,13 +1363,10 @@ internal static partial class BashCommandParser
                     parseOptions.WorkingDirectory ?? Environment.CurrentDirectory));
             }
 
-            var redirectAnalysis = BashRedirectAnalysis.Analyze(
-                simple.Clause,
-                _source,
-                sourceTokens);
             _facts.Add(simple.Clause, new CommandOccurrenceFacts
             {
                 Redirects = redirectAnalysis,
+                RedirectTargetProvenance = redirectProvenance.ToArray(),
                 ValueProvenance = valueProvenance.ToArray(),
                 CwdPathDependencies = cwdPathDependencies.ToArray(),
                 IsComplete = simple.Clause.Verb.Tokens.Count > 0 &&
@@ -1439,9 +1476,19 @@ internal static partial class BashCommandParser
                     return false;
                 }
 
+                if (!TryFindRedirectProvenance(
+                        innerResult.RedirectTargetProvenanceSets,
+                        source.Clause,
+                        out var redirectProvenance))
+                {
+                    error = "decoded bash -c redirect provenance could not be mapped safely";
+                    return false;
+                }
+
                 _facts.Add(clonedClause, new CommandOccurrenceFacts
                 {
                     Redirects = ClearDecodedHereDocumentSpans(source.Redirects),
+                    RedirectTargetProvenance = redirectProvenance,
                     CwdPathDependencies = cwdPathDependencies,
                     ValueProvenance = valueProvenance,
                     IsComplete = source.IsComplete,
@@ -1515,6 +1562,24 @@ internal static partial class BashCommandParser
             }
 
             provenance = Array.Empty<ShellValueElementProvenance>();
+            return false;
+        }
+
+        private static bool TryFindRedirectProvenance(
+            IReadOnlyList<RedirectTargetProvenanceSet> provenanceSets,
+            Clause clause,
+            out IReadOnlyList<RedirectTargetProvenance> provenance)
+        {
+            foreach (var set in provenanceSets)
+            {
+                if (object.ReferenceEquals(set.Clause, clause))
+                {
+                    provenance = set.Provenance;
+                    return true;
+                }
+            }
+
+            provenance = Array.Empty<RedirectTargetProvenance>();
             return false;
         }
 

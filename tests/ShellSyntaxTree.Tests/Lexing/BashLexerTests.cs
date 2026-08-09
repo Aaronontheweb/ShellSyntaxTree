@@ -236,6 +236,22 @@ public class BashLexerTests
         Assert.NotNull(tokens[2].HeredocBodyValue);
     }
 
+    [Theory]
+    [InlineData("cmd <<<data", "<<<")]
+    [InlineData("cmd 3<<<data", "3<<<")]
+    [InlineData("cmd 1\\\n0<<<data", "10<<<")]
+    public void Here_string_prefers_the_longest_input_redirect_operator(
+        string input,
+        string expectedOperator)
+    {
+        var tokens = LexNonWs(input);
+
+        Assert.Equal(3, tokens.Length);
+        Assert.Equal(expectedOperator, tokens[1].OperatorText);
+        Assert.Equal("data", tokens[2].Value);
+        Assert.Null(tokens[2].HeredocBodyValue);
+    }
+
     // ------------------------------------------------------------ quoting
 
     [Fact]

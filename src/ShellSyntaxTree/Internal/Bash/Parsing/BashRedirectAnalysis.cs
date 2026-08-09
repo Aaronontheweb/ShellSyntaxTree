@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
 using ShellSyntaxTree.Internal.Bash.Lexing;
+using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
@@ -90,6 +91,15 @@ internal static class BashRedirectAnalysis
                     .EndsWith("<<-", StringComparison.Ordinal));
         }
 
+        if (operation == RedirectOperation.HereString)
+        {
+            return AnalyzeHereString(
+                redirectIndex,
+                compatibility,
+                element,
+                redirectSource);
+        }
+
         if (operation is RedirectOperation.FileInput or
             RedirectOperation.FileOutput or
             RedirectOperation.FileAppend &&
@@ -127,6 +137,58 @@ internal static class BashRedirectAnalysis
             IsPathRelevant = true,
             IsComplete = isComplete,
         };
+    }
+
+    private static RedirectAnalysis AnalyzeHereString(
+        int redirectIndex,
+        Redirect compatibility,
+        ClauseElement element,
+        RedirectSource source)
+    {
+        var target = compatibility.IsDynamicSkip
+            ? ShellValueDomain.Unknown
+            : new ShellValueDomain
+            {
+                Kind = ShellValueDomainKind.Exact,
+                Values = new[] { (element.Resolved ?? element.Value) + "\n" },
+            };
+        return new RedirectAnalysis
+        {
+            RedirectIndex = redirectIndex,
+            Source = source,
+            Operation = RedirectOperation.HereString,
+            Target = target,
+            IsPathRelevant = false,
+            IsComplete = source.Kind != RedirectSourceKind.Unknown,
+        };
+    }
+
+    internal static ShellValue NormalizeHereStringOperand(ShellValue value)
+    {
+        var fragments = new ShellValueFragment[value.Fragments.Count];
+        var changed = false;
+        for (var index = 0; index < fragments.Length; index++)
+        {
+            var fragment = value.Fragments[index];
+            if (fragment.Expansion is { Kind: ShellExpansionKind.Glob })
+            {
+                changed = true;
+                fragments[index] = fragment with
+                {
+                    Kind = ShellValueFragmentKind.Literal,
+                    AllowedTransforms = ShellLexicalTransform.None,
+                    Expansion = null,
+                    Cardinality = ShellValueCardinality.ExactlyOne,
+                };
+                continue;
+            }
+
+            var transforms = fragment.AllowedTransforms & ~ShellLexicalTransform.FieldSplit;
+            changed |= transforms != fragment.AllowedTransforms;
+            fragments[index] = fragment with { AllowedTransforms = transforms };
+        }
+
+        return changed ? new ShellValue(value.Decoded, fragments) : value;
     }
 
     private static RedirectAnalysis AnalyzeHereDocument(
@@ -313,7 +375,12 @@ internal static class BashRedirectAnalysis
             else
             {
                 source = new RedirectSource();
-                if (raw.AsSpan(operatorStart).StartsWith("<<-", StringComparison.Ordinal))
+                if (raw.AsSpan(operatorStart).StartsWith("<<<", StringComparison.Ordinal))
+                {
+                    operation = RedirectOperation.HereString;
+                    length = operatorStart + 3;
+                }
+                else if (raw.AsSpan(operatorStart).StartsWith("<<-", StringComparison.Ordinal))
                 {
                     operation = RedirectOperation.HereDocument;
                     length = operatorStart + 3;
@@ -339,6 +406,13 @@ internal static class BashRedirectAnalysis
         {
             operation = RedirectOperation.FileOutput;
             length = operatorStart + 1;
+            return true;
+        }
+
+        if (raw.AsSpan(operatorStart).StartsWith("<<<", StringComparison.Ordinal))
+        {
+            operation = RedirectOperation.HereString;
+            length = operatorStart + 3;
             return true;
         }
 

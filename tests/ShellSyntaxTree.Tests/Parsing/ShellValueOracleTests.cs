@@ -102,6 +102,27 @@ public class ShellValueOracleTests
         Assert.Equal(expected, Run("bash", "-c", source));
     }
 
+    [Theory]
+    [InlineData("cat <<< \"hello\"", "hello\n")]
+    [InlineData("value='two words'; cat <<< $value", "two words\n")]
+    [InlineData("cat <<< *.txt", "*.txt\n")]
+    [InlineData("cat <<< \"$(printf payload)\"", "payload\n")]
+    public void Bash_here_strings_append_one_newline_without_field_splitting(
+        string source,
+        string expected)
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked("bash", "-c", source);
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal(expected, result.StandardOutput);
+        Assert.Empty(result.StandardError);
+    }
+
     [Fact]
     public void Bash_prompt_parameter_transform_can_execute_command_text_in_heredoc()
     {

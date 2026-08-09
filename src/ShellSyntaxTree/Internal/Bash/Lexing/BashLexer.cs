@@ -116,8 +116,8 @@ internal static class BashLexer
             // ---- operators (longer-match first) ----
             // Order matters: a token-boundary numeric descriptor precedes its
             // redirect, `&&` precedes `&`, `||` precedes `|`, `>>` precedes
-            // `>`, and `<<-` precedes `<<` and `<`. Bare `&` background jobs
-            // remain unsupported.
+            // `>`, and `<<<` / `<<-` precede `<<` and `<`. Bare `&`
+            // background jobs remain unsupported.
             if (TryReadOperator(
                     src,
                     i,
@@ -401,14 +401,16 @@ internal static class BashLexer
                 if (descriptorEnd + 1 < src.Length && src[descriptorEnd + 1] == '<')
                 {
                     redirectLength = descriptorEnd + 2 < src.Length &&
-                        src[descriptorEnd + 2] == '-'
+                        src[descriptorEnd + 2] is '<' or '-'
                             ? 3
                             : 2;
                 }
 
                 length = descriptorEnd - i + redirectLength;
                 text = descriptor.ToString() +
-                    (redirectLength == 3 ? "<<-" : redirectLength == 2 ? "<<" : "<");
+                    (redirectLength == 3
+                        ? src[descriptorEnd + 2] == '<' ? "<<<" : "<<-"
+                        : redirectLength == 2 ? "<<" : "<");
                 return true;
             }
         }
@@ -433,9 +435,11 @@ internal static class BashLexer
             if (c0 == '>' && c1 == '>') { length = 2; text = ">>"; return true; }
             if (c0 == '<' && c1 == '<')
             {
-                if (i + 2 < src.Length && src[i + 2] == '-')
+                if (i + 2 < src.Length && src[i + 2] is '<' or '-')
                 {
-                    length = 3; text = "<<-"; return true;
+                    length = 3;
+                    text = src[i + 2] == '<' ? "<<<" : "<<-";
+                    return true;
                 }
 
                 length = 2; text = "<<"; return true;
@@ -495,6 +499,23 @@ internal static class BashLexer
                operatorText[operatorStart] == '<' &&
                operatorText[operatorStart + 1] == '<' &&
                (remaining == 2 || remaining == 3 && operatorText[operatorStart + 2] == '-');
+    }
+
+    internal static bool IsHereStringOperator(string? operatorText)
+    {
+        if (string.IsNullOrEmpty(operatorText))
+        {
+            return false;
+        }
+
+        var operatorStart = 0;
+        while (operatorStart < operatorText!.Length &&
+               operatorText[operatorStart] is >= '0' and <= '9')
+        {
+            operatorStart++;
+        }
+
+        return operatorText.AsSpan(operatorStart).SequenceEqual("<<<".AsSpan());
     }
 
     private static bool CanStartNumericDescriptor(IReadOnlyList<BashToken> tokens)

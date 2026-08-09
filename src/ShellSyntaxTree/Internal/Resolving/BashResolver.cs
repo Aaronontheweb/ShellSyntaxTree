@@ -336,7 +336,11 @@ internal static class BashResolver
 
         if (!treatAsPath)
         {
-            return (hadHomeExpansion ? ArgKind.Tilde : ArgKind.Literal, null, false);
+            return (hadHomeExpansion ? ArgKind.Tilde : ArgKind.Literal,
+                hadHomeExpansion && consumer == ShellResolutionConsumer.BashRedirect
+                    ? composed.ToString()
+                    : null,
+                false);
         }
 
         var resolved = TryResolveAbsolutePath(

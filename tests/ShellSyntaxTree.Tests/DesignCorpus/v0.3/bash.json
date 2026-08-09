@@ -895,6 +895,7 @@
     },
     {
       "id": "bash-here-string-literal-data",
+      "compatibilityProjectionLanded": true,
       "concern": "Static here-string data does not force a raw-command approval prompt",
       "input": "cat <<< \"hello\"",
       "current": { "isUnparseable": true, "reasonContains": "missing delimiter" },
@@ -926,6 +927,7 @@
     },
     {
       "id": "bash-here-string-dynamic-data",
+      "compatibilityProjectionLanded": true,
       "concern": "Unknown stdin data does not make an otherwise complete redirect structurally incomplete",
       "input": "cat <<< \"$value\"",
       "current": { "isUnparseable": true, "reasonContains": "missing delimiter" },
