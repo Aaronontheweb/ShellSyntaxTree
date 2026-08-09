@@ -1,0 +1,346 @@
+{
+  "name": "V03 data receiver canonical alias mutation",
+  "input": "Set-Alias Write-Output Invoke-Command; echo { Remove-Item victim.txt }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Alias"
+        ],
+        "args": [
+          {
+            "raw": "Write-Output",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "Invoke-Command",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Set-Alias",
+            "value": "Set-Alias",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "Write-Output",
+            "value": "Write-Output",
+            "role": "Argument",
+            "sourceStart": 10,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "Invoke-Command",
+            "value": "Invoke-Command",
+            "role": "Argument",
+            "sourceStart": 23,
+            "sourceLength": 14,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "echo"
+        ],
+        "canonicalVerb": "Write-Output",
+        "args": [
+          {
+            "raw": "{ Remove-Item victim.txt }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "echo",
+            "value": "echo",
+            "role": "Verb",
+            "sourceStart": 39,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "{ Remove-Item victim.txt }",
+            "value": "{ Remove-Item victim.txt }",
+            "role": "Argument",
+            "sourceStart": 44,
+            "sourceLength": 26,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "victim.txt",
+            "kind": "Literal",
+            "isPath": true
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Remove-Item",
+            "value": "Remove-Item",
+            "role": "Verb",
+            "sourceStart": 46,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "victim.txt",
+            "value": "victim.txt",
+            "role": "Argument",
+            "sourceStart": 58,
+            "sourceLength": 10,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 70,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 70,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 37,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 39,
+        "sourceLength": 31,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      },
+      {
+        "kind": "ExecutionRegion",
+        "parentIndex": 3,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 44,
+        "sourceLength": 26,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "executionOrigin": "CommandArgument",
+        "hostClauseElementIndex": 1,
+        "executionPhase": "Unknown",
+        "executionTiming": "Unknown",
+        "executionCardinality": "Unknown"
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 4,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 45,
+        "sourceLength": 24,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 5,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 46,
+        "sourceLength": 22,
+        "clauseIndex": 2,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 70
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 70
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 70
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 70
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "ExecutionRegion",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 70
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 70
+          },
+          {
+            "ancestorKind": "ExecutionRegion",
+            "region": "ExecutionRegion",
+            "childIndex": 0,
+            "sourceStart": 44,
+            "sourceLength": 26
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 45,
+            "sourceLength": 24
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "A mutation of an alias canonical target also invalidates the authored alias receiver and keeps the nested command visible."
+}

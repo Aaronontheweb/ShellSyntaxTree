@@ -516,6 +516,23 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Fact]
+    public void Parallel_child_runspace_reestablishes_proved_data_receivers()
+    {
+        var result = ParseIsolated(
+            "Set-Alias Write-Output Invoke-Command; 1 | " +
+            "Microsoft.PowerShell.Core\\ForEach-Object -Parallel { " +
+            "Write-Output { Remove-Item victim.txt } }");
+
+        Assert.DoesNotContain(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "Remove-Item");
+        var childWrite = Assert.Single(
+            result.Commands,
+            command => command.Clause.Verb.Tokens[0] == "Write-Output");
+        Assert.True(childWrite.IsComplete);
+    }
+
+    [Fact]
     public void Parallel_pooled_runspace_command_mutation_joins_later_activations()
     {
         var result = ParseIsolated(
@@ -997,7 +1014,7 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Fact]
-    public void Module_qualified_receiver_remains_proved_after_alias_mutation()
+    public void Module_qualified_receiver_remains_proved_after_unrelated_alias_mutation()
     {
         var result = ParseIsolated(
             "Set-Alias Measure-Command Write-Output; " +
@@ -1015,7 +1032,7 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(ExecutionRegionTiming.Synchronous, region.Timing);
         Assert.Equal(ExecutionRegionCardinality.Once, region.Cardinality);
         Assert.True(result.Commands[1].IsComplete);
-        Assert.False(result.Commands[2].IsComplete);
+        Assert.True(result.Commands[2].IsComplete);
     }
 
     [Fact]
@@ -1052,7 +1069,7 @@ public class PwshExecutionRegionStructuralTests
             "ForEach-Object -Begin { Write-Output begin } " +
             "-Process { Remove-Item one }, { Remove-Item two }";
 
-        var result = Parse(source);
+        var result = ParseIsolated(source);
 
         var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Equal(3, host.ExecutionRegions.Count);
@@ -1089,6 +1106,87 @@ public class PwshExecutionRegionStructuralTests
 
     [Theory]
     [InlineData("Write-Output { Remove-Item victim.txt }")]
+    [InlineData("echo { Remove-Item victim.txt }")]
+    [InlineData(
+        "Microsoft.PowerShell.Utility\\Write-Output { Remove-Item victim.txt }")]
+    public void Proved_data_receiver_keeps_script_block_opaque(string source)
+    {
+        var result = ParseIsolated(source);
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        Assert.Empty(host.ExecutionRegions);
+        Assert.Equal(ArgKind.DynamicSkip, Assert.Single(host.Clause.Args).Kind);
+        Assert.Equal("{ Remove-Item victim.txt }", host.Clause.Elements[1].Raw);
+        Assert.True(Assert.Single(result.Commands).IsComplete);
+        Assert.Single(result.Clauses);
+    }
+
+    [Fact]
+    public void Module_qualified_data_receiver_requires_a_constrained_baseline()
+    {
+        var result = Parse(
+            "Microsoft.PowerShell.Utility\\Write-Output { Remove-Item victim.txt }");
+
+        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
+        Assert.Single(host.ExecutionRegions);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.False(command.IsComplete));
+    }
+
+    [Fact]
+    public void Observed_receiver_mutation_prevents_a_false_data_proof()
+    {
+        var result = ParseIsolated(
+            "Set-Alias Write-Output Invoke-Command; " +
+            "Write-Output { Remove-Item victim.txt }");
+
+        var list = Assert.IsType<CommandListSyntax>(Assert.Single(result.Syntax.Statements));
+        var host = Assert.IsType<SimpleCommandSyntax>(list.Items[1].Command);
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionPhase.Unknown, region.Phase);
+        Assert.Equal(
+            new[] { "Set-Alias", "Write-Output", "Remove-Item" },
+            result.Commands.Select(command => command.Clause.Verb.Tokens[0]));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.All(result.Commands.Skip(1), command => Assert.False(command.IsComplete));
+    }
+
+    [Fact]
+    public void Exact_module_qualified_alias_prevents_a_false_data_proof()
+    {
+        var result = ParseIsolated(
+            "Set-Alias 'Microsoft.PowerShell.Utility\\Write-Output' " +
+            "Invoke-Command; Microsoft.PowerShell.Utility\\Write-Output " +
+            "{ Remove-Item victim.txt }");
+
+        Assert.Equal(
+            new[]
+            {
+                "Set-Alias",
+                "Microsoft.PowerShell.Utility\\Write-Output",
+                "Remove-Item",
+            },
+            result.Commands.Select(command => command.Clause.Verb.Tokens[0]));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.All(result.Commands.Skip(1), command => Assert.False(command.IsComplete));
+    }
+
+    [Fact]
+    public void Canonical_alias_target_mutation_prevents_a_false_data_proof()
+    {
+        var result = ParseIsolated(
+            "Set-Alias Write-Output Invoke-Command; " +
+            "echo { Remove-Item victim.txt }");
+
+        Assert.Equal(
+            new[] { "Set-Alias", "echo", "Remove-Item" },
+            result.Commands.Select(command => command.Clause.Verb.Tokens[0]));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.All(result.Commands.Skip(1), command => Assert.False(command.IsComplete));
+    }
+
+    [Theory]
+    [InlineData("Write-Output { Remove-Item victim.txt }")]
     [InlineData("Invoke-Custom { Remove-Item victim.txt }")]
     public void Unproved_receiver_identity_never_hides_a_script_block(string source)
     {
@@ -1105,7 +1203,7 @@ public class PwshExecutionRegionStructuralTests
     [InlineData("ForEach-Object { $_ }")]
     public void Pure_output_expressions_do_not_invent_command_occurrences(string source)
     {
-        var result = Parse(source);
+        var result = ParseIsolated(source);
 
         var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Empty(Assert.Single(host.ExecutionRegions).Body.Statements);
@@ -1144,7 +1242,7 @@ public class PwshExecutionRegionStructuralTests
     {
         var location = Parse(
             "Invoke-Custom { Set-Location /tmp }; Remove-Item relative.txt");
-        var alias = Parse(
+        var alias = ParseIsolated(
             "ForEach-Object { Set-Alias ri Write-Output }; ri victim.txt");
 
         Assert.Equal(

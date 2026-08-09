@@ -435,6 +435,11 @@ follow the unknown-receiver rule and retain visible bodies with incomplete
 facts. Aliases, supported module-qualified spellings, static call
 operator spellings, parameter abbreviations/inline values, positional binding,
 parameter sets, and `ScriptBlock[]` binding use the same static catalog.
+Catalog lookup is separate from identity proof: PowerShell permits an alias
+whose exact name looks module-qualified. A constrained baseline plus bounded
+mutation provenance must prove the authored spelling unchanged before a
+catalog entry can hide a script block as data. Mutation matching covers both
+the authored spelling and its known canonical alias target.
 
 An unknown receiver or ambiguous binding is over-approximated as an execution
 region with unknown facts. Its body commands remain visible and affected

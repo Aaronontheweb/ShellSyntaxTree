@@ -1,0 +1,213 @@
+{
+  "name": "V03 invoke command local region",
+  "input": "Invoke-Command { Remove-Item secret.txt }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Invoke-Command"
+        ],
+        "args": [
+          {
+            "raw": "{ Remove-Item secret.txt }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Invoke-Command",
+            "value": "Invoke-Command",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 14,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "{ Remove-Item secret.txt }",
+            "value": "{ Remove-Item secret.txt }",
+            "role": "Argument",
+            "sourceStart": 15,
+            "sourceLength": 26,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "secret.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/secret.txt"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Remove-Item",
+            "value": "Remove-Item",
+            "role": "Verb",
+            "sourceStart": 17,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "secret.txt",
+            "value": "secret.txt",
+            "role": "Argument",
+            "sourceStart": 29,
+            "sourceLength": 10,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/secret.txt"
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 41,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 41,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ExecutionRegion",
+        "parentIndex": 1,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 15,
+        "sourceLength": 26,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "executionOrigin": "CommandArgument",
+        "hostClauseElementIndex": 1,
+        "executionPhase": "Main",
+        "executionTiming": "Synchronous",
+        "executionCardinality": "Once"
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 2,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 16,
+        "sourceLength": 24,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 17,
+        "sourceLength": 22,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 41
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "ExecutionRegion",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 41
+          },
+          {
+            "ancestorKind": "ExecutionRegion",
+            "region": "ExecutionRegion",
+            "childIndex": 0,
+            "sourceStart": 15,
+            "sourceLength": 26
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 16,
+            "sourceLength": 24
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "A proved local Invoke-Command receiver exposes its positional script block as one synchronous execution region."
+}

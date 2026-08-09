@@ -1,0 +1,347 @@
+{
+  "name": "V03 module qualified data exact alias",
+  "input": "Set-Alias \u0027Microsoft.PowerShell.Utility\\Write-Output\u0027 Invoke-Command; Microsoft.PowerShell.Utility\\Write-Output { Remove-Item victim.txt }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Alias"
+        ],
+        "args": [
+          {
+            "raw": "\u0027Microsoft.PowerShell.Utility\\Write-Output\u0027",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/Microsoft.PowerShell.Utility/Write-Output"
+          },
+          {
+            "raw": "Invoke-Command",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Set-Alias",
+            "value": "Set-Alias",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "\u0027Microsoft.PowerShell.Utility\\Write-Output\u0027",
+            "value": "Microsoft.PowerShell.Utility\\Write-Output",
+            "role": "Argument",
+            "sourceStart": 10,
+            "sourceLength": 43,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/Microsoft.PowerShell.Utility/Write-Output"
+          },
+          {
+            "raw": "Invoke-Command",
+            "value": "Invoke-Command",
+            "role": "Argument",
+            "sourceStart": 54,
+            "sourceLength": 14,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Microsoft.PowerShell.Utility\\Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "{ Remove-Item victim.txt }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Microsoft.PowerShell.Utility\\Write-Output",
+            "value": "Microsoft.PowerShell.Utility\\Write-Output",
+            "role": "Verb",
+            "sourceStart": 70,
+            "sourceLength": 41,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "{ Remove-Item victim.txt }",
+            "value": "{ Remove-Item victim.txt }",
+            "role": "Argument",
+            "sourceStart": 112,
+            "sourceLength": 26,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "Remove-Item"
+        ],
+        "args": [
+          {
+            "raw": "victim.txt",
+            "kind": "Literal",
+            "isPath": true
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Remove-Item",
+            "value": "Remove-Item",
+            "role": "Verb",
+            "sourceStart": 114,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "victim.txt",
+            "value": "victim.txt",
+            "role": "Argument",
+            "sourceStart": 126,
+            "sourceLength": 10,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 138,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 138,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 68,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 70,
+        "sourceLength": 68,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      },
+      {
+        "kind": "ExecutionRegion",
+        "parentIndex": 3,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 112,
+        "sourceLength": 26,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "executionOrigin": "CommandArgument",
+        "hostClauseElementIndex": 1,
+        "executionPhase": "Unknown",
+        "executionTiming": "Unknown",
+        "executionCardinality": "Unknown"
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 4,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 113,
+        "sourceLength": 24,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 5,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 114,
+        "sourceLength": 22,
+        "clauseIndex": 2,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 138
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 138
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 138
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 138
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "ExecutionRegion",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 138
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 138
+          },
+          {
+            "ancestorKind": "ExecutionRegion",
+            "region": "ExecutionRegion",
+            "childIndex": 0,
+            "sourceStart": 112,
+            "sourceLength": 26
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 113,
+            "sourceLength": 24
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "An exact alias can shadow a module-qualified-looking token, so the nested command remains visible and incomplete."
+}

@@ -568,6 +568,11 @@ execution and state facts.
 Aliases, supported module-qualified spellings, static call-operator spellings,
 parameter abbreviations and inline values, positional binding, parameter-set
 selection, and `ScriptBlock[]` binding resolve through the same static catalog.
+Catalog lookup is not identity proof: PowerShell permits an alias whose exact
+name looks module-qualified. A constrained baseline plus bounded mutation
+provenance must prove the authored spelling unchanged before a catalog entry
+can classify a script block as non-executing data. Mutation matching covers
+both the authored spelling and its known canonical alias target.
 PowerShell's special multiple-script-block binding for `ForEach-Object` assigns
 Begin, Process, and End phases semantically; authored syntax and occurrence
 projection remain in source order while the analyzer schedules phases in

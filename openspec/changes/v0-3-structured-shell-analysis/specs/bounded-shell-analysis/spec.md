@@ -860,6 +860,17 @@ SHALL fail closed to every unproved command name.
 - **THEN** their execution-region facts and observing continuation are incomplete
 - **THEN** an unsupported body interior makes the whole result unparseable
 
+#### Scenario: Module-qualified-looking data receiver is shadowable
+- **WHEN** isolated-mode PowerShell assigns alias name `Microsoft.PowerShell.Utility\Write-Output` to `Invoke-Command` and then invokes that exact spelling with `{ Remove-Item target.txt }`
+- **THEN** static catalog lookup does not independently prove the receiver identity
+- **THEN** the `Remove-Item` body remains visible in an unknown incomplete execution region
+- **THEN** an unrelated exact alias mutation does not invalidate a different catalog spelling
+
+#### Scenario: Canonical alias-target mutation invalidates authored alias
+- **WHEN** isolated-mode PowerShell reassigns `Write-Output` to `Invoke-Command` and then invokes `echo { Remove-Item target.txt }`
+- **THEN** receiver proof matches the mutation against canonical `Write-Output` as well as authored `echo`
+- **THEN** the `Remove-Item` body remains visible in an unknown incomplete execution region
+
 ### Requirement: Unknown analysis remains policy-sensitive
 An unknown value SHALL identify the occurrence and position it affects so a
 consumer can determine whether command identity, option parsing, path scope,
