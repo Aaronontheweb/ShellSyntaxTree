@@ -599,6 +599,11 @@ priorities.
       [NuGet package](https://www.nuget.org/packages/ShellSyntaxTree/0.3.0-alpha.3)
       and [GitHub prerelease](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0-alpha.3)
       preserve the v0.2 projection and the existing public v0.3 API.
+- [ ] Publish `0.3.0-alpha.4` with the reviewed authored-command completeness
+      correction. Netclaw must validate default-mode static PowerShell commands
+      without requiring ambient profile, module, alias, function, `PATH`,
+      inherited-variable, or prior-runspace proofs. Unknown and source-mutated
+      policy facts must remain strict.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
