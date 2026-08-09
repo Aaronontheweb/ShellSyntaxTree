@@ -12,6 +12,32 @@
   results require a consumer-owned, versioned DTO or explicit serializer
   mapping that fails closed on unknown node and enum values.
 
+#### 0.3.0-alpha.1 2026-08-09 ####
+
+This prerelease refreshes the Netclaw validation package with the Bash
+redirect and command-resolution slices completed after `0.3.0-alpha`. It does
+not change the public v0.3 API surface, and the conservative v0.2 projection
+remains available.
+
+## Added
+
+- Added bounded Bash heredoc analysis with explicit delimiter, body, expansion,
+  tab-stripping, completeness, and substitution facts.
+- Added Bash `<<<` here-string analysis. Exact and finite data include Bash's
+  trailing newline, remain non-path, and preserve independently executable
+  substitutions as command occurrences.
+
+## Security and compatibility
+
+- Reject command-resolution mutation through unsupported `exec`, `hash`,
+  alias, shell-option, builtin-enable, and reserved execution forms before a
+  later occurrence can inherit an unsafe executable identity.
+- Keep unknown here-string values structurally visible without guessing their
+  data, and fail malformed redirect forms atomically.
+- Pin the unchanged public API with reflection, equality, hashing, string, and
+  unknown-enum compatibility tests, and document occurrence-first consumer
+  authorization.
+
 #### 0.3.0-alpha 2026-08-08 ####
 
 This prerelease exposes the v0.3 structured-analysis API for Netclaw
