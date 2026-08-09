@@ -573,11 +573,20 @@ internal static class BashLexer
         // src[i]       = closing '
         // Strip the delimiters from the value per SPEC §5.
         var inner = src.Slice(start + 1, i - start - 1).ToString();
+        var boundary = new ShellValueBuilder();
+        boundary.AppendBoundary(start + 1);
+        if (inner.Length > 0)
+        {
+            boundary.AppendLiteral(inner, start + 1, i - start - 1);
+        }
+
+        var resolverValue = boundary.Build();
+
         tokens.Add(new BashToken(
             BashTokenKind.QuotedString, inner, null, start, (i - start) + 1, null)
         {
             IsSingleQuoted = true,
-            ResolverValue = ShellValue.Literal(inner, start + 1, i - start - 1),
+            ResolverValue = resolverValue,
         });
         return i + 1;
     }

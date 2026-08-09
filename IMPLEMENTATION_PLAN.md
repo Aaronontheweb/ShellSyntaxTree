@@ -259,6 +259,16 @@ priorities.
       The PowerShell manifest owns all 422 entries and round-trips them exactly,
       including case-specific isolated-state inputs. Explicit false/null
       assertions remain opt-in and generator-preserved.
+- [x] Promote the remaining 21 stable Bash design cases into the executable
+      corpus with complete compatibility, syntax, occurrence, value, ancestry,
+      redirect, and completeness assertions. Nine compatibility-only entries
+      now carry the v0.3 projections and entries 281-292 cover the inputs that
+      had no exact executable-corpus case. The three Bash future-scope design
+      cases remain non-gating. Promotion also reconciled the unquoted wildcard
+      redirect story with the fail-closed completeness contract, publishes
+      sparse exact/unknown effective-value overlays, and pins quoted, escaped,
+      and continued tilde-prefix behavior against Bash. The PowerShell promotion
+      half keeps OpenSpec task 1.10 open.
 - [x] Deliver the first Bash `$()` substitution slice for supported
       simple-command arguments and redirect targets. Direct tests and corpus
       entries pin multiple and nested ordering, exact ancestry/spans, isolated

@@ -3,12 +3,127 @@
   "input": "echo ok > \\$HOME\".txt\"",
   "expected": {
     "isUnparseable": false,
-    "clauses": [{
-      "operator": "None",
-      "verb": ["echo", "ok"],
-      "args": [],
-      "redirects": [{ "direction": "Out", "target": "/work/$HOME.txt", "isDynamicSkip": false }]
-    }]
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "echo",
+          "ok"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "/work/$HOME.txt",
+            "isDynamicSkip": false
+          }
+        ],
+        "elements": [
+          {
+            "raw": "echo",
+            "value": "echo",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "ok",
+            "value": "ok",
+            "role": "Verb",
+            "sourceStart": 5,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "> \\$HOME\".txt\"",
+            "value": "$HOME.txt",
+            "role": "Redirect",
+            "sourceStart": 8,
+            "sourceLength": 14,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/$HOME.txt"
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 22,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 22,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 22
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "operation": "FileOutput",
+            "targetDescriptor": null,
+            "target": {
+              "kind": "Exact",
+              "values": [
+                "/work/$HOME.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "isPathRelevant": true,
+            "isComplete": true
+          }
+        ]
+      }
+    ]
   },
-  "notes": "The complete adjacent target run is aggregated before redirect resolution."
+  "notes": "The complete adjacent target run is aggregated before redirect resolution. Promotes stable design case bash-adjacent-redirect-target-fragments with complete v0.3 syntax, occurrence, value, and completeness assertions."
 }

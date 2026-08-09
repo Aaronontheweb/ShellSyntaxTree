@@ -1441,12 +1441,12 @@
           "authoredVerb": "echo",
           "immediateRole": "Ordinary",
           "ancestry": ["root"],
-          "isComplete": true,
+          "isComplete": false,
           "redirects": [{
             "operation": "FileOutput",
             "target": { "sourceElement": "*.txt", "kind": "Unknown", "isPolicySensitive": true },
             "isPathRelevant": true,
-            "isComplete": true
+            "isComplete": false
           }]
         }],
         "compatibilityClause": {

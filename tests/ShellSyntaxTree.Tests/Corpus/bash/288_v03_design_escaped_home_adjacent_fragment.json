@@ -1,47 +1,72 @@
 {
-  "name": "Escaped interpolation start remains a literal path",
-  "input": "cat \"\\${HOME\"",
+  "name": "v0.3 Bash design promotion: Escaped inline prefix composes with a quoted suffix",
+  "input": "curl --data=@\\$HOME\".json\" https://example.invalid/api",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
         "verb": [
-          "cat"
+          "curl"
         ],
         "args": [
           {
-            "raw": "\"\\${HOME\"",
+            "raw": "--data",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "@\\$HOME\".json\"",
             "kind": "Literal",
             "isPath": true,
-            "resolved": "/work/${HOME",
+            "resolved": "/work/$HOME.json",
+            "isFlag": false
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
             "isFlag": false
           }
         ],
         "redirects": [],
         "elements": [
           {
-            "raw": "cat",
-            "value": "cat",
+            "raw": "curl",
+            "value": "curl",
             "role": "Verb",
             "sourceStart": 0,
-            "sourceLength": 3,
+            "sourceLength": 4,
             "precedingVerbElementCount": 0,
             "kind": "Literal",
             "isFlag": false,
             "isPath": false
           },
           {
-            "raw": "\"\\${HOME\"",
-            "value": "${HOME",
+            "raw": "--data=@\\$HOME\".json\"",
+            "value": "--data=@$HOME.json",
             "role": "Argument",
-            "sourceStart": 4,
-            "sourceLength": 9,
+            "sourceStart": 5,
+            "sourceLength": 21,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": true,
+            "resolved": "/work/$HOME.json"
+          },
+          {
+            "raw": "https://example.invalid/api",
+            "value": "https://example.invalid/api",
+            "role": "Argument",
+            "sourceStart": 27,
+            "sourceLength": 27,
             "precedingVerbElementCount": 1,
             "kind": "Literal",
             "isFlag": false,
-            "isPath": true,
-            "resolved": "/work/${HOME"
+            "isPath": false
           }
         ]
       }
@@ -53,7 +78,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 13,
+        "sourceLength": 54,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -64,7 +89,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 13,
+        "sourceLength": 54,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -81,7 +106,7 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 13
+            "sourceLength": 54
           }
         ],
         "effectiveArguments": [
@@ -90,7 +115,7 @@
             "value": {
               "kind": "Exact",
               "values": [
-                "${HOME"
+                "--data=@$HOME.json"
               ],
               "pattern": null,
               "coveringDirectory": null
@@ -108,5 +133,5 @@
       }
     ]
   },
-  "notes": "Escaping the dollar prevents interpolation; the unmatched-looking brace is literal shell data. Promotes stable design case bash-escaped-open-brace-literal-path with complete v0.3 syntax, occurrence, value, and completeness assertions."
+  "notes": "Promotes stable design case bash-escaped-home-adjacent-native-fragment into the executable corpus with complete compatibility, syntax, occurrence, value, and completeness assertions."
 }

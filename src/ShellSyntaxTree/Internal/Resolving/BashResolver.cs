@@ -9,6 +9,13 @@ using System.Text;
 
 namespace ShellSyntaxTree.Internal.Resolving;
 
+internal enum BashTildeExpansionKind
+{
+    Unknown,
+    Literal,
+    Home,
+}
+
 /// <summary>
 /// Path-token resolver for the bash parser. Implements SPEC §8 — tilde
 /// expansion, the lone <c>$HOME</c> expansion, <c>filesystem::</c> prefix
@@ -295,25 +302,21 @@ internal static class BashResolver
                     break;
 
                 case ShellExpansionKind.Tilde:
-                    // An empty quoted fragment before '~' is still an authored
-                    // word prefix and suppresses Bash tilde expansion.
-                    if (fragmentIndex != 0
-                        || (fragment.AllowedTransforms & ShellLexicalTransform.Tilde) == 0)
+                    var tildeKind = ClassifyTildeExpansion(value, fragmentIndex);
+                    if (tildeKind == BashTildeExpansionKind.Literal)
                     {
                         composed.Append(fragment.Value);
                         break;
                     }
 
-                    if (value.Decoded.Length > 1
-                        && value.Decoded[1] != '/'
-                        && value.Decoded[1] != '\\')
+                    if (tildeKind == BashTildeExpansionKind.Unknown)
                     {
                         return treatAsPath
                             ? (ArgKind.DynamicSkip, null, false)
                             : (ArgKind.Tilde, null, false);
                     }
 
-                    composed.Append(GetHomeDirectory(options).TrimEnd('/', '\\'));
+                    composed.Append(GetHomeDirectory(options));
                     hadHomeExpansion = true;
                     break;
 
@@ -439,9 +442,67 @@ internal static class BashResolver
         return false;
     }
 
+    internal static BashTildeExpansionKind ClassifyTildeExpansion(
+        ShellValue value,
+        int fragmentIndex)
+    {
+        var fragment = value.Fragments[fragmentIndex];
+        if (fragmentIndex != 0 ||
+            (fragment.AllowedTransforms & ShellLexicalTransform.Tilde) == 0)
+        {
+            return BashTildeExpansionKind.Literal;
+        }
+
+        if (value.Decoded.Length == 1)
+        {
+            return value.Fragments.Count == 1
+                ? BashTildeExpansionKind.Home
+                : BashTildeExpansionKind.Literal;
+        }
+
+        if (value.Decoded[1] != '/')
+        {
+            if (value.Fragments.Count > 1)
+            {
+                var prefix = value.Fragments[1];
+                var hasQuoteBoundary = prefix.Kind == ShellValueFragmentKind.Literal &&
+                    prefix.Value.Length == 0;
+                var hasEscapedPrefix = prefix.Kind == ShellValueFragmentKind.Literal &&
+                    prefix.Value.Length > 0 &&
+                    prefix.SourceLength is not null &&
+                    prefix.SourceLength != prefix.Value.Length;
+                if (hasQuoteBoundary || hasEscapedPrefix)
+                {
+                    return BashTildeExpansionKind.Literal;
+                }
+            }
+
+            return BashTildeExpansionKind.Unknown;
+        }
+
+        if (value.Fragments.Count <= 1 ||
+            fragment.SourceStart is null ||
+            fragment.SourceLength is null)
+        {
+            return BashTildeExpansionKind.Unknown;
+        }
+
+        var delimiter = value.Fragments[1];
+        // A source gap without a quote boundary is a removed line
+        // continuation. Bash removes it before testing the unquoted slash.
+        var isUnquotedSlash = delimiter.Kind == ShellValueFragmentKind.Literal &&
+            delimiter.Value.Length > 0 &&
+            delimiter.Value[0] == '/' &&
+            delimiter.SourceStart >= fragment.SourceStart + fragment.SourceLength &&
+            delimiter.SourceLength == delimiter.Value.Length;
+        return isUnquotedSlash
+            ? BashTildeExpansionKind.Home
+            : BashTildeExpansionKind.Literal;
+    }
+
     // ---------------------------------------------------------------- helpers
 
-    private static string GetHomeDirectory(BashParserOptions options)
+    internal static string GetHomeDirectory(BashParserOptions options)
     {
         if (!string.IsNullOrEmpty(options.HomeDirectory))
         {

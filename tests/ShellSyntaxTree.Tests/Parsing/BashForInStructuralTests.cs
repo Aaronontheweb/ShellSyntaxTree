@@ -448,7 +448,9 @@ public class BashForInStructuralTests
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.Equal(new[] { "printf", "rm" }, result.Commands.Select(CommandVerb));
         Assert.Equal(CommandOccurrenceRole.Substitution, result.Commands[0].ImmediateRole);
-        Assert.Empty(result.Commands[0].EffectiveArguments);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(result.Commands[0].EffectiveArguments).Value.Kind);
         Assert.Equal(CommandOccurrenceRole.LoopBody, result.Commands[1].ImmediateRole);
         Assert.Equal(
             ShellValueDomainKind.Unknown,
@@ -934,7 +936,9 @@ public class BashForInStructuralTests
         var result = Parse("for f in a b; do bash -c 'echo \"$f\"'; done");
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
-        Assert.Empty(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(Assert.Single(result.Commands).EffectiveArguments).Value.Kind);
     }
 
     [Fact]

@@ -1,47 +1,46 @@
 {
-  "name": "Escaped interpolation start remains a literal path",
-  "input": "cat \"\\${HOME\"",
+  "name": "v0.3 Bash design promotion: Literal and expandable regions compose within one token",
+  "input": "echo \"\\${HOME}-$HOME\"",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
         "verb": [
-          "cat"
+          "echo"
         ],
         "args": [
           {
-            "raw": "\"\\${HOME\"",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "/work/${HOME",
+            "raw": "\"\\${HOME}-$HOME\"",
+            "kind": "Tilde",
+            "isPath": false,
+            "resolved": "__NULL__",
             "isFlag": false
           }
         ],
         "redirects": [],
         "elements": [
           {
-            "raw": "cat",
-            "value": "cat",
+            "raw": "echo",
+            "value": "echo",
             "role": "Verb",
             "sourceStart": 0,
-            "sourceLength": 3,
+            "sourceLength": 4,
             "precedingVerbElementCount": 0,
             "kind": "Literal",
             "isFlag": false,
             "isPath": false
           },
           {
-            "raw": "\"\\${HOME\"",
-            "value": "${HOME",
+            "raw": "\"\\${HOME}-$HOME\"",
+            "value": "${HOME}-$HOME",
             "role": "Argument",
-            "sourceStart": 4,
-            "sourceLength": 9,
+            "sourceStart": 5,
+            "sourceLength": 16,
             "precedingVerbElementCount": 1,
-            "kind": "Literal",
+            "kind": "Tilde",
             "isFlag": false,
-            "isPath": true,
-            "resolved": "/work/${HOME"
+            "isPath": false
           }
         ]
       }
@@ -53,7 +52,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 13,
+        "sourceLength": 21,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -64,7 +63,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 13,
+        "sourceLength": 21,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -81,7 +80,7 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 13
+            "sourceLength": 21
           }
         ],
         "effectiveArguments": [
@@ -90,7 +89,7 @@
             "value": {
               "kind": "Exact",
               "values": [
-                "${HOME"
+                "${HOME}-/home/test"
               ],
               "pattern": null,
               "coveringDirectory": null
@@ -108,5 +107,5 @@
       }
     ]
   },
-  "notes": "Escaping the dollar prevents interpolation; the unmatched-looking brace is literal shell data. Promotes stable design case bash-escaped-open-brace-literal-path with complete v0.3 syntax, occurrence, value, and completeness assertions."
+  "notes": "Promotes stable design case bash-double-quoted-literal-expandable-composition into the executable corpus with complete compatibility, syntax, occurrence, value, and completeness assertions."
 }

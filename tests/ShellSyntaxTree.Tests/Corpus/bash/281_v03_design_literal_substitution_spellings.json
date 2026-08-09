@@ -1,31 +1,31 @@
 {
-  "name": "Curl data mixed literal dynamic",
-  "input": "curl --data='@$HOME'\".json\" https://example.invalid/api",
+  "name": "v0.3 Bash design promotion: Quoted and escaped substitution-looking text does not execute",
+  "input": "printf '%s %s' '$(whoami)' \"\\$(id)\"",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
         "verb": [
-          "curl"
+          "printf"
         ],
         "args": [
           {
-            "raw": "--data",
+            "raw": "'%s %s'",
             "kind": "Literal",
             "isPath": false,
             "resolved": "__NULL__",
-            "isFlag": true
-          },
-          {
-            "raw": "'@$HOME'\".json\"",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "/work/$HOME.json",
             "isFlag": false
           },
           {
-            "raw": "https://example.invalid/api",
+            "raw": "'$(whoami)'",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          },
+          {
+            "raw": "\"\\$(id)\"",
             "kind": "Literal",
             "isPath": false,
             "resolved": "__NULL__",
@@ -35,34 +35,44 @@
         "redirects": [],
         "elements": [
           {
-            "raw": "curl",
-            "value": "curl",
+            "raw": "printf",
+            "value": "printf",
             "role": "Verb",
             "sourceStart": 0,
-            "sourceLength": 4,
+            "sourceLength": 6,
             "precedingVerbElementCount": 0,
             "kind": "Literal",
             "isFlag": false,
             "isPath": false
           },
           {
-            "raw": "--data='@$HOME'\".json\"",
-            "value": "--data=@$HOME.json",
+            "raw": "'%s %s'",
+            "value": "%s %s",
             "role": "Argument",
-            "sourceStart": 5,
-            "sourceLength": 22,
+            "sourceStart": 7,
+            "sourceLength": 7,
             "precedingVerbElementCount": 1,
             "kind": "Literal",
-            "isFlag": true,
-            "isPath": true,
-            "resolved": "/work/$HOME.json"
+            "isFlag": false,
+            "isPath": false
           },
           {
-            "raw": "https://example.invalid/api",
-            "value": "https://example.invalid/api",
+            "raw": "'$(whoami)'",
+            "value": "$(whoami)",
             "role": "Argument",
-            "sourceStart": 28,
-            "sourceLength": 27,
+            "sourceStart": 15,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "\"\\$(id)\"",
+            "value": "$(id)",
+            "role": "Argument",
+            "sourceStart": 27,
+            "sourceLength": 8,
             "precedingVerbElementCount": 1,
             "kind": "Literal",
             "isFlag": false,
@@ -78,7 +88,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 55,
+        "sourceLength": 35,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -89,7 +99,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 55,
+        "sourceLength": 35,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -106,22 +116,10 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 55
+            "sourceLength": 35
           }
         ],
-        "effectiveArguments": [
-          {
-            "clauseElementIndex": 1,
-            "value": {
-              "kind": "Exact",
-              "values": [
-                "--data=@$HOME.json"
-              ],
-              "pattern": null,
-              "coveringDirectory": null
-            }
-          }
-        ],
+        "effectiveArguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -133,5 +131,5 @@
       }
     ]
   },
-  "notes": "All fragments are literal, so the curl @ prefix is removed without reinterpreting the quoted $HOME text. Promotes stable design case bash-static-mixed-quote-native-fragment with complete v0.3 syntax, occurrence, value, and completeness assertions."
+  "notes": "Promotes stable design case bash-literal-substitution-spellings into the executable corpus with complete compatibility, syntax, occurrence, value, and completeness assertions."
 }

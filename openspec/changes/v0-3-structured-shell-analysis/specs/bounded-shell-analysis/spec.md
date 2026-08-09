@@ -28,6 +28,12 @@ retain their existing meanings.
 - **THEN** the compatibility argument is a literal path resolved as `<cwd>/$HOME`
 - **THEN** it is not `DynamicSkip` and is not resolved as the configured home directory
 
+#### Scenario: Bash tilde expansion retains prefix provenance
+- **WHEN** Bash parses `~/x` or a backslash-newline continuation between `~` and `/x`
+- **THEN** the unquoted tilde prefix expands from the configured home directory
+- **WHEN** the slash or an empty intervening fragment is quoted or escaped
+- **THEN** the decoded `~/x` remains a literal path resolved under the configured cwd
+
 #### Scenario: PowerShell escaped variable is a literal path component
 - **WHEN** PowerShell parses ``Get-Content `$HOME`` with an exact working directory
 - **THEN** the shell value is the literal `$HOME`
@@ -123,6 +129,7 @@ retain their existing meanings.
 #### Scenario: Bash redirect wildcard cardinality is quote-sensitive
 - **WHEN** Bash parses unquoted `> *.txt`
 - **THEN** the target is unknown without filesystem enumeration because expansion may produce zero, one, or multiple paths
+- **THEN** the redirect and containing command occurrence remain incomplete
 - **WHEN** Bash parses quoted `> "*.txt"`
 - **THEN** the target is the exact literal filename `*.txt`
 
