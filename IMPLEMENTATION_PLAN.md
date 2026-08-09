@@ -579,6 +579,10 @@ priorities.
       and [GitHub prerelease](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0-alpha.2)
       include exact module-qualified-looking alias and canonical alias-target
       shadowing defenses without changing the public API.
+- [ ] Publish `0.3.0-alpha.3` for the Netclaw PowerShell approval integration
+      after Linux and Windows validate the reviewed initial-state, value,
+      command-binding, and state-invalidation slice. The package must preserve
+      the v0.2 projection and the existing public v0.3 API.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,

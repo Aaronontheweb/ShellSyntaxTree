@@ -12,6 +12,35 @@
   results require a consumer-owned, versioned DTO or explicit serializer
   mapping that fails closed on unknown node and enum values.
 
+#### 0.3.0-alpha.3 2026-08-09 ####
+
+This prerelease adds the PowerShell state and value proofs needed for the
+Netclaw approval-policy integration. It does not change the public v0.3 API
+surface, and the conservative v0.2 projection remains available.
+
+## Added
+
+- Apply the explicit PowerShell initial-state contract to command identity,
+  native-versus-cmdlet argument binding, working-directory attribution,
+  redirects, automatic `HOME`, and `USERPROFILE` values.
+- Preserve argument-binding provenance through static current-scope
+  `Invoke-Expression` payloads while keeping decoded child-host state isolated.
+- Expand the generated PowerShell corpus from 422 to 491 entries with direct,
+  wrapper, alias, script, redirect, child-host, and unknown-state cases.
+
+## Security and compatibility
+
+- Treat aliases as capable of shadowing built-ins and path-shaped command
+  names; exact argument binding requires constrained, unmutated command
+  resolution.
+- Invalidate following authorization state after uninspected scripts and
+  unproved in-process invocations instead of retaining stale exact values.
+- Keep supported non-pipeline bodies of unknown receivers visible and
+  incomplete, while failing an unproved interior pipeline atomically with
+  empty authorization projections.
+- Preserve ordinary v0.2 compatibility leaves under ambient uncertainty and
+  keep the public v0.3 API snapshot unchanged.
+
 #### 0.3.0-alpha.2 2026-08-09 ####
 
 This prerelease completes the stable-v0.3 boundary between PowerShell script
