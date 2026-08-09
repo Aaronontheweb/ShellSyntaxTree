@@ -191,7 +191,7 @@
   completeness, while explicit source mutations, computed identities, hidden
   execution, and unsupported syntax remain strict. Preserve the existing
   `PwshInitialStateMode` API shape.
-- [ ] 7.2c Implement authored-command completeness for default-mode static
+- [x] 7.2c Implement authored-command completeness for default-mode static
   PowerShell commands, pipelines, decoded children, and known script-block
   receivers without weakening explicit mutation or dynamic-execution checks.
 - [x] 7.3 Derive exact and finite string domains without treating pipeline objects as literal strings.

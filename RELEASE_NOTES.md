@@ -12,6 +12,35 @@
   results require a consumer-owned, versioned DTO or explicit serializer
   mapping that fails closed on unknown node and enum values.
 
+#### 0.3.0-alpha.4 2026-08-09 ####
+
+This prerelease corrects PowerShell occurrence completeness to describe the
+authored command text instead of ambient command resolution. It does not
+change the public v0.3 API surface, and the conservative v0.2 projection
+remains available.
+
+## Changed
+
+- Keep static authored PowerShell commands, pipeline stages, decoded child
+  commands, and proved script-block receivers complete under the default
+  initial-state mode.
+- Use an explicit native or `.ps1` path spelling to select authored argument
+  binding without inspecting the executable, `PATH`, profiles, modules,
+  aliases, functions, inherited variables, or prior runspace state.
+- Keep unqualified `.ps1` binding, dynamic command identities, computed
+  execution, unknown receivers, and unsupported executable syntax strict.
+
+## Security and compatibility
+
+- Preserve `Unknown` effective loop values when the submitted source does not
+  prove the runtime binding value.
+- Invalidate later command proofs after a matching mutation that is visible in
+  the submitted source.
+- Keep provider-sensitive repeated loops incomplete when an unknown path could
+  mutate command resolution before a later visit.
+- Preserve all public signatures, the v0.2 compatibility projection, and the
+  491-case generated PowerShell corpus.
+
 #### 0.3.0-alpha.3 2026-08-09 ####
 
 This prerelease adds the PowerShell state and value proofs needed for the
