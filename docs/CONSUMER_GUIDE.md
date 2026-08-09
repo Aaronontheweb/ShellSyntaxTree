@@ -179,7 +179,7 @@ approval must never bypass a deny.
 
 ## v0.3 authorization and migration contract
 
-The `0.3.0-alpha` package adds `ParsedCommand.Commands` as the authorization
+The `0.3.0-alpha.1` package adds `ParsedCommand.Commands` as the authorization
 projection and `ParsedCommand.Syntax` as the typed display/analysis tree. This
 guide describes the stable v0.3 contract; constructs not yet complete in an
 installed prerelease remain prompt-or-deny cases. The migration rules are:

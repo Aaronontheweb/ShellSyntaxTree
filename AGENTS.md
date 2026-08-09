@@ -203,5 +203,6 @@ dotnet test -c Release
 dotnet pack -c Release -o ./bin/nuget
 
 # Cut a release (manual, then push the tag)
-git tag 0.3.0-alpha && git push origin 0.3.0-alpha
+release_version=$(dotnet msbuild src/ShellSyntaxTree/ShellSyntaxTree.csproj -nologo -getProperty:Version)
+git tag "$release_version" && git push origin "$release_version"
 ```

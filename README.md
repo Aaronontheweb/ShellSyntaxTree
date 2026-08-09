@@ -13,10 +13,10 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 
 ```bash
 # Current structured-analysis prerelease
-dotnet add package ShellSyntaxTree --version 0.3.0-alpha
+dotnet add package ShellSyntaxTree --version 0.3.0-alpha.1
 ```
 
-The latest stable package is `0.2.0`. The `0.3.0-alpha` prerelease adds the
+The latest stable package is `0.2.0`. The `0.3.0-alpha.1` prerelease adds the
 typed syntax tree and command-occurrence authorization API documented below.
 
 ## What you get
