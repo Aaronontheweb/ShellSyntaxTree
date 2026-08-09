@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash brace group fails closed before nested mutation",
+  "input": "{ hash -p /bin/rm git; git target.txt; }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "reserved execution syntax"
+  },
+  "notes": "A brace group executes in the current shell and cannot be flattened into ordinary complete commands before group state propagation is modeled.",
+  "oracleExpectation": "OutOfScope"
+}

@@ -912,6 +912,132 @@ public class ShellValueOracleTests
     }
 
     [Fact]
+    public void Bash_hash_mapping_replaces_a_later_executable_identity()
+    {
+        if (!IsNativeBashAvailable() || !File.Exists("/usr/bin/printf"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "hash -p /usr/bin/printf safe; safe HASHED");
+
+        Assert.Equal("HASHED", output);
+    }
+
+    [Fact]
+    public void Bash_shopt_and_alias_mutation_replace_a_later_executable_identity()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "shopt -s expand_aliases\nalias safe='printf ALIASED'\nsafe");
+
+        Assert.Equal("ALIASED", output);
+    }
+
+    [Fact]
+    public void Bash_enable_changes_builtin_command_resolution()
+    {
+        if (!IsNativeBashAvailable() || !File.Exists("/usr/bin/printf"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "enable -n printf; type -t printf; enable printf; type -t printf");
+
+        Assert.Equal(new[] { "file", "builtin" }, Lines(output));
+    }
+
+    [Fact]
+    public void Bash_exec_replaces_the_current_shell_with_its_target()
+    {
+        if (!IsNativeBashAvailable() || !File.Exists("/usr/bin/printf"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "exec /usr/bin/printf EXECUTED");
+
+        Assert.Equal("EXECUTED", output);
+    }
+
+    [Fact]
+    public void Bash_time_prefix_preserves_current_shell_command_resolution_mutation()
+    {
+        if (!IsNativeBashAvailable() || !File.Exists("/usr/bin/printf"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "TIMEFORMAT=; time hash -p /usr/bin/printf safe; safe TIMED");
+
+        Assert.Equal("TIMED", output);
+    }
+
+    [Fact]
+    public void Bash_negation_prefix_preserves_current_shell_command_resolution_mutation()
+    {
+        if (!IsNativeBashAvailable() || !File.Exists("/usr/bin/printf"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "! hash -p /usr/bin/printf safe; safe NEGATED");
+
+        Assert.Equal("NEGATED", output);
+    }
+
+    [Fact]
+    public void Bash_brace_group_preserves_current_shell_command_resolution_mutation()
+    {
+        if (!IsNativeBashAvailable() || !File.Exists("/usr/bin/printf"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "{ hash -p /usr/bin/printf safe; safe BRACED; }");
+
+        Assert.Equal("BRACED", output);
+    }
+
+    [Fact]
     public void Bash_debug_trap_installed_before_a_loop_can_mutate_each_binding()
     {
         if (!IsNativeBashAvailable())

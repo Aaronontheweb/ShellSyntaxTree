@@ -224,6 +224,66 @@ SHALL retain its existing behavior.
 - **WHEN** Bash parses `builtin eval 'rm target.txt'`
 - **THEN** the whole result is unparseable under the same rule as direct `eval`
 
+### Requirement: Bash command-resolution mutation fails closed globally
+Stable v0.3 SHALL treat command-resolution state independently from variable
+attributes and cwd. Direct or statically wrapped `exec` SHALL make the whole
+result unparseable. Mutating or ambiguous `hash`, `alias`, `unalias`, `shopt`,
+and `enable` forms SHALL likewise fail closed before later commands can inherit
+an unmodeled executable identity.
+
+The parser MAY retain only exact static query forms: bare `hash`, `alias`,
+`shopt`, and `enable`; `hash -l` without operands and `hash -t NAME...`;
+`alias [-p] [NAME...]` without an equals-bearing definition; `shopt` option
+clusters that contain neither `s` nor `u`; and no-name `enable` listing flags
+composed only from `a`, `n`, `p`, and `s`. A dynamic word, invalid option,
+plain hash operand, alias definition, `unalias`, `shopt -s` / `-u`, or enable
+name / `-d` / `-f` SHALL make the complete result unparseable. Exact `command`
+and `builtin` dispatch wrappers SHALL NOT bypass this boundary.
+
+#### Scenario: Hash mapping cannot replace a later executable
+- **WHEN** Bash parses `hash -p /bin/rm git; git target.txt`
+- **THEN** the whole result is unparseable
+- **THEN** the later `git` occurrence is not published with a false executable identity
+
+#### Scenario: Alias activation cannot hide a later command
+- **WHEN** Bash parses newline-delimited `shopt -s expand_aliases`, `alias safe=rm`, and `safe target.txt`
+- **THEN** the whole result is unparseable before the alias-expanded command can be hidden
+
+#### Scenario: Exec is a global execution boundary
+- **WHEN** Bash parses `exec /bin/rm target.txt` outside a loop
+- **THEN** the whole result is unparseable
+- **THEN** `exec` is not published as an ordinary complete occurrence
+
+#### Scenario: Exact query forms remain structurally visible
+- **WHEN** Bash parses `hash -t git`, `alias safe`, `shopt -q expand_aliases`, or bare `enable -n`
+- **THEN** the query remains parseable under its exact option grammar
+- **THEN** the parser does not infer that the queried identity is safe to authorize
+
+### Requirement: Unmodeled Bash reserved execution syntax fails closed
+Stable v0.3 SHALL NOT treat unquoted `time`, `!`, `coproc`, `{`, or `}` in
+command position as ordinary verb-chain elements. Until timed/negated
+pipelines, coprocesses, and brace groups have typed recursive structure and
+state propagation, each form SHALL make the whole result unparseable. Quoted
+or escaped spellings and an external `/usr/bin/time` identity SHALL NOT invent
+reserved syntax.
+
+#### Scenario: Timed mutation remains in the current shell
+- **WHEN** Bash parses `time hash -p /bin/rm git; git target.txt`
+- **THEN** the whole result is unparseable
+- **THEN** the hash mutation is not hidden inside a `time hash` verb chain
+
+#### Scenario: Negated mutation remains in the current shell
+- **WHEN** Bash parses `! hash -p /bin/rm git; git target.txt`
+- **THEN** the whole result is unparseable even though negation changes exit status
+
+#### Scenario: Brace group shares command-resolution state
+- **WHEN** Bash parses `{ hash -p /bin/rm git; git target.txt; }`
+- **THEN** the whole result is unparseable until current-scope brace groups are modeled
+
+#### Scenario: Coprocess body is hidden concurrent execution
+- **WHEN** Bash parses `coproc exec /bin/rm target.txt`
+- **THEN** the whole result is unparseable until coprocess structure and timing are modeled
+
 ### Requirement: PowerShell loop proofs require an explicit initial-runspace contract
 `PwshParserOptions.InitialStateMode` SHALL default to `Unknown`. In that mode,
 the parser MAY expose supported `foreach` structure and command occurrences,

@@ -10,12 +10,23 @@ namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
 internal static class BashCwdInvocationGrammar
 {
+    private static readonly HashSet<string> UnsupportedReservedExecutionSyntax =
+        new(StringComparer.Ordinal)
+        {
+            "!",
+            "coproc",
+            "time",
+            "{",
+            "}",
+        };
+
     private static readonly HashSet<string> ExecutionBearingBuiltins =
         new(StringComparer.Ordinal)
         {
             ".",
             "declare",
             "eval",
+            "exec",
             "export",
             "getopts",
             "let",
@@ -36,6 +47,11 @@ internal static class BashCwdInvocationGrammar
         out IReadOnlyList<int> cwdArgumentElementIndices)
     {
         cwdArgumentElementIndices = Array.Empty<int>();
+        if (ClassifyExecutionBoundary(clause) == BashExecutionBoundaryKind.Query)
+        {
+            return BashDispatchKind.Query;
+        }
+
         var words = CollectWords(clause);
         var dispatch = ParseDispatch(clause, words);
         if (dispatch.IsQuery)
@@ -68,6 +84,16 @@ internal static class BashCwdInvocationGrammar
     internal static BashExecutionBoundaryKind ClassifyExecutionBoundary(Clause clause)
     {
         var words = CollectWords(clause);
+        if (words.Count > 0)
+        {
+            var firstWord = clause.Elements[words[0]];
+            if (firstWord.Raw == firstWord.Value &&
+                UnsupportedReservedExecutionSyntax.Contains(firstWord.Value))
+            {
+                return BashExecutionBoundaryKind.UnsupportedReservedExecutionSyntax;
+            }
+        }
+
         var dispatch = ParseDispatch(clause, words);
         if (!dispatch.IsSupported)
         {
@@ -92,6 +118,16 @@ internal static class BashCwdInvocationGrammar
             return BashExecutionBoundaryKind.ExecutionBearingBuiltin;
         }
 
+        var commandResolutionBoundary = ClassifyCommandResolutionBoundary(
+            clause,
+            words,
+            targetWordIndex,
+            target.Value);
+        if (commandResolutionBoundary != BashExecutionBoundaryKind.Allowed)
+        {
+            return commandResolutionBoundary;
+        }
+
         if (target.Value == "printf" && targetWordIndex + 1 < words.Count)
         {
             var firstArgument = clause.Elements[words[targetWordIndex + 1]];
@@ -103,6 +139,186 @@ internal static class BashCwdInvocationGrammar
         }
 
         return BashExecutionBoundaryKind.Allowed;
+    }
+
+    private static BashExecutionBoundaryKind ClassifyCommandResolutionBoundary(
+        Clause clause,
+        IReadOnlyList<int> words,
+        int targetWordIndex,
+        string target)
+    {
+        return target switch
+        {
+            "hash" => IsStaticHashQuery(clause, words, targetWordIndex + 1)
+                ? BashExecutionBoundaryKind.Query
+                : BashExecutionBoundaryKind.CommandResolutionMutation,
+            "alias" => IsStaticAliasQuery(clause, words, targetWordIndex + 1)
+                ? BashExecutionBoundaryKind.Query
+                : BashExecutionBoundaryKind.CommandResolutionMutation,
+            "shopt" => IsStaticShoptQuery(clause, words, targetWordIndex + 1)
+                ? BashExecutionBoundaryKind.Query
+                : BashExecutionBoundaryKind.CommandResolutionMutation,
+            "enable" => IsStaticEnableQuery(clause, words, targetWordIndex + 1)
+                ? BashExecutionBoundaryKind.Query
+                : BashExecutionBoundaryKind.CommandResolutionMutation,
+            "unalias" => BashExecutionBoundaryKind.CommandResolutionMutation,
+            _ => BashExecutionBoundaryKind.Allowed,
+        };
+    }
+
+    private static bool IsStaticHashQuery(
+        Clause clause,
+        IReadOnlyList<int> words,
+        int argumentWordIndex)
+    {
+        if (argumentWordIndex == words.Count)
+        {
+            return true;
+        }
+
+        var printLocations = false;
+        var reusableListing = false;
+        var operandCount = 0;
+        for (var index = argumentWordIndex; index < words.Count; index++)
+        {
+            var argument = clause.Elements[words[index]];
+            if (!IsStaticWord(argument))
+            {
+                return false;
+            }
+
+            var value = argument.Value;
+            if (operandCount > 0 && value.Length > 0 && value[0] == '-')
+            {
+                return false;
+            }
+
+            if (operandCount == 0 && value.Length > 1 && value[0] == '-')
+            {
+                for (var optionIndex = 1; optionIndex < value.Length; optionIndex++)
+                {
+                    switch (value[optionIndex])
+                    {
+                        case 'l':
+                            reusableListing = true;
+                            break;
+                        case 't':
+                            printLocations = true;
+                            break;
+                        default:
+                            return false;
+                    }
+                }
+
+                continue;
+            }
+
+            operandCount++;
+        }
+
+        if (printLocations)
+        {
+            return operandCount > 0;
+        }
+
+        return reusableListing && operandCount == 0;
+    }
+
+    private static bool IsStaticAliasQuery(
+        Clause clause,
+        IReadOnlyList<int> words,
+        int argumentWordIndex)
+    {
+        var allowPrintOption = true;
+        for (var index = argumentWordIndex; index < words.Count; index++)
+        {
+            var argument = clause.Elements[words[index]];
+            if (!IsStaticWord(argument))
+            {
+                return false;
+            }
+
+            if (allowPrintOption && argument.Value == "-p")
+            {
+                allowPrintOption = false;
+                continue;
+            }
+
+            allowPrintOption = false;
+            if ((argument.Value.Length > 0 && argument.Value[0] == '-') ||
+                argument.Value.IndexOf('=') >= 0)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsStaticShoptQuery(
+        Clause clause,
+        IReadOnlyList<int> words,
+        int argumentWordIndex)
+    {
+        var parsingOptions = true;
+        for (var index = argumentWordIndex; index < words.Count; index++)
+        {
+            var argument = clause.Elements[words[index]];
+            if (!IsStaticWord(argument))
+            {
+                return false;
+            }
+
+            var value = argument.Value;
+            if (parsingOptions && value.Length > 1 && value[0] == '-')
+            {
+                for (var optionIndex = 1; optionIndex < value.Length; optionIndex++)
+                {
+                    if (value[optionIndex] is 's' or 'u' ||
+                        value[optionIndex] is not ('p' or 'q' or 'o'))
+                    {
+                        return false;
+                    }
+                }
+
+                continue;
+            }
+
+            parsingOptions = false;
+            if (value.Length > 0 && value[0] == '-')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsStaticEnableQuery(
+        Clause clause,
+        IReadOnlyList<int> words,
+        int argumentWordIndex)
+    {
+        for (var index = argumentWordIndex; index < words.Count; index++)
+        {
+            var argument = clause.Elements[words[index]];
+            if (!IsStaticWord(argument) ||
+                argument.Value.Length <= 1 ||
+                argument.Value[0] != '-')
+            {
+                return false;
+            }
+
+            for (var optionIndex = 1; optionIndex < argument.Value.Length; optionIndex++)
+            {
+                if (argument.Value[optionIndex] is not ('a' or 'n' or 'p' or 's'))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }
 
     private static IReadOnlyList<int> CollectWords(Clause clause)
@@ -239,5 +455,7 @@ internal enum BashExecutionBoundaryKind
     Allowed,
     Query,
     ExecutionBearingBuiltin,
+    CommandResolutionMutation,
+    UnsupportedReservedExecutionSyntax,
     UnsupportedDispatch,
 }

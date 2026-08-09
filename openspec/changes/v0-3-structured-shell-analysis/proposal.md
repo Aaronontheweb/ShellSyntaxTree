@@ -34,6 +34,11 @@ fail-closed behavior for incomplete analysis.
   unmodeled shell builtins that can evaluate, assign through, or defer
   argument text, because nameref and arithmetic attributes can otherwise turn
   quoted data into hidden execution.
+- Treat Bash command resolution as policy-relevant shell state. `exec` and
+  mutating or ambiguous `hash`, `alias`, `unalias`, shell-option, and
+  builtin-enable forms fail closed globally; only exact documented query forms remain visible.
+  Unmodeled `time`, negation, coprocess, and brace-group syntax also fails
+  closed rather than hiding a nested mutation in an apparent verb chain.
 - Preserve resolver-relevant lexical fragments, typed expansion identity and
   cardinality, operation-specific transform eligibility, opaque cause, and
   consumer/binding context through decoding so escaped or

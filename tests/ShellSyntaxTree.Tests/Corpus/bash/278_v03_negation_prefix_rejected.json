@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash negation prefix fails closed before nested mutation",
+  "input": "! hash -p /bin/rm git; git target.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "reserved execution syntax"
+  },
+  "notes": "Pipeline negation changes status but preserves current-shell mutation, so the nested command must be structurally analyzed before acceptance.",
+  "oracleExpectation": "OutOfScope"
+}

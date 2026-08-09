@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash time prefix fails closed before nested mutation",
+  "input": "time hash -p /bin/rm git; git target.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "reserved execution syntax"
+  },
+  "notes": "The Bash time reserved word runs its pipeline in the current shell, so it cannot hide a hash mutation behind an apparent verb chain.",
+  "oracleExpectation": "OutOfScope"
+}

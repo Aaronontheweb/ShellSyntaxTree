@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash builtin enable mutation fails closed",
+  "input": "enable -n printf; printf marker",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "command-resolution mutation"
+  },
+  "notes": "Disabling a builtin changes how a later authored command name resolves and therefore fails before the continuation is published.",
+  "oracleExpectation": "OutOfScope"
+}

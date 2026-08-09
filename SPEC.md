@@ -810,8 +810,28 @@ evaluate argument text, install deferred execution, or assign through
 unproved integer, nameref, or array attributes. Recognition recursively
 unwraps statically proved `command` and `builtin` dispatch; dynamic or invalid
 wrapper grammar fails closed. Ordinary `printf` without `-v` remains
-supported. `break`, `continue`, `return`, `exit`, and `exec` remain loop-region
-failures until their transfers are implemented.
+supported.
+
+Command-resolution state is independent from variable attributes and cwd.
+`exec` fails the complete parse closed globally because it replaces the shell
+or makes commandless redirections persistent. Mutating or ambiguous `hash`,
+`alias`, `unalias`, `shopt`, and `enable` forms likewise fail globally before a
+later command can inherit an unmodeled executable identity. The only retained
+forms are exact static queries: bare `hash`, `alias`, `shopt`, and `enable`;
+`hash -l` without operands and `hash -t NAME...`; `alias [-p] [NAME...]`
+without a definition; `shopt` option clusters without `s` or `u`; and no-name
+`enable` listing flags composed only from `a`, `n`, `p`, and `s`. Dynamic or
+invalid grammar fails closed, and exact `command` / `builtin` wrappers cannot
+bypass the boundary. `break`, `continue`, `return`, and `exit` remain
+loop-region failures until their transfers are implemented.
+
+Unquoted `time` and `!` reserved prefixes execute the following pipeline with
+current-shell state; `coproc` starts hidden concurrent execution; and
+`{ ...; }` is a current-shell group. Stable v0.3 fails exact unquoted `time`,
+`!`, `coproc`, `{`, or `}` in command position closed until their nested
+structure and state propagation are modeled. Quoted/escaped spellings,
+`/usr/bin/time`, and `command time ...` remain ordinary command identities and
+do not acquire reserved-word semantics.
 
 Substitutions and subshells inherit the current variable/cwd state but discard
 their state changes on exit. Decoded Bash command wrappers inherit invocation
@@ -1356,7 +1376,6 @@ bash_list_item       := bash_and_or
 bash_and_or          := bash_pipeline (("&&" | "||") bash_pipeline)*
 bash_pipeline        := bash_command ("|" bash_command)*
 bash_command         := bash_for_in
-                      | bash_group
                       | bash_subshell
                       | bash_c_wrapper
                       | bash_simple_command

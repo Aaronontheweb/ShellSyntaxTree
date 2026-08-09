@@ -543,6 +543,15 @@ priorities.
       fail atomically until their state effects are modeled. Native Bash
       oracles pin nameref-deferred and integer-assignment execution, and the
       executable corpus carries isolated, unknown-state, and wrapper cases.
+- [x] Close Bash command-resolution mutation globally. Reject `exec` and
+      mutating or ambiguous `hash`, `alias`, `unalias`, `shopt`, and `enable`
+      forms before later occurrences can inherit a false executable identity; retain only
+      exact static query grammar and pin native-shell behavior, recursive
+      wrappers, and executable corpus cases. Fail unmodeled `time`, negation,
+      coprocess, and current-shell brace-group syntax closed rather than
+      flattening nested execution into apparent ordinary verb chains.
+- [ ] Promote the Bash command-resolution mutation cases into Netclaw's strict
+      allow/prompt/deny matrix before the downstream approval-fatigue gate.
 - [ ] Add the separately tested Bash `<<<` here-string redirect slice with
       bounded operand analysis and trailing-newline semantics.
 

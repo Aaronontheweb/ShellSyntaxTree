@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash alias activation and definition fail closed",
+  "input": "shopt -s expand_aliases\nalias safe=rm\nsafe target.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "command-resolution mutation"
+  },
+  "notes": "Enabling alias expansion and defining an alias can hide the executable identity of a later newline-delimited command.",
+  "oracleExpectation": "OutOfScope"
+}
