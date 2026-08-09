@@ -111,7 +111,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "LoopBody",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -176,5 +176,5 @@
       }
     ]
   },
-  "notes": "An unreachable wrapper redirect stays visible, Unknown, and incomplete rather than borrowing a loop value."
+  "notes": "An unreachable wrapper command stays complete while its redirect remains Unknown rather than borrowing a loop value."
 }

@@ -2,9 +2,29 @@
   "name": "Recursion command pipeline",
   "input": "pwsh -Command \u0022gci | rm\u0022",
   "expected": {
-    "isUnparseable": true,
-    "unparseableReasonContains": "PowerShell structural syntax exceeded limits or contained invalid parser-owned facts"
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "gci"
+        ],
+        "canonicalVerb": "Get-ChildItem",
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "rm"
+        ],
+        "canonicalVerb": "Remove-Item",
+        "args": [],
+        "redirects": [],
+        "isCommandStringWrapped": true
+      }
+    ]
   },
-  "notes": "An unconstrained -Command child pipeline fails atomically because stage identities are not proved.",
-  "oracleExpectation": "OutOfScope"
+  "notes": "A static -Command child pipeline retains both authored stages."
 }

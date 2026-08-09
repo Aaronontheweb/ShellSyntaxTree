@@ -1964,9 +1964,6 @@ internal sealed class PwshForEachValueAnalyzer
                 initialWorkingDirectory,
                 canPromote: options.InitialStateMode ==
                     PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
-                hasConstrainedCommandResolutionBaseline:
-                    options.InitialStateMode ==
-                    PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
                 commandResolutionInvalidated: false,
                 commandResolutionInvalidatedBeyondTrackedMutations: false,
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
@@ -2053,19 +2050,12 @@ internal sealed class PwshForEachValueAnalyzer
             includeUnresolved: isForEachIncomplete ||
                 current.CommandResolutionInvalidated);
         var redirects = AnalyzeRedirects(source, current);
-        var mayPromote = current.CanPromote &&
-            source.HasCompleteValueProvenance &&
-            simple.Substitutions.Count == 0 &&
-            !simple.Clause.IsCommandStringWrapped &&
-            current.CanResolveEveryExpansion(source.ValueProvenance);
         RecordFacts(
             simple,
             current,
             source,
             effective,
-            redirects,
-            isForEachIncomplete,
-            mayPromote);
+            redirects);
 
         var hasCommandResolutionMutation =
             PwshPersistentStateMutation.TryGetCommandResolutionMutation(
@@ -2074,7 +2064,7 @@ internal sealed class PwshForEachValueAnalyzer
                 providerLocationUnknown: current.WorkingDirectory is null,
                 out var invalidatesAllCommandNames,
                 out var mutatedCommandNames);
-        var commandIdentityMayMutateState = simple.Clause.Verb.IsDynamic ||
+        var commandIdentityMayMutateState =
             !IsCommandIdentityProven(simple.Clause, current);
         var mayMutateAutomaticHome =
             commandIdentityMayMutateState ||
@@ -2087,9 +2077,9 @@ internal sealed class PwshForEachValueAnalyzer
             PwshPersistentStateMutation.PreservesCommandResolution(simple.Clause);
         if (commandIdentityMayMutateState)
         {
-            // An unproved invocation can resolve to arbitrary in-process code
-            // regardless of its authored verb, including through ambient
-            // aliases, functions, modules, or observed mutations.
+            // Computed command identities and explicit source mutations can
+            // hide arbitrary in-process code. Ambient runtime resolution is
+            // outside the authored-command approval boundary.
             _nonRegionStateMutationCount++;
             _childScopeEscapeRiskCount++;
             _childRunspaceProcessEscapeRiskCount++;
@@ -2814,7 +2804,7 @@ internal sealed class PwshForEachValueAnalyzer
         Clause clause,
         AnalysisContext input)
     {
-        if (!input.HasConstrainedCommandResolutionBaseline)
+        if (clause.Verb.IsDynamic)
         {
             return false;
         }
@@ -2830,10 +2820,7 @@ internal sealed class PwshForEachValueAnalyzer
 
     private static bool IsExecutionRegionReceiverIdentityProven(
         Clause clause,
-        AnalysisContext input) =>
-        input.HasConstrainedCommandResolutionBaseline &&
-        !input.CommandResolutionInvalidatedBeyondTrackedMutations &&
-        !input.MayResolveCommandToProcessMutation(clause);
+        AnalysisContext input) => IsCommandIdentityProven(clause, input);
 
     private void RecordExecutionRegions(
         Clause clause,
@@ -2996,9 +2983,7 @@ internal sealed class PwshForEachValueAnalyzer
         AnalysisContext input,
         CommandOccurrenceFacts source,
         IReadOnlyList<EffectiveArgument> effective,
-        IReadOnlyList<RedirectAnalysis> redirects,
-        bool isForEachIncomplete,
-        bool mayPromote)
+        IReadOnlyList<RedirectAnalysis> redirects)
     {
         var current = new CommandOccurrenceFacts
         {
@@ -3010,8 +2995,7 @@ internal sealed class PwshForEachValueAnalyzer
             ValueProvenance = source.ValueProvenance,
             HasCompleteValueProvenance = source.HasCompleteValueProvenance,
             IsComplete = source.IsComplete &&
-                IsCommandIdentityProven(simple.Clause, input) &&
-                (!isForEachIncomplete || mayPromote),
+                IsCommandIdentityProven(simple.Clause, input),
         };
         if (!_facts.TryGetValue(simple.Clause, out var prior))
         {
@@ -3612,7 +3596,10 @@ internal sealed class PwshForEachValueAnalyzer
 
         if (plan.Cardinality == PwshIterationCardinality.Never)
         {
-            RecordUnvisitedBindingArguments(forEach.Body, plan.BindingName);
+            RecordUnvisitedBindingArguments(
+                forEach.Body,
+                plan.BindingName,
+                loopInput);
             return PwshFlowResult.Success(loopInput);
         }
 
@@ -3896,7 +3883,7 @@ internal sealed class PwshForEachValueAnalyzer
                 CwdPathDependencies = source.CwdPathDependencies,
                 ValueProvenance = source.ValueProvenance,
                 HasCompleteValueProvenance = source.HasCompleteValueProvenance,
-                IsComplete = false,
+                IsComplete = source.IsComplete,
             }
             : source;
     }
@@ -4605,17 +4592,19 @@ internal sealed class PwshForEachValueAnalyzer
 
     private void RecordUnvisitedBindingArguments(
         ShellBlockSyntax block,
-        string bindingName)
+        string bindingName,
+        AnalysisContext input)
     {
         foreach (var statement in block.Statements)
         {
-            RecordUnvisitedBindingArguments(statement, bindingName);
+            RecordUnvisitedBindingArguments(statement, bindingName, input);
         }
     }
 
     private void RecordUnvisitedBindingArguments(
         ShellSyntaxNode node,
-        string bindingName)
+        string bindingName,
+        AnalysisContext input)
     {
         switch (node)
         {
@@ -4643,40 +4632,47 @@ internal sealed class PwshForEachValueAnalyzer
                     CwdPathDependencies = source.CwdPathDependencies,
                     ValueProvenance = source.ValueProvenance,
                     HasCompleteValueProvenance = source.HasCompleteValueProvenance,
-                    IsComplete = false,
+                    IsComplete = source.IsComplete &&
+                        IsCommandIdentityProven(simple.Clause, input),
                 };
                 foreach (var substitution in simple.Substitutions)
                 {
-                    RecordUnvisitedBindingArguments(substitution.Body, bindingName);
+                    RecordUnvisitedBindingArguments(
+                        substitution.Body,
+                        bindingName,
+                        input);
                 }
 
                 break;
             case ShellBlockSyntax nestedBlock:
-                RecordUnvisitedBindingArguments(nestedBlock, bindingName);
+                RecordUnvisitedBindingArguments(nestedBlock, bindingName, input);
                 break;
             case PipelineSyntax pipeline:
                 foreach (var stage in pipeline.Stages)
                 {
-                    RecordUnvisitedBindingArguments(stage, bindingName);
+                    RecordUnvisitedBindingArguments(stage, bindingName, input);
                 }
 
                 break;
             case CommandListSyntax list:
                 foreach (var item in list.Items)
                 {
-                    RecordUnvisitedBindingArguments(item.Command, bindingName);
+                    RecordUnvisitedBindingArguments(item.Command, bindingName, input);
                 }
 
                 break;
             case GroupSyntax group:
-                RecordUnvisitedBindingArguments(group.Body, bindingName);
+                RecordUnvisitedBindingArguments(group.Body, bindingName, input);
                 break;
             case ForEachSyntax forEach:
-                RecordUnvisitedBindingArguments(forEach.IteratorCommands, bindingName);
-                RecordUnvisitedBindingArguments(forEach.Body, bindingName);
+                RecordUnvisitedBindingArguments(
+                    forEach.IteratorCommands,
+                    bindingName,
+                    input);
+                RecordUnvisitedBindingArguments(forEach.Body, bindingName, input);
                 break;
             case CommandSubstitutionSyntax substitution:
-                RecordUnvisitedBindingArguments(substitution.Body, bindingName);
+                RecordUnvisitedBindingArguments(substitution.Body, bindingName, input);
                 break;
         }
     }
@@ -5203,8 +5199,7 @@ internal sealed class PwshForEachValueAnalyzer
             return null;
         }
 
-        return context.HasConstrainedCommandResolutionBaseline &&
-            IsCommandIdentityProven(clause, context)
+        return IsCommandIdentityProven(clause, context)
                 ? provenance.UsesNativeArgumentBinding
                 : null;
     }
@@ -5277,7 +5272,6 @@ internal sealed class PwshForEachValueAnalyzer
         internal AnalysisContext(
             string? workingDirectory,
             bool canPromote,
-            bool hasConstrainedCommandResolutionBaseline,
             bool commandResolutionInvalidated,
             bool commandResolutionInvalidatedBeyondTrackedMutations,
             bool allRunspaceCommandResolutionMayReachProcessMutation,
@@ -5290,8 +5284,6 @@ internal sealed class PwshForEachValueAnalyzer
         {
             WorkingDirectory = workingDirectory;
             CanPromote = canPromote;
-            HasConstrainedCommandResolutionBaseline =
-                hasConstrainedCommandResolutionBaseline;
             CommandResolutionInvalidated = commandResolutionInvalidated;
             CommandResolutionInvalidatedBeyondTrackedMutations =
                 commandResolutionInvalidatedBeyondTrackedMutations;
@@ -5309,8 +5301,6 @@ internal sealed class PwshForEachValueAnalyzer
         internal string? WorkingDirectory { get; }
 
         internal bool CanPromote { get; }
-
-        internal bool HasConstrainedCommandResolutionBaseline { get; }
 
         internal bool CommandResolutionInvalidated { get; }
 
@@ -5373,7 +5363,6 @@ internal sealed class PwshForEachValueAnalyzer
                 return new AnalysisContext(
                     unknownCwd ? null : WorkingDirectory,
                     false,
-                    HasConstrainedCommandResolutionBaseline,
                     commandResolutionInvalidated,
                     CommandResolutionInvalidatedBeyondTrackedMutations ||
                         invalidateCommandResolution,
@@ -5397,7 +5386,6 @@ internal sealed class PwshForEachValueAnalyzer
             return new AnalysisContext(
                 unknownCwd ? null : WorkingDirectory,
                 false,
-                HasConstrainedCommandResolutionBaseline,
                 commandResolutionInvalidated,
                 CommandResolutionInvalidatedBeyondTrackedMutations ||
                     invalidateCommandResolution,
@@ -5414,7 +5402,6 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
-                HasConstrainedCommandResolutionBaseline,
                 commandResolutionInvalidated: true,
                 commandResolutionInvalidatedBeyondTrackedMutations: true,
                 allRunspaceCommandResolutionMayReachProcessMutation: true,
@@ -5449,7 +5436,6 @@ internal sealed class PwshForEachValueAnalyzer
                 : new AnalysisContext(
                     WorkingDirectory,
                     CanPromote,
-                    HasConstrainedCommandResolutionBaseline,
                     commandResolutionInvalidated: true,
                     CommandResolutionInvalidatedBeyondTrackedMutations,
                     allRunspaceCommandResolutionMayReachProcessMutation: false,
@@ -5473,7 +5459,6 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
-                HasConstrainedCommandResolutionBaseline,
                 commandResolutionInvalidated: true,
                 commandResolutionInvalidatedBeyondTrackedMutations: true,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
@@ -5493,7 +5478,6 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
-                HasConstrainedCommandResolutionBaseline,
                 CommandResolutionInvalidated,
                 CommandResolutionInvalidatedBeyondTrackedMutations,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
@@ -5508,7 +5492,6 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
-                HasConstrainedCommandResolutionBaseline,
                 CommandResolutionInvalidated,
                 CommandResolutionInvalidatedBeyondTrackedMutations,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
@@ -5523,7 +5506,6 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
-                HasConstrainedCommandResolutionBaseline,
                 CommandResolutionInvalidated,
                 CommandResolutionInvalidatedBeyondTrackedMutations,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
@@ -5538,7 +5520,6 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 canPromote: false,
-                hasConstrainedCommandResolutionBaseline: false,
                 commandResolutionInvalidated: ProcessWideStateInvalidated,
                 commandResolutionInvalidatedBeyondTrackedMutations:
                     ProcessWideStateInvalidated,
@@ -5554,7 +5535,6 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 canPromote: false,
-                hasConstrainedCommandResolutionBaseline: false,
                 commandResolutionInvalidated: ProcessWideStateInvalidated,
                 commandResolutionInvalidatedBeyondTrackedMutations:
                     ProcessWideStateInvalidated,
@@ -5567,15 +5547,14 @@ internal sealed class PwshForEachValueAnalyzer
                 Array.Empty<BindingFrame>());
 
         internal AnalysisContext CreateRemoteInput() =>
-            // The target host or persistent session can have arbitrary cwd,
-            // variables, aliases, functions, modules, and profiles. Its exit
-            // state is isolated from the invoking host.
+            // The target host can have arbitrary cwd and value state. Ambient
+            // command resolution is outside authored-command completeness, and
+            // remote exit state is isolated from the invoking host.
             new(
                 workingDirectory: null,
                 canPromote: false,
-                hasConstrainedCommandResolutionBaseline: false,
                 commandResolutionInvalidated: true,
-                commandResolutionInvalidatedBeyondTrackedMutations: true,
+                commandResolutionInvalidatedBeyondTrackedMutations: false,
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 processWideStateInvalidated: false,
@@ -5590,7 +5569,6 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 WorkingDirectory,
                 CanPromote,
-                HasConstrainedCommandResolutionBaseline,
                 commandResolutionInvalidated: ProcessWideStateInvalidated,
                 commandResolutionInvalidatedBeyondTrackedMutations:
                     ProcessWideStateInvalidated,
@@ -5606,7 +5584,6 @@ internal sealed class PwshForEachValueAnalyzer
             new(
                 workingDirectory,
                 CanPromote,
-                HasConstrainedCommandResolutionBaseline,
                 CommandResolutionInvalidated,
                 CommandResolutionInvalidatedBeyondTrackedMutations,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
@@ -5636,7 +5613,6 @@ internal sealed class PwshForEachValueAnalyzer
             return new AnalysisContext(
                 WorkingDirectory,
                 CanPromote,
-                HasConstrainedCommandResolutionBaseline,
                 CommandResolutionInvalidated,
                 CommandResolutionInvalidatedBeyondTrackedMutations,
                 AllRunspaceCommandResolutionMayReachProcessMutation,
@@ -5682,32 +5658,6 @@ internal sealed class PwshForEachValueAnalyzer
             }
 
             return TryAnalyzeEffectiveValue(value, out domain);
-        }
-
-        internal bool CanResolveEveryExpansion(
-            IReadOnlyList<ShellValueElementProvenance> provenance)
-        {
-            foreach (var value in provenance)
-            {
-                foreach (var fragment in value.Value.Fragments)
-                {
-                    if (fragment.Kind == ShellValueFragmentKind.Literal)
-                    {
-                        continue;
-                    }
-
-                    if (fragment.Kind != ShellValueFragmentKind.Expansion ||
-                        fragment.Expansion is not ShellExpansionReference expansion ||
-                        expansion.Kind != ShellExpansionKind.Variable ||
-                        expansion.Name is null ||
-                        FindBinding(expansion.Name) is null)
-                    {
-                        return false;
-                    }
-                }
-            }
-
-            return true;
         }
 
         internal bool TryAnalyzeEffectiveValue(
@@ -5899,8 +5849,6 @@ internal sealed class PwshForEachValueAnalyzer
                     other.WorkingDirectory,
                     StringComparison.Ordinal) ||
                 CanPromote != other.CanPromote ||
-                HasConstrainedCommandResolutionBaseline !=
-                    other.HasConstrainedCommandResolutionBaseline ||
                 CommandResolutionInvalidated != other.CommandResolutionInvalidated ||
                 CommandResolutionInvalidatedBeyondTrackedMutations !=
                     other.CommandResolutionInvalidatedBeyondTrackedMutations ||
@@ -5990,8 +5938,6 @@ internal sealed class PwshForEachValueAnalyzer
                     ? left.WorkingDirectory
                     : null,
                 left.CanPromote && right.CanPromote,
-                left.HasConstrainedCommandResolutionBaseline &&
-                    right.HasConstrainedCommandResolutionBaseline,
                 left.CommandResolutionInvalidated ||
                     right.CommandResolutionInvalidated,
                 left.CommandResolutionInvalidatedBeyondTrackedMutations ||

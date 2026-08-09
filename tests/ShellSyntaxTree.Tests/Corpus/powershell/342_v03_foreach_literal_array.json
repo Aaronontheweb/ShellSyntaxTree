@@ -128,13 +128,15 @@
           }
         ],
         "workingDirectory": {
-          "kind": "Unknown",
-          "values": [],
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         }
       }
     ]
   },
-  "notes": "A static array exposes the loop body while binding-dependent facts remain incomplete."
+  "notes": "A static array exposes the loop body while policy-sensitive binding facts remain strict."
 }

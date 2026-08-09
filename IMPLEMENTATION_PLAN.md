@@ -21,10 +21,11 @@ priorities.
       approval completeness consistently: prove every authored executable
       region, but do not require proof of ambient aliases, functions, modules,
       profiles, executable lookup, or inherited environment state. Preserve the
-      existing `PwshInitialStateMode` API. Next update default-mode PowerShell
-      occurrence completeness while keeping loop-dependent effective values
-      Unknown unless fresh-process state is proved, expand the executable
-      corpus, and prove the Netclaw approval matrix. Explicit
+      existing `PwshInitialStateMode` API. Default-mode PowerShell occurrence
+      completeness now follows that authored boundary while loop-dependent
+      effective values remain Unknown unless fresh-process state is proved.
+      Next expand the executable corpus and prove the Netclaw approval matrix.
+      Explicit
       source mutation, computed identity, hidden execution, unknown receiver
       semantics, unsupported constructs, and policy-sensitive unknown values,
       paths, cwd, or redirects remain strict.
@@ -297,8 +298,8 @@ priorities.
       local state; and invalidate home, cwd, environment, and command-binding
       facts after uninspected `.ps1` execution. Decoded wrappers rebuild value
       provenance from preserved inner raw spelling, reset child-process state,
-      retain explicit native/script binding candidates only when the alpha.3
-      constrained command-resolution state proves them unshadowed, clear
+      retain explicit native/script binding semantics from authored path
+      spellings without inspecting ambient child state, clear
       profile-mutable automatic HOME and environment facts, and carry a bounded
       invocation-owner depth for current, intermediate, and root-owned
       redirects. Parser-owned binding provenance now distinguishes path-shaped
@@ -310,7 +311,7 @@ priorities.
       pipelines fail atomically. Alpha.3 authorization completeness requires
       the explicit constrained command-resolution baseline, including after
       decoded-host boundaries. The v0.3 authored-command approval correction
-      above supersedes that behavior and is pending implementation.
+      above supersedes that behavior and is implemented in this slice.
       Execution-region and loop/state design promotions remain, so OpenSpec
       task 1.10 stays open.
 - [x] Deliver the first Bash `$()` substitution slice for supported
@@ -416,11 +417,10 @@ priorities.
       projects iterator and loop-body ancestry, survives decoded wrappers, and
       fails closed on dynamic iterables, iterator/body state or
       command-resolution mutation, malformed boundaries, and depth overflow.
-      Alpha.3 leaves default-mode loop-body and current-scope post-loop
-      occurrences incomplete; the authored-command correction will make static
-      occurrences complete without weakening explicit mutation or dynamic
-      execution checks. Isolated child-host loops do not taint their outer
-      continuation.
+      The authored-command correction makes default-mode loop-body and
+      current-scope post-loop static occurrences complete without weakening
+      explicit mutation or dynamic execution checks. Isolated child-host loops
+      do not taint their outer continuation.
       Alpha.3 added an explicit PowerShell initial-runspace contract and
       wrapper-state metadata. The additive `PwshInitialStateMode` API remains
       locked. The v0.3 authored-command correction no longer requires isolated

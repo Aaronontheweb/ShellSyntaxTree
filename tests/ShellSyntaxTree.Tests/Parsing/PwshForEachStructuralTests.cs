@@ -98,7 +98,29 @@ public class PwshForEachStructuralTests
         Assert.Contains(result.Commands[0].Ancestry, frame =>
             frame.Region == CommandAncestryRegion.Iterator);
         Assert.Equal(CommandOccurrenceRole.LoopBody, result.Commands[1].ImmediateRole);
-        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
+    }
+
+    [Fact]
+    public void Default_state_keeps_loop_command_complete_without_promoting_value()
+    {
+        var result = Parse(
+            "foreach ($f in @('a','b')) { Write-Output $f }");
+
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Default_state_keeps_static_pipeline_stages_complete()
+    {
+        var result = Parse("Get-ChildItem | Remove-Item");
+
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
     }
 
     [Fact]
@@ -117,7 +139,7 @@ public class PwshForEachStructuralTests
             occurrence.Ancestry.Count(frame =>
                 frame.AncestorKind == ShellSyntaxKind.ForEach &&
                 frame.Region == CommandAncestryRegion.LoopBody));
-        Assert.False(occurrence.IsComplete);
+        Assert.True(occurrence.IsComplete);
     }
 
     [Fact]
@@ -135,7 +157,7 @@ public class PwshForEachStructuralTests
         Assert.Null(loop.Binding.Source.SourceLength);
         Assert.Null(loop.Iterable.SourceStart);
         Assert.Null(loop.Iterable.SourceLength);
-        Assert.False(Assert.Single(result.Commands).IsComplete);
+        Assert.True(Assert.Single(result.Commands).IsComplete);
     }
 
     [Theory]
@@ -242,9 +264,7 @@ public class PwshForEachStructuralTests
         var list = Assert.IsType<CommandListSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Equal(3, list.Items.Count);
         Assert.IsType<ForEachSyntax>(list.Items[1].Command);
-        Assert.False(result.Commands[0].IsComplete);
-        Assert.False(result.Commands[1].IsComplete);
-        Assert.False(result.Commands[2].IsComplete);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
     }
 
     [Fact]
@@ -258,7 +278,7 @@ public class PwshForEachStructuralTests
         Assert.Equal(3, list.Items.Count);
         Assert.Equal(CompoundOperator.Sequence, list.Items[1].Operator);
         Assert.Equal(CompoundOperator.AndIf, list.Items[2].Operator);
-        Assert.All(result.Commands, command => Assert.False(command.IsComplete));
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
     }
 
     [Fact]
@@ -269,12 +289,12 @@ public class PwshForEachStructuralTests
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.Equal(2, result.Commands.Count);
-        Assert.False(result.Commands[0].IsComplete);
+        Assert.True(result.Commands[0].IsComplete);
         Assert.True(result.Commands[1].IsComplete);
     }
 
     [Fact]
-    public void Decoded_child_host_iterator_stays_visible_but_incomplete()
+    public void Decoded_child_host_iterator_stays_visible_and_complete()
     {
         var result = ParseIsolated(
             "pwsh -Command 'foreach ($x in Get-Item C:\\input) " +
@@ -283,8 +303,8 @@ public class PwshForEachStructuralTests
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.Equal(new[] { "Get-Item", "Write-Output", "Get-Date" },
             result.Commands.Select(CommandVerb));
-        Assert.False(result.Commands[0].IsComplete);
-        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
         Assert.True(result.Commands[2].IsComplete);
     }
 
@@ -348,7 +368,7 @@ public class PwshForEachStructuralTests
     }
 
     [Fact]
-    public void Default_initial_state_withholds_binding_proof()
+    public void Default_initial_state_keeps_policy_sensitive_binding_strict()
     {
         var result = Parse(
             "foreach ($f in @('a.txt', 'b.txt')) { Remove-Item -LiteralPath $f }");
@@ -440,9 +460,9 @@ public class PwshForEachStructuralTests
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.Equal(3, result.Commands.Count);
-        Assert.False(result.Commands[0].IsComplete);
+        Assert.True(result.Commands[0].IsComplete);
         Assert.Equal(ShellValueDomainKind.Unknown, result.Commands[0].WorkingDirectory.Kind);
-        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
         Assert.Equal(
             ShellValueDomainKind.Unknown,
             Assert.Single(result.Commands[1].EffectiveArguments).Value.Kind);
@@ -560,14 +580,14 @@ public class PwshForEachStructuralTests
     }
 
     [Fact]
-    public void Prior_variable_mutation_invalidates_later_binding_proof()
+    public void Prior_variable_mutation_keeps_static_occurrence_complete()
     {
         var result = ParseIsolated(
             "Set-Variable f seeded; foreach ($f in 'value') { Write-Output $f }");
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.Equal(2, result.Commands.Count);
-        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
         Assert.Equal(
             ShellValueDomainKind.Unknown,
             Assert.Single(result.Commands[1].EffectiveArguments).Value.Kind);
@@ -575,6 +595,20 @@ public class PwshForEachStructuralTests
             result.Commands[1].WorkingDirectory,
             ShellValueDomainKind.Exact,
             "C:/work");
+    }
+
+    [Fact]
+    public void Default_state_prior_variable_mutation_keeps_static_occurrence_complete()
+    {
+        var result = Parse(
+            "Set-Variable f seeded; foreach ($f in 'value') { Write-Output $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.True(result.Commands[1].IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(result.Commands[1].EffectiveArguments).Value.Kind);
     }
 
     [Theory]
@@ -1106,7 +1140,7 @@ public class PwshForEachStructuralTests
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var command = Assert.Single(result.Commands);
-        Assert.False(command.IsComplete);
+        Assert.True(command.IsComplete);
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(ShellValueDomainKind.FiniteSet, redirect.Target.Kind);
         Assert.Equal(
@@ -1127,7 +1161,7 @@ public class PwshForEachStructuralTests
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var command = Assert.Single(result.Commands);
-        Assert.False(command.IsComplete);
+        Assert.True(command.IsComplete);
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(ShellValueDomainKind.FiniteSet, redirect.Target.Kind);
         Assert.Equal(
@@ -1144,7 +1178,7 @@ public class PwshForEachStructuralTests
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var command = Assert.Single(result.Commands);
-        Assert.False(command.IsComplete);
+        Assert.True(command.IsComplete);
         Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
         Assert.True(Assert.Single(command.Clause.Redirects).IsDynamicSkip);
         var redirect = Assert.Single(command.Redirects);
@@ -1160,7 +1194,7 @@ public class PwshForEachStructuralTests
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var command = Assert.Single(result.Commands);
-        Assert.False(command.IsComplete);
+        Assert.True(command.IsComplete);
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
         Assert.Equal("C:/fixed.txt", Assert.Single(redirect.Target.Values));

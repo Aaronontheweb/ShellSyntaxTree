@@ -118,7 +118,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Iterator",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",

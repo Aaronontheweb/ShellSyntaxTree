@@ -37,19 +37,12 @@
             "raw": "hi",
             "kind": "Literal",
             "isPath": false
-          },
-          {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
-            "isCwdAttribution": true
           }
         ],
         "redirects": [
           {
             "direction": "Out",
-            "target": "relative.txt",
-            "isDynamicSkip": true
+            "target": "C:/work/relative.txt"
           }
         ],
         "elements": [
@@ -84,7 +77,8 @@
             "precedingVerbElementCount": 1,
             "kind": "Literal",
             "isFlag": false,
-            "isPath": true
+            "isPath": true,
+            "resolved": "C:/work/relative.txt"
           }
         ],
         "isCommandStringWrapped": true
@@ -162,7 +156,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -206,7 +200,7 @@
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -239,8 +233,10 @@
         ],
         "effectiveArguments": [],
         "workingDirectory": {
-          "kind": "Unknown",
-          "values": [],
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         },
@@ -252,8 +248,10 @@
             "operation": "FileOutput",
             "targetDescriptor": null,
             "target": {
-              "kind": "Unknown",
-              "values": [],
+              "kind": "Exact",
+              "values": [
+                "C:/work/relative.txt"
+              ],
               "pattern": null,
               "coveringDirectory": null
             },
@@ -264,5 +262,5 @@
       }
     ]
   },
-  "notes": "An unconstrained decoded receiver remains visible and incomplete; its first unproved invocation makes the following redirect and cwd facts unknown."
+  "notes": "A static decoded receiver remains visible and complete without poisoning the following authored redirect or cwd facts."
 }

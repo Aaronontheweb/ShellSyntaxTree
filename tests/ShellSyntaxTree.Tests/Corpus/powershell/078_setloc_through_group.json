@@ -33,9 +33,10 @@
             "isPath": true
           },
           {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
+            "raw": "C:/sensitive",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/sensitive",
             "isCwdAttribution": true
           }
         ],

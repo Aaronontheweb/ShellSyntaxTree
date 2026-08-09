@@ -190,9 +190,9 @@
         "listOperator": null,
         "executionOrigin": "CommandArgument",
         "hostClauseElementIndex": 3,
-        "executionPhase": "Unknown",
-        "executionTiming": "Unknown",
-        "executionCardinality": "Unknown"
+        "executionPhase": "Main",
+        "executionTiming": "Synchronous",
+        "executionCardinality": "Once"
       },
       {
         "kind": "Block",
@@ -221,7 +221,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -258,7 +258,7 @@
       {
         "clauseIndex": 1,
         "immediateRole": "ExecutionRegion",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",

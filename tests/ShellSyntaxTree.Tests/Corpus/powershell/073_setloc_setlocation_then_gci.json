@@ -26,9 +26,10 @@
         ],
         "args": [
           {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
+            "raw": "C:/src",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/src",
             "isCwdAttribution": true
           }
         ],

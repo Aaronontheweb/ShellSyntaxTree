@@ -93,7 +93,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Substitution",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -134,5 +134,5 @@
       }
     ]
   },
-  "notes": "Parent-scope expansion remains visible beside an incomplete outer pwsh host."
+  "notes": "Parent-scope expansion remains visible beside the complete decoded authored command."
 }

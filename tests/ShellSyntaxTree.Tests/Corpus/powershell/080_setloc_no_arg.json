@@ -20,9 +20,10 @@
         "canonicalVerb": "Get-ChildItem",
         "args": [
           {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
+            "raw": "C:/Users/user",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/Users/user",
             "isCwdAttribution": true
           }
         ],

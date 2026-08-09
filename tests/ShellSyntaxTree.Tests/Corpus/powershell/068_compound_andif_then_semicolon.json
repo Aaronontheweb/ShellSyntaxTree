@@ -23,13 +23,8 @@
           {
             "raw": "a.txt",
             "kind": "Literal",
-            "isPath": true
-          },
-          {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
-            "isCwdAttribution": true
+            "isPath": true,
+            "resolved": "C:/work/a.txt"
           }
         ],
         "redirects": []

@@ -97,7 +97,7 @@ public class PwshExecutionRegionBindingCatalogTests
     }
 
     [Fact]
-    public void Module_qualified_catalog_lookup_is_separate_from_identity_proof()
+    public void Module_qualified_catalog_lookup_uses_authored_identity()
     {
         var resolved = PwshExecutionRegionBindingCatalog.TryResolveStaticCommandName(
             "Microsoft.PowerShell.Core\\ForEach-Object",
@@ -110,11 +110,12 @@ public class PwshExecutionRegionBindingCatalogTests
         Assert.True(resolved);
         Assert.Equal("ForEach-Object", canonical);
         Assert.Equal(
-            ExecutionRegionPhase.Unknown,
+            ExecutionRegionPhase.Process,
             Assert.Single(
                 Assert.IsType<SimpleCommandSyntax>(
                     Assert.Single(conservative.Syntax.Statements))
                 .ExecutionRegions).Phase);
+        Assert.All(conservative.Commands, command => Assert.True(command.IsComplete));
         Assert.False(parsed.IsUnparseable);
         Assert.Equal(2, parsed.Commands.Count);
         Assert.Equal(2, parsed.Clauses.Count);

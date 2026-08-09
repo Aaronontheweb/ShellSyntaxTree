@@ -5,15 +5,18 @@
 // -----------------------------------------------------------------------
 namespace ShellSyntaxTree;
 
-/// <summary>Declares which ambient PowerShell runspace facts the caller can prove.</summary>
+/// <summary>Compatibility option for PowerShell initial host-state analysis.</summary>
 public enum PwshInitialStateMode
 {
-    /// <summary>No safe assumption is made about ambient PowerShell runspace state.</summary>
+    /// <summary>
+    /// No safe assumption is made about ambient PowerShell variable-binding
+    /// state. Static authored command completeness is unaffected.
+    /// </summary>
     Unknown,
 
     /// <summary>
     /// The source runs in a new non-interactive PowerShell process with
-    /// profiles, startup state, and module discovery constrained as specified.
+    /// profiles disabled and no reused or caller-initialized runspace.
     /// </summary>
     IsolatedNonInteractiveNoProfile,
 }
@@ -26,7 +29,7 @@ public sealed record PwshParserOptions : ShellParserOptions
 {
     /// <summary>
     /// Gets the caller-proved initial PowerShell runspace-state contract. The
-    /// default leaves v0.3 command identities and bounded values unproved.
+    /// default leaves loop-dependent effective values unproved.
     /// </summary>
     public PwshInitialStateMode InitialStateMode { get; init; }
 }
