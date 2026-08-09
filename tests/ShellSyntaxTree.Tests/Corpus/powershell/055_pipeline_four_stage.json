@@ -1,6 +1,7 @@
 {
   "name": "Pipeline four stage",
   "input": "gci -Recurse C:\\logs | ? Name | sort | rm",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

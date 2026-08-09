@@ -1,0 +1,339 @@
+{
+  "name": "V03 nested encoded intermediate redirect owner",
+  "input": "pwsh -NoProfile -EncodedCommand cAB3AHMAaAAgAC0ATgBvAFAAcgBvAGYAaQBsAGUAIAAtAEUAbgBjAG8AZABlAGQAQwBvAG0AbQBhAG4AZAAgAFUAdwBCAGwAQQBIAFEAQQBMAFEAQgBNAEEARwA4AEEAWQB3AEIAaABBAEgAUQBBAGEAUQBCAHYAQQBHADQAQQBJAEEAQQB2AEEASABRAEEAYgBRAEIAdwBBAEMAOABBAGEAUQBCAHUAQQBHADQAQQBaAFEAQgB5AEEAQwBBAEEASgBnAEEAbQBBAEMAQQBBAFYAdwBCAHkAQQBHAGsAQQBkAEEAQgBsAEEAQwAwAEEAVAB3AEIAMQBBAEgAUQBBAGMAQQBCADEAQQBIAFEAQQBJAEEAQgBvAEEARwBrAEEAIAA\u002BACAAcgBlAGwAYQB0AGkAdgBlAC4AdAB4AHQA",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Location"
+        ],
+        "args": [
+          {
+            "raw": "/tmp/inner",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/tmp/inner"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Set-Location",
+            "value": "Set-Location",
+            "role": "Verb",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "/tmp/inner",
+            "value": "/tmp/inner",
+            "role": "Argument",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/tmp/inner"
+          }
+        ],
+        "isCommandStringWrapped": true
+      },
+      {
+        "operator": "AndIf",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "hi",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/work/relative.txt"
+          }
+        ],
+        "elements": [
+          {
+            "raw": "Write-Output",
+            "value": "Write-Output",
+            "role": "Verb",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "hi",
+            "value": "hi",
+            "role": "Argument",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "\u003E relative.txt",
+            "value": "relative.txt",
+            "role": "Redirect",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/relative.txt"
+          }
+        ],
+        "isCommandStringWrapped": true
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 456,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Group",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 456,
+        "clauseIndex": null,
+        "groupKind": "IsolatedScope",
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "GroupBody",
+        "childIndex": null,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Group",
+        "parentIndex": 2,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": null,
+        "groupKind": "IsolatedScope",
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 3,
+        "region": "GroupBody",
+        "childIndex": null,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 4,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 5,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 5,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "AndIf"
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 456
+          },
+          {
+            "ancestorKind": "Group",
+            "region": "GroupBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 456
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
+          },
+          {
+            "ancestorKind": "Group",
+            "region": "GroupBody",
+            "childIndex": null,
+            "sourceStart": null,
+            "sourceLength": null
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 456
+          },
+          {
+            "ancestorKind": "Group",
+            "region": "GroupBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 456
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
+          },
+          {
+            "ancestorKind": "Group",
+            "region": "GroupBody",
+            "childIndex": null,
+            "sourceStart": null,
+            "sourceLength": null
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": null,
+            "sourceLength": null
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "operation": "FileOutput",
+            "targetDescriptor": null,
+            "target": {
+              "kind": "Exact",
+              "values": [
+                "C:/work/relative.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "isPathRelevant": true,
+            "isComplete": true
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "A redirect between nested decoded hosts resolves in the intermediate invocation rather than the deepest child."
+}

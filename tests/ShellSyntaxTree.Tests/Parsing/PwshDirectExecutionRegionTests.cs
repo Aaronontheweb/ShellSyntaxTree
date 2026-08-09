@@ -250,7 +250,8 @@ public class PwshDirectExecutionRegionTests
 
     private static ParsedCommand Parse(string source)
     {
-        var result = Parser().Parse(source);
+        var result = Parser(PwshInitialStateMode.IsolatedNonInteractiveNoProfile)
+            .Parse(source);
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         return result;
     }

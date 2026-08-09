@@ -1,6 +1,7 @@
 {
   "name": "Pipeline percent block",
   "input": "gci | % { Remove-Item $_ }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

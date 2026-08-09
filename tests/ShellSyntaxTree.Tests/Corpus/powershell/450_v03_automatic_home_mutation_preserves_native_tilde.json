@@ -1,0 +1,273 @@
+{
+  "name": "V03 automatic home mutation preserves native tilde",
+  "input": "Set-Variable HOME X -Force; curl --output ~ https://example.invalid",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Variable"
+        ],
+        "args": [
+          {
+            "raw": "HOME",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "X",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-Force",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Set-Variable",
+            "value": "Set-Variable",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "HOME",
+            "value": "HOME",
+            "role": "Argument",
+            "sourceStart": 13,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "X",
+            "value": "X",
+            "role": "Argument",
+            "sourceStart": 18,
+            "sourceLength": 1,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-Force",
+            "value": "-Force",
+            "role": "Argument",
+            "sourceStart": 20,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "curl"
+        ],
+        "args": [
+          {
+            "raw": "--output",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "~",
+            "kind": "Tilde",
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          },
+          {
+            "raw": "https://example.invalid",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "curl",
+            "value": "curl",
+            "role": "Verb",
+            "sourceStart": 28,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "--output",
+            "value": "--output",
+            "role": "Argument",
+            "sourceStart": 33,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "~",
+            "value": "~",
+            "role": "Argument",
+            "sourceStart": 42,
+            "sourceLength": 1,
+            "precedingVerbElementCount": 1,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          },
+          {
+            "raw": "https://example.invalid",
+            "value": "https://example.invalid",
+            "role": "Argument",
+            "sourceStart": 44,
+            "sourceLength": 23,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 67,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 67,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 26,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 28,
+        "sourceLength": 39,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 67
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 67
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 67
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 67
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "C:/Users/user"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "A current-runspace HOME mutation does not change the configured native tilde expansion root."
+}

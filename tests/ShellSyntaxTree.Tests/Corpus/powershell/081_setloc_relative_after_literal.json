@@ -30,14 +30,12 @@
           {
             "raw": "sub",
             "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/repo/sub"
+            "isPath": true
           },
           {
-            "raw": "C:/repo",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/repo",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],
@@ -51,10 +49,9 @@
         "canonicalVerb": "Get-ChildItem",
         "args": [
           {
-            "raw": "C:/repo/sub",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/repo/sub",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

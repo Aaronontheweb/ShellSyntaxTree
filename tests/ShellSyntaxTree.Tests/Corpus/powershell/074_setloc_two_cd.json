@@ -34,10 +34,9 @@
             "resolved": "C:/b"
           },
           {
-            "raw": "C:/a",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/a",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],
@@ -51,10 +50,9 @@
         "canonicalVerb": "Get-ChildItem",
         "args": [
           {
-            "raw": "C:/b",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/b",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

@@ -1,0 +1,112 @@
+{
+  "name": "V03 cmdlet unquoted tilde argument",
+  "input": "Get-Content ~",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "~",
+            "kind": "Tilde",
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Get-Content",
+            "value": "Get-Content",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "~",
+            "value": "~",
+            "role": "Argument",
+            "sourceStart": 12,
+            "sourceLength": 1,
+            "precedingVerbElementCount": 1,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 13,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 13,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 13
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "~"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "Cmdlets receive an authored tilde string while their Path binding retains independent provider resolution."
+}

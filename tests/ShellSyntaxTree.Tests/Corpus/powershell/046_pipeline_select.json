@@ -1,6 +1,7 @@
 {
   "name": "Pipeline select",
   "input": "Get-ChildItem | Select-Object Name",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

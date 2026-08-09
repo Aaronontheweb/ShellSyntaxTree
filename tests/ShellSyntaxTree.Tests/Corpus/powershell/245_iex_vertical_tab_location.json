@@ -32,10 +32,9 @@
             "resolved": "C:/evil"
           },
           {
-            "raw": "C:/safe",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/safe",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

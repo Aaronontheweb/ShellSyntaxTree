@@ -363,7 +363,8 @@ quoted_string    := single_quoted | double_quoted
   `DynamicSkip` leaf. Script blocks are classified after command and parameter
   binding: cataloged execution-bearing bindings create typed regions,
   cataloged data bindings remain opaque, and unknown receivers create unknown
-  incomplete regions with visible bodies. An `@()` or `@{}` value with execution-bearing content is
+  incomplete regions whose supported non-pipeline bodies remain visible. An
+  unproved pipeline inside such a region fails atomically. An `@()` or `@{}` value with execution-bearing content is
   unparseable until that expression form has complete command discovery;
   a non-executing literal form may remain an opaque value.
 - Under v0.2, control-flow keywords fall outside the grammar. Stable v0.3 owns
@@ -380,7 +381,8 @@ language keyword only at statement position when followed by `(`;
 bounded non-executing parenthesized argument remains opaque. A script-block
 argument is classified by its proved receiver and parameter binding: executing
 bindings create regions, proved data remains opaque, and unknown receivers
-create unknown incomplete regions. It is not reinterpreted as a loop body.
+create unknown incomplete regions for supported non-pipeline bodies. An
+unproved interior pipeline fails atomically. It is not reinterpreted as a loop body.
 `&&` and `||` join pipelines, not
 control-flow statements, so
 they cannot precede or follow `foreach`; `;` and newline remain legal statement
@@ -451,6 +453,18 @@ state. Decoded `pwsh -Command` and `pwsh -EncodedCommand` payloads run in child
 hosts and do not inherit the parent's fresh-state assertion unless their own
 invocation independently proves the complete constrained-host contract; host
 flags alone do not prove the launch environment or module baseline.
+An uncontrolled child profile can mutate automatic `$HOME` and environment
+variables before the payload runs, so decoded children do not inherit exact
+facts for `$HOME` or `$env:USERPROFILE`. Provider/native tilde initialization
+is tracked independently. Path-shaped command names are also shadowable by
+aliases; an explicit native or `.ps1` spelling is a binding candidate, not an
+identity proof, until constrained command-resolution state proves it
+unmodified. Default ambient uncertainty preserves ordinary v0.2 compatibility
+leaves, but it leaves the v0.3 authorization occurrence incomplete and
+binding-dependent effective values unknown. An unproved
+invocation may be arbitrary in-process code, so it invalidates subsequent
+observable state; an unproved pipeline fails atomically until pipeline state
+propagation is modeled.
 Recognized variable, alias, function, or module mutation invalidates later
 proofs in every observing scope; cwd-only mutation retains the independent
 initial-state assertion.
@@ -506,9 +520,10 @@ A script block passed to a command remains an authored `DynamicSkip` argument
 on the host `Clause`. After canonical command and parameter binding, a proved
 execution-bearing block additionally creates an attached
 `ExecutionRegionSyntax`; a proved data block does not. An unknown receiver or
-ambiguous binding conservatively creates an unknown incomplete region so every
-body command remains visible. If that body cannot be parsed completely, the
-whole result is unparseable.
+ambiguous binding conservatively creates an unknown incomplete region. Every
+command in a completely parsed supported non-pipeline body remains visible. If
+the body cannot be parsed completely, or it contains a pipeline whose stage
+identity is unproved, the whole result is unparseable.
 
 The version-pinned PowerShell 7 catalog covers:
 
@@ -562,8 +577,9 @@ Optional-module `Start-ThreadJob` and deferred breakpoint, event, and argument-
 completion receivers are not stable-v0.3 catalog-completeness promises.
 Existing conservative recognition may remain, but additional module/version or
 trigger-time proof does not gate the release. Every unproved form follows the
-unknown-receiver rule: completely parsed bodies remain visible with incomplete
-execution and state facts.
+unknown-receiver rule: supported non-pipeline bodies remain visible with
+incomplete execution and state facts, while an unproved interior pipeline
+fails atomically.
 
 Aliases, supported module-qualified spellings, static call-operator spellings,
 parameter abbreviations and inline values, positional binding, parameter-set
@@ -1179,6 +1195,13 @@ identity while their value stays unknown without a bounded proof. An
 unterminated `${...}` interpolation makes the entire result unparseable.
 Adjacent fragments after a redirect operator form one target; the suffix is
 never emitted as an unrelated argument.
+
+Exact `$HOME` and `$env:USERPROFILE` composition requires the corresponding
+current-runspace or environment fact. A decoded child with uncontrolled profile
+startup has neither fact even when its parent was analyzed under the isolated
+mode. Native-versus-cmdlet path interpretation likewise requires constrained,
+unmutated command resolution; PowerShell permits aliases whose names are
+explicit native or `.ps1` paths.
 
 When every fragment, transformation, binding fact, cwd/home fact, and
 consumer fact is exact, mixed literal and expandable fragments compose to one

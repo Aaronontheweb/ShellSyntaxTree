@@ -1,6 +1,7 @@
 {
   "name": "Pipeline dir gc",
   "input": "dir | gc",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

@@ -256,7 +256,7 @@ priorities.
       roles, ancestry, completeness, nullable decoded spans, compatibility
       operators, and exact shared `Clause` identity. The strict DTO rejects
       unknown fields and always requires unparseable projections to be empty.
-      The PowerShell manifest owns all 422 entries and round-trips them exactly,
+      The PowerShell manifest owns all 491 entries and round-trips them exactly,
       including case-specific isolated-state inputs. Explicit false/null
       assertions remain opt-in and generator-preserved.
 - [x] Promote the remaining 21 stable Bash design cases into the executable
@@ -269,6 +269,36 @@ priorities.
       sparse exact/unknown effective-value overlays, and pins quoted, escaped,
       and continued tilde-prefix behavior against Bash. The PowerShell promotion
       half keeps OpenSpec task 1.10 open.
+- [x] Promote the first 22 stable PowerShell design cases covering value,
+      path, and redirect provenance. Exact effective values are published only
+      when parser-owned fragments prove the post-lexical value; runtime
+      automatic parameters and active wildcards remain Unknown. The sparse
+      overlay omits ordinary literals, distinguishes quoted from active tilde
+      and wildcard syntax, preserves provider and PSDrive spellings, and keeps
+      redirect resolution separate from command arguments. Local PowerShell
+      probes and direct tests pin that native tilde expansion preserves the
+      configured home string byte-for-byte, including root and trailing
+      separators. Adversarial review added 47 executable-corpus cases that
+      separate mutable `$HOME`, configured tilde expansion, process-environment
+      child initialization, current provider location, and default-versus-
+      isolated command binding; re-evaluate redirect targets from occurrence-
+      local state; and invalidate home, cwd, environment, and command-binding
+      facts after uninspected `.ps1` execution. Decoded wrappers rebuild value
+      provenance from preserved inner raw spelling, reset child-process state,
+      retain explicit native/script binding candidates only when constrained
+      command-resolution state proves them unshadowed, clear profile-mutable
+      automatic HOME and environment facts, and carry a bounded
+      invocation-owner depth for current, intermediate, and root-owned
+      redirects. Parser-owned binding provenance now distinguishes path-shaped
+      native/script candidates, constrained cmdlets and aliases, and ambiguous
+      unqualified hyphenated names without reparsing verb spelling. Script
+      blocks are excluded from host effective argv, and
+      unknown non-pipeline receivers retain visible, incomplete bodies and
+      invalidate subsequent state without discarding v0.2 leaves; unproved
+      pipelines fail atomically. Authorization completeness now requires the
+      explicit constrained command-resolution baseline, including after
+      decoded-host boundaries. Execution-region and loop/state design promotions remain, so
+      OpenSpec task 1.10 stays open.
 - [x] Deliver the first Bash `$()` substitution slice for supported
       simple-command arguments and redirect targets. Direct tests and corpus
       entries pin multiple and nested ordering, exact ancestry/spans, isolated
@@ -514,7 +544,8 @@ priorities.
       Stable v0.3 stops at the delivered Start-Job, Parallel, and remote/session
       boundaries. Optional-module Start-ThreadJob and exact deferred
       breakpoint/event/completion actions are post-v0.3 catalog work; unknown
-      receivers continue to expose incomplete bodies. Script blocks consumed
+      receivers continue to expose supported non-pipeline bodies as incomplete;
+      unproved interior pipelines fail atomically. Script blocks consumed
       by a proved canonical, alias, or supported module-qualified `Write-Output`
       receiver now remain opaque data under constrained, bounded command-
       resolution state. Unknown receivers and exact identities changed by
@@ -522,7 +553,11 @@ priorities.
       Generated corpus entries 418-422 pin proved data, the fail-closed unknown
       receiver, proved local `Invoke-Command`, and the exact module-qualified-
       looking and canonical-target alias boundaries; unsupported potentially
-      executable interiors still fail atomically. Local PowerShell 7.6.4 probes pin variable-versus-location
+      executable interiors still fail atomically. Static current-scope
+      `Invoke-Expression` cloning preserves cmdlet/native binding provenance;
+      paired direct, unit, and executable-corpus cases pin cmdlet tilde and
+      wildcard values plus native tilde expansion while decoded child hosts
+      remain unknown. Local PowerShell 7.6.4 probes pin variable-versus-location
       independence, semantic phase order, child process/runspace boundaries,
       boundaries and the fact that the in-process `Invoke-Command` parameter
       set does not support `-AsJob`.

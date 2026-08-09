@@ -111,8 +111,9 @@ default serialization and therefore requires explicit migration notes.
 This accepted scope supersedes the earlier assumption that every ordinary
 PowerShell script-block argument is non-executing. Canonical receivers proved
 to treat a block as data remain opaque; known execution-bearing bindings are
-typed, and unknown receivers conservatively expose the body with incomplete
-facts rather than hiding it.
+typed, and unknown receivers conservatively expose supported non-pipeline body
+commands with incomplete facts rather than hiding them. An unproved pipeline
+inside such a region fails the whole parse atomically.
 
 The implementation also corrects a v0.2 security defect at an internal
 boundary: decoded token text currently loses lexical provenance and

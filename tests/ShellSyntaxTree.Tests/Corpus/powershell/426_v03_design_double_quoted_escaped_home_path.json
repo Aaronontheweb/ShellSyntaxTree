@@ -1,0 +1,112 @@
+{
+  "name": "V03 design double quoted escaped home path",
+  "input": "Get-Content \u0022\u0060$HOME.txt\u0022",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "\u0022\u0060$HOME.txt\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/$HOME.txt"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Get-Content",
+            "value": "Get-Content",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "\u0022\u0060$HOME.txt\u0022",
+            "value": "$HOME.txt",
+            "role": "Argument",
+            "sourceStart": 12,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/$HOME.txt"
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 24,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 24,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 24
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "$HOME.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "Promotes stable design case pwsh-double-quoted-escaped-home-path."
+}

@@ -1,0 +1,147 @@
+{
+  "name": "V03 iex cmdlet wildcard binding",
+  "input": "iex \u0027Get-Content *.txt\u0027",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "*.txt",
+            "kind": "Glob",
+            "isPath": true
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Get-Content",
+            "value": "Get-Content",
+            "role": "Verb",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "*.txt",
+            "value": "*.txt",
+            "role": "Argument",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 1,
+            "kind": "Glob",
+            "isFlag": false,
+            "isPath": true
+          }
+        ],
+        "isCommandStringWrapped": true
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 23,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Group",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 23,
+        "clauseIndex": null,
+        "groupKind": "CurrentScope",
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "GroupBody",
+        "childIndex": null,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 2,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 23
+          },
+          {
+            "ancestorKind": "Group",
+            "region": "GroupBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 23
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "*.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "A static current-scope Invoke-Expression payload preserves cmdlet binding and keeps an authored wildcard exact."
+}

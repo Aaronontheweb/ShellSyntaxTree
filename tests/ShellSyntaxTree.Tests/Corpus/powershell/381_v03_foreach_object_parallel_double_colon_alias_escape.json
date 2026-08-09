@@ -484,7 +484,19 @@
             "sourceLength": 100
           }
         ],
-        "effectiveArguments": [],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "Alias::sstDoubleAlias"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Unknown",
           "values": [],

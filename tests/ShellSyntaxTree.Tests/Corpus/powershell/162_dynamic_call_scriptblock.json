@@ -68,7 +68,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "ExecutionRegion",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",

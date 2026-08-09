@@ -1493,7 +1493,7 @@ internal static class PwshExecutionRegionBindingCatalog
         return result;
     }
 
-    private static bool IsScriptBlock(ClauseElement element)
+    internal static bool IsScriptBlock(ClauseElement element)
     {
         if (element.Kind != ArgKind.DynamicSkip)
         {

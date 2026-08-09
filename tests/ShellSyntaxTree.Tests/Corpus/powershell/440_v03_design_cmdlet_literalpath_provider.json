@@ -1,0 +1,128 @@
+{
+  "name": "V03 design cmdlet literalpath provider",
+  "input": "Get-Content -LiteralPath \u0022FileSystem::C:\\logs\\x.txt\u0022",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-Content"
+        ],
+        "args": [
+          {
+            "raw": "-LiteralPath",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0022FileSystem::C:\\logs\\x.txt\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/logs/x.txt"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Get-Content",
+            "value": "Get-Content",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-LiteralPath",
+            "value": "-LiteralPath",
+            "role": "Argument",
+            "sourceStart": 12,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "\u0022FileSystem::C:\\logs\\x.txt\u0022",
+            "value": "FileSystem::C:\\logs\\x.txt",
+            "role": "Argument",
+            "sourceStart": 25,
+            "sourceLength": 27,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/logs/x.txt"
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 52,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 52,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 52
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "FileSystem::C:\\logs\\x.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "Promotes stable design case pwsh-cmdlet-literalpath-provider."
+}

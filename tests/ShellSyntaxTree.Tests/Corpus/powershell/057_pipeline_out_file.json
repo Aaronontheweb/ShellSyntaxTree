@@ -1,6 +1,7 @@
 {
   "name": "Pipeline out file",
   "input": "Get-Process | Out-File C:\\out\\procs.txt",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

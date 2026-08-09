@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
+using ShellSyntaxTree.Internal.Bash.Verbs;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
 using ShellSyntaxTree.Internal.Pwsh.Verbs;
 using ShellSyntaxTree.Internal.Resolving;
@@ -364,6 +365,7 @@ internal static class PwshPersistentStateMutation
     internal static bool TryGetEffect(
         Clause clause,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
+        bool providerLocationUnknown,
         out bool unknownCwd)
     {
         unknownCwd = false;
@@ -378,11 +380,21 @@ internal static class PwshPersistentStateMutation
             return true;
         }
 
+        if (IsPowerShellScriptInvocation(clause))
+        {
+            // An external script executes in this runspace and its body is not
+            // available to the parser. It can persist location, command
+            // resolution, variable, and process-environment mutations.
+            unknownCwd = true;
+            return true;
+        }
+
         if (IsProviderStateMutation(
                 verb,
                 clause,
                 effectiveArguments,
-                failOnUnproved: true))
+                failOnUnproved: true,
+                providerLocationUnknown: providerLocationUnknown))
         {
             return true;
         }
@@ -488,7 +500,8 @@ internal static class PwshPersistentStateMutation
 
     internal static bool MayEscapeChildRunspaceProcess(
         Clause clause,
-        IReadOnlyList<EffectiveArgument> effectiveArguments)
+        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        bool providerLocationUnknown)
     {
         var verb = GetCanonicalVerb(clause);
         if (verb is null)
@@ -496,7 +509,8 @@ internal static class PwshPersistentStateMutation
             return true;
         }
 
-        if (IsInvokeExpression(verb) ||
+        if (IsPowerShellScriptInvocation(clause) ||
+            IsInvokeExpression(verb) ||
             verb.Equals("Import-Module", StringComparison.OrdinalIgnoreCase) ||
             verb.Equals("New-Module", StringComparison.OrdinalIgnoreCase) ||
             verb.Equals("Import-PSSession", StringComparison.OrdinalIgnoreCase))
@@ -509,18 +523,132 @@ internal static class PwshPersistentStateMutation
                 verb,
                 clause,
                 effectiveArguments,
-                failOnUnproved: true) &&
+                failOnUnproved: true,
+                providerLocationUnknown: providerLocationUnknown) &&
             HasMutableOrUnprovedProviderTarget(
                 verb,
                 clause,
                 effectiveArguments,
                 failOnUnproved: true,
-                selection: StateProviderSelection.Environment);
+                selection: StateProviderSelection.Environment,
+                providerLocationUnknown: providerLocationUnknown);
+    }
+
+    internal static bool MayMutateAutomaticHome(
+        Clause clause,
+        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        bool providerLocationUnknown)
+    {
+        var verb = GetCanonicalVerb(clause);
+        if (verb is null)
+        {
+            return true;
+        }
+
+        if (IsPowerShellScriptInvocation(clause) ||
+            IsVariableCommand(verb) &&
+            VariableCommandMayTargetAutomaticHome(
+                verb,
+                clause,
+                effectiveArguments) ||
+            IsInvokeExpression(verb) ||
+            verb.Equals("Import-Module", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("New-Module", StringComparison.OrdinalIgnoreCase) ||
+            verb.Equals("Import-PSSession", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return IsProviderStateMutation(
+                verb,
+                clause,
+                effectiveArguments,
+                failOnUnproved: true,
+                providerLocationUnknown: providerLocationUnknown) &&
+            HasMutableOrUnprovedProviderTarget(
+                verb,
+                clause,
+                effectiveArguments,
+                failOnUnproved: true,
+                selection: StateProviderSelection.Variable,
+                providerLocationUnknown: providerLocationUnknown);
+    }
+
+    private static bool IsVariableCommand(string verb) =>
+        verb.Equals("Set-Variable", StringComparison.OrdinalIgnoreCase) ||
+        verb.Equals("New-Variable", StringComparison.OrdinalIgnoreCase) ||
+        verb.Equals("Remove-Variable", StringComparison.OrdinalIgnoreCase) ||
+        verb.Equals("Clear-Variable", StringComparison.OrdinalIgnoreCase);
+
+    private static bool VariableCommandMayTargetAutomaticHome(
+        string verb,
+        Clause clause,
+        IReadOnlyList<EffectiveArgument> effectiveArguments)
+    {
+        if (!TryGetAliasMutationNames(
+                verb,
+                clause,
+                effectiveArguments,
+                out var variableNames))
+        {
+            return true;
+        }
+
+        foreach (var variableName in variableNames)
+        {
+            var candidate = TrimMatchingQuotes(variableName);
+            if (candidate.Length > 0 && candidate[0] == '+')
+            {
+                candidate = candidate.Substring(1);
+            }
+
+            var scopeSeparator = candidate.IndexOf(':');
+            if (scopeSeparator > 0 &&
+                IsVariableScope(candidate.Substring(0, scopeSeparator)))
+            {
+                candidate = candidate.Substring(scopeSeparator + 1);
+            }
+
+            if (PwshResolver.IsAutomaticHomeVariable(candidate))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsVariableScope(string value) =>
+        value.Equals("Global", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("Local", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("Private", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("Script", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPowerShellScriptInvocation(Clause clause)
+    {
+        if (clause.Verb.Tokens.Count != 1)
+        {
+            return false;
+        }
+
+        return clause.Verb.Tokens[0]
+            .EndsWith(".ps1", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static bool PreservesCommandResolution(Clause clause)
+    {
+        var verb = GetCanonicalVerb(clause);
+        return verb is not null &&
+            (verb.Equals("Set-Variable", StringComparison.OrdinalIgnoreCase) ||
+             verb.Equals("New-Variable", StringComparison.OrdinalIgnoreCase) ||
+             verb.Equals("Remove-Variable", StringComparison.OrdinalIgnoreCase) ||
+             verb.Equals("Clear-Variable", StringComparison.OrdinalIgnoreCase));
     }
 
     internal static bool TryGetCommandResolutionMutation(
         Clause clause,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
+        bool providerLocationUnknown,
         out bool invalidatesAll,
         out IReadOnlyList<string> commandNames)
     {
@@ -564,9 +692,23 @@ internal static class PwshPersistentStateMutation
                 verb,
                 clause,
                 effectiveArguments,
-                failOnUnproved: true))
+                failOnUnproved: true,
+                providerLocationUnknown: providerLocationUnknown))
         {
             return false;
+        }
+
+        if (providerLocationUnknown &&
+            HasMutableOrUnprovedProviderTarget(
+                verb,
+                clause,
+                effectiveArguments,
+                failOnUnproved: true,
+                selection: StateProviderSelection.CommandResolution,
+                providerLocationUnknown: true))
+        {
+            invalidatesAll = true;
+            return true;
         }
 
         if (verb.Equals("Rename-Item", StringComparison.OrdinalIgnoreCase) ||
@@ -1330,7 +1472,8 @@ internal static class PwshPersistentStateMutation
         string verb,
         Clause clause,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
-        bool failOnUnproved)
+        bool failOnUnproved,
+        bool providerLocationUnknown = false)
     {
         if (!verb.Equals("Set-Item", StringComparison.OrdinalIgnoreCase) &&
             !verb.Equals("New-Item", StringComparison.OrdinalIgnoreCase) &&
@@ -1351,7 +1494,8 @@ internal static class PwshPersistentStateMutation
             verb,
             clause,
             effectiveArguments,
-            failOnUnproved);
+            failOnUnproved,
+            providerLocationUnknown: providerLocationUnknown);
     }
 
     private static bool HasMutableOrUnprovedProviderTarget(
@@ -1359,7 +1503,8 @@ internal static class PwshPersistentStateMutation
         Clause clause,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
         bool failOnUnproved,
-        StateProviderSelection selection = StateProviderSelection.AnyMutable)
+        StateProviderSelection selection = StateProviderSelection.AnyMutable,
+        bool providerLocationUnknown = false)
     {
         var positionalIndex = 0;
         var pendingParameter = ProviderParameterRole.None;
@@ -1386,7 +1531,8 @@ internal static class PwshPersistentStateMutation
                             elementIndex,
                             effectiveArguments,
                             failOnUnproved,
-                            selection))
+                            selection,
+                            providerLocationUnknown))
                     {
                         return true;
                     }
@@ -1406,7 +1552,8 @@ internal static class PwshPersistentStateMutation
                     elementIndex,
                     effectiveArguments,
                     failOnUnproved,
-                    selection))
+                    selection,
+                    providerLocationUnknown))
             {
                 return true;
             }
@@ -1430,12 +1577,22 @@ internal static class PwshPersistentStateMutation
         int elementIndex,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
         bool failOnUnproved,
-        StateProviderSelection selection)
+        StateProviderSelection selection,
+        bool providerLocationUnknown)
     {
         if (IsSelectedStateProviderPath(element.Value, selection) ||
             IsSelectedStateProviderPath(element.Raw, selection) ||
             element.Resolved is not null &&
             IsSelectedStateProviderPath(element.Resolved, selection))
+        {
+            return true;
+        }
+
+        if (providerLocationUnknown &&
+            TargetDependsOnProviderLocation(
+                element,
+                elementIndex,
+                effectiveArguments))
         {
             return true;
         }
@@ -1473,12 +1630,77 @@ internal static class PwshPersistentStateMutation
         return true;
     }
 
+    private static bool TargetDependsOnProviderLocation(
+        ClauseElement element,
+        int elementIndex,
+        IReadOnlyList<EffectiveArgument> effectiveArguments)
+    {
+        if (IsProviderLocationIndependent(element.Value) ||
+            IsProviderLocationIndependent(element.Raw) ||
+            element.Resolved is not null &&
+            IsProviderLocationIndependent(element.Resolved))
+        {
+            return false;
+        }
+
+        foreach (var effective in effectiveArguments)
+        {
+            if (effective.ClauseElementIndex != elementIndex)
+            {
+                continue;
+            }
+
+            if (effective.Value.Kind is not (
+                    ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet) ||
+                effective.Value.Values.Count == 0)
+            {
+                return true;
+            }
+
+            foreach (var value in effective.Value.Values)
+            {
+                if (!IsProviderLocationIndependent(value))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool IsProviderLocationIndependent(string value)
+    {
+        value = TrimMatchingQuotes(value);
+        if (value.Length > 1 && value[0] == '-')
+        {
+            var separator = FindParameterValueSeparator(value);
+            if (separator >= 0 && separator + 1 < value.Length)
+            {
+                value = TrimMatchingQuotes(value.Substring(separator + 1));
+            }
+        }
+
+        if (value.StartsWith("/", StringComparison.Ordinal) ||
+            value.StartsWith("\\", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        return value.IndexOf("::", StringComparison.Ordinal) > 0 ||
+            value.IndexOf(':') > 0;
+    }
+
     private static bool IsSelectedStateProviderPath(
         string value,
         StateProviderSelection selection) => selection switch
         {
             StateProviderSelection.Environment =>
                 IsEnvironmentStateProviderPath(value),
+            StateProviderSelection.Variable =>
+                IsVariableStateProviderPath(value),
             StateProviderSelection.CommandResolution =>
                 IsCommandResolutionStateProviderPath(value),
             _ => IsMutableStateProviderPath(value),
@@ -1593,7 +1815,33 @@ internal static class PwshPersistentStateMutation
 
     private static bool HasEnvironmentStateProviderPrefix(string providerPath) =>
         providerPath.StartsWith("Environment:", StringComparison.OrdinalIgnoreCase) ||
-        providerPath.StartsWith("Env:", StringComparison.OrdinalIgnoreCase);
+            providerPath.StartsWith("Env:", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsVariableStateProviderPath(string value)
+    {
+        value = TrimMatchingQuotes(value);
+        if (value.StartsWith("Variable:", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (value.Length > 1 && value[0] == '-')
+        {
+            var parameterSeparator = value.IndexOf(':');
+            if (parameterSeparator > 1 && parameterSeparator + 1 < value.Length)
+            {
+                return TrimMatchingQuotes(value.Substring(parameterSeparator + 1))
+                    .StartsWith("Variable:", StringComparison.OrdinalIgnoreCase);
+            }
+        }
+
+        var providerStart = Math.Max(
+            value.LastIndexOf('\\'),
+            value.LastIndexOf('/')) + 1;
+        return providerStart > 0 &&
+            value.Substring(providerStart)
+                .StartsWith("Variable:", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static bool IsCommandResolutionStateProviderPath(string value)
     {
@@ -1655,6 +1903,7 @@ internal static class PwshPersistentStateMutation
     {
         AnyMutable,
         Environment,
+        Variable,
         CommandResolution,
     }
 }
@@ -1723,6 +1972,11 @@ internal sealed class PwshForEachValueAnalyzer
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 processWideStateInvalidated: false,
+                configuredHomeAvailable: true,
+                homeEnvironmentAvailable: options.InitialStateMode ==
+                    PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+                automaticHomeValueAvailable: options.InitialStateMode ==
+                    PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
                 new List<BindingFrame>()));
         if (!analyzer._isComplete)
         {
@@ -1794,6 +2048,7 @@ internal sealed class PwshForEachValueAnalyzer
         var isForEachIncomplete = ContainsReference(_incompleteClauses, simple.Clause);
         var effective = CreateEffectiveArguments(
             source.ValueProvenance,
+            simple.Clause,
             current,
             includeUnresolved: isForEachIncomplete ||
                 current.CommandResolutionInvalidated);
@@ -1816,15 +2071,40 @@ internal sealed class PwshForEachValueAnalyzer
             PwshPersistentStateMutation.TryGetCommandResolutionMutation(
                 simple.Clause,
                 effective,
+                providerLocationUnknown: current.WorkingDirectory is null,
                 out var invalidatesAllCommandNames,
                 out var mutatedCommandNames);
-        if (simple.Clause.Verb.IsDynamic ||
-            current.MayResolveCommandToProcessMutation(simple.Clause) &&
-            !IsCommandIdentityProven(simple.Clause, current))
+        var commandIdentityMayMutateState = simple.Clause.Verb.IsDynamic ||
+            !IsCommandIdentityProven(simple.Clause, current);
+        var mayMutateAutomaticHome =
+            commandIdentityMayMutateState ||
+            PwshPersistentStateMutation.MayMutateAutomaticHome(
+                simple.Clause,
+                effective,
+                providerLocationUnknown: current.WorkingDirectory is null);
+        var preservesCommandResolution =
+            !commandIdentityMayMutateState &&
+            PwshPersistentStateMutation.PreservesCommandResolution(simple.Clause);
+        if (commandIdentityMayMutateState)
         {
-            // An invocation reached after alias/function/module mutation can be
-            // any in-process command, including one that writes Env: state.
+            // An unproved invocation can resolve to arbitrary in-process code
+            // regardless of its authored verb, including through ambient
+            // aliases, functions, modules, or observed mutations.
+            _nonRegionStateMutationCount++;
+            _childScopeEscapeRiskCount++;
             _childRunspaceProcessEscapeRiskCount++;
+            return ApplyExecutionRegionEffect(
+                simple,
+                current,
+                PwshFlowResult.Both(ApplyPersistentStateInvalidation(
+                    current,
+                    unknownCwd: true,
+                    hasCommandResolutionMutation: true,
+                    invalidatesAllCommandNames: true,
+                    mutatedCommandNames: Array.Empty<string>(),
+                    mayEscapeChildRunspaceProcess: true,
+                    mayMutateAutomaticHome: true,
+                    preservesCommandResolution: false)));
         }
 
         var location = AnalyzeSetLocation(simple, current);
@@ -1835,12 +2115,14 @@ internal sealed class PwshForEachValueAnalyzer
             if (PwshPersistentStateMutation.TryGetEffect(
                     simple.Clause,
                     effective,
+                    providerLocationUnknown: current.WorkingDirectory is null,
                     out var locationEffectUnknownCwd))
             {
                 var mayEscapeChildRunspaceProcess =
                     PwshPersistentStateMutation.MayEscapeChildRunspaceProcess(
                         simple.Clause,
-                        effective);
+                        effective,
+                        providerLocationUnknown: current.WorkingDirectory is null);
                 if (PwshPersistentStateMutation.MayEscapeChildScope(
                         simple.Clause,
                         effective))
@@ -1862,7 +2144,9 @@ internal sealed class PwshForEachValueAnalyzer
                             hasCommandResolutionMutation,
                             invalidatesAllCommandNames,
                             mutatedCommandNames,
-                            mayEscapeChildRunspaceProcess)
+                            mayEscapeChildRunspaceProcess,
+                            mayMutateAutomaticHome,
+                            preservesCommandResolution)
                         : null,
                     flow.OnFailure is AnalysisContext failure
                         ? ApplyPersistentStateInvalidation(
@@ -1871,38 +2155,27 @@ internal sealed class PwshForEachValueAnalyzer
                             hasCommandResolutionMutation,
                             invalidatesAllCommandNames,
                             mutatedCommandNames,
-                            mayEscapeChildRunspaceProcess)
+                            mayEscapeChildRunspaceProcess,
+                            mayMutateAutomaticHome,
+                            preservesCommandResolution)
                         : null));
             }
 
             return ApplyExecutionRegionEffect(simple, current, location.Value);
         }
 
-        if (simple.Clause.Verb.IsDynamic)
-        {
-            _nonRegionStateMutationCount++;
-            _childScopeEscapeRiskCount++;
-            _childRunspaceProcessEscapeRiskCount++;
-            return ApplyExecutionRegionEffect(
-                simple,
-                current,
-                PwshFlowResult.Both(
-                    current
-                        .Invalidate(unknownCwd: true)
-                        .WithRunspaceCommandResolutionProcessRisk()
-                        .WithProcessWideStateInvalidated()));
-        }
-
         if (PwshPersistentStateMutation.TryGetEffect(
                 simple.Clause,
                 effective,
+                providerLocationUnknown: current.WorkingDirectory is null,
                 out var unknownCwd))
         {
             _nonRegionStateMutationCount++;
             var mayEscapeChildRunspaceProcess =
                 PwshPersistentStateMutation.MayEscapeChildRunspaceProcess(
                     simple.Clause,
-                    effective);
+                    effective,
+                    providerLocationUnknown: current.WorkingDirectory is null);
             if (PwshPersistentStateMutation.MayEscapeChildScope(
                     simple.Clause,
                     effective))
@@ -1924,10 +2197,18 @@ internal sealed class PwshForEachValueAnalyzer
                     hasCommandResolutionMutation,
                     invalidatesAllCommandNames,
                     mutatedCommandNames,
-                    mayEscapeChildRunspaceProcess)));
+                    mayEscapeChildRunspaceProcess,
+                    mayMutateAutomaticHome,
+                    preservesCommandResolution)));
         }
 
-        return ApplyExecutionRegionEffect(simple, current, PwshFlowResult.Both(current));
+        return ApplyExecutionRegionEffect(
+            simple,
+            current,
+            PwshFlowResult.Both(
+                mayMutateAutomaticHome
+                    ? current.WithoutAutomaticHomeValue()
+                    : current));
     }
 
     private static AnalysisContext ApplyPersistentStateInvalidation(
@@ -1936,16 +2217,24 @@ internal sealed class PwshForEachValueAnalyzer
         bool hasCommandResolutionMutation,
         bool invalidatesAllCommandNames,
         IReadOnlyList<string> mutatedCommandNames,
-        bool mayEscapeChildRunspaceProcess)
+        bool mayEscapeChildRunspaceProcess,
+        bool mayMutateAutomaticHome,
+        bool preservesCommandResolution)
     {
         var invalidated = input.Invalidate(
             unknownCwd,
-            invalidateCommandResolution: !hasCommandResolutionMutation);
+            invalidateCommandResolution:
+                !hasCommandResolutionMutation && !preservesCommandResolution);
         if (hasCommandResolutionMutation)
         {
             invalidated = invalidated.WithRunspaceCommandResolutionProcessRisk(
                 invalidatesAllCommandNames,
                 mutatedCommandNames);
+        }
+
+        if (mayMutateAutomaticHome)
+        {
+            invalidated = invalidated.WithoutAutomaticHomeValue();
         }
 
         return mayEscapeChildRunspaceProcess
@@ -1992,13 +2281,22 @@ internal sealed class PwshForEachValueAnalyzer
                 return flow;
             }
 
+            AnalyzeUnreachableRegions(
+                simple.ExecutionRegions,
+                receiverInput
+                    .Invalidate(unknownCwd: true)
+                    .WithoutConfiguredHome());
             _childScopeEscapeRiskCount++;
             return new PwshFlowResult(
                 flow.OnSuccess is AnalysisContext success
-                    ? success.Invalidate(unknownCwd: true)
+                    ? success
+                        .Invalidate(unknownCwd: true)
+                        .WithoutAutomaticHomeValue()
                     : null,
                 flow.OnFailure is AnalysisContext failure
-                    ? failure.Invalidate(unknownCwd: true)
+                    ? failure
+                        .Invalidate(unknownCwd: true)
+                        .WithoutAutomaticHomeValue()
                     : null);
         }
 
@@ -2180,6 +2478,11 @@ internal sealed class PwshForEachValueAnalyzer
                         .WithConditionalProcessWideStateInvalidation(
                             firstVisitMayEscape)
                         .WithoutBindings();
+                    if (firstVisitMayEscape)
+                    {
+                        repeatedInput = repeatedInput.WithoutConfiguredHome();
+                    }
+
                     if (!binding.HasUseNewRunspace)
                     {
                         repeatedInput = repeatedInput
@@ -2482,7 +2785,9 @@ internal sealed class PwshForEachValueAnalyzer
         var enclosingStageMayReceiveInput = _pipelineStageMayReceiveInput;
         _pipelineStageMayReceiveInput = false;
         var bodyInput = _pipelineStageEffectsMayReachRegionBodies
-            ? input.Invalidate(unknownCwd: true)
+            ? input
+                .Invalidate(unknownCwd: true)
+                .WithoutAutomaticHomeValue()
             : input;
         var flow = AnalyzeBlock(body, bodyInput);
         _pipelineStageMayReceiveInput = enclosingStageMayReceiveInput;
@@ -2509,6 +2814,11 @@ internal sealed class PwshForEachValueAnalyzer
         Clause clause,
         AnalysisContext input)
     {
+        if (!input.HasConstrainedCommandResolutionBaseline)
+        {
+            return false;
+        }
+
         if (!input.CommandResolutionInvalidated)
         {
             return true;
@@ -2744,16 +3054,37 @@ internal sealed class PwshForEachValueAnalyzer
 
         foreach (var provenance in source.RedirectTargetProvenance)
         {
-            var evaluationContext = provenance.UsesOutermostInvocationScope &&
-                _invocationRedirectContexts.Count > 0
-                ? _invocationRedirectContexts[0]
-                : input;
             if (provenance.RedirectIndex < 0 ||
                 provenance.RedirectIndex >= rewritten.Length ||
-                !rewritten[provenance.RedirectIndex].IsPathRelevant ||
-                !evaluationContext.TryEvaluateValue(
-                    provenance.Value,
-                    out var domain) ||
+                !rewritten[provenance.RedirectIndex].IsPathRelevant)
+            {
+                continue;
+            }
+
+            // Parser-time redirect compatibility values are only a baseline.
+            // Clear them before occurrence-local evaluation so mutations or
+            // remote execution cannot leave stale local values behind.
+            rewritten[provenance.RedirectIndex] =
+                rewritten[provenance.RedirectIndex] with
+                {
+                    Target = ShellValueDomain.Unknown,
+                };
+            if (!TryGetRedirectEvaluationContext(
+                    provenance.InvocationScopeDepth,
+                    input,
+                    out var evaluationContext))
+            {
+                continue;
+            }
+
+            if (!(evaluationContext.TryEvaluateValue(
+                      provenance.Value,
+                      out var domain) ||
+                  TryAnalyzeParserKnownValue(
+                      provenance.Value,
+                      usesNativeBinding: true,
+                      evaluationContext,
+                      out domain)) ||
                 domain.Kind is not (
                     ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
             {
@@ -2769,6 +3100,13 @@ internal sealed class PwshForEachValueAnalyzer
             var resolvedAll = true;
             foreach (var candidate in domain.Values)
             {
+                if (!evaluationContext.ConfiguredHomeAvailable &&
+                    IsRedirectHomePath(candidate))
+                {
+                    resolvedAll = false;
+                    break;
+                }
+
                 var resolved = PwshResolver.Resolve(
                     ShellValue.Literal(candidate),
                     treatAsPath: true,
@@ -2799,6 +3137,34 @@ internal sealed class PwshForEachValueAnalyzer
 
         return rewritten;
     }
+
+    private bool TryGetRedirectEvaluationContext(
+        int invocationScopeDepth,
+        AnalysisContext input,
+        out AnalysisContext context)
+    {
+        if (invocationScopeDepth == 0)
+        {
+            context = input;
+            return true;
+        }
+
+        if (invocationScopeDepth > 0 &&
+            invocationScopeDepth <= _invocationRedirectContexts.Count)
+        {
+            context = _invocationRedirectContexts[
+                _invocationRedirectContexts.Count - invocationScopeDepth];
+            return true;
+        }
+
+        context = input;
+        return false;
+    }
+
+    private static bool IsRedirectHomePath(string value) =>
+        value.Length > 0 &&
+        value[0] == '~' &&
+        (value.Length == 1 || value[1] is '/' or '\\');
 
     private static IReadOnlyList<RedirectAnalysis> JoinRedirects(
         IReadOnlyList<RedirectAnalysis> left,
@@ -3030,6 +3396,7 @@ internal sealed class PwshForEachValueAnalyzer
         return PwshPersistentStateMutation.TryGetEffect(
             simple.Clause,
             Array.Empty<EffectiveArgument>(),
+            providerLocationUnknown: false,
             out _);
     }
 
@@ -3094,11 +3461,14 @@ internal sealed class PwshForEachValueAnalyzer
         _invocationRedirectContexts.Add(input);
         try
         {
+            var bodyInput = group.GroupKind == ShellGroupKind.IsolatedScope
+                ? input.CreateDecodedHostInput()
+                : input.WithoutBindings().Invalidate(
+                    unknownCwd: false,
+                    invalidateCommandResolution: false);
             AnalyzeBlock(
                 group.Body,
-                input.WithoutBindings().Invalidate(
-                    unknownCwd: false,
-                    invalidateCommandResolution: false));
+                bodyInput);
         }
         finally
         {
@@ -3145,7 +3515,10 @@ internal sealed class PwshForEachValueAnalyzer
 
         if (region.Origin != ExecutionRegionOrigin.DirectCall)
         {
-            return PwshFlowResult.Both(input.Invalidate(unknownCwd: true));
+            return PwshFlowResult.Both(
+                input
+                    .Invalidate(unknownCwd: true)
+                    .WithoutAutomaticHomeValue());
         }
 
         return new PwshFlowResult(
@@ -3185,6 +3558,11 @@ internal sealed class PwshForEachValueAnalyzer
         if (bodyExit.Value.ProcessWideStateInvalidated)
         {
             restored = restored.WithProcessWideStateInvalidated();
+        }
+
+        if (!bodyExit.Value.AutomaticHomeValueAvailable)
+        {
+            restored = restored.WithoutAutomaticHomeValue();
         }
 
         if (!locationMutated && string.Equals(
@@ -3663,17 +4041,20 @@ internal sealed class PwshForEachValueAnalyzer
             }
 
             var compatibility = clause.Redirects[fact.RedirectIndex];
+            var hasProvenance = HasRedirectProvenance(
+                provenance,
+                fact.RedirectIndex);
             rewritten[index] = fact with
             {
-                Target = compatibility.IsDynamicSkip
-                    ? HasRedirectProvenance(provenance, fact.RedirectIndex)
-                        ? fact.Target
-                        : ShellValueDomain.Unknown
-                    : new ShellValueDomain
-                    {
-                        Kind = ShellValueDomainKind.Exact,
-                        Values = new[] { compatibility.Target },
-                    },
+                Target = hasProvenance
+                    ? fact.Target
+                    : compatibility.IsDynamicSkip
+                        ? ShellValueDomain.Unknown
+                        : new ShellValueDomain
+                        {
+                            Kind = ShellValueDomainKind.Exact,
+                            Values = new[] { compatibility.Target },
+                        },
             };
         }
 
@@ -4477,14 +4858,23 @@ internal sealed class PwshForEachValueAnalyzer
 
     private static string NormalizePath(string path) => path.Replace('\\', '/');
 
-    private static IReadOnlyList<EffectiveArgument> CreateEffectiveArguments(
+    private IReadOnlyList<EffectiveArgument> CreateEffectiveArguments(
         IReadOnlyList<ShellValueElementProvenance> provenance,
+        Clause clause,
         AnalysisContext context,
         bool includeUnresolved)
     {
         var effective = new List<EffectiveArgument>();
         foreach (var value in provenance)
         {
+            if (value.ClauseElementIndex >= 0 &&
+                value.ClauseElementIndex < clause.Elements.Count &&
+                PwshExecutionRegionBindingCatalog.IsScriptBlock(
+                    clause.Elements[value.ClauseElementIndex]))
+            {
+                continue;
+            }
+
             if (context.TryAnalyzeEffectiveValue(value.Value, out var domain))
             {
                 effective.Add(new EffectiveArgument
@@ -4492,6 +4882,33 @@ internal sealed class PwshForEachValueAnalyzer
                     ClauseElementIndex = value.ClauseElementIndex,
                     Value = domain,
                 });
+            }
+            else if (RequiresIndependentEffectiveValue(clause, value))
+            {
+                if (TryAnalyzeParserKnownValue(
+                        value.Value,
+                        EffectiveArgumentUsesNativeBinding(
+                            value,
+                            clause,
+                            context),
+                        context,
+                        out domain) ||
+                    IsPolicySensitiveValue(clause, value))
+                {
+                    effective.Add(new EffectiveArgument
+                    {
+                        ClauseElementIndex = value.ClauseElementIndex,
+                        Value = domain,
+                    });
+                }
+                else if (includeUnresolved && ContainsExpansion(value.Value))
+                {
+                    effective.Add(new EffectiveArgument
+                    {
+                        ClauseElementIndex = value.ClauseElementIndex,
+                        Value = ShellValueDomain.Unknown,
+                    });
+                }
             }
             else if (includeUnresolved && ContainsExpansion(value.Value))
             {
@@ -4504,6 +4921,313 @@ internal sealed class PwshForEachValueAnalyzer
         }
 
         return effective.ToArray();
+    }
+
+    private static bool RequiresIndependentEffectiveValue(
+        Clause clause,
+        ShellValueElementProvenance provenance)
+    {
+        if (provenance.ClauseElementIndex < 0 ||
+            provenance.ClauseElementIndex >= clause.Elements.Count)
+        {
+            return false;
+        }
+
+        var nonEmptyLiteralFragments = 0;
+        var hasLiteralLexicalTransform = false;
+        foreach (var fragment in provenance.Value.Fragments)
+        {
+            if (fragment.Kind != ShellValueFragmentKind.Literal)
+            {
+                return true;
+            }
+
+            if (fragment.Value.Length == 0)
+            {
+                continue;
+            }
+
+            nonEmptyLiteralFragments++;
+            if (fragment.SourceLength != fragment.Value.Length)
+            {
+                hasLiteralLexicalTransform = true;
+            }
+        }
+
+        var element = clause.Elements[provenance.ClauseElementIndex];
+        if ((element.IsPath || element.IsFlag) &&
+            (hasLiteralLexicalTransform || nonEmptyLiteralFragments > 1))
+        {
+            return true;
+        }
+
+        return HasShellSpecificPathSpelling(provenance.Value.Decoded);
+    }
+
+    private static bool IsPolicySensitiveValue(
+        Clause clause,
+        ShellValueElementProvenance provenance)
+    {
+        if (provenance.ClauseElementIndex < 0 ||
+            provenance.ClauseElementIndex >= clause.Elements.Count)
+        {
+            return false;
+        }
+
+        var element = clause.Elements[provenance.ClauseElementIndex];
+
+        return element.IsPath ||
+            element.IsFlag ||
+            HasShellSpecificPathSpelling(provenance.Value.Decoded) ||
+            IsPolicySensitiveBinding(clause, provenance.ClauseElementIndex);
+    }
+
+    private static bool IsPolicySensitiveBinding(Clause clause, int targetElementIndex)
+    {
+        var canonicalVerb = clause.Verb.CanonicalVerb ??
+            (clause.Verb.Tokens.Count == 0 ? null : clause.Verb.Tokens[0]);
+        var cmdletStyle = IsCmdletStyle(clause);
+        var positionalIndex = 0;
+        string? pendingValue = null;
+
+        for (var index = 0; index < clause.Elements.Count; index++)
+        {
+            var element = clause.Elements[index];
+            if (element.Role != ClauseElementRole.Argument)
+            {
+                continue;
+            }
+
+            if (element.IsFlag)
+            {
+                if (index == targetElementIndex)
+                {
+                    return true;
+                }
+
+                var parameter = ParameterName(element.Value);
+                if (cmdletStyle)
+                {
+                    var binding = PwshBindingTables.Resolve(canonicalVerb, parameter);
+                    pendingValue = binding.Binding == PwshBinding.Value &&
+                        !HasInlineParameterValue(element.Value)
+                            ? binding.CanonicalName ?? parameter
+                            : null;
+                }
+                else
+                {
+                    var verb = clause.Verb.Tokens.Count == 0
+                        ? string.Empty
+                        : clause.Verb.Tokens[0];
+                    pendingValue = element.Value.IndexOf('=') < 0 &&
+                        BashVerbs.FlagsWithValue.TryGetValue(verb, out var flags) &&
+                        flags.Contains(parameter)
+                            ? parameter
+                            : null;
+                }
+
+                continue;
+            }
+
+            if (index == targetElementIndex)
+            {
+                if (pendingValue is not null)
+                {
+                    return true;
+                }
+
+                return cmdletStyle
+                    ? PwshPerVerbRules.IsPositionalPathArg(
+                        canonicalVerb,
+                        !string.IsNullOrEmpty(canonicalVerb) &&
+                            PwshVerbs.FileVerbs.Contains(canonicalVerb!),
+                        positionalIndex,
+                        element.Value)
+                    : BashPerVerbRules.IsPositionalPathArg(
+                        clause.Verb,
+                        positionalIndex,
+                        element.Value);
+            }
+
+            if (pendingValue is not null)
+            {
+                pendingValue = null;
+            }
+            else
+            {
+                positionalIndex++;
+            }
+        }
+
+        return false;
+    }
+
+    private static string ParameterName(string value)
+    {
+        var colon = value.IndexOf(':');
+        var equals = value.IndexOf('=');
+        var separator = colon < 0
+            ? equals
+            : equals < 0
+                ? colon
+                : Math.Min(colon, equals);
+        return separator < 0 ? value : value.Substring(0, separator);
+    }
+
+    private static bool HasInlineParameterValue(string value) =>
+        value.IndexOf(':') >= 0 || value.IndexOf('=') >= 0;
+
+    private bool TryAnalyzeParserKnownValue(
+        ShellValue value,
+        bool? usesNativeBinding,
+        AnalysisContext context,
+        out ShellValueDomain domain)
+    {
+        var homeDirectory = PwshResolver.GetHomeDirectory(_options);
+        var composed = new StringBuilder(value.Decoded.Length);
+        for (var fragmentIndex = 0;
+             fragmentIndex < value.Fragments.Count;
+             fragmentIndex++)
+        {
+            var fragment = value.Fragments[fragmentIndex];
+            if (fragment.Kind == ShellValueFragmentKind.Literal)
+            {
+                composed.Append(fragment.Value);
+                continue;
+            }
+
+            if (fragment.Kind != ShellValueFragmentKind.Expansion ||
+                fragment.Expansion is not ShellExpansionReference expansion)
+            {
+                domain = ShellValueDomain.Unknown;
+                return false;
+            }
+
+            if (expansion.Kind == ShellExpansionKind.Tilde)
+            {
+                if ((fragment.AllowedTransforms & ShellLexicalTransform.Tilde) != 0)
+                {
+                    var expandsWholeArgumentTilde = fragmentIndex == 0 &&
+                        composed.Length == 0 &&
+                        (value.Decoded.Length == 1 ||
+                         value.Decoded.Length > 1 &&
+                         value.Decoded[1] is '/' or '\\');
+                    if (!expandsWholeArgumentTilde)
+                    {
+                        composed.Append(fragment.Value);
+                        continue;
+                    }
+
+                    if (usesNativeBinding is null)
+                    {
+                        domain = ShellValueDomain.Unknown;
+                        return false;
+                    }
+
+                    if (usesNativeBinding == false)
+                    {
+                        composed.Append(fragment.Value);
+                        continue;
+                    }
+
+                    if (!context.ConfiguredHomeAvailable || homeDirectory.Length == 0)
+                    {
+                        domain = ShellValueDomain.Unknown;
+                        return false;
+                    }
+
+                    composed.Append(homeDirectory);
+                }
+                else
+                {
+                    composed.Append(fragment.Value);
+                }
+
+                continue;
+            }
+
+            if (expansion.Kind == ShellExpansionKind.Glob)
+            {
+                if ((fragment.AllowedTransforms & ShellLexicalTransform.Glob) != 0)
+                {
+                    if (usesNativeBinding is null)
+                    {
+                        domain = ShellValueDomain.Unknown;
+                        return false;
+                    }
+
+                    if (usesNativeBinding == true)
+                    {
+                        domain = ShellValueDomain.Unknown;
+                        return false;
+                    }
+                }
+
+                composed.Append(fragment.Value);
+                continue;
+            }
+
+            var hasKnownHomeVariable =
+                PwshResolver.IsAutomaticHomeVariable(expansion.Name)
+                    ? context.AutomaticHomeValueAvailable
+                    : PwshResolver.IsUserProfileEnvironmentVariable(expansion.Name) &&
+                        context.HomeEnvironmentAvailable &&
+                        !context.ProcessWideStateInvalidated;
+            if (expansion.Kind != ShellExpansionKind.Variable ||
+                !hasKnownHomeVariable ||
+                (fragment.AllowedTransforms & ShellLexicalTransform.Variable) == 0 ||
+                homeDirectory.Length == 0)
+            {
+                domain = ShellValueDomain.Unknown;
+                return false;
+            }
+
+            composed.Append(homeDirectory);
+        }
+
+        domain = new ShellValueDomain
+        {
+            Kind = ShellValueDomainKind.Exact,
+            Values = new[] { composed.ToString() },
+        };
+        return true;
+    }
+
+    private static bool? EffectiveArgumentUsesNativeBinding(
+        ShellValueElementProvenance provenance,
+        Clause clause,
+        AnalysisContext context)
+    {
+        if (clause.Verb.IsDynamic)
+        {
+            return null;
+        }
+
+        return context.HasConstrainedCommandResolutionBaseline &&
+            IsCommandIdentityProven(clause, context)
+                ? provenance.UsesNativeArgumentBinding
+                : null;
+    }
+
+    private static bool HasShellSpecificPathSpelling(string value)
+    {
+        if (value == "~" || value.IndexOfAny(new[] { '*', '?', '[' }) >= 0)
+        {
+            return true;
+        }
+
+        if (value.IndexOf("::", StringComparison.Ordinal) > 0)
+        {
+            return true;
+        }
+
+        var colon = value.IndexOf(':');
+        return colon > 1 &&
+            colon + 1 < value.Length &&
+            value[colon + 1] is '/' or '\\' &&
+            !(value[colon + 1] == '/' &&
+              colon + 2 < value.Length &&
+              value[colon + 2] == '/');
     }
 
     private static bool ContainsExpansion(ShellValue value)
@@ -4559,6 +5283,9 @@ internal sealed class PwshForEachValueAnalyzer
             bool allRunspaceCommandResolutionMayReachProcessMutation,
             IReadOnlyList<string> runspaceProcessMutationCommandNames,
             bool processWideStateInvalidated,
+            bool configuredHomeAvailable,
+            bool homeEnvironmentAvailable,
+            bool automaticHomeValueAvailable,
             IReadOnlyList<BindingFrame> bindings)
         {
             WorkingDirectory = workingDirectory;
@@ -4573,6 +5300,9 @@ internal sealed class PwshForEachValueAnalyzer
             _runspaceProcessMutationCommandNames =
                 runspaceProcessMutationCommandNames;
             ProcessWideStateInvalidated = processWideStateInvalidated;
+            ConfiguredHomeAvailable = configuredHomeAvailable;
+            HomeEnvironmentAvailable = homeEnvironmentAvailable;
+            AutomaticHomeValueAvailable = automaticHomeValueAvailable;
             _bindings = bindings;
         }
 
@@ -4589,6 +5319,12 @@ internal sealed class PwshForEachValueAnalyzer
         internal bool AllRunspaceCommandResolutionMayReachProcessMutation { get; }
 
         internal bool ProcessWideStateInvalidated { get; }
+
+        internal bool ConfiguredHomeAvailable { get; }
+
+        internal bool HomeEnvironmentAvailable { get; }
+
+        internal bool AutomaticHomeValueAvailable { get; }
 
         internal bool HasRunspaceCommandResolutionProcessRisk =>
             AllRunspaceCommandResolutionMayReachProcessMutation ||
@@ -4644,6 +5380,9 @@ internal sealed class PwshForEachValueAnalyzer
                     AllRunspaceCommandResolutionMayReachProcessMutation,
                     _runspaceProcessMutationCommandNames,
                     ProcessWideStateInvalidated,
+                    ConfiguredHomeAvailable,
+                    HomeEnvironmentAvailable,
+                    AutomaticHomeValueAvailable,
                     _bindings);
             }
 
@@ -4665,6 +5404,9 @@ internal sealed class PwshForEachValueAnalyzer
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 ProcessWideStateInvalidated,
+                ConfiguredHomeAvailable,
+                HomeEnvironmentAvailable,
+                AutomaticHomeValueAvailable,
                 unknown);
         }
 
@@ -4678,6 +5420,9 @@ internal sealed class PwshForEachValueAnalyzer
                 allRunspaceCommandResolutionMayReachProcessMutation: true,
                 Array.Empty<string>(),
                 ProcessWideStateInvalidated,
+                ConfiguredHomeAvailable,
+                HomeEnvironmentAvailable,
+                AutomaticHomeValueAvailable,
                 _bindings);
 
         internal AnalysisContext WithRunspaceCommandResolutionProcessRisk(
@@ -4710,6 +5455,9 @@ internal sealed class PwshForEachValueAnalyzer
                     allRunspaceCommandResolutionMayReachProcessMutation: false,
                     names,
                     ProcessWideStateInvalidated,
+                    ConfiguredHomeAvailable,
+                    HomeEnvironmentAvailable,
+                    AutomaticHomeValueAvailable,
                     _bindings);
         }
 
@@ -4731,12 +5479,45 @@ internal sealed class PwshForEachValueAnalyzer
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 processWideStateInvalidated: true,
+                ConfiguredHomeAvailable,
+                HomeEnvironmentAvailable,
+                AutomaticHomeValueAvailable,
                 _bindings);
 
         internal AnalysisContext WithConditionalProcessWideStateInvalidation(
             bool invalidated) => invalidated
                 ? WithProcessWideStateInvalidated()
                 : this;
+
+        internal AnalysisContext WithoutConfiguredHome() =>
+            new(
+                WorkingDirectory,
+                CanPromote,
+                HasConstrainedCommandResolutionBaseline,
+                CommandResolutionInvalidated,
+                CommandResolutionInvalidatedBeyondTrackedMutations,
+                AllRunspaceCommandResolutionMayReachProcessMutation,
+                _runspaceProcessMutationCommandNames,
+                ProcessWideStateInvalidated,
+                configuredHomeAvailable: false,
+                homeEnvironmentAvailable: false,
+                automaticHomeValueAvailable: false,
+                _bindings);
+
+        internal AnalysisContext WithoutAutomaticHomeValue() =>
+            new(
+                WorkingDirectory,
+                CanPromote,
+                HasConstrainedCommandResolutionBaseline,
+                CommandResolutionInvalidated,
+                CommandResolutionInvalidatedBeyondTrackedMutations,
+                AllRunspaceCommandResolutionMayReachProcessMutation,
+                _runspaceProcessMutationCommandNames,
+                ProcessWideStateInvalidated,
+                ConfiguredHomeAvailable,
+                HomeEnvironmentAvailable,
+                automaticHomeValueAvailable: false,
+                _bindings);
 
         internal AnalysisContext WithoutBindings() =>
             new(
@@ -4748,6 +5529,9 @@ internal sealed class PwshForEachValueAnalyzer
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 ProcessWideStateInvalidated,
+                ConfiguredHomeAvailable,
+                HomeEnvironmentAvailable,
+                AutomaticHomeValueAvailable,
                 Array.Empty<BindingFrame>());
 
         internal AnalysisContext CreateChildProcessInput() =>
@@ -4761,6 +5545,25 @@ internal sealed class PwshForEachValueAnalyzer
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 ProcessWideStateInvalidated,
+                HomeEnvironmentAvailable && !ProcessWideStateInvalidated,
+                HomeEnvironmentAvailable && !ProcessWideStateInvalidated,
+                HomeEnvironmentAvailable && !ProcessWideStateInvalidated,
+                Array.Empty<BindingFrame>());
+
+        internal AnalysisContext CreateDecodedHostInput() =>
+            new(
+                WorkingDirectory,
+                canPromote: false,
+                hasConstrainedCommandResolutionBaseline: false,
+                commandResolutionInvalidated: ProcessWideStateInvalidated,
+                commandResolutionInvalidatedBeyondTrackedMutations:
+                    ProcessWideStateInvalidated,
+                allRunspaceCommandResolutionMayReachProcessMutation: false,
+                Array.Empty<string>(),
+                ProcessWideStateInvalidated,
+                HomeEnvironmentAvailable && !ProcessWideStateInvalidated,
+                homeEnvironmentAvailable: false,
+                automaticHomeValueAvailable: false,
                 Array.Empty<BindingFrame>());
 
         internal AnalysisContext CreateRemoteInput() =>
@@ -4776,6 +5579,9 @@ internal sealed class PwshForEachValueAnalyzer
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 processWideStateInvalidated: false,
+                configuredHomeAvailable: false,
+                homeEnvironmentAvailable: false,
+                automaticHomeValueAvailable: false,
                 Array.Empty<BindingFrame>());
 
         internal AnalysisContext CreateChildRunspaceInput() =>
@@ -4791,6 +5597,9 @@ internal sealed class PwshForEachValueAnalyzer
                 allRunspaceCommandResolutionMayReachProcessMutation: false,
                 Array.Empty<string>(),
                 ProcessWideStateInvalidated,
+                HomeEnvironmentAvailable && !ProcessWideStateInvalidated,
+                HomeEnvironmentAvailable && !ProcessWideStateInvalidated,
+                HomeEnvironmentAvailable && !ProcessWideStateInvalidated,
                 Array.Empty<BindingFrame>());
 
         internal AnalysisContext WithCwd(string? workingDirectory) =>
@@ -4803,6 +5612,9 @@ internal sealed class PwshForEachValueAnalyzer
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 ProcessWideStateInvalidated,
+                ConfiguredHomeAvailable,
+                HomeEnvironmentAvailable,
+                AutomaticHomeValueAvailable,
                 _bindings);
 
         internal AnalysisContext WithBinding(
@@ -4830,6 +5642,9 @@ internal sealed class PwshForEachValueAnalyzer
                 AllRunspaceCommandResolutionMayReachProcessMutation,
                 _runspaceProcessMutationCommandNames,
                 ProcessWideStateInvalidated,
+                ConfiguredHomeAvailable,
+                HomeEnvironmentAvailable,
+                AutomaticHomeValueAvailable,
                 bindings);
         }
 
@@ -5092,6 +5907,9 @@ internal sealed class PwshForEachValueAnalyzer
                 AllRunspaceCommandResolutionMayReachProcessMutation !=
                     other.AllRunspaceCommandResolutionMayReachProcessMutation ||
                 ProcessWideStateInvalidated != other.ProcessWideStateInvalidated ||
+                ConfiguredHomeAvailable != other.ConfiguredHomeAvailable ||
+                HomeEnvironmentAvailable != other.HomeEnvironmentAvailable ||
+                AutomaticHomeValueAvailable != other.AutomaticHomeValueAvailable ||
                 _runspaceProcessMutationCommandNames.Count !=
                     other._runspaceProcessMutationCommandNames.Count ||
                 _bindings.Count != other._bindings.Count)
@@ -5184,6 +6002,10 @@ internal sealed class PwshForEachValueAnalyzer
                     : commandNames,
                 left.ProcessWideStateInvalidated ||
                     right.ProcessWideStateInvalidated,
+                left.ConfiguredHomeAvailable && right.ConfiguredHomeAvailable,
+                left.HomeEnvironmentAvailable && right.HomeEnvironmentAvailable,
+                left.AutomaticHomeValueAvailable &&
+                    right.AutomaticHomeValueAvailable,
                 bindings);
         }
 

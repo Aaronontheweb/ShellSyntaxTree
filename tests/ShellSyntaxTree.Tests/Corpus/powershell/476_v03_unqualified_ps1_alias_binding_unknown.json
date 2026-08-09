@@ -1,0 +1,223 @@
+{
+  "name": "V03 unqualified ps1 alias binding unknown",
+  "input": "Set-Alias foo.ps1 Write-Output; foo.ps1 ~",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Alias"
+        ],
+        "args": [
+          {
+            "raw": "foo.ps1",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "Write-Output",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Set-Alias",
+            "value": "Set-Alias",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "foo.ps1",
+            "value": "foo.ps1",
+            "role": "Argument",
+            "sourceStart": 10,
+            "sourceLength": 7,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "Write-Output",
+            "value": "Write-Output",
+            "role": "Argument",
+            "sourceStart": 18,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "foo.ps1"
+        ],
+        "args": [
+          {
+            "raw": "~",
+            "kind": "Tilde",
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "foo.ps1",
+            "value": "foo.ps1",
+            "role": "Verb",
+            "sourceStart": 32,
+            "sourceLength": 7,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "~",
+            "value": "~",
+            "role": "Argument",
+            "sourceStart": 40,
+            "sourceLength": 1,
+            "precedingVerbElementCount": 1,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 41,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 41,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 30,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 32,
+        "sourceLength": 9,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 41
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 41
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 41
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 41
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "An unqualified .ps1-shaped name can resolve to a mutated alias, so its argument binding remains Unknown."
+}

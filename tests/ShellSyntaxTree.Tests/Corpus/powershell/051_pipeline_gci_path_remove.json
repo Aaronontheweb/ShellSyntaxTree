@@ -1,6 +1,7 @@
 {
   "name": "Pipeline gci path remove",
   "input": "gci C:\\logs | Remove-Item",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

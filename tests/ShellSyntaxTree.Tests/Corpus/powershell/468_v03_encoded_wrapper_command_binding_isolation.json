@@ -1,0 +1,145 @@
+{
+  "name": "V03 encoded wrapper command binding isolation",
+  "input": "pwsh -EncodedCommand YwB1AHIAbAAgAH4A",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "curl"
+        ],
+        "args": [
+          {
+            "raw": "~",
+            "kind": "Tilde",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "curl",
+            "value": "curl",
+            "role": "Verb",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "~",
+            "value": "~",
+            "role": "Argument",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 1,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": false
+          }
+        ],
+        "isCommandStringWrapped": true
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 37,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Group",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 37,
+        "clauseIndex": null,
+        "groupKind": "IsolatedScope",
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "GroupBody",
+        "childIndex": null,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 2,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 37
+          },
+          {
+            "ancestorKind": "Group",
+            "region": "GroupBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 37
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "A decoded child does not inherit the parent parser\u0027s isolated command-binding assertion."
+}

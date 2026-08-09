@@ -119,6 +119,19 @@ retain their existing meanings.
 - **THEN** `-LiteralPath` still applies quoted tilde, provider-qualifier, and PSDrive semantics
 - **THEN** the parser does not enumerate the filesystem for any form
 
+#### Scenario: Path-shaped PowerShell command names remain shadowable
+- **WHEN** isolated-mode PowerShell parses an explicit native or `.ps1` path command before any command-resolution mutation
+- **THEN** its spelling may supply the candidate native-versus-PowerShell argument-binding semantics
+- **WHEN** a matching alias mutation has been observed, or the command executes in an unconstrained decoded child
+- **THEN** path spelling alone does not prove command identity or argument-binding semantics
+- **THEN** a shell-sensitive effective value remains Unknown
+
+#### Scenario: Decoded host profiles can mutate home facts
+- **WHEN** isolated-mode PowerShell decodes a child `pwsh -Command` or `-EncodedCommand` payload that references `$HOME` or `$env:USERPROFILE`
+- **THEN** the child does not inherit exact automatic-variable or environment-variable facts from its parent
+- **THEN** an uncontrolled profile may have mutated either value before the payload
+- **THEN** configured provider/native tilde initialization remains an independent fact
+
 #### Scenario: Adjacent redirect fragments form one target
 - **WHEN** either shell parses its escaped-dollar spelling of `> $HOME".txt"`
 - **THEN** the redirect target retains one ordered fragment sequence and the exact literal shell value `$HOME.txt`
@@ -343,7 +356,14 @@ initial-state assertion.
 - **WHEN** isolated-mode PowerShell parses `Set-Item Alias:git Remove-Item; git child.txt`
 - **THEN** the second command occurrence is incomplete because authored identity `git` is no longer proved
 - **THEN** this invalidation applies without requiring the command to be inside or after a loop
-- **THEN** default ambient-state uncertainty alone does not retroactively make every v0.2 ordinary command incomplete
+
+#### Scenario: Unknown ambient identity preserves leaves and invalidates continuation state
+- **WHEN** default-mode PowerShell parses `Write-Output victim.txt; Get-Content relative.txt`
+- **THEN** default ambient-state uncertainty alone does not invent an observed mutation or discard the v0.2 compatibility leaves
+- **THEN** both v0.3 authorization occurrences are incomplete because their command identities are not proved
+- **THEN** the second occurrence has unknown cwd and path-dependent facts because the first invocation may resolve to arbitrary in-process code
+- **WHEN** default-mode PowerShell parses `Get-ChildItem | Remove-Item`
+- **THEN** the unproved pipeline fails atomically until pipeline state propagation is modeled
 
 #### Scenario: Imported session proxies invalidate command identity
 - **WHEN** PowerShell parses `Import-PSSession $session -CommandName git -AllowClobber; git child.txt`
@@ -761,8 +781,10 @@ Optional-module `Start-ThreadJob` and deferred breakpoint, event, and argument-
 completion receivers are not stable-v0.3 catalog-completeness requirements.
 Existing conservative recognition MAY remain, but additional module/version or
 trigger-time proof does not gate the release. Every unproved form SHALL follow
-the unknown-receiver rule: its completely parsed body remains visible while
-execution and affected state are incomplete.
+the unknown-receiver rule: supported non-pipeline body commands remain visible
+while execution and affected state are incomplete. An interior pipeline whose
+stage identity is unproved SHALL make the whole result unparseable with empty
+`Commands` and `Clauses`.
 
 Known aliases, supported module-qualified spellings, static call-operator
 spellings, PowerShell parameter prefixes and inline values, positional

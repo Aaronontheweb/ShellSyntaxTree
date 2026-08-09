@@ -1,6 +1,7 @@
 {
   "name": "Pipeline ps sort",
   "input": "ps | sort CPU",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

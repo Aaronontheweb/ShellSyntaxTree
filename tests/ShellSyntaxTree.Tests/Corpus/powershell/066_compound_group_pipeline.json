@@ -1,6 +1,7 @@
 {
   "name": "Compound group pipeline",
   "input": "(gci C:\\tmp | Remove-Item)",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

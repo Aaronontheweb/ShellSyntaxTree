@@ -1,0 +1,245 @@
+{
+  "name": "V03 redirect after userprofile environment mutation",
+  "input": "Set-Item Env:USERPROFILE X; Write-Output hi \u003E \u0022$env:USERPROFILE/out\u0022",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Item"
+        ],
+        "args": [
+          {
+            "raw": "Env:USERPROFILE",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "X",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Set-Item",
+            "value": "Set-Item",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "Env:USERPROFILE",
+            "value": "Env:USERPROFILE",
+            "role": "Argument",
+            "sourceStart": 9,
+            "sourceLength": 15,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "X",
+            "value": "X",
+            "role": "Argument",
+            "sourceStart": 25,
+            "sourceLength": 1,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "hi",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/Users/user/out"
+          }
+        ],
+        "elements": [
+          {
+            "raw": "Write-Output",
+            "value": "Write-Output",
+            "role": "Verb",
+            "sourceStart": 28,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "hi",
+            "value": "hi",
+            "role": "Argument",
+            "sourceStart": 41,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "\u003E \u0022$env:USERPROFILE/out\u0022",
+            "value": "$env:USERPROFILE/out",
+            "role": "Redirect",
+            "sourceStart": 44,
+            "sourceLength": 24,
+            "precedingVerbElementCount": 1,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/Users/user/out"
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 68,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 68,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 26,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 28,
+        "sourceLength": 40,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 68
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 68
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 68
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 68
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "operation": "FileOutput",
+            "targetDescriptor": null,
+            "target": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "isPathRelevant": true,
+            "isComplete": true
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "A redirect cannot retain its configured USERPROFILE value after process-environment mutation."
+}

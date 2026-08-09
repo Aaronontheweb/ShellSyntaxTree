@@ -439,6 +439,7 @@
       "id": "pwsh-pipeline-foreach-alias",
       "concern": "Contextual foreach alias is not a foreach statement",
       "input": "Get-ChildItem | foreach { Remove-Item $_ }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "current": { "isUnparseable": false },
       "desired": {
         "syntax": [
@@ -2501,6 +2502,24 @@
       "id": "pwsh-execution-region-param-header-fail-closed",
       "concern": "A leading param declaration keeps the complete argument-completer region atomic until declaration grammar lands",
       "input": "Register-ArgumentCompleter -CommandName tool -ScriptBlock { param($commandName) Write-Output $commandName }",
+      "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "current": { "isUnparseable": true },
+      "desired": {
+        "isUnparseable": true,
+        "syntax": [
+          { "id": "root", "kind": "Block", "slot": "Root" },
+          { "id": "unsupported", "kind": "Unsupported", "parent": "root", "slot": "Statement" }
+        ],
+        "commands": [],
+        "compatibility": { "verbs": [], "preservesAuthoredDynamicValues": false },
+        "securityInvariants": ["PartialTreeDiagnosticOnly", "UnknownPolicyValueFailsClosed"]
+      }
+    },
+    {
+      "id": "pwsh-unknown-receiver-pipeline-fails-atomically",
+      "concern": "An unknown receiver cannot expose a partially authorized pipeline after command identity becomes unproved",
+      "compatibilityProjectionLanded": true,
+      "input": "Invoke-Custom { Get-Item x | Select-Object Name }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
       "current": { "isUnparseable": true },
       "desired": {

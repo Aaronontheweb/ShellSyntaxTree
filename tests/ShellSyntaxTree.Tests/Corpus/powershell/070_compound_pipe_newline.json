@@ -1,6 +1,7 @@
 {
   "name": "Compound pipe newline",
   "input": "gci |\nrm",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

@@ -1,6 +1,7 @@
 {
   "name": "V03 foreach body pipeline",
   "input": "foreach ($f in @(\u0027a\u0027, \u0027b\u0027)) { Write-Output $f | Sort-Object }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -117,7 +118,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "PipelineStage",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -152,8 +153,11 @@
           {
             "clauseElementIndex": 1,
             "value": {
-              "kind": "Unknown",
-              "values": [],
+              "kind": "FiniteSet",
+              "values": [
+                "a",
+                "b"
+              ],
               "pattern": null,
               "coveringDirectory": null
             }
@@ -171,7 +175,7 @@
       {
         "clauseIndex": 1,
         "immediateRole": "PipelineStage",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",

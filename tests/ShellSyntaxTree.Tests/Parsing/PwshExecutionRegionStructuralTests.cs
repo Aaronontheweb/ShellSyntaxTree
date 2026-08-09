@@ -32,7 +32,8 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(
             new[] { expectedHost, "Get-Item" },
             result.Commands.Select(command => command.Clause.Verb.Tokens[0]));
-        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
     }
 
     [Theory]
@@ -397,7 +398,7 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Fact]
-    public void Parallel_provider_qualification_preserves_additional_name_colons()
+    public void Parallel_provider_qualification_still_fails_unproved_child_identity_closed()
     {
         var result = ParseIsolated(
             "1 | ForEach-Object -Parallel { " +
@@ -407,10 +408,8 @@ public class PwshExecutionRegionStructuralTests
 
         var continuation = result.Commands.Last();
         Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
-        Assert.True(continuation.IsComplete);
-        Assert.Equal(
-            new[] { "C:/work" },
-            continuation.WorkingDirectory.Values);
+        Assert.False(continuation.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, continuation.WorkingDirectory.Kind);
     }
 
     [Fact]
@@ -431,7 +430,7 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Fact]
-    public void Parallel_exact_rebinding_does_not_taint_unrelated_mutator_names()
+    public void Parallel_pooled_rebinding_conservatively_taints_later_activations()
     {
         var result = ParseIsolated(
             "1 | ForEach-Object -Parallel { " +
@@ -440,10 +439,8 @@ public class PwshExecutionRegionStructuralTests
 
         var continuation = result.Commands.Last();
         Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
-        Assert.True(continuation.IsComplete);
-        Assert.Equal(
-            new[] { "C:/work" },
-            continuation.WorkingDirectory.Values);
+        Assert.False(continuation.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, continuation.WorkingDirectory.Kind);
     }
 
     [Theory]
@@ -467,11 +464,12 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Theory]
-    [InlineData("Set-Variable sstChild child -Scope Global")]
-    [InlineData("Remove-Item Function:sstChild")]
-    [InlineData("Remove-Item Alias:sstChild")]
-    public void Parallel_runspace_local_mutation_does_not_escape_to_host(
-        string mutation)
+    [InlineData("Set-Variable sstChild child -Scope Global", true)]
+    [InlineData("Remove-Item Function:sstChild", false)]
+    [InlineData("Remove-Item Alias:sstChild", false)]
+    public void Parallel_runspace_mutation_tracks_process_escape_risk(
+        string mutation,
+        bool expectedComplete)
     {
         var result = ParseIsolated(
             $"1 | ForEach-Object -Parallel {{ {mutation} }}; " +
@@ -479,10 +477,10 @@ public class PwshExecutionRegionStructuralTests
 
         var continuation = result.Commands.Last();
         Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
-        Assert.True(continuation.IsComplete);
+        Assert.Equal(expectedComplete, continuation.IsComplete);
         Assert.Equal(
-            new[] { "C:/work" },
-            continuation.WorkingDirectory.Values);
+            expectedComplete ? ShellValueDomainKind.Exact : ShellValueDomainKind.Unknown,
+            continuation.WorkingDirectory.Kind);
     }
 
     [Fact]
@@ -591,7 +589,8 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(ExecutionRegionTiming.Concurrent, region.Timing);
         Assert.Equal(ExecutionRegionCardinality.Once, region.Cardinality);
         Assert.Equal(2, result.Commands.Count);
-        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
     }
 
     [Fact]
@@ -629,9 +628,10 @@ public class PwshExecutionRegionStructuralTests
             .ToArray();
         Assert.Equal(3, items.Length);
         Assert.Equal("/tmp", Assert.Single(items[0].WorkingDirectory.Values));
-        Assert.Equal("/tmp", Assert.Single(items[1].WorkingDirectory.Values));
+        Assert.Equal(ShellValueDomainKind.Unknown, items[1].WorkingDirectory.Kind);
         Assert.Equal("C:/work", Assert.Single(items[2].WorkingDirectory.Values));
-        Assert.All(items, command => Assert.True(command.IsComplete));
+        Assert.All(items.Take(2), command => Assert.False(command.IsComplete));
+        Assert.True(items[2].IsComplete);
     }
 
     [Theory]
@@ -651,7 +651,7 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(
             new[] { "/tmp" },
             child.WorkingDirectory.Values);
-        Assert.True(child.IsComplete);
+        Assert.False(child.IsComplete);
     }
 
     [Theory]
@@ -669,7 +669,7 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(
             new[] { expected },
             child.WorkingDirectory.Values);
-        Assert.True(child.IsComplete);
+        Assert.False(child.IsComplete);
     }
 
     [Theory]
@@ -701,7 +701,7 @@ public class PwshExecutionRegionStructuralTests
 
         var child = result.Commands.Last();
         Assert.Equal(ShellValueDomainKind.Unknown, child.WorkingDirectory.Kind);
-        Assert.True(child.IsComplete);
+        Assert.False(child.IsComplete);
     }
 
     [Theory]
@@ -780,7 +780,7 @@ public class PwshExecutionRegionStructuralTests
             Assert.Equal(
                 ShellValueDomainKind.Unknown,
                 Assert.Single(write.EffectiveArguments).Value.Kind);
-            Assert.True(write.IsComplete);
+            Assert.False(write.IsComplete);
         });
         Assert.Equal(
             new[] { "outer" },
@@ -816,7 +816,7 @@ public class PwshExecutionRegionStructuralTests
             .ToArray();
         Assert.Equal(2, items.Length);
         Assert.Equal(ShellValueDomainKind.Unknown, items[0].WorkingDirectory.Kind);
-        Assert.True(items[0].IsComplete);
+        Assert.False(items[0].IsComplete);
         Assert.Equal(
             new[] { "C:/work" },
             items[1].WorkingDirectory.Values);
@@ -1341,16 +1341,14 @@ public class PwshExecutionRegionStructuralTests
     [Fact]
     public void First_pipeline_stage_for_each_processes_once_without_upstream_input()
     {
-        var result = ParseIsolated(
+        var result = ParseIsolatedRaw(
             "foreach ($x in 'outer') { }; " +
             "ForEach-Object { Write-Output $x; foreach ($x in 'process') { } } | " +
             "Out-Null");
 
-        var processWrite = result.Commands
-            .Single(command => command.Clause.Verb.Tokens[0] == "Write-Output");
-        Assert.Equal(
-            new[] { "outer" },
-            Assert.Single(processWrite.EffectiveArguments).Value.Values);
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Fact]
@@ -1371,18 +1369,14 @@ public class PwshExecutionRegionStructuralTests
     [Fact]
     public void Interleaved_pipeline_callbacks_never_publish_stale_upstream_state()
     {
-        var result = ParseIsolated(
+        var result = ParseIsolatedRaw(
             "foreach ($x in 'start') { }; Write-Output 1 2 | " +
             "ForEach-Object { Write-Output $x } | " +
             "ForEach-Object { foreach ($x in 'down') { }; Write-Output $_ }");
 
-        var upstream = result.Commands
-            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
-            .ElementAt(1);
-        Assert.False(upstream.IsComplete);
-        Assert.Equal(
-            ShellValueDomainKind.Unknown,
-            Assert.Single(upstream.EffectiveArguments).Value.Kind);
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Theory]
@@ -1391,39 +1385,26 @@ public class PwshExecutionRegionStructuralTests
     public void Interleaved_direct_regions_never_publish_stale_upstream_state(
         string upstreamStage)
     {
-        var result = ParseIsolated(
+        var result = ParseIsolatedRaw(
             "foreach ($x in 'start') { }; " + upstreamStage + " | " +
             "ForEach-Object { foreach ($x in 'down') { }; Write-Output $_ }");
 
-        var upstream = result.Commands
-            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
-            .Take(2)
-            .ToArray();
-        Assert.Equal(2, upstream.Length);
-        Assert.All(upstream, command =>
-        {
-            Assert.False(command.IsComplete);
-            Assert.Equal(
-                ShellValueDomainKind.Unknown,
-                Assert.Single(command.EffectiveArguments).Value.Kind);
-        });
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Fact]
     public void Interleaved_common_parameter_writer_invalidates_callback_state()
     {
-        var result = ParseIsolated(
+        var result = ParseIsolatedRaw(
             "foreach ($x in 'start') { }; Write-Output 1 2 | " +
             "ForEach-Object { Write-Output $x } | " +
             "Write-Output -OutVariable x");
 
-        var callbackWrite = result.Commands
-            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
-            .ElementAt(1);
-        Assert.False(callbackWrite.IsComplete);
-        Assert.Equal(
-            ShellValueDomainKind.Unknown,
-            Assert.Single(callbackWrite.EffectiveArguments).Value.Kind);
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Theory]
@@ -1437,24 +1418,15 @@ public class PwshExecutionRegionStructuralTests
         string invocation,
         string trailingArguments)
     {
-        var result = ParseIsolated(
+        var result = ParseIsolatedRaw(
             "foreach ($x in 'start') { }; " + invocation + " { " +
             "Write-Output $x; Write-Output $x; foreach ($x in 'end') { } }" +
             trailingArguments + " | " +
             "Write-Output -OutVariable x");
 
-        var upstream = result.Commands
-            .Where(command => command.Clause.Verb.Tokens[0] == "Write-Output")
-            .Take(2)
-            .ToArray();
-        Assert.Equal(2, upstream.Length);
-        Assert.All(upstream, command =>
-        {
-            Assert.False(command.IsComplete);
-            Assert.Equal(
-                ShellValueDomainKind.Unknown,
-                Assert.Single(command.EffectiveArguments).Value.Kind);
-        });
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Fact]
@@ -1575,19 +1547,13 @@ public class PwshExecutionRegionStructuralTests
     [Fact]
     public void Unknown_region_poisons_later_pipeline_stages()
     {
-        var result = ParseIsolated(
+        var result = ParseIsolatedRaw(
             "Write-Output content | Invoke-Custom { Set-Location /tmp } | " +
             "Set-Content relative-probe.txt -WhatIf");
 
-        var continuation = result.Commands.Last();
-        Assert.Equal("Set-Content", Assert.Single(continuation.Clause.Verb.Tokens));
-        Assert.False(continuation.IsComplete);
-        Assert.Equal(
-            ShellValueDomainKind.Unknown,
-            continuation.WorkingDirectory.Kind);
-        Assert.Contains(
-            continuation.Clause.Args,
-            argument => argument.IsCwdAttribution && argument.Raw == "<dynamic-cwd>");
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Theory]
@@ -1631,14 +1597,17 @@ public class PwshExecutionRegionStructuralTests
         return result;
     }
 
-    private static ParsedCommand ParseIsolated(string source)
-    {
-        var result = new PwshParser(new PwshParserOptions
+    private static ParsedCommand ParseIsolatedRaw(string source) =>
+        new PwshParser(new PwshParserOptions
         {
             HomeDirectory = "C:/Users/test",
             WorkingDirectory = "C:/work",
             InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
         }).Parse(source);
+
+    private static ParsedCommand ParseIsolated(string source)
+    {
+        var result = ParseIsolatedRaw(source);
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         return result;
     }

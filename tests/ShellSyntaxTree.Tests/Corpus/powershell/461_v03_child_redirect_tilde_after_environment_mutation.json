@@ -1,0 +1,363 @@
+{
+  "name": "V03 child redirect tilde after environment mutation",
+  "input": "Set-Item Env:HOME X; Start-Job { Write-Output hi \u003E \u0022~\u0022 }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Set-Item"
+        ],
+        "args": [
+          {
+            "raw": "Env:HOME",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "X",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Set-Item",
+            "value": "Set-Item",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "Env:HOME",
+            "value": "Env:HOME",
+            "role": "Argument",
+            "sourceStart": 9,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "X",
+            "value": "X",
+            "role": "Argument",
+            "sourceStart": 18,
+            "sourceLength": 1,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "Start-Job"
+        ],
+        "args": [
+          {
+            "raw": "{ Write-Output hi \u003E \u0022~\u0022 }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Start-Job",
+            "value": "Start-Job",
+            "role": "Verb",
+            "sourceStart": 21,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "{ Write-Output hi \u003E \u0022~\u0022 }",
+            "value": "{ Write-Output hi \u003E \u0022~\u0022 }",
+            "role": "Argument",
+            "sourceStart": 31,
+            "sourceLength": 25,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "Write-Output"
+        ],
+        "args": [
+          {
+            "raw": "hi",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "C:/Users/user"
+          }
+        ],
+        "elements": [
+          {
+            "raw": "Write-Output",
+            "value": "Write-Output",
+            "role": "Verb",
+            "sourceStart": 33,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "hi",
+            "value": "hi",
+            "role": "Argument",
+            "sourceStart": 46,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "\u003E \u0022~\u0022",
+            "value": "~",
+            "role": "Redirect",
+            "sourceStart": 49,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 1,
+            "kind": "Tilde",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 56,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 56,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 19,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 21,
+        "sourceLength": 35,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      },
+      {
+        "kind": "ExecutionRegion",
+        "parentIndex": 3,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 31,
+        "sourceLength": 25,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "executionOrigin": "CommandArgument",
+        "hostClauseElementIndex": 1,
+        "executionPhase": "Unknown",
+        "executionTiming": "Unknown",
+        "executionCardinality": "Unknown"
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 4,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 32,
+        "sourceLength": 23,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 5,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 33,
+        "sourceLength": 21,
+        "clauseIndex": 2,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 56
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 56
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 56
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 56
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "ExecutionRegion",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 56
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 56
+          },
+          {
+            "ancestorKind": "ExecutionRegion",
+            "region": "ExecutionRegion",
+            "childIndex": 0,
+            "sourceStart": 31,
+            "sourceLength": 25
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 32,
+            "sourceLength": 23
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "operation": "FileOutput",
+            "targetDescriptor": null,
+            "target": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "isPathRelevant": true,
+            "isComplete": true
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "A fresh child redirect cannot reuse configured tilde state after its home environment input changes."
+}

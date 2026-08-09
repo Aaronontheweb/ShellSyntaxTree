@@ -336,9 +336,14 @@ internal static class PwshResolver
             : (hadHomeish ? ArgKind.Tilde : ArgKind.Literal, resolved, true);
     }
 
-    private static bool IsHomeVariable(string? name) =>
-        string.Equals(name, "HOME", StringComparison.OrdinalIgnoreCase)
-        || string.Equals(name, "env:USERPROFILE", StringComparison.OrdinalIgnoreCase);
+    internal static bool IsHomeVariable(string? name) =>
+        IsAutomaticHomeVariable(name) || IsUserProfileEnvironmentVariable(name);
+
+    internal static bool IsAutomaticHomeVariable(string? name) =>
+        string.Equals(name, "HOME", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool IsUserProfileEnvironmentVariable(string? name) =>
+        string.Equals(name, "env:USERPROFILE", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsKnownNonFileSystemDrive(string name) =>
         string.Equals(name, "Alias", StringComparison.OrdinalIgnoreCase)
@@ -378,7 +383,7 @@ internal static class PwshResolver
 
     // ---------------------------------------------------------------- helpers
 
-    private static string GetHomeDirectory(ShellParserOptions options)
+    internal static string GetHomeDirectory(ShellParserOptions options)
     {
         if (!string.IsNullOrEmpty(options.HomeDirectory))
         {

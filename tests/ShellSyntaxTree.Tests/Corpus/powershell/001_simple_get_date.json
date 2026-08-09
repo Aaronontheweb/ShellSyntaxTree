@@ -41,7 +41,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Ordinary",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",

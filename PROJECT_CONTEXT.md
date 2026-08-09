@@ -87,7 +87,8 @@ zero-native-deps .NET parser sized to what security gates actually need.
   origin/phase/timing/cardinality facts remain separate from
   shell-specific variable, location, command-resolution, runspace, and process
   state analysis; proved script-block data stays opaque and unknown receivers
-  conservatively expose incomplete bodies.
+  conservatively expose supported non-pipeline bodies as incomplete. An
+  unproved pipeline inside such a region fails the whole parse atomically.
 - Add fixed, non-executing value and state analysis: at most 32 candidates, at
   most 16 structural container levels, and the existing wrapper depth of 5.
 - Deliver Bash `for ... in` and PowerShell `foreach` in stable v0.3. Condition

@@ -1,6 +1,7 @@
 {
   "name": "Pipeline gci rm",
   "input": "gci | rm",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

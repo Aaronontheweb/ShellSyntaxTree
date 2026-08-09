@@ -118,7 +118,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Iterator",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -191,10 +191,8 @@
           }
         ],
         "workingDirectory": {
-          "kind": "Exact",
-          "values": [
-            "C:/work"
-          ],
+          "kind": "Unknown",
+          "values": [],
           "pattern": null,
           "coveringDirectory": null
         }

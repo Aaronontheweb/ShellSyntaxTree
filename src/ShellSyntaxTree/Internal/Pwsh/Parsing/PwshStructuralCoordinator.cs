@@ -144,13 +144,40 @@ internal static partial class PwshCommandParser
             SimpleCommandSyntax simple)
         {
             var redirects = PwshRedirectAnalysis.Analyze(simple.Clause);
+            var valueProvenance = new List<ShellValueElementProvenance>();
             var redirectProvenance = new List<RedirectTargetProvenance>();
+            var hasCompleteValueProvenance = true;
+            var reconstructedArgumentBinding =
+                ReconstructArgumentBindingCandidate(simple.Clause);
             var redirectIndex = 0;
             for (var elementIndex = 0;
                  elementIndex < simple.Clause.Elements.Count;
                  elementIndex++)
             {
                 var element = simple.Clause.Elements[elementIndex];
+                if (element.Role == ClauseElementRole.Argument)
+                {
+                    if (TryGetAuthoredElementValue(element, out var argumentValue))
+                    {
+                        var argumentBinding =
+                            ClauseElementProvenance.TryGetArgumentBindingCandidate(
+                                element,
+                                out var preservedArgumentBinding)
+                                ? preservedArgumentBinding
+                                : reconstructedArgumentBinding;
+                        valueProvenance.Add(new ShellValueElementProvenance(
+                            elementIndex,
+                            argumentValue,
+                            argumentBinding));
+                    }
+                    else
+                    {
+                        hasCompleteValueProvenance = false;
+                    }
+
+                    continue;
+                }
+
                 if (element.Role != ClauseElementRole.Redirect)
                 {
                     continue;
@@ -163,7 +190,8 @@ internal static partial class PwshCommandParser
                         redirectIndex,
                         elementIndex,
                         value,
-                        UsesOutermostInvocationScope: true));
+                        ClauseElementProvenance.RedirectInvocationScopeDepth(
+                            element)));
                 }
 
                 redirectIndex++;
@@ -173,9 +201,24 @@ internal static partial class PwshCommandParser
             {
                 Redirects = redirects,
                 RedirectTargetProvenance = redirectProvenance.ToArray(),
+                ValueProvenance = valueProvenance.ToArray(),
+                HasCompleteValueProvenance = hasCompleteValueProvenance,
                 IsComplete = IsStructurallyComplete(simple) &&
                     AreRedirectsComplete(redirects),
             };
+        }
+
+        private static bool? ReconstructArgumentBindingCandidate(Clause clause)
+        {
+            if (clause.Verb.IsDynamic || clause.Verb.Tokens.Count != 1)
+            {
+                return null;
+            }
+
+            var command = clause.Verb.Tokens[0];
+            return TryClassifyAuthoredArgumentBinding(command, out var usesNative)
+                ? usesNative
+                : null;
         }
 
         internal PwshForEachAnalysisPlan? GetForEachPlan(ForEachSyntax forEach) =>
@@ -608,7 +651,10 @@ internal static partial class PwshCommandParser
                 SourceStart = first.SourceStart,
                 SourceLength = last.SourceStart + last.SourceLength - first.SourceStart,
             };
-            RegisterFacts(simple, segmentTokens);
+            RegisterFacts(
+                simple,
+                segmentTokens,
+                built.UsesNativeArgumentBinding);
             command = simple;
             return true;
         }
@@ -1741,7 +1787,8 @@ internal static partial class PwshCommandParser
     {
         private void RegisterFacts(
             SimpleCommandSyntax simple,
-            IReadOnlyList<PwshToken> sourceTokens)
+            IReadOnlyList<PwshToken> sourceTokens,
+            bool? usesNativeArgumentBinding)
         {
             var provenance = new List<ShellValueElementProvenance>();
             var redirectProvenance = new List<RedirectTargetProvenance>();
@@ -1763,7 +1810,7 @@ internal static partial class PwshCommandParser
                             redirectIndex,
                             elementIndex,
                             redirectValue,
-                            UsesOutermostInvocationScope: false));
+                            InvocationScopeDepth: 0));
                     }
 
                     redirectIndex++;
@@ -1775,13 +1822,20 @@ internal static partial class PwshCommandParser
                     continue;
                 }
 
+                ClauseElementProvenance.SetArgumentBindingCandidate(
+                    element,
+                    usesNativeArgumentBinding);
+
                 if (!TryGetElementValue(element, sourceTokens, out var value))
                 {
                     hasCompleteProvenance = false;
                     continue;
                 }
 
-                provenance.Add(new ShellValueElementProvenance(elementIndex, value));
+                provenance.Add(new ShellValueElementProvenance(
+                    elementIndex,
+                    value,
+                    usesNativeArgumentBinding));
             }
 
             var redirects = PwshRedirectAnalysis.Analyze(simple.Clause);
@@ -1851,11 +1905,6 @@ internal static partial class PwshCommandParser
             out ShellValue value)
         {
             value = ShellValue.Literal(string.Empty);
-            if (element.SourceStart is null || element.SourceLength is null)
-            {
-                return false;
-            }
-
             var localTokens = PwshLexer.Tokenize(element.Raw);
             foreach (var token in localTokens)
             {
@@ -1866,8 +1915,37 @@ internal static partial class PwshCommandParser
             }
 
             var significant = FilterSignificant(localTokens);
-            var shifted = ShiftTokens(significant, element.SourceStart.Value);
-            return TryGetRedirectTargetValue(element, shifted, out value);
+            var localElement = element with
+            {
+                SourceStart = 0,
+                SourceLength = element.Raw.Length,
+            };
+            return TryGetRedirectTargetValue(localElement, significant, out value);
+        }
+
+        private static bool TryGetAuthoredElementValue(
+            ClauseElement element,
+            out ShellValue value)
+        {
+            value = ShellValue.Literal(string.Empty);
+            var localTokens = PwshLexer.Tokenize(element.Raw);
+            foreach (var token in localTokens)
+            {
+                if (token.Kind == PwshTokenKind.UnparseableSentinel)
+                {
+                    return false;
+                }
+            }
+
+            var localElement = element with
+            {
+                SourceStart = 0,
+                SourceLength = element.Raw.Length,
+            };
+            return TryGetElementValue(
+                localElement,
+                FilterSignificant(localTokens),
+                out value);
         }
 
         private static bool TryGetElementValue(
@@ -2004,6 +2082,10 @@ internal static partial class PwshCommandParser
             Array.Empty<ClauseElement>();
 
         internal int LeafIndex { get; set; }
+
+        internal int IsolatedScopeDepth { get; set; }
+
+        internal bool PreserveArgumentBindingCandidates { get; init; }
     }
 
     private static bool TryBuildDecodedWrapper(
@@ -2021,6 +2103,7 @@ internal static partial class PwshCommandParser
             LeafCount = inner.Commands.Count,
             WrapperRedirects = wrapperRedirects,
             WrapperRedirectElements = wrapperRedirectElements,
+            PreserveArgumentBindingCandidates = groupKind == ShellGroupKind.CurrentScope,
         };
         if (!TryCloneDecodedBlock(inner.Syntax, state, out var body))
         {
@@ -2161,15 +2244,20 @@ internal static partial class PwshCommandParser
                 var elements = new List<ClauseElement>(simple.Clause.Elements.Count +
                     (isLast ? state.WrapperRedirectElements.Count : 0));
                 elements.AddRange(ClauseElementProvenance.WithoutOuterSourceSpans(
-                    simple.Clause.Elements));
+                    simple.Clause.Elements,
+                    state.PreserveArgumentBindingCandidates));
                 if (isLast)
                 {
                     foreach (var redirectElement in state.WrapperRedirectElements)
                     {
-                        elements.Add(redirectElement with
+                        var clonedRedirect = redirectElement with
                         {
                             PrecedingVerbElementCount = simple.Clause.Verb.Tokens.Count,
-                        });
+                        };
+                        elements.Add(
+                            ClauseElementProvenance.WithRedirectInvocationScopeDepth(
+                                clonedRedirect,
+                                state.IsolatedScopeDepth + 1));
                     }
                 }
 
@@ -2213,7 +2301,21 @@ internal static partial class PwshCommandParser
                 clone = new CommandListSyntax { Items = items };
                 return true;
             case GroupSyntax group:
-                if (!TryCloneDecodedBlock(group.Body, state, out var groupBody))
+                if (group.GroupKind == ShellGroupKind.IsolatedScope)
+                {
+                    state.IsolatedScopeDepth++;
+                }
+
+                var clonedGroup = TryCloneDecodedBlock(
+                    group.Body,
+                    state,
+                    out var groupBody);
+                if (group.GroupKind == ShellGroupKind.IsolatedScope)
+                {
+                    state.IsolatedScopeDepth--;
+                }
+
+                if (!clonedGroup)
                 {
                     return false;
                 }
