@@ -31,9 +31,10 @@
             "isPath": false
           },
           {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
+            "raw": "C:/safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe",
             "isCwdAttribution": true
           }
         ],
@@ -53,9 +54,10 @@
             "resolved": "C:/evil"
           },
           {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
+            "raw": "C:/safe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/safe",
             "isCwdAttribution": true
           }
         ],
@@ -71,12 +73,14 @@
           {
             "raw": "child.txt",
             "kind": "Literal",
-            "isPath": true
+            "isPath": true,
+            "resolved": "C:/evil/child.txt"
           },
           {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
+            "raw": "C:/evil",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/evil",
             "isCwdAttribution": true
           }
         ],

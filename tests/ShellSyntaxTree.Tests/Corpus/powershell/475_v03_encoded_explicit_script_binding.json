@@ -97,7 +97,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -125,8 +125,10 @@
           {
             "clauseElementIndex": 1,
             "value": {
-              "kind": "Unknown",
-              "values": [],
+              "kind": "Exact",
+              "values": [
+                "~"
+              ],
               "pattern": null,
               "coveringDirectory": null
             }
@@ -143,5 +145,5 @@
       }
     ]
   },
-  "notes": "An explicit script path supplies a PowerShell-binding candidate, but an unconstrained decoded child cannot prove it was not shadowed."
+  "notes": "An explicit script path supplies authored PowerShell-binding semantics without inspecting ambient child state."
 }

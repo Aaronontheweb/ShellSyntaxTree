@@ -29,12 +29,14 @@
           {
             "raw": "child.txt",
             "kind": "Literal",
-            "isPath": true
+            "isPath": true,
+            "resolved": "C:/b/child.txt"
           },
           {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
+            "raw": "C:/b",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/b",
             "isCwdAttribution": true
           }
         ],

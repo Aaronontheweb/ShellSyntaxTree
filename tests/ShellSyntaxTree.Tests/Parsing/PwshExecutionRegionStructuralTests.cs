@@ -165,7 +165,7 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(expectedHostComplete, result.Commands[0].IsComplete);
         var body = result.Commands[1];
         Assert.Equal("Get-Date", body.Clause.Verb.Tokens[0]);
-        Assert.False(body.IsComplete);
+        Assert.Equal(expectedHostComplete, body.IsComplete);
         Assert.Equal(ShellValueDomainKind.Unknown, body.WorkingDirectory.Kind);
     }
 
@@ -206,7 +206,7 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(
             ShellValueDomainKind.Unknown,
             Assert.Single(writes[0].EffectiveArguments).Value.Kind);
-        Assert.False(writes[0].IsComplete);
+        Assert.True(writes[0].IsComplete);
         Assert.Equal(
             new[] { "outer" },
             Assert.Single(writes[1].EffectiveArguments).Value.Values);
@@ -590,7 +590,7 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(ExecutionRegionCardinality.Once, region.Cardinality);
         Assert.Equal(2, result.Commands.Count);
         Assert.True(result.Commands[0].IsComplete);
-        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
     }
 
     [Fact]
@@ -628,9 +628,9 @@ public class PwshExecutionRegionStructuralTests
             .ToArray();
         Assert.Equal(3, items.Length);
         Assert.Equal("/tmp", Assert.Single(items[0].WorkingDirectory.Values));
-        Assert.Equal(ShellValueDomainKind.Unknown, items[1].WorkingDirectory.Kind);
+        Assert.Equal("/tmp", Assert.Single(items[1].WorkingDirectory.Values));
         Assert.Equal("C:/work", Assert.Single(items[2].WorkingDirectory.Values));
-        Assert.All(items.Take(2), command => Assert.False(command.IsComplete));
+        Assert.All(items.Take(2), command => Assert.True(command.IsComplete));
         Assert.True(items[2].IsComplete);
     }
 
@@ -651,7 +651,7 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(
             new[] { "/tmp" },
             child.WorkingDirectory.Values);
-        Assert.False(child.IsComplete);
+        Assert.True(child.IsComplete);
     }
 
     [Theory]
@@ -669,7 +669,7 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal(
             new[] { expected },
             child.WorkingDirectory.Values);
-        Assert.False(child.IsComplete);
+        Assert.True(child.IsComplete);
     }
 
     [Theory]
@@ -701,7 +701,7 @@ public class PwshExecutionRegionStructuralTests
 
         var child = result.Commands.Last();
         Assert.Equal(ShellValueDomainKind.Unknown, child.WorkingDirectory.Kind);
-        Assert.False(child.IsComplete);
+        Assert.True(child.IsComplete);
     }
 
     [Theory]
@@ -780,7 +780,7 @@ public class PwshExecutionRegionStructuralTests
             Assert.Equal(
                 ShellValueDomainKind.Unknown,
                 Assert.Single(write.EffectiveArguments).Value.Kind);
-            Assert.False(write.IsComplete);
+            Assert.True(write.IsComplete);
         });
         Assert.Equal(
             new[] { "outer" },
@@ -816,7 +816,7 @@ public class PwshExecutionRegionStructuralTests
             .ToArray();
         Assert.Equal(2, items.Length);
         Assert.Equal(ShellValueDomainKind.Unknown, items[0].WorkingDirectory.Kind);
-        Assert.False(items[0].IsComplete);
+        Assert.True(items[0].IsComplete);
         Assert.Equal(
             new[] { "C:/work" },
             items[1].WorkingDirectory.Values);
@@ -1109,9 +1109,9 @@ public class PwshExecutionRegionStructuralTests
     [InlineData("echo { Remove-Item victim.txt }")]
     [InlineData(
         "Microsoft.PowerShell.Utility\\Write-Output { Remove-Item victim.txt }")]
-    public void Proved_data_receiver_keeps_script_block_opaque(string source)
+    public void Authored_data_receiver_keeps_script_block_opaque(string source)
     {
-        var result = ParseIsolated(source);
+        var result = Parse(source);
 
         var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Empty(host.ExecutionRegions);
@@ -1119,18 +1119,6 @@ public class PwshExecutionRegionStructuralTests
         Assert.Equal("{ Remove-Item victim.txt }", host.Clause.Elements[1].Raw);
         Assert.True(Assert.Single(result.Commands).IsComplete);
         Assert.Single(result.Clauses);
-    }
-
-    [Fact]
-    public void Module_qualified_data_receiver_requires_a_constrained_baseline()
-    {
-        var result = Parse(
-            "Microsoft.PowerShell.Utility\\Write-Output { Remove-Item victim.txt }");
-
-        var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
-        Assert.Single(host.ExecutionRegions);
-        Assert.Equal(2, result.Commands.Count);
-        Assert.All(result.Commands, command => Assert.False(command.IsComplete));
     }
 
     [Fact]
@@ -1185,12 +1173,10 @@ public class PwshExecutionRegionStructuralTests
         Assert.All(result.Commands.Skip(1), command => Assert.False(command.IsComplete));
     }
 
-    [Theory]
-    [InlineData("Write-Output { Remove-Item victim.txt }")]
-    [InlineData("Invoke-Custom { Remove-Item victim.txt }")]
-    public void Unproved_receiver_identity_never_hides_a_script_block(string source)
+    [Fact]
+    public void Unknown_receiver_semantics_never_hide_a_script_block()
     {
-        var result = Parse(source);
+        var result = Parse("Invoke-Custom { Remove-Item victim.txt }");
 
         var host = Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Single(host.ExecutionRegions);

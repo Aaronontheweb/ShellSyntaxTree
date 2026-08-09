@@ -133,7 +133,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "LoopBody",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",

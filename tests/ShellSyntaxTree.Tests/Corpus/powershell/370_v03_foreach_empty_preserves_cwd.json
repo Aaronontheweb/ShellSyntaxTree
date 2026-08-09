@@ -119,7 +119,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "LoopBody",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -190,5 +190,5 @@
       }
     ]
   },
-  "notes": "The unreachable body stays visible and incomplete, performs no state transition, and cannot leak parser-time cwd attribution into the continuation."
+  "notes": "The unreachable authored body stays visible and complete, performs no state transition, and cannot leak parser-time cwd attribution into the continuation."
 }

@@ -651,6 +651,13 @@ internal static partial class PwshCommandParser
             return new ArgumentBindingSemantics(usesNative);
         }
 
+        // A suffix alone does not prove script binding: an unqualified name
+        // can resolve to an authored alias or function with the same spelling.
+        if (command.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase))
+        {
+            return ArgumentBindingSemantics.Unknown;
+        }
+
         // An unqualified hyphenated name can resolve to either a PowerShell
         // command or a native executable. Preserve that ambiguity instead of
         // reconstructing command kind from its spelling during value analysis.

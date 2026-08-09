@@ -186,7 +186,7 @@ public class PwshStructuralProjectionTests
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
         Assert.True(redirect.IsComplete);
-        Assert.False(command.IsComplete);
+        Assert.True(command.IsComplete);
     }
 
     [Theory]
@@ -203,7 +203,7 @@ public class PwshStructuralProjectionTests
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
         Assert.Equal("C:/maybe/relative.txt", Assert.Single(redirect.Target.Values));
-        Assert.False(command.IsComplete);
+        Assert.True(command.IsComplete);
     }
 
     [Theory]
@@ -232,9 +232,7 @@ public class PwshStructuralProjectionTests
         var redirect = Assert.Single(clause.Redirects);
         Assert.False(redirect.IsDynamicSkip);
         Assert.Equal("C:/work/out.txt", redirect.Target);
-        Assert.Equal(
-            !invocation.StartsWith("pwsh", StringComparison.Ordinal),
-            command.IsComplete);
+        Assert.True(command.IsComplete);
         var redirectFact = Assert.Single(command.Redirects);
         Assert.Equal(RedirectOperation.FileOutput, redirectFact.Operation);
         Assert.Equal("C:/work/out.txt", Assert.Single(redirectFact.Target.Values));
@@ -292,9 +290,7 @@ public class PwshStructuralProjectionTests
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var command = result.Commands[1];
-        Assert.Equal(
-            !invocation.StartsWith("pwsh", StringComparison.Ordinal),
-            command.IsComplete);
+        Assert.True(command.IsComplete);
         Assert.Contains(command.Clause.Args, argument =>
             argument.Resolved == "C:/work/a,b");
     }
@@ -402,14 +398,16 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
-    public void PowerShell_host_wrapper_pipeline_fails_without_child_identity_proof()
+    public void PowerShell_host_wrapper_pipeline_retains_static_authored_commands()
     {
         var result = Parse(
             "pwsh -Command \"Get-Item x | Select-Object Name; Get-Date\"");
 
-        Assert.True(result.IsUnparseable);
-        Assert.Empty(result.Commands);
-        Assert.Empty(result.Clauses);
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(
+            new[] { "Get-Item", "Select-Object", "Get-Date" },
+            result.Commands.Select(CommandVerb));
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
     }
 
     [Fact]
@@ -499,8 +497,8 @@ public class PwshStructuralProjectionTests
         var result = Parse(source);
 
         Assert.Equal(2, result.Commands.Count);
-        Assert.False(result.Commands[0].IsComplete);
-        Assert.False(result.Commands[1].IsComplete);
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.True(result.Commands[1].IsComplete);
         var last = result.Clauses[1];
         Assert.Single(last.Redirects);
         var redirect = last.Elements.Last();
@@ -541,7 +539,7 @@ public class PwshStructuralProjectionTests
 
         var wrapper = Assert.IsType<GroupSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Equal(ShellGroupKind.IsolatedScope, wrapper.GroupKind);
-        Assert.False(Assert.Single(result.Commands).IsComplete);
+        Assert.True(Assert.Single(result.Commands).IsComplete);
         Assert.Equal("Get-Date", Assert.Single(result.Clauses).Verb.Tokens[0]);
     }
 
@@ -1203,10 +1201,11 @@ public class PwshStructuralProjectionTests
     }
 
     [Theory]
-    [InlineData("/usr/bin/my-tool ~")]
-    [InlineData("./tool.ps1 ~")]
-    public void Encoded_wrapper_cannot_prove_path_shaped_command_binding(
-        string payload)
+    [InlineData("/usr/bin/my-tool ~", "C:/Users/test")]
+    [InlineData("./tool.ps1 ~", "~")]
+    public void Encoded_wrapper_retains_authored_path_shaped_command_binding(
+        string payload,
+        string expected)
     {
         var result = ParseIsolatedWithHome(
             $"pwsh -EncodedCommand {Encode(payload)}",
@@ -1214,8 +1213,25 @@ public class PwshStructuralProjectionTests
 
         var command = result.Commands.Last();
         var effective = Assert.Single(command.EffectiveArguments);
-        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
-        Assert.False(command.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal(expected, Assert.Single(effective.Value.Values));
+        Assert.True(command.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/my-tool ~", "C:/Users/test")]
+    [InlineData("./tool.ps1 ~", "~")]
+    public void Default_state_retains_authored_path_shaped_command_binding(
+        string source,
+        string expected)
+    {
+        var result = ParseWithHome(source, "C:/Users/test");
+
+        var command = Assert.Single(result.Commands);
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal(expected, Assert.Single(effective.Value.Values));
+        Assert.True(command.IsComplete);
     }
 
     [Theory]
@@ -1279,28 +1295,29 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
-    public void Unknown_initial_receiver_invalidates_later_state_without_hiding_leaves()
+    public void Ambient_receiver_uncertainty_does_not_poison_later_authored_facts()
     {
         var result = ParseUnknown("Invoke-Custom; Get-Content relative.txt");
 
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
         var command = result.Commands.Last();
-        Assert.False(command.IsComplete);
-        Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
+        Assert.Equal(ShellValueDomainKind.Exact, command.WorkingDirectory.Kind);
         Assert.Contains(command.Clause.Args, argument =>
-            argument.Raw == "relative.txt" && argument.Resolved is null);
-        Assert.Contains(command.Clause.Args, argument =>
-            argument.IsCwdAttribution && argument.Raw == "<dynamic-cwd>");
+            argument.Raw == "relative.txt" &&
+            argument.Resolved == "C:/work/relative.txt");
+        Assert.DoesNotContain(command.Clause.Args, argument =>
+            argument.IsCwdAttribution);
     }
 
     [Fact]
-    public void Initial_state_contract_controls_authorization_identity_completeness()
+    public void Initial_state_contract_does_not_control_authored_completeness()
     {
         var unknown = ParseUnknown("Write-Output victim.txt");
         var isolated = Parse("Write-Output victim.txt");
 
         Assert.Single(unknown.Clauses);
         Assert.Single(isolated.Clauses);
-        Assert.False(Assert.Single(unknown.Commands).IsComplete);
+        Assert.True(Assert.Single(unknown.Commands).IsComplete);
         Assert.True(Assert.Single(isolated.Commands).IsComplete);
     }
 
@@ -1312,11 +1329,14 @@ public class PwshStructuralProjectionTests
             "C:/Users/test");
 
         var command = result.Commands.Last();
-        Assert.False(command.IsComplete);
+        Assert.True(command.IsComplete);
         Assert.Equal(
-            ShellValueDomainKind.Unknown,
+            ShellValueDomainKind.Exact,
             Assert.Single(command.Redirects).Target.Kind);
-        Assert.True(Assert.Single(command.Clause.Redirects).IsDynamicSkip);
+        Assert.Equal(
+            "C:/work/relative.txt",
+            Assert.Single(Assert.Single(command.Redirects).Target.Values));
+        Assert.False(Assert.Single(command.Clause.Redirects).IsDynamicSkip);
     }
 
     [Theory]
@@ -1490,15 +1510,17 @@ public class PwshStructuralProjectionTests
     }
 
     [Theory]
-    [InlineData("curl ~")]
-    [InlineData("Get-Content ~")]
-    public void Unknown_initial_state_does_not_assume_unqualified_command_binding(
-        string source)
+    [InlineData("curl ~", "C:/Users/test")]
+    [InlineData("Get-Content ~", "~")]
+    public void Default_state_uses_parser_owned_command_binding(
+        string source,
+        string expected)
     {
         var result = ParseWithHome(source, "C:/Users/test");
 
         var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
-        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal(expected, Assert.Single(effective.Value.Values));
     }
 
     [Fact]

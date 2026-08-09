@@ -398,9 +398,12 @@ binding facts.
 
 #### Scenario: Unknown ambient PowerShell state keeps effective values unknown
 - **WHEN** default-mode PowerShell parses `foreach ($f in @('a','b')) { Remove-Item -LiteralPath $f }`
-- **THEN** the loop structure and body command remain visible and complete
+- **THEN** the loop structure and body command remain visible
 - **THEN** the body occurrence's effective `$f` value is Unknown
 - **THEN** the parser does not mistake authored iterable text for a runtime value when an ambient binding can coerce or reject it
+- **THEN** the occurrence remains incomplete because the unknown provider target can mutate command resolution before a later visit
+- **WHEN** the same loop body uses a non-state-mutating receiver such as `Write-Output $f`
+- **THEN** its static authored occurrence remains complete while its effective `$f` value remains Unknown
 
 #### Scenario: Isolated no-profile runspace permits an ordinary binding proof
 - **WHEN** the caller selects `IsolatedNonInteractiveNoProfile` for a newly spawned noninteractive no-profile host and parses `foreach ($f in @('a','b')) { Write-Output $f }`
@@ -629,7 +632,7 @@ partition merely to publish exact continuation facts.
 
 #### Scenario: Unreachable relative redirect has no parse-time cwd proof
 - **WHEN** isolated-mode PowerShell parses `foreach ($x in @()) { Write-Output x > relative.txt }`
-- **THEN** the body occurrence and its working directory remain incomplete or Unknown
+- **THEN** the static authored body occurrence remains complete while its working directory is Unknown
 - **THEN** the explicit redirect target is Unknown rather than the parse-time absolute path
 - **THEN** an authored absolute redirect target may remain exact because it is cwd-independent
 

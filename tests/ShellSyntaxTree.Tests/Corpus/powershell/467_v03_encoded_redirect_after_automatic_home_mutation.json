@@ -205,7 +205,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -249,7 +249,7 @@
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -282,8 +282,10 @@
         ],
         "effectiveArguments": [],
         "workingDirectory": {
-          "kind": "Unknown",
-          "values": [],
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         },

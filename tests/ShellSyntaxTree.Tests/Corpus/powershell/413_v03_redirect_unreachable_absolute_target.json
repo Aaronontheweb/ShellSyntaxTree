@@ -93,7 +93,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "LoopBody",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -146,5 +146,5 @@
       }
     ]
   },
-  "notes": "A cwd-independent absolute redirect target remains exact even on an unreachable incomplete occurrence."
+  "notes": "A cwd-independent absolute redirect target remains exact on an unreachable complete authored occurrence."
 }

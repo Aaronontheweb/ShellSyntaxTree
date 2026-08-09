@@ -58,9 +58,10 @@
             "isPath": false
           },
           {
-            "raw": "\u003Cdynamic-cwd\u003E",
-            "kind": "DynamicSkip",
-            "isPath": false,
+            "raw": "/tmp/inner",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/tmp/inner",
             "isCwdAttribution": true
           }
         ],
@@ -203,7 +204,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -261,7 +262,7 @@
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -308,8 +309,10 @@
         ],
         "effectiveArguments": [],
         "workingDirectory": {
-          "kind": "Unknown",
-          "values": [],
+          "kind": "Exact",
+          "values": [
+            "/tmp/inner"
+          ],
           "pattern": null,
           "coveringDirectory": null
         },

@@ -573,7 +573,7 @@
       {
         "clauseIndex": 1,
         "immediateRole": "ExecutionRegion",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -622,7 +622,7 @@
       {
         "clauseIndex": 2,
         "immediateRole": "ExecutionRegion",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -671,7 +671,7 @@
       {
         "clauseIndex": 3,
         "immediateRole": "ExecutionRegion",
-        "isComplete": false,
+        "isComplete": true,
         "ancestry": [
           {
             "ancestorKind": "Block",
