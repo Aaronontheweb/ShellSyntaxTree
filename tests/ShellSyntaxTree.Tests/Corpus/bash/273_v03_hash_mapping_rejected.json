@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash hash mapping mutation fails closed",
+  "input": "hash -p /bin/rm git; git target.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "command-resolution mutation"
+  },
+  "notes": "A hash mapping can replace a later executable identity, so the complete source fails before publishing the apparent git occurrence.",
+  "oracleExpectation": "OutOfScope"
+}

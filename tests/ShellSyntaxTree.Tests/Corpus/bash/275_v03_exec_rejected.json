@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash exec fails at the global execution boundary",
+  "input": "exec /bin/rm target.txt",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "execution-bearing builtin"
+  },
+  "notes": "Exec replaces the current shell and cannot remain an ordinary complete occurrence outside loops.",
+  "oracleExpectation": "OutOfScope"
+}

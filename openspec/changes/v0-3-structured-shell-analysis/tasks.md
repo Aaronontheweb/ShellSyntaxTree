@@ -46,6 +46,7 @@
   - [x] 3.10a Implement the simple-command argument and redirect-target slice, including comment-safe boundaries and fail-closed unsupported interiors.
   - [x] 3.10b Implement the bounded expanding-heredoc slice with quote-removed delimiters, literal quoted/escaped bodies, tab stripping, exact provenance, and fail-closed unsupported header/body forms.
   - [x] 3.10c Require proved Bash variable-attribute state for simple named-parameter dereferences and fail closed globally on the locked unmodeled execution-bearing builtin catalog, including exact dispatch-wrapper bypasses.
+  - [x] 3.10d Fail closed globally on Bash `exec`, mutating or ambiguous `hash`, alias, `shopt`, and `enable` forms, and unmodeled reserved execution prefixes/groups while retaining only exact static query grammar.
 - [ ] 3.11 Implement PowerShell `$()` discovery in supported words, redirect values, foreach expressions, call-operator dynamic identities, standalone expression statements, double-quoted strings, and expandable here-strings; never invent invocation from standalone output, retain literal/escaped spellings, and fail closed on trailing command-style arguments, call-operator script blocks, or unsupported execution-bearing `@()` / `@{}` forms.
   - [x] 3.11a Implement words, redirect values, call-operator dynamic identities, standalone statements, expandable strings/here-strings, and parent-versus-child host payload provenance; fail closed on arbitrary expression values and unsupported execution-bearing `@()` / `@{}` forms.
 - [x] 3.12 Pin substitution parentage, authored sibling indices, innermost-first ordering, Bash-isolated versus PowerShell-current-scope state, unknown-state propagation, nesting/depth limits, and incomplete dynamic identities in direct tests.
@@ -53,11 +54,13 @@
   - [x] 3.12b Pin the PowerShell simple-command slice, current-scope exact and unknown cwd propagation, parent/child wrapper provenance, expression boundaries, and the shared structural-depth budget.
   - [x] 3.12c Pin expanding-heredoc sibling/nested ordering, exact spans, isolated state, delimiter modes, escape parity, depth limits, and atomic failure.
   - [x] 3.12d Pin default-versus-isolated parameter dereferences, nameref and integer hidden execution, reachable mutation invalidation, substitution/subshell scope boundaries, and direct/wrapped execution-bearing builtins with native Bash oracles.
+  - [x] 3.12e Pin Bash command-resolution mutation, reserved-prefix/group rejection, and exact-query boundaries with direct tests, recursive wrapper cases, and native Bash oracles.
 - [ ] 3.13 Promote ordinary, multiple, nested, iterator, redirect, quoted, escaped, stateful, malformed, and hidden-execution substitution cases into both executable corpora and the Netclaw approval matrix.
   - [x] 3.13a Promote the Bash ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, and hidden-execution cases into its executable corpus.
   - [x] 3.13b Promote the PowerShell ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, expression-boundary, and hidden-execution cases into its executable corpus.
   - [x] 3.13c Promote expanding, literal, tab-stripped, multiple, and malformed Bash heredoc cases with full structural expectations into the executable corpus.
   - [ ] 3.13d Promote sanitized nameref, unknown-state dereference, and execution-bearing builtin failures into the Bash executable corpus and Netclaw strict matrix.
+  - [ ] 3.13e Promote sanitized Bash hash, alias/option, exec, builtin-enable, and reserved execution syntax failures into the executable corpus and Netclaw strict matrix.
 - [x] 3.14 Add `ExecutionRegionSyntax`, its four discriminant enums,
   `SimpleCommandSyntax.ExecutionRegions`, and appended occurrence/ancestry enum
   members to the public API and snapshot without changing existing enum values.

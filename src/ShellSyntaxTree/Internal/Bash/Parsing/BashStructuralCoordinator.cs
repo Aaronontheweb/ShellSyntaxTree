@@ -571,6 +571,19 @@ internal static partial class BashCommandParser
                 return false;
             }
 
+            if (executionBoundary == BashExecutionBoundaryKind.CommandResolutionMutation)
+            {
+                error = "Bash command-resolution mutation requires structure-aware state analysis";
+                return false;
+            }
+
+            if (executionBoundary ==
+                BashExecutionBoundaryKind.UnsupportedReservedExecutionSyntax)
+            {
+                error = "Bash reserved execution syntax requires structural analysis";
+                return false;
+            }
+
             if (executionBoundary == BashExecutionBoundaryKind.UnsupportedDispatch)
             {
                 error = "Bash command or builtin dispatch grammar is not statically supported";

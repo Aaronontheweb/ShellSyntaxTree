@@ -48,6 +48,132 @@ public class BashExecutionBoundaryTests
     }
 
     [Theory]
+    [InlineData("hash -p /bin/rm git; git target.txt")]
+    [InlineData("hash -r")]
+    [InlineData("hash -d git")]
+    [InlineData("hash git")]
+    [InlineData("hash -l git")]
+    [InlineData("hash -t")]
+    [InlineData("hash -lt")]
+    [InlineData("hash -t git -p /bin/rm safe")]
+    [InlineData("hash \"$arguments\"")]
+    [InlineData("alias safe=rm")]
+    [InlineData("alias \"$definition\"")]
+    [InlineData("unalias safe")]
+    [InlineData("shopt -s expand_aliases")]
+    [InlineData("shopt -u expand_aliases")]
+    [InlineData("shopt \"$arguments\"")]
+    [InlineData("enable printf")]
+    [InlineData("enable -n printf")]
+    [InlineData("enable -f /tmp/plugin.so custom")]
+    [InlineData("enable -d custom")]
+    [InlineData("enable \"$arguments\"")]
+    [InlineData("h''ash -p /bin/rm git")]
+    [InlineData("ha\\sh -r")]
+    [InlineData("'alias' safe=rm")]
+    [InlineData("a\"lia\"s safe=rm")]
+    [InlineData("sho''pt -s expand_aliases")]
+    [InlineData("en\\able -n printf")]
+    [InlineData("hash -\"$mode\" git")]
+    [InlineData("alias safe=\"$command\"")]
+    [InlineData("shopt -\"$mode\" expand_aliases")]
+    [InlineData("enable -\"$mode\" printf")]
+    public void Command_resolution_mutation_or_ambiguous_grammar_fails_atomically(
+        string source)
+    {
+        var result = Parse(source, BashInitialStateMode.IsolatedNonInteractive);
+
+        AssertAtomicFailure(result, "command-resolution mutation");
+    }
+
+    [Theory]
+    [InlineData("command -- hash -p /bin/rm git")]
+    [InlineData("builtin -- alias safe=rm")]
+    [InlineData("command -p -- builtin -- shopt -s expand_aliases")]
+    [InlineData("builtin command -- enable -n printf")]
+    public void Static_dispatch_wrapper_cannot_hide_command_resolution_mutation(
+        string source)
+    {
+        var result = Parse(source, BashInitialStateMode.IsolatedNonInteractive);
+
+        AssertAtomicFailure(result, "command-resolution mutation");
+    }
+
+    [Theory]
+    [InlineData("exec /bin/rm target.txt")]
+    [InlineData("exec > output.log")]
+    [InlineData("command -- exec /bin/printf marker")]
+    [InlineData("builtin -- exec /bin/printf marker")]
+    [InlineData("ex''ec /bin/printf marker")]
+    [InlineData("e\\xec /bin/printf marker")]
+    public void Exec_fails_at_the_global_execution_boundary(string source)
+    {
+        var result = Parse(source, BashInitialStateMode.IsolatedNonInteractive);
+
+        AssertAtomicFailure(result, "execution-bearing builtin");
+    }
+
+    [Theory]
+    [InlineData("time hash -p /bin/rm git; git target.txt")]
+    [InlineData("time -p command -- hash -p /bin/rm git")]
+    [InlineData("time -- builtin -- exec /bin/rm target.txt")]
+    [InlineData("! hash -p /bin/rm git; git target.txt")]
+    [InlineData("! exec /bin/rm target.txt")]
+    [InlineData("coproc exec /bin/rm target.txt")]
+    [InlineData("coproc worker { printf hidden; }")]
+    [InlineData("{ hash -p /bin/rm git; git target.txt; }")]
+    [InlineData("{ exec /bin/rm target.txt; }")]
+    public void Unsupported_reserved_execution_syntax_fails_atomically(string source)
+    {
+        var result = Parse(source, BashInitialStateMode.IsolatedNonInteractive);
+
+        AssertAtomicFailure(result, "reserved execution syntax");
+    }
+
+    [Theory]
+    [InlineData("printf '%s' time")]
+    [InlineData("printf '%s' '!'")]
+    [InlineData("printf '%s' '{'")]
+    [InlineData("'time' hash -p /bin/rm git")]
+    [InlineData("command -- time hash -p /bin/rm git")]
+    public void Non_reserved_spellings_do_not_invent_reserved_execution_structure(
+        string source)
+    {
+        var result = Parse(source, BashInitialStateMode.IsolatedNonInteractive);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+    }
+
+    [Theory]
+    [InlineData("hash")]
+    [InlineData("hash -l")]
+    [InlineData("hash -t git")]
+    [InlineData("hash -lt git")]
+    [InlineData("alias")]
+    [InlineData("alias -p")]
+    [InlineData("alias safe")]
+    [InlineData("alias -p safe other")]
+    [InlineData("shopt")]
+    [InlineData("shopt -p")]
+    [InlineData("shopt -q expand_aliases")]
+    [InlineData("shopt -oq nounset")]
+    [InlineData("enable")]
+    [InlineData("enable -a")]
+    [InlineData("enable -n")]
+    [InlineData("enable -p")]
+    [InlineData("enable -s")]
+    [InlineData("enable -an")]
+    [InlineData("builtin -- hash -t git")]
+    [InlineData("command -- shopt -q expand_aliases")]
+    public void Exact_command_resolution_queries_remain_parseable(string source)
+    {
+        var result = Parse(source, BashInitialStateMode.IsolatedNonInteractive);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.NotEmpty(result.Commands);
+    }
+
+    [Theory]
     [InlineData("printf \"$option\" data")]
     [InlineData("printf -v\"$name\" data")]
     public void Dynamic_printf_option_position_fails_atomically(string source)

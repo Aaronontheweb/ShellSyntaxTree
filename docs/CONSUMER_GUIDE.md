@@ -231,6 +231,18 @@ outside the first bounded scalar grammar. The parser also downgrades a decoded
 `export`; resolver-only option cloning for an exact cwd retains the independent
 variable-state assertion.
 
+ShellSyntaxTree also treats Bash command resolution as parser-owned security
+state. `exec` and mutating or ambiguous `hash`, `alias`, `unalias`, `shopt`,
+and `enable` forms make the complete result unparseable, including through exact `command`
+or `builtin` dispatch wrappers. Only documented static query forms remain
+visible, such as `hash -t name`, `alias name`, `shopt -q option`, and bare
+`enable -n`. Consumers need no special fallback for rejected mutations: apply
+the ordinary `IsUnparseable` prompt-or-deny rule. A parseable query is still
+only syntax evidence; it does not prove the queried executable safe.
+Unmodeled unquoted `time`, `!`, `coproc`, and `{ ...; }` syntax follows the
+same rule because those constructs can hide nested or current-shell execution;
+quoted spellings and external `/usr/bin/time` do not acquire reserved syntax.
+
 PowerShell `foreach` value proofs require the parallel but shell-specific
 assertion. `PwshInitialStateMode.Unknown` is the safe default: the parser can
 still expose supported loop structure, but ambient typed, validated,

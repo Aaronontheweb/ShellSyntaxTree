@@ -567,6 +567,35 @@ than bypassing the catalog. Ordinary `printf` without `-v` remains supported.
 A later additive grammar may admit individually proved query or assignment
 forms without weakening this stable boundary.
 
+Bash command resolution is a separate state axis from variable attributes and
+cwd. Stable v0.3 rejects `exec` globally because it replaces the analyzed shell
+with another executable (or makes redirections persistent when no command is
+supplied). It also rejects `unalias` and every mutating or ambiguous `hash`,
+`alias`, `shopt`, and `enable` form before any later occurrence can inherit a
+false command identity. This closes mappings such as
+`hash -p /bin/rm git; git target`, newline-delimited alias activation through
+`shopt -s expand_aliases`, and builtin disable/load operations.
+
+The parser may retain only exact static query grammar: bare `hash`, `alias`,
+`shopt`, and `enable`; `hash -l` without operands and `hash -t NAME...`;
+`alias [-p] [NAME...]` without an equals-bearing definition; `shopt` options
+that contain neither `-s` nor `-u`; and no-name `enable` listing flags composed
+only from `-a`, `-n`, `-p`, and `-s`. Dynamic words, unsupported options, plain
+hash names, alias definitions, any `shopt -s` / `-u`, and any enable name,
+`-d`, or `-f` fail closed. Exact `command` and `builtin` wrappers are unwrapped
+before this grammar is applied. Query recognition is a parser completeness
+fact, not authorization for the queried builtin.
+
+Reserved execution syntax is not a verb-chain wrapper. Unquoted `time` and `!`
+run the following pipeline with current-shell state, `coproc` launches hidden
+concurrent execution, and `{ ...; }` shares the current shell. Until those
+constructs have typed structural nodes and recursive state analysis, an exact
+unquoted `time`, `!`, `coproc`, `{`, or `}` in command position fails the
+complete parse closed. Quoted/escaped spellings and `/usr/bin/time` remain
+ordinary command identities; `command time ...` does not invent reserved-word
+semantics. The structured Bash BNF therefore does not include a `bash_group`
+production until brace-group support is actually implemented.
+
 PowerShell needs the same explicit boundary for different reasons.
 `PwshParserOptions.InitialStateMode` defaults to `Unknown`, which permits
 structural discovery but withholds exact or finite `foreach` binding proofs.
@@ -1505,7 +1534,6 @@ bash_list_item       := bash_and_or
 bash_and_or          := bash_pipeline (("&&" | "||") bash_pipeline)*
 bash_pipeline        := bash_command ("|" bash_command)*
 bash_command         := bash_for_in
-                      | bash_group
                       | bash_subshell
                       | bash_c_wrapper
                       | bash_simple_command
