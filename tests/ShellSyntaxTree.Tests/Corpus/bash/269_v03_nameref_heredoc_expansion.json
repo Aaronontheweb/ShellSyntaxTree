@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash nameref heredoc expansion fails closed",
+  "input": "declare -a values; declare -n current='values[$(printf marker >&2)0]'; cat <<EOF\n${current}\nEOF",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "execution-bearing builtin"
+  },
+  "notes": "A nameref can defer executable array-subscript evaluation until a later simple parameter expansion, so declare remains outside the modeled boundary.",
+  "oracleExpectation": "OutOfScope"
+}

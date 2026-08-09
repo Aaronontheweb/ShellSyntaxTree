@@ -220,6 +220,22 @@ public class BashLexerTests
         Assert.Equal("rest", tokens[3].Value);
     }
 
+    [Theory]
+    [InlineData("cmd 2<<EOF\nbody\nEOF", "2<<")]
+    [InlineData("cmd 10<<-EOF\n\tbody\n\tEOF", "10<<-")]
+    [InlineData("cmd 1\\\n0<<EOF\nbody\nEOF", "10<<")]
+    public void Numeric_source_heredoc_prefers_the_longest_redirect_operator(
+        string input,
+        string expectedOperator)
+    {
+        var tokens = LexNonWs(input);
+
+        Assert.Equal(3, tokens.Length);
+        Assert.Equal(expectedOperator, tokens[1].OperatorText);
+        Assert.Equal("EOF", tokens[2].Value);
+        Assert.NotNull(tokens[2].HeredocBodyValue);
+    }
+
     // ------------------------------------------------------------ quoting
 
     [Fact]
@@ -454,6 +470,21 @@ public class BashLexerTests
         Assert.Equal(BashTokenKind.UnparseableSentinel, t.Kind);
         Assert.Equal("$((1 + 2))", t.Value);
         Assert.Contains("arithmetic", t.UnparseableReason);
+    }
+
+    [Theory]
+    [InlineData("$[value]")]
+    [InlineData("\"$[value]\"")]
+    [InlineData("prefix$[value]suffix")]
+    [InlineData("prefix$((1 + 2))suffix")]
+    [InlineData("prefix${value@P}suffix")]
+    public void Unsupported_expansion_anywhere_in_a_word_emits_unparseable_sentinel(
+        string source)
+    {
+        var tokens = LexNonWs(source);
+
+        Assert.Contains(tokens, token =>
+            token.Kind == BashTokenKind.UnparseableSentinel);
     }
 
     [Fact]

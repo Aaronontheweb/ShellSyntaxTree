@@ -860,7 +860,7 @@ internal static partial class BashCommandParser
                     continue;
                 }
 
-                if (t.OperatorText == "<<" || t.OperatorText == "<<-")
+                if (BashLexer.IsHeredocOperator(t.OperatorText))
                 {
                     if (i + 1 >= segmentTokens.Count)
                     {

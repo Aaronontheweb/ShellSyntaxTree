@@ -102,6 +102,44 @@ public class ShellValueOracleTests
         Assert.Equal(expected, Run("bash", "-c", source));
     }
 
+    [Fact]
+    public void Bash_prompt_parameter_transform_can_execute_command_text_in_heredoc()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "x='$(printf HIDDEN_EXEC)'; cat <<EOF\n${x@P}\nEOF");
+
+        Assert.Equal("HIDDEN_EXEC", output);
+    }
+
+    [Fact]
+    public void Bash_obsolete_arithmetic_expansion_can_execute_command_text_in_heredoc()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "x='a[$(printf OLD_ARITH >&2)0]'; cat <<EOF\n$[x]\nEOF");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Equal("0\n", result.StandardOutput);
+        Assert.Equal("OLD_ARITH", result.StandardError);
+    }
+
     [Theory]
     [InlineData("cat <<EOF >out\nbody\nEOF")]
     [InlineData("cat <<EOF; evil\nbody\nEOF")]
@@ -813,6 +851,64 @@ public class ShellValueOracleTests
             "for f in a b; do trap 'f=x' DEBUG; printf '<%s>\\n' \"$f\"; done");
 
         Assert.Equal(new[] { "<x>", "<x>" }, Lines(output));
+    }
+
+    [Fact]
+    public void Bash_nameref_parameter_expansion_can_execute_deferred_array_subscript()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "declare -a a; declare -n x='a[$(printf NREF >&2)0]'; " +
+            "cat <<EOF\n${x}\nEOF");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("NREF", result.StandardError);
+    }
+
+    [Fact]
+    public void Bash_integer_declaration_can_execute_array_subscript_during_assignment()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "declare -a a; declare -i x='a[$(printf INTEGER >&2)0]'");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("INTEGER", result.StandardError);
+    }
+
+    [Fact]
+    public void Bash_printf_attached_v_option_can_execute_array_subscript_assignment()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var result = RunUnchecked(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "declare -a a; printf -v'a[$(printf PRINTF_V >&2)0]' '%s' data");
+
+        Assert.Equal(0, result.ExitCode);
+        Assert.Contains("PRINTF_V", result.StandardError);
     }
 
     [Fact]

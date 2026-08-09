@@ -13,6 +13,7 @@ public class ResolverProvenanceTests
     {
         HomeDirectory = "/home/test",
         WorkingDirectory = "/work",
+        InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
     });
 
     private static readonly PwshParser Pwsh = new(new PwshParserOptions
@@ -43,6 +44,7 @@ public class ResolverProvenanceTests
         {
             HomeDirectory = "/home/test user",
             WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
         });
 
         var unquoted = Assert.Single(Assert.Single(parser.Parse("cat $HOME").Clauses).Args);

@@ -21,6 +21,7 @@ public class ClauseElementTests
     {
         HomeDirectory = "/home/test",
         WorkingDirectory = "/work",
+        InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
     });
 
     private static readonly PwshParser Pwsh = new(new PwshParserOptions

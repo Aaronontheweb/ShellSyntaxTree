@@ -1,0 +1,10 @@
+{
+  "name": "v0.3 Bash attached printf variable assignment fails closed",
+  "input": "printf -v'value[$(printf marker >&2)0]' '%s' data",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "execution-bearing builtin"
+  },
+  "notes": "Bash accepts an attached -vname option, and an array-subscript variable name can execute command substitution during assignment.",
+  "oracleExpectation": "OutOfScope"
+}

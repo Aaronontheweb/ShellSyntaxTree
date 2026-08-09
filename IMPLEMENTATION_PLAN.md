@@ -530,9 +530,21 @@ priorities.
       plus equal-record hash consistency, demonstrate that default JSON is not
       a polymorphic round-trip contract, and make every policy-sensitive
       unknown numeric enum value detectable so consumers can reject it.
-- [ ] Build on the delivered bounded Bash heredoc grammar and quoted-delimiter
-      adjacency by exposing public body/delimiter/expansion/completeness facts,
-      then add a separately tested Bash `<<<` here-string redirect slice.
+- [x] Expose public Bash heredoc body, delimiter, expansion, tab-stripping, and
+      completeness facts from the delivered bounded grammar. Direct tests pin
+      literal and expanding delimiters, every supported substitution command,
+      exact empty/LF/CRLF/tabbed body provenance, the retained v0.2 redirect,
+      and nullable source offsets for decoded `bash -c` payloads.
+- [x] Close the Bash variable-attribute hidden-execution boundary. Named
+      parameter dereferences now require a caller-proved isolated initial
+      state, with that proof propagated into substitutions and subshells.
+      Direct and recursively dispatch-wrapped `eval`, source/dot, trap,
+      variable-attribute and variable-mutating builtins, plus `printf -v`,
+      fail atomically until their state effects are modeled. Native Bash
+      oracles pin nameref-deferred and integer-assignment execution, and the
+      executable corpus carries isolated, unknown-state, and wrapper cases.
+- [ ] Add the separately tested Bash `<<<` here-string redirect slice with
+      bounded operand analysis and trailing-newline semantics.
 
 ---
 

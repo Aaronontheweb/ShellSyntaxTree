@@ -64,6 +64,25 @@ internal readonly record struct BashToken(
     public ShellValue? HeredocBodyValue { get; init; }
 
     /// <summary>
+    /// Authored-source start of the heredoc body associated with a delimiter
+    /// token. Null for ordinary tokens and malformed heredocs.
+    /// </summary>
+    public int? HeredocBodyStart { get; init; }
+
+    /// <summary>
+    /// Authored-source length of the heredoc body associated with a delimiter
+    /// token. The span ends immediately before the terminator line and retains
+    /// leading tabs for <c>&lt;&lt;-</c> provenance.
+    /// </summary>
+    public int? HeredocBodyLength { get; init; }
+
+    /// <summary>
+    /// True when quote removal or an escape contributed to the delimiter.
+    /// Bash disables body expansion when any delimiter fragment is quoted.
+    /// </summary>
+    public bool IsHeredocDelimiterQuoted { get; init; }
+
+    /// <summary>
     /// Exclusive authored-source end of the heredoc terminator associated
     /// with a delimiter token. Null for ordinary tokens and malformed
     /// heredocs. This lets structural spans cover the body without exposing

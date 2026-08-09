@@ -130,6 +130,11 @@ executable may interpret that data as code.
 - **THEN** the redirect records that leading tabs are stripped
 - **THEN** authored body provenance remains available
 
+#### Scenario: Numeric-source heredoc
+- **WHEN** Bash parses `cat 3<<EOF` followed by a supported body and delimiter
+- **THEN** descriptor `3`, heredoc operation, delimiter, body, expansion, and completeness facts are preserved
+- **THEN** the numeric descriptor does not cause the body to be tokenized as an ordinary command
+
 ### Requirement: Bash here strings are explicit data redirects
 v0.3 SHALL parse Bash `<<< word` as a `HereString` redirect. Its operand SHALL
 use the normal shell value domain, SHALL NOT be path-relevant, and SHALL account

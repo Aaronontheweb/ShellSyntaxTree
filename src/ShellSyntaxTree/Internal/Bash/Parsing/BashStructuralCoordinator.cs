@@ -563,6 +563,28 @@ internal static partial class BashCommandParser
                 IsCommandStringWrapped = _markBashCWrapped,
             };
             var emitted = AttachAttributionArg(clause, _attribution);
+            var executionBoundary =
+                BashCwdInvocationGrammar.ClassifyExecutionBoundary(emitted);
+            if (executionBoundary == BashExecutionBoundaryKind.ExecutionBearingBuiltin)
+            {
+                error = "Bash execution-bearing builtin requires structure-aware state analysis";
+                return false;
+            }
+
+            if (executionBoundary == BashExecutionBoundaryKind.UnsupportedDispatch)
+            {
+                error = "Bash command or builtin dispatch grammar is not statically supported";
+                return false;
+            }
+
+            if (ContainsNamedParameterExpansion(segmentTokens) &&
+                (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive ||
+                 _hasUnmodeledVariableStateMutation))
+            {
+                error = "Bash named parameter expansion requires proved variable-attribute state";
+                return false;
+            }
+
             var dispatchKind = BashCwdInvocationGrammar.Classify(
                 emitted,
                 out _);
@@ -1288,16 +1310,33 @@ internal static partial class BashCommandParser
                     parseOptions.WorkingDirectory ?? Environment.CurrentDirectory));
             }
 
-            var redirectAnalysis = BashRedirectAnalysis.Analyze(simple.Clause);
+            var redirectAnalysis = BashRedirectAnalysis.Analyze(
+                simple.Clause,
+                _source,
+                sourceTokens);
             _facts.Add(simple.Clause, new CommandOccurrenceFacts
             {
                 Redirects = redirectAnalysis,
                 ValueProvenance = valueProvenance.ToArray(),
                 CwdPathDependencies = cwdPathDependencies.ToArray(),
                 IsComplete = simple.Clause.Verb.Tokens.Count > 0 &&
-                    AreRedirectsComplete(simple.Clause) &&
+                    AreRedirectsComplete(redirectAnalysis) &&
                     !HasUnexpandedCommandString(simple.Clause),
             });
+        }
+
+        private static bool AreRedirectsComplete(
+            IReadOnlyList<RedirectAnalysis> redirects)
+        {
+            foreach (var redirect in redirects)
+            {
+                if (!redirect.IsComplete)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool TryGetElementValue(
@@ -1389,7 +1428,7 @@ internal static partial class BashCommandParser
 
                 _facts.Add(clonedClause, new CommandOccurrenceFacts
                 {
-                    Redirects = source.Redirects,
+                    Redirects = ClearDecodedHereDocumentSpans(source.Redirects),
                     CwdPathDependencies = cwdPathDependencies,
                     ValueProvenance = valueProvenance,
                     IsComplete = source.IsComplete,
@@ -1409,6 +1448,43 @@ internal static partial class BashCommandParser
 
             error = null;
             return true;
+        }
+
+        private static IReadOnlyList<RedirectAnalysis> ClearDecodedHereDocumentSpans(
+            IReadOnlyList<RedirectAnalysis> redirects)
+        {
+            var rewritten = new RedirectAnalysis[redirects.Count];
+            var changed = false;
+            for (var index = 0; index < rewritten.Length; index++)
+            {
+                var redirect = redirects[index];
+                var hereDocument = redirect.HereDocument;
+                if (hereDocument is null)
+                {
+                    rewritten[index] = redirect;
+                    continue;
+                }
+
+                changed = true;
+                rewritten[index] = redirect with
+                {
+                    HereDocument = hereDocument with
+                    {
+                        Delimiter = hereDocument.Delimiter with
+                        {
+                            SourceStart = null,
+                            SourceLength = null,
+                        },
+                        Body = hereDocument.Body with
+                        {
+                            SourceStart = null,
+                            SourceLength = null,
+                        },
+                    },
+                };
+            }
+
+            return changed ? rewritten : redirects;
         }
 
         private static bool TryFindValueProvenance(
@@ -1488,6 +1564,32 @@ internal static partial class BashCommandParser
                 if (string.Equals(argument.Raw, "-v", StringComparison.Ordinal))
                 {
                     return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool ContainsNamedParameterExpansion(
+            IReadOnlyList<BashToken> tokens)
+        {
+            foreach (var token in tokens)
+            {
+                foreach (var value in new[] { token.ResolverValue, token.HeredocBodyValue })
+                {
+                    if (value is null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var fragment in value.Fragments)
+                    {
+                        if (fragment.Kind == ShellValueFragmentKind.Expansion &&
+                            fragment.Expansion is { Kind: ShellExpansionKind.Variable })
+                        {
+                            return true;
+                        }
+                    }
                 }
             }
 

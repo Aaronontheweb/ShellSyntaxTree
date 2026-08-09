@@ -528,6 +528,61 @@ internal static class AstAssert
                 wanted.Target,
                 observed.Target,
                 $"{path}[{index}].target");
+            AssertHereDocumentEqual(
+                wanted.HereDocument,
+                observed.HereDocument,
+                $"{path}[{index}].hereDocument");
+        }
+    }
+
+    private static void AssertHereDocumentEqual(
+        ExpectedHereDocumentAnalysis? expected,
+        HereDocumentAnalysis? actual,
+        string path)
+    {
+        if (expected is null)
+        {
+            if (actual is not null)
+            {
+                throw new XunitException($"{path}: expected null, actual non-null");
+            }
+
+            return;
+        }
+
+        if (actual is null)
+        {
+            throw new XunitException($"{path}: expected non-null, actual null");
+        }
+
+        AssertSourceFragmentEqual(expected.Delimiter, actual.Delimiter, path + ".delimiter");
+        AssertSourceFragmentEqual(expected.Body, actual.Body, path + ".body");
+        if (expected.ExpansionMode != actual.ExpansionMode ||
+            expected.StripLeadingTabs != actual.StripLeadingTabs ||
+            expected.IsComplete != actual.IsComplete)
+        {
+            throw new XunitException(
+                $"{path} differs: expected expansion={expected.ExpansionMode}, "
+                + $"stripTabs={expected.StripLeadingTabs}, complete={expected.IsComplete}; "
+                + $"actual expansion={actual.ExpansionMode}, "
+                + $"stripTabs={actual.StripLeadingTabs}, complete={actual.IsComplete}");
+        }
+    }
+
+    private static void AssertSourceFragmentEqual(
+        ExpectedSourceFragment expected,
+        ShellSourceFragment actual,
+        string path)
+    {
+        if (expected.Raw != actual.Raw ||
+            expected.SourceStart != actual.SourceStart ||
+            expected.SourceLength != actual.SourceLength)
+        {
+            throw new XunitException(
+                $"{path}: expected raw={Quote(expected.Raw)}, "
+                + $"span={expected.SourceStart}:{expected.SourceLength}; "
+                + $"actual raw={Quote(actual.Raw)}, "
+                + $"span={actual.SourceStart}:{actual.SourceLength}");
         }
     }
 

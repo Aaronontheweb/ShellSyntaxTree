@@ -168,6 +168,62 @@ the independently proved variable-state mode.
 - **THEN** the decoded child enters with unknown initial variable state
 - **THEN** the complete result is unparseable rather than publishing an isolated scalar proof
 
+### Requirement: Bash parameter dereferences require proved attribute state
+A syntactically simple Bash `$name` or `${name}` dereference SHALL be treated
+as fully execution-accounted only when the incoming variable-attribute state
+proves that the binding cannot be an integer, nameref, array reference, or
+other recursively evaluated form. Value exactness SHALL remain independent:
+an attribute-safe variable MAY still produce an `Unknown` value.
+
+`BashInitialStateMode.Unknown` SHALL make a simple named-variable dereference
+unparseable because an ambient nameref can evaluate an authored array
+subscript. `IsolatedNonInteractive` MAY establish safe initial attributes for
+a fresh-process variable before reachable source mutation. A modeled ordinary
+loop binding MAY retain that proof. Any reachable unmodeled variable mutation
+SHALL invalidate the proof in later regions that can observe it. Positional
+and special parameters that cannot carry variable attributes remain governed
+by their existing typed cardinality rules.
+
+#### Scenario: Unknown ambient nameref fails closed
+- **WHEN** default-mode Bash parses `printf '%s' "$x"`
+- **THEN** the whole result is unparseable because ambient `x` may be a nameref
+- **THEN** the parser does not report the outer `printf` complete while hiding recursive execution
+
+#### Scenario: Fresh isolated scalar may remain unknown data
+- **WHEN** isolated-mode Bash parses `printf '%s' "$x"` before any source mutation
+- **THEN** the variable value remains unknown
+- **THEN** the dereference does not by itself make the result unparseable because fresh-process attributes are proved safe
+
+#### Scenario: Nameref mutation hides execution in a later heredoc
+- **WHEN** isolated-mode Bash parses `declare -a a; declare -n x='a[$(hidden)0]'; cat <<EOF` followed by `${x}` and `EOF`
+- **THEN** the whole result is unparseable
+- **THEN** no complete heredoc or command projection hides `hidden`
+
+### Requirement: Unmodeled execution-bearing Bash builtins fail closed globally
+Stable v0.3 SHALL fail the complete parse closed for direct or statically
+wrapped Bash builtin forms whose argument text can execute, be evaluated as
+arithmetic, install deferred execution, or assign through unproved variable
+attributes. The bounded catalog SHALL include `eval`, `source` / `.`, `trap`,
+`let`, `declare`, `typeset`, `local`, `readonly`, `export`, `unset`, `read`,
+`readarray`, `mapfile`, `getopts`, and `set`, plus `printf -v`. Exact `command`
+and `builtin` dispatch wrappers SHALL be recursively unwrapped. Dynamic or
+invalid wrapper grammar SHALL fail closed. Ordinary `printf` without `-v`
+SHALL retain its existing behavior.
+
+#### Scenario: Eval payload is not mistaken for inert data
+- **WHEN** Bash parses `eval 'rm target.txt'`
+- **THEN** the whole result is unparseable until eval payload grammar is modeled
+- **THEN** `eval` is not published as a complete occurrence that hides `rm`
+
+#### Scenario: Integer declaration can execute quoted arithmetic data
+- **WHEN** Bash parses `declare -i x='a[$(hidden)0]'`
+- **THEN** the whole result is unparseable
+- **THEN** quoting the assignment operand does not make the builtin evaluation inert
+
+#### Scenario: Exact dispatch wrapper cannot bypass the boundary
+- **WHEN** Bash parses `builtin eval 'rm target.txt'`
+- **THEN** the whole result is unparseable under the same rule as direct `eval`
+
 ### Requirement: PowerShell loop proofs require an explicit initial-runspace contract
 `PwshParserOptions.InitialStateMode` SHALL default to `Unknown`. In that mode,
 the parser MAY expose supported `foreach` structure and command occurrences,
