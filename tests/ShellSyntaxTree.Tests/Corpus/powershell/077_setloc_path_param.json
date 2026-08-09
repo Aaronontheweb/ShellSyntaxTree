@@ -34,14 +34,12 @@
           {
             "raw": "temp.txt",
             "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/proj/temp.txt"
+            "isPath": true
           },
           {
-            "raw": "C:/proj",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/proj",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

@@ -135,7 +135,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Substitution",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -222,10 +222,8 @@
           }
         ],
         "workingDirectory": {
-          "kind": "Exact",
-          "values": [
-            "C:/work"
-          ],
+          "kind": "Unknown",
+          "values": [],
           "pattern": null,
           "coveringDirectory": null
         }

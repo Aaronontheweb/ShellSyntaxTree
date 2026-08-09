@@ -335,6 +335,19 @@ Current-runspace regions such as `( ... )`, `$()`, and a static
 location state. A decoded `pwsh -Command` or `pwsh -EncodedCommand` child does
 not inherit the assertion unless its own invocation contract independently
 proves the complete constrained-host environment, not merely `-NoProfile`.
+The decoded child also does not inherit exact `$HOME` or environment-variable
+facts: an uncontrolled profile can mutate either before the payload runs.
+Configured provider/native tilde state remains a separate process-initialization
+fact. An explicit native or `.ps1` path spelling supplies only an argument-
+binding candidate because PowerShell aliases can shadow path-shaped names; the
+candidate becomes a proof only under constrained, unmutated command-resolution
+state. Default ambient uncertainty alone does not invent an observed mutation
+or discard the v0.2 compatibility leaves. It does make the v0.3 authorization
+occurrence incomplete because command identity is
+not proved; binding-dependent effective values remain `Unknown` as well. Since
+that occurrence may resolve to arbitrary in-process code, subsequent observable
+runspace state is unknown. An unproved pipeline fails atomically until pipeline
+state propagation is modeled.
 Recognized mutation of variables,
 aliases, functions, or modules invalidates later proofs wherever PowerShell
 scope rules make the mutation observable. Cwd-only state changes retain the

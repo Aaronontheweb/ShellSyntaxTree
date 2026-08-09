@@ -1,6 +1,7 @@
 {
   "name": "Pipeline measure",
   "input": "gci | measure",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

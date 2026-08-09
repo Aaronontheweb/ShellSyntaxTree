@@ -699,6 +699,35 @@ public class ShellValueOracleTests
     }
 
     [Fact]
+    public void PowerShell_native_tilde_expands_only_as_a_whole_argument_path_prefix()
+    {
+        if (!IsAvailable("pwsh") || !File.Exists("/usr/bin/printf"))
+        {
+            return;
+        }
+
+        var home = Environment.GetEnvironmentVariable("HOME");
+        Assert.False(string.IsNullOrEmpty(home));
+
+        var output = Run(
+            "pwsh",
+            "-NoLogo",
+            "-NoProfile",
+            "-Command",
+            "& /usr/bin/printf '<%s>\\n' ~ ~/x --output=~ prefix~ ~suffix");
+
+        Assert.Equal(
+            string.Join(
+                Environment.NewLine,
+                $"<{home}>",
+                $"<{home}/x>",
+                "<--output=~>",
+                "<prefix~>",
+                "<~suffix>"),
+            output);
+    }
+
+    [Fact]
     public void Dynamic_command_fragments_are_executable_identity()
     {
         if (IsNativeBashAvailable())
@@ -1882,6 +1911,86 @@ public class ShellValueOracleTests
                 "global-var=<host>",
             },
             Lines(output));
+    }
+
+    [Fact]
+    public void PowerShell_unqualified_ps1_name_can_bind_to_an_alias()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Set-Alias foo.ps1 Write-Output; " +
+            "\"type=<$((Get-Command foo.ps1).CommandType)>\"; " +
+            "foo.ps1 ~");
+
+        Assert.Equal(new[] { "type=<Alias>", "~" }, Lines(output));
+    }
+
+    [Fact]
+    public void PowerShell_builtin_cmdlet_name_can_bind_to_an_alias()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Set-Alias Write-Output Get-Item; " +
+            "$item = Write-Output .; " +
+            "[Console]::WriteLine(" +
+            "\"type=<$((Get-Command Write-Output).CommandType)>\"); " +
+            "[Console]::WriteLine(\"item=<$($item.GetType().FullName)>\")");
+
+        Assert.Equal(
+            new[] { "type=<Alias>", "item=<System.IO.DirectoryInfo>" },
+            Lines(output));
+    }
+
+    [Fact]
+    public void PowerShell_path_shaped_names_can_bind_to_aliases()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Set-Alias './foo.ps1' Write-Output; " +
+            "\"script-type=<$((Get-Command './foo.ps1').CommandType)>\"; " +
+            "./foo.ps1 ~");
+
+        Assert.Equal(new[] { "script-type=<Alias>", "~" }, Lines(output));
+
+        if (OperatingSystem.IsWindows() || !File.Exists("/usr/bin/printf"))
+        {
+            return;
+        }
+
+        output = Run(
+            "pwsh",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "Set-Alias '/usr/bin/printf' Write-Output; " +
+            "\"native-type=<$((Get-Command '/usr/bin/printf').CommandType)>\"; " +
+            "/usr/bin/printf ~");
+
+        Assert.Equal(new[] { "native-type=<Alias>", "~" }, Lines(output));
     }
 
     private static bool IsAvailable(string executable)

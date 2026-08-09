@@ -278,17 +278,7 @@
             "sourceLength": 70
           }
         ],
-        "effectiveArguments": [
-          {
-            "clauseElementIndex": 1,
-            "value": {
-              "kind": "Unknown",
-              "values": [],
-              "pattern": null,
-              "coveringDirectory": null
-            }
-          }
-        ],
+        "effectiveArguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [

@@ -1,6 +1,7 @@
 {
   "name": "Pipeline foreach alias",
   "input": "Get-ChildItem | foreach { $_ }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

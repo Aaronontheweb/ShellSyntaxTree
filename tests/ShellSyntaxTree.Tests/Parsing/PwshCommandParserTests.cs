@@ -22,6 +22,7 @@ public class PwshCommandParserTests
     {
         HomeDirectory = "C:/Users/user",
         WorkingDirectory = "C:/work",
+        InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
     });
 
     private static ParsedCommand Parse(string input) => Parser.Parse(input);
@@ -707,16 +708,16 @@ public class PwshCommandParserTests
     }
 
     [Fact]
-    public void Backtick_newline_payload_keeps_outer_location_conservative_until_remapping()
+    public void Backtick_newline_payload_remaps_current_scope_location()
     {
         var result = Parse(
             "Set-Location C:\\safe && iex Write-Output` ok`nSet-Location` C:\\evil && Remove-Item child.txt");
         var remove = result.Clauses.Last();
 
         Assert.Contains(remove.Args,
-            a => a.Raw == "child.txt" && a.Resolved is null);
+            a => a.Raw == "child.txt" && a.Resolved == "C:/evil/child.txt");
         Assert.Contains(remove.Args,
-            a => a.IsCwdAttribution && a.Kind == ArgKind.DynamicSkip);
+            a => a.IsCwdAttribution && a.Resolved == "C:/evil");
     }
 
     [Theory]
@@ -731,16 +732,16 @@ public class PwshCommandParserTests
     }
 
     [Fact]
-    public void Decoded_vertical_tab_location_keeps_outer_state_conservative_until_remapping()
+    public void Decoded_vertical_tab_location_remaps_current_scope_state()
     {
         var result = Parse(
             "Set-Location C:\\safe && iex \"Set-Location`vC:\\evil\" && Remove-Item child.txt");
         var remove = result.Clauses.Last();
 
         Assert.Contains(remove.Args,
-            a => a.Raw == "child.txt" && a.Resolved is null);
+            a => a.Raw == "child.txt" && a.Resolved == "C:/evil/child.txt");
         Assert.Contains(remove.Args,
-            a => a.IsCwdAttribution && a.Kind == ArgKind.DynamicSkip);
+            a => a.IsCwdAttribution && a.Resolved == "C:/evil");
     }
 
     [Fact]
@@ -903,15 +904,15 @@ public class PwshCommandParserTests
     }
 
     [Fact]
-    public void Invoke_expression_location_changes_remain_conservative_until_remapping()
+    public void Invoke_expression_location_changes_remap_inner_and_outer_paths()
     {
         var result = Parse(
             "Set-Location C:\\a && iex 'Set-Location C:\\b && Remove-Item child.txt' && Get-ChildItem child.txt");
 
         Assert.Contains(result.Clauses[2].Args,
-            a => a.Raw == "child.txt" && a.Resolved is null);
+            a => a.Raw == "child.txt" && a.Resolved == "C:/b/child.txt");
         Assert.Contains(result.Clauses[3].Args,
-            a => a.Raw == "child.txt" && a.Resolved is null);
+            a => a.Raw == "child.txt" && a.Resolved == "C:/b/child.txt");
     }
 
     [Fact]

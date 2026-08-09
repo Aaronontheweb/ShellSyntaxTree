@@ -1,6 +1,7 @@
 {
   "name": "V03 foreach parenthesized alias",
   "input": "Write-Output x | foreach ($_)",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

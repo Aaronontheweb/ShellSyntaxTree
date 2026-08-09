@@ -1,6 +1,7 @@
 {
   "name": "Pipeline process stop",
   "input": "Get-Process | Stop-Process",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

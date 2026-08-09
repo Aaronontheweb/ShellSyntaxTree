@@ -197,8 +197,13 @@
           {
             "raw": "host.txt",
             "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/work/host.txt"
+            "isPath": true
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
           }
         ],
         "redirects": [],
@@ -223,8 +228,7 @@
             "precedingVerbElementCount": 1,
             "kind": "Literal",
             "isFlag": false,
-            "isPath": true,
-            "resolved": "C:/work/host.txt"
+            "isPath": true
           }
         ]
       }
@@ -540,10 +544,8 @@
         ],
         "effectiveArguments": [],
         "workingDirectory": {
-          "kind": "Exact",
-          "values": [
-            "C:/work"
-          ],
+          "kind": "Unknown",
+          "values": [],
           "pattern": null,
           "coveringDirectory": null
         }
@@ -551,7 +553,7 @@
       {
         "clauseIndex": 4,
         "immediateRole": "Ordinary",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -570,10 +572,8 @@
         ],
         "effectiveArguments": [],
         "workingDirectory": {
-          "kind": "Exact",
-          "values": [
-            "C:/work"
-          ],
+          "kind": "Unknown",
+          "values": [],
           "pattern": null,
           "coveringDirectory": null
         }

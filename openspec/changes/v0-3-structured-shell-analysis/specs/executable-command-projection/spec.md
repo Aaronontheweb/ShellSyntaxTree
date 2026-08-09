@@ -127,10 +127,16 @@ SHALL NOT omit the body or authorize it as inert data.
 - **THEN** occurrences contain `Get-ChildItem`, `ForEach-Object`, and `Remove-Item` exactly once
 - **THEN** the body occurrence has execution-region ancestry nested beneath the pipeline stage
 
-#### Scenario: Unknown receiver does not hide a script block
+#### Scenario: Unknown receiver preserves a supported non-pipeline body
 - **WHEN** a script-block argument's receiver or binding is not statically proved
+- **WHEN** its body contains only supported non-pipeline commands
 - **THEN** the host and every body command remain visible
 - **THEN** the affected occurrence facts are incomplete or unknown
+
+#### Scenario: Unknown receiver pipeline fails atomically
+- **WHEN** an unknown receiver's body contains a pipeline whose stage identity is unproved
+- **THEN** the whole result is unparseable
+- **THEN** `Commands` and `Clauses` are empty
 
 ### Requirement: Occurrence completeness is explicit
 Each occurrence SHALL state whether its command identity, structural ancestry,
@@ -148,9 +154,16 @@ be sufficient authorization evidence.
 - **THEN** completeness does not imply that `echo` is authorized
 
 #### Scenario: Complete occurrence with unknown value
-- **WHEN** PowerShell parses `foreach ($item in Get-ChildItem) { Write-Output $item }`
+- **WHEN** isolated-mode PowerShell parses `foreach ($item in Get-ChildItem) { Write-Output $item }`
 - **THEN** the `Write-Output` occurrence may be structurally complete
 - **THEN** its effective `$item` value remains unknown because pipeline objects are not evaluated
+
+#### Scenario: Unknown PowerShell identity preserves compatibility evidence
+- **WHEN** default-mode PowerShell parses `Write-Output victim.txt`
+- **THEN** one v0.2 compatibility `Clause` remains visible
+- **THEN** the v0.3 occurrence is incomplete because ambient command resolution may shadow the authored name
+- **WHEN** the same source is parsed under the constrained isolated-host contract
+- **THEN** the occurrence command identity is complete
 
 ### Requirement: Source order is deterministic
 The occurrence collection SHALL be ordered by authored command occurrence,

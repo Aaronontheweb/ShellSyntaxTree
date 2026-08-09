@@ -2,27 +2,9 @@
   "name": "Recursion encoded pipeline",
   "input": "pwsh -EncodedCommand RwBlAHQALQBQAHIAbwBjAGUAcwBzACAAfAAgAFMAdABvAHAALQBQAHIAbwBjAGUAcwBzAA==",
   "expected": {
-    "isUnparseable": false,
-    "clauses": [
-      {
-        "operator": "None",
-        "verb": [
-          "Get-Process"
-        ],
-        "args": [],
-        "redirects": [],
-        "isCommandStringWrapped": true
-      },
-      {
-        "operator": "Pipe",
-        "verb": [
-          "Stop-Process"
-        ],
-        "args": [],
-        "redirects": [],
-        "isCommandStringWrapped": true
-      }
-    ]
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell structural syntax exceeded limits or contained invalid parser-owned facts"
   },
-  "notes": "-EncodedCommand decoding to a pipeline."
+  "notes": "An unconstrained decoded child pipeline fails atomically because stage identities are not proved.",
+  "oracleExpectation": "OutOfScope"
 }

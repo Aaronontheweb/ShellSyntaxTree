@@ -243,11 +243,15 @@ Unmodeled unquoted `time`, `!`, `coproc`, and `{ ...; }` syntax follows the
 same rule because those constructs can hide nested or current-shell execution;
 quoted spellings and external `/usr/bin/time` do not acquire reserved syntax.
 
-PowerShell `foreach` value proofs require the parallel but shell-specific
+PowerShell authorization proofs require the parallel but shell-specific
 assertion. `PwshInitialStateMode.Unknown` is the safe default: the parser can
-still expose supported loop structure, but ambient typed, validated,
-read-only, scoped, alias, function, and module state prevents a closed-world
-binding proof. Select `IsolatedNonInteractiveNoProfile` only when the caller
+still expose supported non-pipeline structure and preserve v0.2 compatibility
+leaves, but ambient typed, validated, read-only, scoped, alias, function, and
+module state prevents both a closed-world binding proof and a complete v0.3
+command-identity proof. An unproved invocation invalidates subsequent cwd,
+value, redirect, and command-resolution facts; an unproved pipeline fails
+atomically until pipeline state propagation is modeled. Select
+`IsolatedNonInteractiveNoProfile` only when the caller
 executes the complete source in a newly spawned noninteractive PowerShell
 process with profiles disabled and no reused or uncontrolled caller-initialized
 runspace. The launch must also disable module auto-loading or pin available
@@ -263,6 +267,8 @@ var parser = new PwshParser(new PwshParserOptions
 });
 ```
 
+Approval reuse based on `ParsedCommand.Commands` therefore requires this
+constrained command-resolution baseline, not merely a loop-value assertion.
 The assertion does not automatically cross `pwsh -Command` or
 `pwsh -EncodedCommand`; a child host needs its own independently proved launch
 contract. By contrast, `( ... )`, `$()`, and static `Invoke-Expression` share

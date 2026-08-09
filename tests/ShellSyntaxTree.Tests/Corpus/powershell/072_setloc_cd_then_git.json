@@ -28,10 +28,9 @@
         ],
         "args": [
           {
-            "raw": "C:/repo",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/repo",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],

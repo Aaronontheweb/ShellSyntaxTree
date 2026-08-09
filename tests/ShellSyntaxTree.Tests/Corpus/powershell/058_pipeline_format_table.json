@@ -1,6 +1,7 @@
 {
   "name": "Pipeline format table",
   "input": "Get-Service | ft",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

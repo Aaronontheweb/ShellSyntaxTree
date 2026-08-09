@@ -28,6 +28,7 @@ public class ClauseElementTests
     {
         HomeDirectory = "C:/Users/user",
         WorkingDirectory = "C:/work",
+        InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
     });
 
     [Fact]

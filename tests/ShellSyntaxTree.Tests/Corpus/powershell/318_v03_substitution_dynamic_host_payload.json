@@ -93,7 +93,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Substitution",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",

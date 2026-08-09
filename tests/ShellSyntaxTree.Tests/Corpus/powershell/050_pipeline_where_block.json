@@ -1,6 +1,7 @@
 {
   "name": "Pipeline where block",
   "input": "Get-Process | Where-Object { $_.CPU -gt 10 }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

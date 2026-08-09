@@ -1,6 +1,7 @@
 {
   "name": "Pipeline select then rm",
   "input": "gci C:\\tmp | Select-Object -First 5 | rm",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

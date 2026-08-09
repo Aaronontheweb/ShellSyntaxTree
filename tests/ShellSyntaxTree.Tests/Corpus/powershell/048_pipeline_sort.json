@@ -1,6 +1,7 @@
 {
   "name": "Pipeline sort",
   "input": "gci | Sort-Object Length",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

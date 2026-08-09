@@ -128,10 +128,8 @@
           }
         ],
         "workingDirectory": {
-          "kind": "Exact",
-          "values": [
-            "C:/work"
-          ],
+          "kind": "Unknown",
+          "values": [],
           "pattern": null,
           "coveringDirectory": null
         }

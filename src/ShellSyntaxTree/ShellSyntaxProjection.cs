@@ -44,7 +44,8 @@ internal sealed class CommandOccurrenceFacts
 /// </summary>
 internal readonly record struct ShellValueElementProvenance(
     int ClauseElementIndex,
-    ShellValue Value);
+    ShellValue Value,
+    bool? UsesNativeArgumentBinding = null);
 
 /// <summary>
 /// Retains the shell-owned value fragments for one file-redirect target so
@@ -55,7 +56,7 @@ internal readonly record struct RedirectTargetProvenance(
     int RedirectIndex,
     int ClauseElementIndex,
     ShellValue Value,
-    bool UsesOutermostInvocationScope);
+    int InvocationScopeDepth);
 
 /// <summary>
 /// Retains resolver-owned path provenance and its exact compatibility

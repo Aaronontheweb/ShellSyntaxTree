@@ -3,8 +3,10 @@
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests.Parsing;
@@ -184,7 +186,7 @@ public class PwshStructuralProjectionTests
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
         Assert.True(redirect.IsComplete);
-        Assert.True(command.IsComplete);
+        Assert.False(command.IsComplete);
     }
 
     [Theory]
@@ -201,7 +203,7 @@ public class PwshStructuralProjectionTests
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
         Assert.Equal("C:/maybe/relative.txt", Assert.Single(redirect.Target.Values));
-        Assert.True(command.IsComplete);
+        Assert.False(command.IsComplete);
     }
 
     [Theory]
@@ -230,7 +232,9 @@ public class PwshStructuralProjectionTests
         var redirect = Assert.Single(clause.Redirects);
         Assert.False(redirect.IsDynamicSkip);
         Assert.Equal("C:/work/out.txt", redirect.Target);
-        Assert.True(command.IsComplete);
+        Assert.Equal(
+            !invocation.StartsWith("pwsh", StringComparison.Ordinal),
+            command.IsComplete);
         var redirectFact = Assert.Single(command.Redirects);
         Assert.Equal(RedirectOperation.FileOutput, redirectFact.Operation);
         Assert.Equal("C:/work/out.txt", Assert.Single(redirectFact.Target.Values));
@@ -288,7 +292,9 @@ public class PwshStructuralProjectionTests
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var command = result.Commands[1];
-        Assert.True(command.IsComplete);
+        Assert.Equal(
+            !invocation.StartsWith("pwsh", StringComparison.Ordinal),
+            command.IsComplete);
         Assert.Contains(command.Clause.Args, argument =>
             argument.Resolved == "C:/work/a,b");
     }
@@ -396,34 +402,25 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
-    public void PowerShell_host_wrapper_preserves_inner_structure_in_an_isolated_group()
+    public void PowerShell_host_wrapper_pipeline_fails_without_child_identity_proof()
     {
         var result = Parse(
             "pwsh -Command \"Get-Item x | Select-Object Name; Get-Date\"");
 
-        var wrapper = Assert.IsType<GroupSyntax>(Assert.Single(result.Syntax.Statements));
-        Assert.Equal(ShellGroupKind.IsolatedScope, wrapper.GroupKind);
-        Assert.Equal(0, wrapper.SourceStart);
-        Assert.Equal(result.Source.Length, wrapper.SourceLength);
-        Assert.Null(wrapper.Body.SourceStart);
-        Assert.Null(wrapper.Body.SourceLength);
-        var list = Assert.IsType<CommandListSyntax>(Assert.Single(wrapper.Body.Statements));
-        Assert.IsType<PipelineSyntax>(list.Items[0].Command);
-        Assert.Equal(3, result.Commands.Count);
-        Assert.All(result.Clauses, clause => Assert.True(clause.IsCommandStringWrapped));
-        Assert.All(Descendants(wrapper.Body), node =>
-        {
-            Assert.Null(node.SourceStart);
-            Assert.Null(node.SourceLength);
-        });
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
 
-        var leaves = Descendants(wrapper.Body).OfType<SimpleCommandSyntax>().ToArray();
-        Assert.Equal(result.Commands.Count, leaves.Length);
-        for (var index = 0; index < leaves.Length; index++)
-        {
-            Assert.Same(leaves[index].Clause, result.Commands[index].Clause);
-            Assert.Same(leaves[index].Clause, result.Clauses[index]);
-        }
+    [Fact]
+    public void Unknown_receiver_body_pipeline_fails_atomically()
+    {
+        var result = Parse(
+            "Invoke-Custom { Get-Item x | Select-Object Name }");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Fact]
@@ -436,6 +433,31 @@ public class PwshStructuralProjectionTests
         Assert.IsType<CommandListSyntax>(Assert.Single(wrapper.Body.Statements));
         Assert.Equal(2, result.Commands.Count);
         Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+    }
+
+    [Theory]
+    [InlineData("Get-Content ~", "iex 'Get-Content ~'", "~")]
+    [InlineData("Get-Content *.txt", "iex 'Get-Content *.txt'", "*.txt")]
+    [InlineData("curl ~", "iex 'curl ~'", "C:/Users/test")]
+    public void Invoke_expression_preserves_current_scope_argument_binding_provenance(
+        string directSource,
+        string wrappedSource,
+        string expectedValue)
+    {
+        var direct = Parse(directSource);
+        var wrapped = Parse(wrappedSource);
+
+        var directArgument = Assert.Single(
+            Assert.Single(direct.Commands).EffectiveArguments);
+        var wrappedArgument = Assert.Single(
+            Assert.Single(wrapped.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, directArgument.Value.Kind);
+        Assert.Equal(directArgument.Value.Kind, wrappedArgument.Value.Kind);
+        Assert.Equal(
+            Assert.Single(directArgument.Value.Values),
+            Assert.Single(wrappedArgument.Value.Values));
+        Assert.Equal(expectedValue, Assert.Single(wrappedArgument.Value.Values));
+        Assert.True(Assert.Single(wrapped.Commands).IsComplete);
     }
 
     [Theory]
@@ -458,7 +480,7 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
-    public void Invoke_expression_location_changes_remain_conservative_until_remapping()
+    public void Invoke_expression_location_changes_remap_current_scope_state()
     {
         var result = Parse(
             "iex 'Set-Location C:\\sensitive' && Remove-Item child.txt");
@@ -466,7 +488,7 @@ public class PwshStructuralProjectionTests
         var remove = result.Clauses.Last();
         Assert.Contains(
             remove.Args,
-            arg => arg.IsCwdAttribution && arg.Kind == ArgKind.DynamicSkip);
+            arg => arg.IsCwdAttribution && arg.Resolved == "C:/sensitive");
     }
 
     [Fact]
@@ -477,8 +499,8 @@ public class PwshStructuralProjectionTests
         var result = Parse(source);
 
         Assert.Equal(2, result.Commands.Count);
-        Assert.True(result.Commands[0].IsComplete);
-        Assert.True(result.Commands[1].IsComplete);
+        Assert.False(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[1].IsComplete);
         var last = result.Clauses[1];
         Assert.Single(last.Redirects);
         var redirect = last.Elements.Last();
@@ -519,7 +541,7 @@ public class PwshStructuralProjectionTests
 
         var wrapper = Assert.IsType<GroupSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Equal(ShellGroupKind.IsolatedScope, wrapper.GroupKind);
-        Assert.True(Assert.Single(result.Commands).IsComplete);
+        Assert.False(Assert.Single(result.Commands).IsComplete);
         Assert.Equal("Get-Date", Assert.Single(result.Clauses).Verb.Tokens[0]);
     }
 
@@ -891,14 +913,676 @@ public class PwshStructuralProjectionTests
         Assert.Single(leaf.Clause.Redirects);
     }
 
+    [Fact]
+    public void Ordinary_literal_argument_does_not_add_a_redundant_effective_value()
+    {
+        var result = Parse("Write-Output plain");
+
+        Assert.Empty(Assert.Single(result.Commands).EffectiveArguments);
+    }
+
+    [Fact]
+    public void Escaped_and_quoted_native_flag_fragments_form_one_exact_effective_value()
+    {
+        var result = Parse(
+            "curl --data=@`$HOME\".json\" https://example.invalid/api");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(1, effective.ClauseElementIndex);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("--data=@$HOME.json", Assert.Single(effective.Value.Values));
+    }
+
+    [Fact]
+    public void Isolated_home_variable_composition_preserves_separator_bytes()
+    {
+        var result = ParseIsolatedWithHome("Write-Output \"$HOME/x\"", "/tmp/");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("/tmp//x", Assert.Single(effective.Value.Values));
+    }
+
+    [Theory]
+    [InlineData("/", "~", "/")]
+    [InlineData("/", "~/x", "//x")]
+    [InlineData("/tmp/", "~", "/tmp/")]
+    [InlineData("/tmp/", "~/x", "/tmp//x")]
+    public void Native_tilde_effective_value_preserves_configured_home_bytes(
+        string homeDirectory,
+        string argument,
+        string expected)
+    {
+        var result = ParseIsolatedWithHome(
+            $"curl --output {argument} https://example.invalid",
+            homeDirectory);
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(2, effective.ClauseElementIndex);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal(expected, Assert.Single(effective.Value.Values));
+    }
+
+    [Fact]
+    public void Quoted_native_tilde_remains_literal_in_the_effective_value()
+    {
+        var result = ParseWithHome(
+            "curl --output \"~\" https://example.invalid",
+            "/tmp/");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("~", Assert.Single(effective.Value.Values));
+    }
+
+    [Theory]
+    [InlineData("$^")]
+    [InlineData("$$")]
+    public void Runtime_automatic_parameter_path_remains_unknown(string argument)
+    {
+        var result = Parse($"Get-Content \"{argument}\"");
+
+        var command = Assert.Single(result.Commands);
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+        Assert.True(command.IsComplete);
+    }
+
+    [Fact]
+    public void Userprofile_mutation_invalidates_the_configured_home_effective_value()
+    {
+        var result = ParseIsolatedWithHome(
+            "Set-Item Env:USERPROFILE X; Get-Content \"$env:USERPROFILE/x\"",
+            "C:/Users/test");
+
+        var command = result.Commands.Last();
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+        Assert.False(command.IsComplete);
+    }
+
+    [Fact]
+    public void Process_environment_mutation_does_not_change_read_only_current_runspace_home()
+    {
+        var result = ParseIsolatedWithHome(
+            "Set-Item Env:USERPROFILE X; Get-Content \"$HOME/x\"",
+            "C:/Users/test");
+
+        var command = result.Commands.Last();
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("C:/Users/test/x", Assert.Single(effective.Value.Values));
+    }
+
+    [Fact]
+    public void Remote_execution_region_does_not_reuse_the_local_configured_home()
+    {
+        var result = ParseIsolatedWithHome(
+            "Invoke-Command -ComputerName server { Get-Content \"$HOME/x\" }",
+            "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => occurrence.Clause.Verb.Tokens[0] == "Get-Content");
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Fact]
+    public void Repeated_parallel_child_does_not_reuse_home_after_process_environment_mutation()
+    {
+        var result = ParseIsolatedWithHome(
+            "1,2 | ForEach-Object -Parallel { Set-Item Env:HOME X; " +
+            "Get-Content \"$HOME/x\" } -UseNewRunspace",
+            "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => occurrence.Clause.Verb.Tokens[0] == "Get-Content");
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Theory]
+    [InlineData(
+        "Start-Job { Get-Content \"$HOME/x\" }",
+        ShellValueDomainKind.Exact,
+        "C:/Users/test/x")]
+    [InlineData(
+        "Set-Item Env:HOME X; Start-Job { Get-Content \"$HOME/x\" }",
+        ShellValueDomainKind.Unknown,
+        null)]
+    public void Child_process_home_depends_on_proved_process_environment(
+        string source,
+        ShellValueDomainKind expectedKind,
+        string? expectedValue)
+    {
+        var result = ParseIsolatedWithHome(source, "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => occurrence.Clause.Verb.Tokens[0] == "Get-Content");
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(expectedKind, effective.Value.Kind);
+        if (expectedValue is not null)
+        {
+            Assert.Equal(expectedValue, Assert.Single(effective.Value.Values));
+        }
+    }
+
+    [Theory]
+    [InlineData("Set-Variable HOME X -Force; Write-Output hi > \"$HOME/out\"")]
+    [InlineData("Set-Item Env:USERPROFILE X; Write-Output hi > \"$env:USERPROFILE/out\"")]
+    [InlineData("Invoke-Command -ComputerName server { Write-Output hi > \"$HOME/out\" }")]
+    [InlineData("Invoke-Command -ComputerName server { Write-Output hi > \"~\" }")]
+    [InlineData("Set-Item Env:HOME X; Start-Job { Write-Output hi > \"~\" }")]
+    public void Redirect_home_values_use_occurrence_local_state(string source)
+    {
+        var result = ParseIsolatedWithHome(source, "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "Write-Output");
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
+    }
+
+    [Theory]
+    [InlineData("Set-Item Env:HOME X; Start-Job { Write-Output hi > \"~\" }")]
+    [InlineData("Invoke-Command -ComputerName server { Write-Output hi > \"~\" }")]
+    [InlineData("Set-Variable HOME X -Force; Write-Output hi > \"$HOME/out\"")]
+    public void Encoded_wrapper_inner_redirect_uses_inner_execution_state(
+        string payload)
+    {
+        var result = ParseIsolatedWithHome(
+            $"pwsh -EncodedCommand {Encode(payload)}",
+            "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "Write-Output");
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
+    }
+
+    [Theory]
+    [InlineData("Set-Variable HOME X -Force; Get-Content \"$HOME/x\"")]
+    [InlineData("Set-Item Env:HOME X; pwsh -EncodedCommand {0}")]
+    public void Encoded_wrapper_reconstructs_inner_argument_provenance(
+        string source)
+    {
+        var inner = Encode("Get-Content \"$HOME/x\"");
+        var commandText = source.IndexOf("{0}", StringComparison.Ordinal) >= 0
+            ? string.Format(source, inner)
+            : $"pwsh -EncodedCommand {Encode(source)}";
+        var result = ParseIsolatedWithHome(commandText, "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "Get-Content");
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Encoded_wrapper_profile_can_mutate_automatic_home()
+    {
+        var result = ParseIsolatedWithHome(
+            $"pwsh -EncodedCommand {Encode("Get-Content \"$HOME/x\"")}",
+            "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "Get-Content");
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Fact]
+    public void Encoded_wrapper_does_not_reuse_parent_automatic_home_proof()
+    {
+        var result = ParseIsolatedWithHome(
+            "Set-Variable HOME X -Force; " +
+            $"pwsh -EncodedCommand {Encode("Get-Content \"$HOME/x\"")}",
+            "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "Get-Content");
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Fact]
+    public void Encoded_wrapper_profile_can_mutate_userprofile_environment()
+    {
+        var result = ParseIsolatedWithHome(
+            $"pwsh -EncodedCommand {Encode("Get-Content \"$env:USERPROFILE/x\"")}",
+            "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "Get-Content");
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Encoded_wrapper_does_not_inherit_parent_command_binding_assertion()
+    {
+        var result = ParseIsolatedWithHome(
+            $"pwsh -EncodedCommand {Encode("curl ~")}",
+            "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "curl");
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Nested_encoded_wrapper_redirect_uses_intermediate_invocation_scope()
+    {
+        var deepest = Encode("Set-Location /tmp/inner && Write-Output hi");
+        var middle = Encode(
+            $"pwsh -NoProfile -EncodedCommand {deepest} > relative.txt");
+        var result = ParseIsolatedWithHome(
+            $"pwsh -NoProfile -EncodedCommand {middle}",
+            "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "Write-Output");
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
+        Assert.Equal("C:/work/relative.txt", Assert.Single(redirect.Target.Values));
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/my-tool ~")]
+    [InlineData("./tool.ps1 ~")]
+    public void Encoded_wrapper_cannot_prove_path_shaped_command_binding(
+        string payload)
+    {
+        var result = ParseIsolatedWithHome(
+            $"pwsh -EncodedCommand {Encode(payload)}",
+            "C:/Users/test");
+
+        var command = result.Commands.Last();
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+        Assert.False(command.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("Set-Alias '/usr/bin/my-tool' Write-Output; /usr/bin/my-tool ~")]
+    [InlineData("Set-Alias './tool.ps1' Write-Output; ./tool.ps1 ~")]
+    public void Path_shaped_alias_mutation_invalidates_argument_binding(string source)
+    {
+        var result = ParseIsolatedWithHome(source, "C:/Users/test");
+
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("foo.ps1 ~")]
+    [InlineData("Set-Alias foo.ps1 Write-Output; foo.ps1 ~")]
+    public void Unqualified_ps1_name_does_not_prove_script_binding(string source)
+    {
+        var result = source.StartsWith("Set-Alias", StringComparison.Ordinal)
+            ? ParseIsolatedWithHome(source, "C:/Users/test")
+            : ParseWithHome(source, "C:/Users/test");
+
+        var command = result.Commands.Last();
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Encoded_unqualified_ps1_name_keeps_binding_unknown()
+    {
+        var result = ParseIsolatedWithHome(
+            $"pwsh -EncodedCommand {Encode("foo.ps1 ~")}",
+            "C:/Users/test");
+
+        var command = result.Commands.Last();
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Rebound_state_mutator_invalidates_all_later_state_proofs()
+    {
+        var result = ParseIsolatedWithHome(
+            "Set-Alias Set-Variable Invoke-Expression; " +
+            "Set-Variable 'Set-Alias evil Write-Output'; evil ~",
+            "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "evil");
+        Assert.False(command.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Unknown_initial_receiver_invalidates_later_state_without_hiding_leaves()
+    {
+        var result = ParseUnknown("Invoke-Custom; Get-Content relative.txt");
+
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
+        Assert.Contains(command.Clause.Args, argument =>
+            argument.Raw == "relative.txt" && argument.Resolved is null);
+        Assert.Contains(command.Clause.Args, argument =>
+            argument.IsCwdAttribution && argument.Raw == "<dynamic-cwd>");
+    }
+
+    [Fact]
+    public void Initial_state_contract_controls_authorization_identity_completeness()
+    {
+        var unknown = ParseUnknown("Write-Output victim.txt");
+        var isolated = Parse("Write-Output victim.txt");
+
+        Assert.Single(unknown.Clauses);
+        Assert.Single(isolated.Clauses);
+        Assert.False(Assert.Single(unknown.Commands).IsComplete);
+        Assert.True(Assert.Single(isolated.Commands).IsComplete);
+    }
+
+    [Fact]
+    public void Encoded_unknown_receiver_keeps_later_structure_visible()
+    {
+        var result = ParseIsolatedWithHome(
+            $"pwsh -EncodedCommand {Encode("foo; Write-Output hi > relative.txt")}",
+            "C:/Users/test");
+
+        var command = result.Commands.Last();
+        Assert.False(command.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(command.Redirects).Target.Kind);
+        Assert.True(Assert.Single(command.Clause.Redirects).IsDynamicSkip);
+    }
+
+    [Theory]
+    [InlineData("Set-Variable HOME X -Force; Get-Content \"$HOME/x\"")]
+    [InlineData("Set-Item Variable:HOME X; Get-Content \"$HOME/x\"")]
+    [InlineData("Invoke-Expression $code; Get-Content \"$HOME/x\"")]
+    [InlineData("Set-Alias sh Set-Variable; sh HOME X -Force; Get-Content \"$HOME/x\"")]
+    [InlineData("& { Set-Variable HOME X -Force }; Get-Content \"$HOME/x\"")]
+    [InlineData(". { Set-Variable HOME X -Force }; Get-Content \"$HOME/x\"")]
+    [InlineData("./mutate.ps1; Get-Content \"$HOME/x\"")]
+    [InlineData("& ./mutate.ps1; Get-Content \"$HOME/x\"")]
+    [InlineData("Set-Location Variable:; Set-Item HOME X -Force; Get-Content \"$HOME/x\"")]
+    [InlineData("Push-Location Variable:; Set-Item HOME X -Force; Pop-Location; Get-Content \"$HOME/x\"")]
+    public void Observable_home_variable_mutation_invalidates_automatic_home(
+        string source)
+    {
+        var result = ParseIsolatedWithHome(source, "C:/Users/test");
+
+        var command = result.Commands.Last();
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("./mutate-env.ps1; Get-Content \"$env:USERPROFILE/x\"")]
+    [InlineData("./mutate-env.ps1; Start-Job { Get-Content \"$HOME/x\" }")]
+    public void External_script_process_mutation_invalidates_later_home_values(
+        string source)
+    {
+        var result = ParseIsolatedWithHome(source, "C:/Users/test");
+
+        var command = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "Get-Content");
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Fact]
+    public void External_script_invalidates_location_and_command_resolution()
+    {
+        var result = ParseIsolatedWithHome(
+            "./mutate.ps1; Get-Content relative.txt; curl ~",
+            "C:/Users/test");
+
+        var getContent = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "Get-Content");
+        Assert.Equal(ShellValueDomainKind.Unknown, getContent.WorkingDirectory.Kind);
+        Assert.Contains(
+            getContent.Clause.Args,
+            argument => argument.IsCwdAttribution &&
+                argument.Kind == ArgKind.DynamicSkip);
+
+        var curl = Assert.Single(
+            result.Commands,
+            occurrence => CommandVerb(occurrence) == "curl");
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(curl.EffectiveArguments).Value.Kind);
+    }
+
+    [Fact]
+    public void Automatic_home_mutation_does_not_invalidate_tilde_home()
+    {
+        var result = ParseIsolatedWithHome(
+            "Set-Variable HOME X -Force; " +
+            "curl --output ~ https://example.invalid",
+            "C:/Users/test");
+
+        var command = result.Commands.Last();
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("C:/Users/test", Assert.Single(effective.Value.Values));
+    }
+
+    [Fact]
+    public void Proved_data_script_block_does_not_leak_into_host_analysis()
+    {
+        var result = Parse("Write-Output { Remove-Item victim.txt }");
+
+        var host = Assert.Single(
+            result.Commands,
+            command => CommandVerb(command) == "Write-Output");
+        Assert.Empty(host.EffectiveArguments);
+        Assert.DoesNotContain(
+            result.Commands,
+            command => CommandVerb(command) == "Remove-Item");
+    }
+
+    [Fact]
+    public void Filesystem_drive_path_does_not_add_a_redundant_effective_value()
+    {
+        var result = Parse("Get-Content C:\\input");
+
+        Assert.Empty(Assert.Single(result.Commands).EffectiveArguments);
+    }
+
+    [Theory]
+    [InlineData("Get-Content ~")]
+    [InlineData("Get-Content -LiteralPath ~")]
+    [InlineData("Write-Output ~")]
+    public void Cmdlet_tilde_is_the_exact_authored_argument(string source)
+    {
+        var result = ParseIsolatedWithHome(source, "C:/Users/test");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("~", Assert.Single(effective.Value.Values));
+    }
+
+    [Theory]
+    [InlineData("Get-Content -Path *.txt")]
+    [InlineData("Get-Content -LiteralPath *.txt")]
+    public void Cmdlet_glob_is_an_exact_argument_before_parameter_semantics(
+        string source)
+    {
+        var result = ParseIsolatedWithHome(source, "C:/Users/test");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("*.txt", Assert.Single(effective.Value.Values));
+    }
+
+    [Theory]
+    [InlineData("--output=~", true)]
+    [InlineData("prefix~", false)]
+    [InlineData("~suffix", true)]
+    public void Native_tilde_only_expands_at_a_whole_argument_path_prefix(
+        string argument,
+        bool hasIndependentEffectiveValue)
+    {
+        var result = ParseWithHome(
+            $"curl {argument} https://example.invalid",
+            "C:/Users/test");
+
+        var effectiveArguments = Assert.Single(result.Commands).EffectiveArguments;
+        if (!hasIndependentEffectiveValue)
+        {
+            Assert.Empty(effectiveArguments);
+            return;
+        }
+
+        var effective = Assert.Single(effectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal(argument, Assert.Single(effective.Value.Values));
+    }
+
+    [Theory]
+    [InlineData("/usr/bin/my-tool ~")]
+    [InlineData("C:/tools/my-tool.exe ~")]
+    public void Explicit_native_path_preserves_native_binding_with_hyphens(
+        string source)
+    {
+        var result = ParseIsolatedWithHome(source, "C:/Users/test");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("C:/Users/test", Assert.Single(effective.Value.Values));
+    }
+
+    [Theory]
+    [InlineData("git-lfs ~")]
+    [InlineData("docker-compose *.txt")]
+    public void Unqualified_hyphenated_command_binding_remains_unknown(string source)
+    {
+        var result = ParseWithHome(source, "C:/Users/test");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("curl ~")]
+    [InlineData("Get-Content ~")]
+    public void Unknown_initial_state_does_not_assume_unqualified_command_binding(
+        string source)
+    {
+        var result = ParseWithHome(source, "C:/Users/test");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Fact]
+    public void Unknown_initial_state_does_not_assume_automatic_home_value()
+    {
+        var result = ParseWithHome(
+            "Write-Output \"$HOME/x\"",
+            "C:/Users/test");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Fact]
+    public void Isolated_initial_state_proves_automatic_home_value()
+    {
+        var result = ParseIsolatedWithHome(
+            "Write-Output \"$HOME/x\"",
+            "C:/Users/test");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("C:/Users/test/x", Assert.Single(effective.Value.Values));
+    }
+
+    [Fact]
+    public void Unknown_initial_state_does_not_assume_userprofile_environment_value()
+    {
+        var result = ParseWithHome(
+            "Write-Output \"$env:USERPROFILE/x\"",
+            "C:/Users/test");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Fact]
+    public void Isolated_initial_state_proves_userprofile_environment_value()
+    {
+        var result = ParseIsolatedWithHome(
+            "Write-Output \"$env:USERPROFILE/x\"",
+            "C:/Users/test");
+
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("C:/Users/test/x", Assert.Single(effective.Value.Values));
+    }
+
     private static ParsedCommand Parse(string source) => new PwshParser(
+        new PwshParserOptions
+        {
+            HomeDirectory = "C:/Users/test",
+            WorkingDirectory = "C:/work",
+            InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+        }).Parse(source);
+
+    private static ParsedCommand ParseUnknown(string source) => new PwshParser(
         new PwshParserOptions
         {
             HomeDirectory = "C:/Users/test",
             WorkingDirectory = "C:/work",
         }).Parse(source);
 
+    private static ParsedCommand ParseWithHome(string source, string homeDirectory) =>
+        new PwshParser(
+            new PwshParserOptions
+            {
+                HomeDirectory = homeDirectory,
+                WorkingDirectory = "C:/work",
+            }).Parse(source);
+
+    private static ParsedCommand ParseIsolatedWithHome(string source, string homeDirectory) =>
+        new PwshParser(
+            new PwshParserOptions
+            {
+                HomeDirectory = homeDirectory,
+                WorkingDirectory = "C:/work",
+                InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+            }).Parse(source);
+
     private static string CommandVerb(CommandOccurrence command) => command.Clause.Verb.Joined;
+
+    private static string Encode(string source) =>
+        Convert.ToBase64String(Encoding.Unicode.GetBytes(source));
 
     private static string NestedSubstitution(int depth) =>
         "Write-Output " + string.Concat(Enumerable.Repeat("$(", depth)) + "Get-Date" +

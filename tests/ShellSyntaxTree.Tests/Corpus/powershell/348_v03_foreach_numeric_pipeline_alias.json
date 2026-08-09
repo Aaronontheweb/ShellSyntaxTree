@@ -1,6 +1,7 @@
 {
   "name": "V03 foreach numeric pipeline alias",
   "input": "Write-Output x | foreach (1)",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

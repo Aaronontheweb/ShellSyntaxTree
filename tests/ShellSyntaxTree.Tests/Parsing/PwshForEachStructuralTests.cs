@@ -18,7 +18,7 @@ public class PwshForEachStructuralTests
         const string source =
             "foreach ($f in @('a.txt', 'b.txt')) { Remove-Item -LiteralPath $f }";
 
-        var result = Parse(source);
+        var result = ParseIsolated(source);
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var loop = Assert.IsType<ForEachSyntax>(Assert.Single(result.Syntax.Statements));
@@ -40,9 +40,10 @@ public class PwshForEachStructuralTests
         Assert.Same(body.Clause, occurrence.Clause);
         Assert.Same(body.Clause, Assert.Single(result.Clauses));
         Assert.Equal(CommandOccurrenceRole.LoopBody, occurrence.ImmediateRole);
-        Assert.False(occurrence.IsComplete);
-        Assert.All(occurrence.EffectiveArguments, argument =>
-            Assert.Equal(ShellValueDomainKind.Unknown, argument.Value.Kind));
+        Assert.True(occurrence.IsComplete);
+        var effective = Assert.Single(occurrence.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.FiniteSet, effective.Value.Kind);
+        Assert.Equal(new[] { "a.txt", "b.txt" }, effective.Value.Values);
     }
 
     [Fact]
@@ -52,7 +53,7 @@ public class PwshForEachStructuralTests
             "foreach ($f in Get-ChildItem C:\\input | Where-Object Name) " +
             "{ Get-Item $f | Remove-Item }";
 
-        var result = Parse(source);
+        var result = ParseIsolated(source);
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var loop = Assert.IsType<ForEachSyntax>(Assert.Single(result.Syntax.Statements));
@@ -77,7 +78,7 @@ public class PwshForEachStructuralTests
             Assert.Contains(command.Ancestry, frame =>
                 frame.Region == CommandAncestryRegion.LoopBody));
         Assert.All(result.Commands.Take(2), command => Assert.True(command.IsComplete));
-        Assert.All(result.Commands.Skip(2), command => Assert.False(command.IsComplete));
+        Assert.All(result.Commands.Skip(2), command => Assert.True(command.IsComplete));
         Assert.Equal(result.Clauses, result.Commands.Select(command => command.Clause));
     }
 
@@ -198,7 +199,7 @@ public class PwshForEachStructuralTests
     [Fact]
     public void Foreach_with_parenthesized_argument_in_pipeline_slot_remains_an_alias()
     {
-        var result = Parse("Write-Output x | foreach ($_) ");
+        var result = ParseIsolated("Write-Output x | foreach ($_) ");
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.IsType<PipelineSyntax>(Assert.Single(result.Syntax.Statements));
@@ -211,7 +212,7 @@ public class PwshForEachStructuralTests
     [InlineData("& foreach (1)")]
     public void Foreach_with_literal_parenthesized_argument_remains_an_alias(string source)
     {
-        var result = Parse(source);
+        var result = ParseIsolated(source);
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var command = result.Commands[^1];
@@ -222,7 +223,7 @@ public class PwshForEachStructuralTests
     [Fact]
     public void Foreach_after_call_operator_remains_an_alias()
     {
-        var result = Parse("& foreach ($x)");
+        var result = ParseIsolated("& foreach ($x)");
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements));
@@ -241,7 +242,7 @@ public class PwshForEachStructuralTests
         var list = Assert.IsType<CommandListSyntax>(Assert.Single(result.Syntax.Statements));
         Assert.Equal(3, list.Items.Count);
         Assert.IsType<ForEachSyntax>(list.Items[1].Command);
-        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[0].IsComplete);
         Assert.False(result.Commands[1].IsComplete);
         Assert.False(result.Commands[2].IsComplete);
     }
@@ -263,7 +264,7 @@ public class PwshForEachStructuralTests
     [Fact]
     public void Isolated_child_host_loop_does_not_taint_outer_continuation()
     {
-        var result = Parse(
+        var result = ParseIsolated(
             "pwsh -Command 'foreach ($x in 1) { Write-Output $x }'; Get-Date");
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
@@ -273,7 +274,7 @@ public class PwshForEachStructuralTests
     }
 
     [Fact]
-    public void Decoded_child_host_pipeline_iterator_stays_visible_without_outer_plan()
+    public void Decoded_child_host_iterator_stays_visible_but_incomplete()
     {
         var result = ParseIsolated(
             "pwsh -Command 'foreach ($x in Get-Item C:\\input) " +
@@ -282,7 +283,7 @@ public class PwshForEachStructuralTests
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.Equal(new[] { "Get-Item", "Write-Output", "Get-Date" },
             result.Commands.Select(CommandVerb));
-        Assert.True(result.Commands[0].IsComplete);
+        Assert.False(result.Commands[0].IsComplete);
         Assert.False(result.Commands[1].IsComplete);
         Assert.True(result.Commands[2].IsComplete);
     }
@@ -290,7 +291,7 @@ public class PwshForEachStructuralTests
     [Fact]
     public void Foreach_object_alias_exposes_an_unknown_script_block_region()
     {
-        var result = Parse("Get-ChildItem | foreach { Write-Output $_ }");
+        var result = ParseIsolated("Get-ChildItem | foreach { Write-Output $_ }");
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         Assert.Equal("Get-ChildItem", CommandVerb(result.Commands[0]));

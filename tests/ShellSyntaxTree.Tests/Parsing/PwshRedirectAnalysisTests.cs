@@ -158,5 +158,6 @@ public class PwshRedirectAnalysisTests
         {
             HomeDirectory = "C:/Users/test",
             WorkingDirectory = "C:/work",
+            InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
         }).Parse(source);
 }

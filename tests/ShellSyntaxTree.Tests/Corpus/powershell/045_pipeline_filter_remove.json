@@ -1,6 +1,7 @@
 {
   "name": "Pipeline filter remove",
   "input": "gci | ? { $_.Length -gt 1mb } | rm",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

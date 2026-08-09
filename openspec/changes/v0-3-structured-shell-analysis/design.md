@@ -431,8 +431,9 @@ ScriptBlock and InitializationScript; and `New-Module -ScriptBlock`.
 Optional-module `Start-ThreadJob` and deferred breakpoint, event, and argument-
 completion bindings are not stable-v0.3 catalog-completeness promises. Existing
 conservative recognition may remain without further expansion. Unproved forms
-follow the unknown-receiver rule and retain visible bodies with incomplete
-facts. Aliases, supported module-qualified spellings, static call
+follow the unknown-receiver rule and retain supported non-pipeline bodies with
+incomplete facts; an unproved interior pipeline fails atomically. Aliases,
+supported module-qualified spellings, static call
 operator spellings, parameter abbreviations/inline values, positional binding,
 parameter sets, and `ScriptBlock[]` binding use the same static catalog.
 Catalog lookup is separate from identity proof: PowerShell permits an alias
@@ -442,11 +443,13 @@ catalog entry can hide a script block as data. Mutation matching covers both
 the authored spelling and its known canonical alias target.
 
 An unknown receiver or ambiguous binding is over-approximated as an execution
-region with unknown facts. Its body commands remain visible and affected
-occurrences and following observable state are incomplete. This can prompt for
-a block that runtime ultimately treats as data, but it cannot silently omit a
-block that a custom advanced function executes. If the interior cannot be
-parsed completely, the whole result is unparseable. Canonical receivers proved
+region with unknown facts. Commands in a supported non-pipeline body remain
+visible, while affected occurrences and following observable state are
+incomplete. This can prompt for a block that runtime ultimately treats as data,
+but it cannot silently omit a supported body that a custom advanced function
+executes. If the interior cannot be parsed completely, or it contains a
+pipeline whose stage identity is unproved, the whole result is unparseable.
+Canonical receivers proved
 not to execute the bound block remain opaque data and do not require the body
 grammar to parse.
 
@@ -627,7 +630,15 @@ oracle so lazy and configuration-dependent preferences cannot escape the gate.
 Current-runspace groups, `$()`, and
 static `Invoke-Expression` share supported binding, command-resolution, and cwd
 state. A decoded child `pwsh` host starts at `Unknown` unless its own invocation
-independently proves the complete constrained-host contract. Recognized
+independently proves the complete constrained-host contract.
+Path-shaped command spellings remain candidates rather than immutable binding
+proofs because PowerShell aliases can shadow explicit native and `.ps1` names.
+Decoded children also clear automatic `$HOME` and environment-value facts
+because an uncontrolled profile can mutate them before the payload; configured
+provider/native tilde initialization remains independent. Default ambient
+uncertainty preserves ordinary v0.2 completeness and does not count as an
+observed mutation, while binding-dependent effective values remain Unknown.
+Recognized
 variable, alias,
 function, or module mutation invalidates every later observing proof; a cwd-only
 transfer preserves the independent initial-runspace assertion. A computed
@@ -747,8 +758,13 @@ provider. Target-position tracking avoids treating a dynamic value as a state
 target when the filesystem path itself is proved.
 An independent observed-mutation bit invalidates command identity for every
 later ordinary or loop occurrence. It is not inferred merely from the default
-ambient-state mode, preserving compatibility for an ordinary command when no
-mutation was observed.
+ambient-state mode, so state is not invalidated before the first occurrence and
+the v0.2 compatibility leaves remain visible. A v0.3 authorization occurrence
+is nevertheless incomplete until the caller supplies the constrained
+command-resolution baseline. Once reached, an unproved invocation may be
+arbitrary in-process code and therefore invalidates subsequent observable
+state. If it is a pipeline stage, the existing fail-atomic pipeline-writer rule
+applies until inter-stage state propagation is modeled.
 The PowerShell 7 mutation inventory includes `Import-Alias` and
 `Import-PSSession` because they can clobber existing command names, and
 `New-Module` because it can immediately export functions into the current session. Legacy PSSnapin
@@ -1014,8 +1030,9 @@ into the release specifications before production types are added.
    `ExecutionRegionSyntax` contract. Origin, phase, timing, and cardinality are public;
    state propagation remains shell-specific and multi-dimensional. The pinned
    PowerShell 7 receiver/binding catalog distinguishes proved execution from
-   proved data. Unknown receivers expose a conservatively executable body with
-   incomplete facts rather than silently treating it as data.
+   proved data. Unknown receivers expose supported non-pipeline body commands
+   with incomplete facts rather than silently treating them as data; unproved
+   interior pipelines fail atomically.
 
 On every unparseable result, `Commands` and the v0.2 `Clauses` projection are
 empty. `Syntax` may contain a partial diagnostic tree, but it cannot be used as
@@ -1757,7 +1774,7 @@ available.
 | Pipeline-produced iterator objects | Iterator commands visible; produced values `Unknown` |
 | Cataloged executing script-block arguments | Typed origin/phase/timing/cardinality region; host and body commands visible |
 | Cataloged non-executing script-block data | Existing opaque argument; no invented child execution |
-| Unknown receiver or ambiguous script-block binding | Unknown region; body visible; affected state and occurrences incomplete |
+| Unknown receiver or ambiguous script-block binding | Unknown region; supported non-pipeline body visible and incomplete; unproved interior pipeline atomic |
 | `do`, `switch`, functions, definitions, class/type bodies, or execution-bearing expressions outside the locked subset | Deferred; whole result unparseable when execution may be hidden |
 
 PowerShell `$()` is a value-producing subexpression, not an invocation.
@@ -1860,6 +1877,6 @@ lattice. Executable-aware interpretation still occurs only in the consumer.
 | Direct `& {}` / `. {}` script block | Standalone execution-region statement | Body commands exposed; no synthetic operator occurrence |
 | PowerShell script block bound to a cataloged executing parameter | Host simple command plus attached execution region | Host and every body command exposed |
 | PowerShell script block bound to a cataloged data parameter | Existing opaque argument | `DynamicSkip`; contents are not invented as executed commands |
-| Unknown receiver or ambiguous script-block binding | Host plus unknown execution region | Body visible; affected occurrences/state incomplete |
+| Unknown receiver or ambiguous script-block binding | Host plus unknown execution region | Supported non-pipeline body visible and incomplete; unproved interior pipeline makes the whole result unparseable |
 | Candidate cap or state-join overflow | Structure remains parseable | Affected effective fact becomes `Unknown` |
 | Any executable region is skipped or cannot be delimited | Partial diagnostic tree allowed | `IsUnparseable=true`; `Commands` and `Clauses` empty |

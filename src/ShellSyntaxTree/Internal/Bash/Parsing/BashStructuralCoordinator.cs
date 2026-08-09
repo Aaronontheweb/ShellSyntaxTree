@@ -1342,7 +1342,7 @@ internal static partial class BashCommandParser
                         currentRedirectIndex,
                         elementIndex,
                         BashRedirectAnalysis.NormalizeHereStringOperand(value),
-                        UsesOutermostInvocationScope: false));
+                        InvocationScopeDepth: 0));
                 }
             }
 

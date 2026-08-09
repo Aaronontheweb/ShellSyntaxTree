@@ -1,6 +1,7 @@
 {
   "name": "V03 mixed list pipeline",
   "input": "gci | Select-Object Name \u0026\u0026 Get-Date; Get-Process",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

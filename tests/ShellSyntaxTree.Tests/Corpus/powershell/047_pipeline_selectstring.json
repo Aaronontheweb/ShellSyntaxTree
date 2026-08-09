@@ -1,6 +1,7 @@
 {
   "name": "Pipeline selectstring",
   "input": "Get-Content app.log | Select-String error",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
     "clauses": [

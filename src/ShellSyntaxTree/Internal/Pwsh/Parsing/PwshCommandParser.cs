@@ -474,32 +474,55 @@ internal static partial class PwshCommandParser
 
         public bool IsRecursion { get; }
 
+        public bool? UsesNativeArgumentBinding { get; }
+
         private BuildResult(
             IReadOnlyList<Clause> clauses,
             ShellSyntaxNode? syntax,
             string? error,
-            bool isRecursion)
+            bool isRecursion,
+            bool? usesNativeArgumentBinding)
         {
             Clauses = clauses;
             Syntax = syntax;
             Error = error;
             IsRecursion = isRecursion;
+            UsesNativeArgumentBinding = usesNativeArgumentBinding;
         }
 
-        public static BuildResult Ok(Clause c) => new(new[] { c }, null, null, false);
+        public static BuildResult Ok(
+            Clause c,
+            ArgumentBindingSemantics argumentBinding) =>
+            new(
+                new[] { c },
+                null,
+                null,
+                false,
+                argumentBinding.UsesNative);
 
         public static BuildResult Recursion(IReadOnlyList<Clause> clauses) =>
-            new(clauses, null, null, true);
+            new(
+                clauses,
+                null,
+                null,
+                true,
+                usesNativeArgumentBinding: null);
 
         public static BuildResult Recursion(ShellSyntaxNode syntax) =>
-            new(Array.Empty<Clause>(), syntax, null, true);
+            new(
+                Array.Empty<Clause>(),
+                syntax,
+                null,
+                true,
+                usesNativeArgumentBinding: null);
 
         public static BuildResult Fail(string? reason) =>
             new(
                 Array.Empty<Clause>(),
                 null,
                 reason ?? "inner parse failed",
-                false);
+                false,
+                usesNativeArgumentBinding: null);
     }
 
     private static BuildResult BuildSegment(
@@ -596,7 +619,64 @@ internal static partial class PwshCommandParser
             return BuildResult.Recursion(new[] { clause });
         }
 
-        return BuildResult.Ok(clause);
+        return BuildResult.Ok(
+            clause,
+            ClassifyArgumentBindingSemantics(classified));
+    }
+
+    private static ArgumentBindingSemantics ClassifyArgumentBindingSemantics(
+        ClassifiedVerb classified)
+    {
+        if (classified.Kind is PwshCommandKind.Cmdlet or PwshCommandKind.Alias)
+        {
+            return classified.BindingSemanticsProven
+                ? new ArgumentBindingSemantics(UsesNative: false)
+                : ArgumentBindingSemantics.Unknown;
+        }
+
+        if (classified.Kind == PwshCommandKind.PwshInvocation)
+        {
+            return new ArgumentBindingSemantics(UsesNative: true);
+        }
+
+        if (classified.Kind != PwshCommandKind.NativeCommand ||
+            classified.VerbTokens.Count != 1)
+        {
+            return ArgumentBindingSemantics.Unknown;
+        }
+
+        var command = classified.VerbTokens[0];
+        if (TryClassifyAuthoredArgumentBinding(command, out var usesNative))
+        {
+            return new ArgumentBindingSemantics(usesNative);
+        }
+
+        // An unqualified hyphenated name can resolve to either a PowerShell
+        // command or a native executable. Preserve that ambiguity instead of
+        // reconstructing command kind from its spelling during value analysis.
+        return command.IndexOf('-') >= 0
+            ? ArgumentBindingSemantics.Unknown
+            : new ArgumentBindingSemantics(UsesNative: true);
+    }
+
+    private static bool TryClassifyAuthoredArgumentBinding(
+        string command,
+        out bool usesNative)
+    {
+        if (!BashResolver.LooksLikePath(command))
+        {
+            usesNative = false;
+            return false;
+        }
+
+        usesNative = !command.EndsWith(".ps1", StringComparison.OrdinalIgnoreCase);
+        return true;
+    }
+
+    private readonly record struct ArgumentBindingSemantics(bool? UsesNative)
+    {
+        internal static ArgumentBindingSemantics Unknown { get; } =
+            new(UsesNative: null);
     }
 
     // ---------------------------------------------------------------- verb chain

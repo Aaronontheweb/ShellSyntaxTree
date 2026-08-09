@@ -26,7 +26,7 @@ public sealed record PwshParserOptions : ShellParserOptions
 {
     /// <summary>
     /// Gets the caller-proved initial PowerShell runspace-state contract. The
-    /// default fails bounded loop-variable analysis closed.
+    /// default leaves v0.3 command identities and bounded values unproved.
     /// </summary>
     public PwshInitialStateMode InitialStateMode { get; init; }
 }

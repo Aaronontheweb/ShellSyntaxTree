@@ -1,0 +1,10 @@
+{
+  "name": "V03 unknown receiver pipeline fails atomically",
+  "input": "Invoke-Custom { Get-Item x | Select-Object Name }",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell structural syntax exceeded limits or contained invalid parser-owned facts"
+  },
+  "notes": "An unknown receiver\u0027s unproved interior pipeline fails atomically after the unknown-state transition.",
+  "oracleExpectation": "OutOfScope"
+}

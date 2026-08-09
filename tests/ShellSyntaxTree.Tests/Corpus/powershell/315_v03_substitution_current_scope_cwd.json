@@ -26,10 +26,9 @@
         ],
         "args": [
           {
-            "raw": "C:/sensitive",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "C:/sensitive",
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
             "isCwdAttribution": true
           }
         ],
@@ -181,7 +180,7 @@
       {
         "clauseIndex": 0,
         "immediateRole": "Substitution",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -223,7 +222,7 @@
       {
         "clauseIndex": 1,
         "immediateRole": "Substitution",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -265,7 +264,7 @@
       {
         "clauseIndex": 2,
         "immediateRole": "Ordinary",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",
@@ -286,7 +285,7 @@
       {
         "clauseIndex": 3,
         "immediateRole": "Ordinary",
-        "isComplete": true,
+        "isComplete": false,
         "ancestry": [
           {
             "ancestorKind": "Block",

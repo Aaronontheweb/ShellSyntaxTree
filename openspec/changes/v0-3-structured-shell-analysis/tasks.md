@@ -233,6 +233,9 @@
   - [x] 7.5e Keep proved non-executing script-block data opaque; over-approximate
     unknown receivers/bindings as unknown incomplete regions; fail atomically
     on unsupported interiors or state transfers.
+    - Supported non-pipeline bodies remain visible and incomplete. An interior
+      pipeline whose stage identity is unproved fails the whole parse atomically
+      with empty authorization projections.
     - Isolated-state canonical, alias, and supported module-qualified
       `Write-Output` receivers keep script blocks opaque only while bounded
       command-resolution state proves that exact authored spelling unchanged.
@@ -308,7 +311,8 @@ These are worthwhile follow-ups, not unfinished tasks in this change:
 - Add exact optional-module `Start-ThreadJob` and deferred breakpoint, event,
   and argument-completion receiver semantics only when consumer demand
   justifies a pinned runtime/module contract. Existing conservative recognition
-  may remain; unproved forms keep visible bodies unknown and incomplete.
+  may remain; unproved forms keep supported non-pipeline bodies unknown and
+  incomplete, while unproved interior pipelines fail atomically.
 - Keep URL-versus-glob, environment-assignment, and multiline reproduction
   work in executable-aware consumer issues unless an exact missing lexical
   fact is demonstrated.
