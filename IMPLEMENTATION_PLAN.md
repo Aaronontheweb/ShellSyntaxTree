@@ -515,10 +515,13 @@ priorities.
 - [x] Publish `0.3.0-alpha` for the Netclaw migration gate. The bare SemVer tag
       published the NuGet package, symbol package, and GitHub prerelease from
       the reviewed merge commit after Linux and Windows CI passed.
-- [x] Prepare `0.3.0-alpha.1` as the next Netclaw validation package. It carries
-      the bounded Bash heredoc, command-resolution mutation, and here-string
-      slices merged after the first alpha without changing the public API.
-      Record publication separately after the tag workflow succeeds.
+- [x] Publish `0.3.0-alpha.1` as the next Netclaw validation package. Bare tag
+      [`0.3.0-alpha.1`](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0-alpha.1)
+      points to reviewed merge `a0f95bdb`; the tag workflow published the
+      package and symbols to NuGet and created the GitHub prerelease after
+      Linux and Windows PR validation passed. It carries the bounded Bash
+      heredoc, command-resolution mutation, and here-string slices merged after
+      the first alpha without changing the public API.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
