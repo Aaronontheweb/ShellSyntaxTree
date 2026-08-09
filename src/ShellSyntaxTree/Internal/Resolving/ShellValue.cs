@@ -405,6 +405,10 @@ internal sealed class ShellValueBuilder
                 && previous.SourceLength is not null
                 && fragment.SourceStart == previous.SourceStart + previous.SourceLength;
             var bothUnmapped = previous.SourceStart is null && fragment.SourceStart is null;
+            // Keep escape-collapsed text separate from source-exact neighbors;
+            // later shell analysis must know which character was quoted.
+            var bothSourceExact = previous.SourceLength == previous.Value.Length &&
+                fragment.SourceLength == fragment.Value.Length;
             if (previous.Value.Length > 0
                 && fragment.Value.Length > 0
                 && previous.Kind == ShellValueFragmentKind.Literal
@@ -413,7 +417,7 @@ internal sealed class ShellValueBuilder
                 && previous.Expansion == fragment.Expansion
                 && previous.Cardinality == fragment.Cardinality
                 && previous.OpaqueCause == fragment.OpaqueCause
-                && (sourceIsContiguous || bothUnmapped))
+                && ((sourceIsContiguous && bothSourceExact) || bothUnmapped))
             {
                 _fragments[_fragments.Count - 1] = previous with
                 {

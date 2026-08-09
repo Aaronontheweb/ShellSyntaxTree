@@ -1559,6 +1559,119 @@ public class BashStructuralProjectionTests
         Assert.True(Assert.Single(result.Commands).IsComplete);
     }
 
+    [Fact]
+    public void Policy_relevant_static_path_publishes_exact_effective_value()
+    {
+        var command = Assert.Single(Parse("cat \\$HOME").Commands);
+
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(1, effective.ClauseElementIndex);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("$HOME", Assert.Single(effective.Value.Values));
+    }
+
+    [Fact]
+    public void Runtime_parameter_publishes_unknown_effective_value()
+    {
+        var command = Assert.Single(Parse("cat \"$?\"").Commands);
+
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(1, effective.ClauseElementIndex);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+        Assert.True(command.IsComplete);
+    }
+
+    [Fact]
+    public void Plain_literal_non_path_argument_does_not_add_effective_overlay()
+    {
+        var command = Assert.Single(Parse("printf '%s' value").Commands);
+
+        Assert.Empty(command.EffectiveArguments);
+    }
+
+    [Theory]
+    [InlineData("cat ~/x")]
+    [InlineData("cat ~\\\n/x")]
+    [InlineData("cat ~\\\r\n/x")]
+    [InlineData("cat ~/\\x")]
+    [InlineData("cat ~/\"x\"")]
+    public void Proved_home_path_does_not_publish_unknown_overlay(string source)
+    {
+        var result = Parse(source);
+        var argument = Assert.Single(Assert.Single(result.Clauses).Args);
+        var command = Assert.Single(result.Commands);
+
+        Assert.Equal(ArgKind.Tilde, argument.Kind);
+        Assert.Equal("/home/test/x", argument.Resolved);
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal("/home/test/x", Assert.Single(effective.Value.Values));
+    }
+
+    [Theory]
+    [InlineData("cat ~\\/x", "~/x", "/work/~/x")]
+    [InlineData("cat ~\"/x\"", "~/x", "/work/~/x")]
+    [InlineData("cat ~'/x'", "~/x", "/work/~/x")]
+    [InlineData("cat ~''", "~", "/work/~")]
+    [InlineData("cat ~''/x", "~/x", "/work/~/x")]
+    [InlineData("cat ~\"x\"", "~x", "/work/~x")]
+    [InlineData("cat ~'x'", "~x", "/work/~x")]
+    [InlineData("cat ~\\x", "~x", "/work/~x")]
+    [InlineData("cat ~\"root\"/x", "~root/x", "/work/~root/x")]
+    [InlineData("cat ~\\\n\"x\"", "~x", "/work/~x")]
+    public void Quoted_or_escaped_tilde_prefix_remains_literal(
+        string source,
+        string effectiveValue,
+        string resolvedPath)
+    {
+        var result = Parse(source);
+        var argument = Assert.Single(Assert.Single(result.Clauses).Args);
+        var command = Assert.Single(result.Commands);
+
+        Assert.Equal(ArgKind.Literal, argument.Kind);
+        Assert.Equal(resolvedPath, argument.Resolved);
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal(effectiveValue, Assert.Single(effective.Value.Values));
+    }
+
+    [Theory]
+    [InlineData("cat ~root/x")]
+    [InlineData("cat ~\\\nroot/x")]
+    public void Unquoted_named_tilde_prefix_remains_unknown(string source)
+    {
+        var result = Parse(source);
+        var argument = Assert.Single(Assert.Single(result.Clauses).Args);
+        var effective = Assert.Single(Assert.Single(result.Commands).EffectiveArguments);
+
+        Assert.Equal(ArgKind.DynamicSkip, argument.Kind);
+        Assert.Null(argument.Resolved);
+        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+    }
+
+    [Theory]
+    [InlineData("/", "~", "/")]
+    [InlineData("/", "~/x", "//x")]
+    [InlineData("/home/test/", "~", "/home/test/")]
+    [InlineData("/home/test/", "~/x", "/home/test//x")]
+    public void Effective_tilde_value_preserves_configured_home_bytes(
+        string homeDirectory,
+        string authoredValue,
+        string effectiveValue)
+    {
+        var parser = new BashParser(new BashParserOptions
+        {
+            HomeDirectory = homeDirectory,
+            WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
+        });
+        var command = Assert.Single(parser.Parse("cat " + authoredValue).Commands);
+
+        var effective = Assert.Single(command.EffectiveArguments);
+        Assert.Equal(ShellValueDomainKind.Exact, effective.Value.Kind);
+        Assert.Equal(effectiveValue, Assert.Single(effective.Value.Values));
+    }
+
     private static ParsedCommand Parse(string input)
     {
         var parser = new BashParser(new BashParserOptions

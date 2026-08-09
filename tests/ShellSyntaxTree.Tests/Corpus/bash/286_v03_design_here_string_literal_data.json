@@ -1,6 +1,6 @@
 {
-  "name": "Escaped interpolation start remains a literal path",
-  "input": "cat \"\\${HOME\"",
+  "name": "v0.3 Bash design promotion: Static here-string data does not force a raw-command approval prompt",
+  "input": "cat <<< \"hello\"",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -9,16 +9,14 @@
         "verb": [
           "cat"
         ],
-        "args": [
+        "args": [],
+        "redirects": [
           {
-            "raw": "\"\\${HOME\"",
-            "kind": "Literal",
-            "isPath": true,
-            "resolved": "/work/${HOME",
-            "isFlag": false
+            "direction": "In",
+            "target": "hello",
+            "isDynamicSkip": false
           }
         ],
-        "redirects": [],
         "elements": [
           {
             "raw": "cat",
@@ -32,16 +30,15 @@
             "isPath": false
           },
           {
-            "raw": "\"\\${HOME\"",
-            "value": "${HOME",
-            "role": "Argument",
+            "raw": "<<< \"hello\"",
+            "value": "hello",
+            "role": "Redirect",
             "sourceStart": 4,
-            "sourceLength": 9,
+            "sourceLength": 11,
             "precedingVerbElementCount": 1,
             "kind": "Literal",
             "isFlag": false,
-            "isPath": true,
-            "resolved": "/work/${HOME"
+            "isPath": false
           }
         ]
       }
@@ -53,7 +50,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 13,
+        "sourceLength": 15,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -64,7 +61,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 13,
+        "sourceLength": 15,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -81,22 +78,10 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 13
+            "sourceLength": 15
           }
         ],
-        "effectiveArguments": [
-          {
-            "clauseElementIndex": 1,
-            "value": {
-              "kind": "Exact",
-              "values": [
-                "${HOME"
-              ],
-              "pattern": null,
-              "coveringDirectory": null
-            }
-          }
-        ],
+        "effectiveArguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -104,9 +89,28 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        }
+        },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "operation": "HereString",
+            "targetDescriptor": null,
+            "target": {
+              "kind": "Exact",
+              "values": [
+                "hello\n"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "isPathRelevant": false,
+            "isComplete": true
+          }
+        ]
       }
     ]
   },
-  "notes": "Escaping the dollar prevents interpolation; the unmatched-looking brace is literal shell data. Promotes stable design case bash-escaped-open-brace-literal-path with complete v0.3 syntax, occurrence, value, and completeness assertions."
+  "notes": "Promotes stable design case bash-here-string-literal-data into the executable corpus with complete compatibility, syntax, occurrence, value, and completeness assertions."
 }

@@ -147,7 +147,7 @@ int CheckBash(string command)
         parsed,
         "ad-hoc check",
         outOfScope: false,
-        includeElements: false,
+        includeElements: true,
         includeStructure: true,
         includeOptionalAssertions: true,
         includeV03Assertions: true));

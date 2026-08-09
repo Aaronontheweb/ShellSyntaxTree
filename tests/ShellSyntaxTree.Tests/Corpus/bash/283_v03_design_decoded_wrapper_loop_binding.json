@@ -1,0 +1,218 @@
+{
+  "name": "v0.3 Bash design promotion: A decoded child process does not receive an unexported loop binding",
+  "input": "for f in a; do bash -c 'printf \"%s\" \"$f\"'; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "printf"
+        ],
+        "args": [
+          {
+            "raw": "\"%s\"",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          },
+          {
+            "raw": "\"$f\"",
+            "kind": "EnvVar",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "printf",
+            "value": "printf",
+            "role": "Verb",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "\"%s\"",
+            "value": "%s",
+            "role": "Argument",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "\"$f\"",
+            "value": "$f",
+            "role": "Argument",
+            "sourceStart": null,
+            "sourceLength": null,
+            "precedingVerbElementCount": 1,
+            "kind": "EnvVar",
+            "isFlag": false,
+            "isPath": false
+          }
+        ],
+        "isCommandStringWrapped": true
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 47,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 47,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "f",
+        "bindingRaw": "f",
+        "bindingSourceStart": 4,
+        "bindingSourceLength": 1,
+        "iterableRaw": "a",
+        "iterableSourceStart": 9,
+        "iterableSourceLength": 1
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 9,
+        "sourceLength": 1,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 14,
+        "sourceLength": 29,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Group",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 15,
+        "sourceLength": 26,
+        "clauseIndex": null,
+        "groupKind": "IsolatedScope",
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 4,
+        "region": "GroupBody",
+        "childIndex": null,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 5,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": null,
+        "sourceLength": null,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 47
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 47
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 14,
+            "sourceLength": 29
+          },
+          {
+            "ancestorKind": "Group",
+            "region": "GroupBody",
+            "childIndex": null,
+            "sourceStart": 15,
+            "sourceLength": 26
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": null,
+            "sourceLength": null
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "Promotes stable design case bash-decoded-wrapper-does-not-inherit-loop-binding into the executable corpus with complete compatibility, syntax, occurrence, value, and completeness assertions."
+}

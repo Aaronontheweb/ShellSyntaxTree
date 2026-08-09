@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Text;
 using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
@@ -467,9 +468,25 @@ internal sealed class BashAbstractStateAnalyzer
         var evaluator = input.Bindings;
         foreach (var provenance in sourceFacts.ValueProvenance)
         {
-            if (!evaluator.TryAnalyzeEffectiveValue(provenance.Value, out var domain))
+            var hasStateDependentValue = evaluator.TryAnalyzeEffectiveValue(
+                provenance.Value,
+                out var domain);
+            if (!hasStateDependentValue &&
+                !RequiresIndependentEffectiveValue(simple.Clause, provenance))
             {
                 continue;
+            }
+
+            if (!hasStateDependentValue)
+            {
+                if (TryAnalyzeParserKnownValue(provenance.Value, out var knownValue))
+                {
+                    domain = knownValue;
+                }
+                else
+                {
+                    domain = evaluator.AnalyzeWordForTransfer(provenance.Value);
+                }
             }
 
             accumulated ??= GetEffectiveArguments(simple.Clause);
@@ -483,6 +500,156 @@ internal sealed class BashAbstractStateAnalyzer
                 accumulated.Add(provenance.ClauseElementIndex, domain);
             }
         }
+    }
+
+    private static bool RequiresIndependentEffectiveValue(
+        Clause clause,
+        ShellValueElementProvenance provenance)
+    {
+        if (provenance.ClauseElementIndex < 0 ||
+            provenance.ClauseElementIndex >= clause.Elements.Count)
+        {
+            return false;
+        }
+
+        var nonEmptyLiteralFragments = 0;
+        var hasLiteralLexicalTransform = false;
+        foreach (var fragment in provenance.Value.Fragments)
+        {
+            if (fragment.Kind != ShellValueFragmentKind.Literal)
+            {
+                return true;
+            }
+
+            if (fragment.Value.Length == 0)
+            {
+                continue;
+            }
+
+            nonEmptyLiteralFragments++;
+            if (fragment.SourceLength != fragment.Value.Length)
+            {
+                hasLiteralLexicalTransform = true;
+            }
+        }
+
+        // Clause.Elements already carries ordinary authored literals. Keep the
+        // overlay for values whose shell decoding or shell-specific path
+        // spelling gives a policy consumer additional information.
+        var element = clause.Elements[provenance.ClauseElementIndex];
+        if ((element.IsPath || element.IsFlag) &&
+            (hasLiteralLexicalTransform || nonEmptyLiteralFragments > 1))
+        {
+            return true;
+        }
+
+        return element.IsPath && HasProviderQualifier(provenance.Value.Decoded);
+    }
+
+    private bool TryAnalyzeParserKnownValue(
+        ShellValue value,
+        out ShellValueDomain domain)
+    {
+        var homeDirectory = BashResolver.GetHomeDirectory(_options);
+        var composed = new StringBuilder(value.Decoded.Length);
+        for (var fragmentIndex = 0;
+             fragmentIndex < value.Fragments.Count;
+             fragmentIndex++)
+        {
+            var fragment = value.Fragments[fragmentIndex];
+            if (fragment.Kind == ShellValueFragmentKind.Literal)
+            {
+                composed.Append(fragment.Value);
+                continue;
+            }
+
+            if (fragment.Kind != ShellValueFragmentKind.Expansion ||
+                fragment.Expansion is not ShellExpansionReference expansion)
+            {
+                domain = ShellValueDomain.Unknown;
+                return false;
+            }
+
+            if (expansion.Kind == ShellExpansionKind.Glob &&
+                (fragment.AllowedTransforms & ShellLexicalTransform.Glob) == 0)
+            {
+                composed.Append(fragment.Value);
+                continue;
+            }
+
+            if (expansion.Kind == ShellExpansionKind.Tilde)
+            {
+                var tildeKind = BashResolver.ClassifyTildeExpansion(value, fragmentIndex);
+                if (tildeKind == BashTildeExpansionKind.Literal)
+                {
+                    composed.Append(fragment.Value);
+                    continue;
+                }
+
+                if (tildeKind == BashTildeExpansionKind.Unknown ||
+                    homeDirectory.Length == 0)
+                {
+                    domain = ShellValueDomain.Unknown;
+                    return false;
+                }
+
+                composed.Append(homeDirectory);
+                continue;
+            }
+
+            if (expansion.Kind != ShellExpansionKind.Variable ||
+                !string.Equals(expansion.Name, "HOME", StringComparison.Ordinal) ||
+                fragment.Cardinality != ShellValueCardinality.ExactlyOne ||
+                (fragment.AllowedTransforms & ShellLexicalTransform.Variable) == 0 ||
+                homeDirectory.Length == 0 ||
+                ((fragment.AllowedTransforms & ShellLexicalTransform.FieldSplit) != 0 &&
+                 ContainsFieldSplitOrGlobCharacter(homeDirectory)))
+            {
+                domain = ShellValueDomain.Unknown;
+                return false;
+            }
+
+            composed.Append(homeDirectory);
+        }
+
+        domain = new ShellValueDomain
+        {
+            Kind = ShellValueDomainKind.Exact,
+            Values = new[] { composed.ToString() },
+        };
+        return true;
+    }
+
+    private static bool ContainsFieldSplitOrGlobCharacter(string value)
+    {
+        foreach (var character in value)
+        {
+            if (char.IsWhiteSpace(character) || character is '*' or '?' or '[')
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasProviderQualifier(string value)
+    {
+        var separator = value.IndexOf("::", StringComparison.Ordinal);
+        if (separator <= 0)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < separator; index++)
+        {
+            if (!char.IsLetterOrDigit(value[index]) && value[index] != '-')
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void RecordUnvisitedBindingArguments(

@@ -58,7 +58,17 @@
           { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 49 },
           { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 16, "sourceLength": 29 }
         ],
-        "effectiveArguments": [],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": { "kind": "Exact", "values": ["/work"], "pattern": null, "coveringDirectory": null }
       }
     ]

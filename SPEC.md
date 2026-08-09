@@ -971,6 +971,11 @@ occurrence. Bash `HereString` data uses `Target`, includes the shell's trailing
 newline in an exact value, and is not path-relevant. PowerShell here-strings
 remain ordinary value tokens rather than redirect operations.
 
+A Bash file redirect whose expansion cannot prove exactly one target has an
+`Unknown` target and `IsComplete=false`; its containing command occurrence is
+also incomplete. In particular, an unquoted wildcard target is not completed
+by enumerating the parser process's filesystem.
+
 The public records define an in-memory typed API, not a stable polymorphic JSON
 wire format. Their generated equality, hashing, and `ToString()` behavior is
 part of the normal record shape. Consumers that persist parser results own a
@@ -1859,7 +1864,9 @@ a normalized absolute path. Resolution order:
    stays literal — `$HOME` is not expanded inside single quotes.
 
 1. **Tilde expansion.** `~` → `BashParserOptions.HomeDirectory`.
-   `~/foo` → `<home>/foo`. `~user` not supported → `DynamicSkip`.
+   `~/foo` → `<home>/foo`. The complete tilde prefix must be unquoted;
+   quoted or escaped slash spellings remain literal, while backslash-newline
+   is removed before this test. `~user` not supported → `DynamicSkip`.
 
 2. **Env-var substitution.** `$VAR` and `${VAR}` are **not expanded**
    even if the value is in `Environment`. We treat any env var reference
