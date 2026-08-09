@@ -551,8 +551,13 @@ priorities.
       flattening nested execution into apparent ordinary verb chains.
 - [ ] Promote the Bash command-resolution mutation cases into Netclaw's strict
       allow/prompt/deny matrix before the downstream approval-fatigue gate.
-- [ ] Add the separately tested Bash `<<<` here-string redirect slice with
-      bounded operand analysis and trailing-newline semantics.
+- [x] Add the separately tested Bash `<<<` here-string redirect slice with
+      bounded operand analysis and trailing-newline semantics. Default and
+      numeric sources publish complete non-path facts; exact and finite data
+      include Bash's appended newline, unknown data remains structurally
+      complete, and every supported `$()` command stays independently visible.
+      Malformed operators fail atomically, while native Bash oracles pin
+      newline and no-field-splitting behavior.
 
 ---
 

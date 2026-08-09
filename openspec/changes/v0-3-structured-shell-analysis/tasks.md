@@ -249,7 +249,12 @@
 - [x] 10.1 Specify heredoc delimiter adjacency and quoting, expansion mode, body provenance, substitutions, tab stripping, completeness, and Bash here-string semantics.
 - [x] 10.2 Preserve existing `<<` / `<<-` behavior and fix quoted-delimiter adjacency without regressing the v0.2 compatibility redirect.
 - [x] 10.3 Add explicit heredoc delimiter/body/expansion/completeness facts and surface every supported substitution command.
-- [ ] 10.4 Add Bash `<<<` here-string tokenization, explicit redirect facts, bounded operand analysis, and trailing-newline semantics.
+- [x] 10.4 Add Bash `<<<` here-string tokenization, explicit redirect facts,
+  bounded operand analysis, and trailing-newline semantics.
+  - Longest-match lexer and occurrence-level tests cover default and numeric
+    sources, exact empty and literal data, unknown values, visible command
+    substitutions, malformed forms, and finite loop-bound operands. Native
+    Bash oracles pin the appended newline and suppression of field splitting.
 - [x] 10.5 Add direct, malformed, quoted/unquoted, tab-stripped, dynamic, and substitution-bearing corpus cases plus real-Bash parse-only validation.
   - [x] 10.5a Add direct, executable-corpus, real-Bash output, and real-Bash parse-only coverage for the bounded substitution-discovery slice, explicit redirect facts, and the full heredoc matrix.
 

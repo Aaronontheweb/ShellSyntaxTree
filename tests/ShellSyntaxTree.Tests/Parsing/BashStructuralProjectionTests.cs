@@ -1124,6 +1124,92 @@ public class BashStructuralProjectionTests
         Assert.False(element.IsPath);
     }
 
+    [Theory]
+    [InlineData("cat <<< \"hello\"", "hello\n")]
+    [InlineData("cat <<< \"\"", "\n")]
+    [InlineData("cat 3<<<payload", "payload\n")]
+    [InlineData("cat <<< *.txt", "*.txt\n")]
+    [InlineData("cat <<< ~", "/home/test\n")]
+    [InlineData("cat <<< $HOME", "/home/test\n")]
+    public void Literal_here_string_publishes_complete_non_path_data(
+        string source,
+        string expectedData)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var occurrence = Assert.Single(result.Commands);
+        Assert.True(occurrence.IsComplete);
+        var redirect = Assert.Single(occurrence.Redirects);
+        Assert.Equal(RedirectOperation.HereString, redirect.Operation);
+        Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
+        Assert.Equal(new[] { expectedData }, redirect.Target.Values);
+        Assert.False(redirect.IsPathRelevant);
+        Assert.True(redirect.IsComplete);
+        Assert.Null(redirect.HereDocument);
+
+        var expectedDescriptor = source.Contains("3<<<", System.StringComparison.Ordinal)
+            ? 3
+            : (int?)null;
+        Assert.Equal(
+            expectedDescriptor is null
+                ? RedirectSourceKind.Default
+                : RedirectSourceKind.Descriptor,
+            redirect.Source.Kind);
+        Assert.Equal(expectedDescriptor, redirect.Source.Descriptor);
+
+        var compatibility = Assert.Single(occurrence.Clause.Redirects);
+        Assert.Equal(RedirectDirection.In, compatibility.Direction);
+        Assert.False(compatibility.IsDynamicSkip);
+        var element = occurrence.Clause.Elements.Last(item =>
+            item.Role == ClauseElementRole.Redirect);
+        Assert.False(element.IsPath);
+    }
+
+    [Fact]
+    public void Dynamic_here_string_data_is_unknown_but_structurally_complete()
+    {
+        var result = Parse("cat <<< \"$value\"");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var occurrence = Assert.Single(result.Commands);
+        Assert.True(occurrence.IsComplete);
+        var redirect = Assert.Single(occurrence.Redirects);
+        Assert.Equal(RedirectOperation.HereString, redirect.Operation);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
+        Assert.False(redirect.IsPathRelevant);
+        Assert.True(redirect.IsComplete);
+        Assert.True(Assert.Single(occurrence.Clause.Redirects).IsDynamicSkip);
+    }
+
+    [Fact]
+    public void Here_string_substitution_is_visible_and_leaves_data_unknown()
+    {
+        var result = Parse("cat <<< \"$(printf payload)\"");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(new[] { "printf payload", "cat" }, result.Commands.Select(CommandVerb));
+        Assert.Equal(CommandOccurrenceRole.Substitution, result.Commands[0].ImmediateRole);
+        var consumer = result.Commands[1];
+        Assert.True(consumer.IsComplete);
+        var redirect = Assert.Single(consumer.Redirects);
+        Assert.Equal(RedirectOperation.HereString, redirect.Operation);
+        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
+        Assert.True(redirect.IsComplete);
+    }
+
+    [Theory]
+    [InlineData("cat <<<")]
+    [InlineData("cat <<<< payload")]
+    public void Malformed_here_string_fails_the_whole_parse(string source)
+    {
+        var result = Parse(source);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
     [Fact]
     public void Expanding_heredoc_publishes_complete_body_and_substitution_facts()
     {

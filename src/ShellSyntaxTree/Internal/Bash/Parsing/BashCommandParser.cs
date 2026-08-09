@@ -497,10 +497,15 @@ internal static partial class BashCommandParser
         Clause Clause,
         IReadOnlyList<ShellValueElementProvenance> Provenance);
 
+    private readonly record struct RedirectTargetProvenanceSet(
+        Clause Clause,
+        IReadOnlyList<RedirectTargetProvenance> Provenance);
+
     private readonly record struct BashParseResult(
         ParsedCommand Command,
         IReadOnlyList<CwdPathDependencySet> CwdPathDependencySets,
         IReadOnlyList<ShellValueProvenanceSet> ValueProvenanceSets,
+        IReadOnlyList<RedirectTargetProvenanceSet> RedirectTargetProvenanceSets,
         IReadOnlyList<BashForInAnalysisPlanReference> ForInPlans);
 
     private static ClauseResult ParseClauseSegment(
@@ -1338,6 +1343,38 @@ internal static partial class BashCommandParser
         out ShellValue? pathResolverValue)
     {
         pathResolverValue = null;
+        if (BashLexer.IsHereStringOperator(redirectOperator.OperatorText))
+        {
+            var hereStringRaw = SourceSlice(source, target);
+            var hereStringValue = BashRedirectAnalysis.NormalizeHereStringOperand(
+                GetResolverValue(target, target.Value));
+            var (hereStringKind, hereStringResolved, _) = BashResolver.Resolve(
+                hereStringValue,
+                treatAsPath: false,
+                options,
+                workingDirectoryUnknown,
+                ShellResolutionConsumer.BashRedirect);
+            var hereStringIsDynamic = hereStringKind != ArgKind.Literal &&
+                hereStringResolved is null;
+            redirectList.Add(new Redirect
+            {
+                Direction = direction,
+                Target = hereStringIsDynamic
+                    ? hereStringRaw
+                    : hereStringResolved ?? target.Value,
+                IsDynamicSkip = hereStringIsDynamic,
+            });
+            element = CreateRedirectElement(
+                source,
+                redirectOperator,
+                target,
+                precedingVerbTokenCount,
+                hereStringKind,
+                isPath: false,
+                resolved: hereStringIsDynamic ? null : hereStringResolved);
+            return;
+        }
+
         if (target.Kind == BashTokenKind.OpaqueSubstitution)
         {
             // Opaque region as redirect target → always DynamicSkip.
@@ -1620,7 +1657,7 @@ internal static partial class BashCommandParser
             if (operatorStart > 0)
             {
                 var redirect = op.Substring(operatorStart);
-                if (redirect == "<")
+                if (redirect is "<" or "<<<")
                 {
                     direction = RedirectDirection.In;
                     return true;
@@ -1653,6 +1690,7 @@ internal static partial class BashCommandParser
                 direction = RedirectDirection.Append;
                 return true;
             case "<":
+            case "<<<":
                 direction = RedirectDirection.In;
                 return true;
             case "2>":

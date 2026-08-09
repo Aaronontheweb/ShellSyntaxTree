@@ -797,6 +797,26 @@ public class BashForInStructuralTests
         Assert.False(command.IsComplete);
     }
 
+    [Fact]
+    public void Loop_binding_in_here_string_becomes_bounded_non_path_data()
+    {
+        var result = Parse(
+            "for item in alpha beta; do cat <<< \"$item\"; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.True(command.IsComplete);
+        var redirect = Assert.Single(command.Redirects);
+        Assert.Equal(RedirectOperation.HereString, redirect.Operation);
+        AssertDomain(
+            redirect.Target,
+            ShellValueDomainKind.FiniteSet,
+            "alpha\n",
+            "beta\n");
+        Assert.False(redirect.IsPathRelevant);
+        Assert.True(redirect.IsComplete);
+    }
+
     [Theory]
     [InlineData("for f in a; do unset f; done")]
     [InlineData("for f in a; do read f; done")]
@@ -956,6 +976,26 @@ public class BashForInStructuralTests
             ShellValueDomainKind.FiniteSet,
             "a",
             "b");
+    }
+
+    [Fact]
+    public void Static_bash_c_remaps_bounded_here_string_data()
+    {
+        var result = Parse(
+            "bash -c 'for item in alpha beta; do cat <<< \"$item\"; done'");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var occurrence = Assert.Single(result.Commands);
+        Assert.True(occurrence.IsComplete);
+        var redirect = Assert.Single(occurrence.Redirects);
+        Assert.Equal(RedirectOperation.HereString, redirect.Operation);
+        AssertDomain(
+            redirect.Target,
+            ShellValueDomainKind.FiniteSet,
+            "alpha\n",
+            "beta\n");
+        Assert.False(redirect.IsPathRelevant);
+        Assert.True(redirect.IsComplete);
     }
 
     [Fact]
