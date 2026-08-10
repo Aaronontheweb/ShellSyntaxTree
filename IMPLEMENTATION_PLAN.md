@@ -660,6 +660,10 @@ priorities.
       were published by successful [tag workflow run 31357832880](https://github.com/Aaronontheweb/ShellSyntaxTree/actions/runs/31357832880)
       after Linux and native Windows validation passed. Use this package for
       Netclaw's native-Windows integration gate.
+- [ ] Publish `0.3.0-alpha.6` with the corrected stable-v0.3 consumer API.
+      Use the package to remove Netclaw's alpha.5 coordinate and property-bag
+      validation, then rerun its Linux and native-Windows approval matrices
+      before promoting stable v0.3.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
