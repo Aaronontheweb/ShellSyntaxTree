@@ -1,18 +1,22 @@
 {
-  "name": "Redirect fd-close: cmd 2>&-",
-  "input": "cmd 2>&-",
+  "name": "Redirect fd-close: cmd 2\u003E\u0026-",
+  "input": "cmd 2\u003E\u0026-",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["cmd"],
+        "verb": [
+          "cmd"
+        ],
         "args": [],
         "redirects": [
-          { "direction": "ErrOut", "target": "&-", "isDynamicSkip": true }
-        ],
-        "isSubshell": false,
-        "isCommandStringWrapped": false
+          {
+            "direction": "ErrOut",
+            "target": "\u0026-",
+            "isDynamicSkip": true
+          }
+        ]
       }
     ],
     "commands": [
@@ -21,16 +25,29 @@
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 8 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 8
+          }
         ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "DescriptorCloseRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 2,
-            "operation": "DescriptorClose",
-            "target": { "kind": "Unknown" },
-            "isPathRelevant": false,
             "isComplete": true
           }
         ]

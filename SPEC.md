@@ -205,16 +205,10 @@ public sealed record CommandListSyntax : ShellSyntaxNode { ... }
 public sealed record CommandListItemSyntax { ... }
 public sealed record GroupSyntax : ShellSyntaxNode { ... }
 public sealed record ForEachSyntax : ShellSyntaxNode { ... }
-public sealed record LoopBindingSyntax { ... }
 public sealed record ShellSourceFragment { ... }
-public sealed record ConditionLoopSyntax : ShellSyntaxNode { ... }
-public sealed record ConditionalSyntax : ShellSyntaxNode { ... }
-public sealed record ConditionalBranchSyntax : ShellSyntaxNode { ... }
 public sealed record CommandSubstitutionSyntax : ShellSyntaxNode { ... }
 public sealed record ExecutionRegionSyntax : ShellSyntaxNode { ... }
-public enum ShellSyntaxKind { ... }
 public enum ShellGroupKind { ... }
-public enum ConditionLoopKind { ... }
 public enum ExecutionRegionOrigin { ... }
 public enum ExecutionRegionPhase { ... }
 public enum ExecutionRegionTiming { ... }
@@ -223,23 +217,28 @@ public enum ExecutionRegionCardinality { ... }
 // v0.3 authorization and bounded-analysis projections — see §3.
 public sealed record CommandOccurrence { ... }
 public sealed record CommandAncestryFrame { ... }
-public sealed record EffectiveArgument { ... }
-public sealed record ShellValueDomain { ... }
-public sealed record RedirectAnalysis { ... }
+public sealed record AnalyzedArgument { ... }
+public abstract record ShellValueDomain { ... }
+public abstract record RedirectAnalysis { ... }
 public sealed record HereDocumentAnalysis { ... }
-public sealed record RedirectSource { ... }
+public abstract record RedirectSource { ... }
+public sealed record FileRedirectAnalysis : RedirectAnalysis { ... }
+public sealed record UnresolvedRedirectAnalysis : RedirectAnalysis { ... }
+public sealed record DescriptorDuplicateRedirectAnalysis : RedirectAnalysis { ... }
+public sealed record DescriptorMoveRedirectAnalysis : RedirectAnalysis { ... }
+public sealed record DescriptorCloseRedirectAnalysis : RedirectAnalysis { ... }
+public sealed record HereDocumentRedirectAnalysis : RedirectAnalysis { ... }
+public sealed record HereStringRedirectAnalysis : RedirectAnalysis { ... }
 public enum CommandOccurrenceRole { ... }
 public enum CommandAncestryRegion { ... }
-public enum ShellValueDomainKind { ... }
+public enum FileRedirectMode { ... }
 public enum HereDocumentExpansionMode { ... }
-public enum RedirectSourceKind { ... }
-public enum RedirectOperation { ... }
-public static class ShellAnalysisLimits { ... }
 ```
 
-`ConditionLoopSyntax`, `ConditionalSyntax`, and `ConditionalBranchSyntax` are
-reserved v0.3 structural vocabulary. The stable-v0.3 parsers do not emit them;
-condition-loop and branch grammar remains fail closed until a later release.
+Stable v0.3 exposes only structural types the parsers can emit. Condition-loop
+and branch grammar remains fail closed and reserves no public type or enum
+member. Every new v0.3 result type is parser-owned; its constructor and result
+setters are not public. The stable v0.2 constructors and setters are unchanged.
 
 That's the entire public API. **Everything else is internal.** The lexer,
 parser internals, verb tables, resolver — all implementation detail.
@@ -263,13 +262,13 @@ public sealed record ParsedCommand
     /// source ranges; decoded wrapper nodes report unavailable ranges unless
     /// an exact outer mapping exists.
     /// </summary>
-    public ShellBlockSyntax Syntax { get; init; } = new();
+    public ShellBlockSyntax Syntax { get; internal init; } = new();
 
     /// <summary>
     /// Canonical authorization projection containing every authored simple
     /// command that may execute exactly once, in deterministic source order.
     /// </summary>
-    public IReadOnlyList<CommandOccurrence> Commands { get; init; } = [];
+    public IReadOnlyList<CommandOccurrence> Commands { get; internal init; } = [];
 
     /// <summary>
     /// Conservative v0.2 compatibility projection. Existing simple-command
@@ -424,65 +423,55 @@ for structure, explanation, display, and specialized analysis.
 public abstract record ShellSyntaxNode
 {
     private protected ShellSyntaxNode() { }
+    private protected abstract object LibraryOwnership { get; }
 
-    public abstract ShellSyntaxKind Kind { get; }
-    public int? SourceStart { get; init; }
-    public int? SourceLength { get; init; }
-}
-
-public enum ShellSyntaxKind
-{
-    Unknown,
-    Block,
-    SimpleCommand,
-    Pipeline,
-    CommandList,
-    Group,
-    ForEach,
-    ConditionLoop,
-    Conditional,
-    ConditionalBranch,
-    CommandSubstitution,
-    ExecutionRegion,
+    public int? SourceStart { get; internal init; }
+    public int? SourceLength { get; internal init; }
 }
 
 public sealed record ShellBlockSyntax : ShellSyntaxNode
 {
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.Block;
-    public IReadOnlyList<ShellSyntaxNode> Statements { get; init; } = [];
+    internal ShellBlockSyntax() { }
+    private protected override object LibraryOwnership => this;
+    public IReadOnlyList<ShellSyntaxNode> Statements { get; internal init; } = [];
 }
 
 public sealed record SimpleCommandSyntax : ShellSyntaxNode
 {
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.SimpleCommand;
-    public Clause Clause { get; init; } = new();
-    public IReadOnlyList<CommandSubstitutionSyntax> Substitutions { get; init; } = [];
-    public IReadOnlyList<ExecutionRegionSyntax> ExecutionRegions { get; init; } = [];
+    internal SimpleCommandSyntax() { }
+    private protected override object LibraryOwnership => this;
+    public Clause Clause { get; internal init; } = new();
+    public IReadOnlyList<CommandSubstitutionSyntax> Substitutions { get; internal init; } = [];
+    public IReadOnlyList<ExecutionRegionSyntax> ExecutionRegions { get; internal init; } = [];
 }
 
 public sealed record PipelineSyntax : ShellSyntaxNode
 {
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.Pipeline;
-    public IReadOnlyList<ShellSyntaxNode> Stages { get; init; } = [];
+    internal PipelineSyntax() { }
+    private protected override object LibraryOwnership => this;
+    public IReadOnlyList<ShellSyntaxNode> Stages { get; internal init; } = [];
 }
 
 public sealed record CommandListSyntax : ShellSyntaxNode
 {
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.CommandList;
-    public IReadOnlyList<CommandListItemSyntax> Items { get; init; } = [];
+    internal CommandListSyntax() { }
+    private protected override object LibraryOwnership => this;
+    public IReadOnlyList<CommandListItemSyntax> Items { get; internal init; } = [];
 }
 
 public sealed record CommandListItemSyntax
 {
-    public CompoundOperator Operator { get; init; }
-    public ShellSyntaxNode Command { get; init; } = new ShellBlockSyntax();
+    internal CommandListItemSyntax() { }
+    public CompoundOperator Operator { get; internal init; }
+    public ShellSyntaxNode Command { get; internal init; } = null!;
 }
 
 public sealed record GroupSyntax : ShellSyntaxNode
 {
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.Group;
-    public ShellGroupKind GroupKind { get; init; }
-    public ShellBlockSyntax Body { get; init; } = new();
+    internal GroupSyntax() { }
+    private protected override object LibraryOwnership => this;
+    public ShellGroupKind GroupKind { get; internal init; }
+    public ShellBlockSyntax Body { get; internal init; } = null!;
 }
 
 public enum ShellGroupKind
@@ -494,70 +483,40 @@ public enum ShellGroupKind
 
 public sealed record ForEachSyntax : ShellSyntaxNode
 {
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.ForEach;
-    public LoopBindingSyntax Binding { get; init; } = new();
-    public ShellSourceFragment Iterable { get; init; } = new();
-    public ShellBlockSyntax IteratorCommands { get; init; } = new();
-    public ShellBlockSyntax Body { get; init; } = new();
-}
-
-public sealed record LoopBindingSyntax
-{
-    public string Name { get; init; } = "";
-    public ShellSourceFragment Source { get; init; } = new();
+    internal ForEachSyntax() { }
+    private protected override object LibraryOwnership => this;
+    public string BindingName { get; internal init; } = "";
+    public ShellSourceFragment BindingSource { get; internal init; } = null!;
+    public ShellSourceFragment Iterable { get; internal init; } = null!;
+    public ShellBlockSyntax IteratorCommands { get; internal init; } = null!;
+    public ShellBlockSyntax Body { get; internal init; } = null!;
 }
 
 public sealed record ShellSourceFragment
 {
-    public string Raw { get; init; } = "";
-    public int? SourceStart { get; init; }
-    public int? SourceLength { get; init; }
-}
-
-public sealed record ConditionLoopSyntax : ShellSyntaxNode
-{
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.ConditionLoop;
-    public ConditionLoopKind LoopKind { get; init; }
-    public ShellBlockSyntax Condition { get; init; } = new();
-    public ShellBlockSyntax Body { get; init; } = new();
-}
-
-public enum ConditionLoopKind
-{
-    Unknown,
-    While,
-    Until,
-}
-
-public sealed record ConditionalSyntax : ShellSyntaxNode
-{
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.Conditional;
-    public IReadOnlyList<ConditionalBranchSyntax> Branches { get; init; } = [];
-    public ShellBlockSyntax? Else { get; init; }
-}
-
-public sealed record ConditionalBranchSyntax : ShellSyntaxNode
-{
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.ConditionalBranch;
-    public ShellBlockSyntax Condition { get; init; } = new();
-    public ShellBlockSyntax Body { get; init; } = new();
+    internal ShellSourceFragment() { }
+    public string Raw { get; internal init; } = "";
+    public int? SourceStart { get; internal init; }
+    public int? SourceLength { get; internal init; }
 }
 
 public sealed record CommandSubstitutionSyntax : ShellSyntaxNode
 {
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.CommandSubstitution;
-    public ShellBlockSyntax Body { get; init; } = new();
+    internal CommandSubstitutionSyntax() { }
+    private protected override object LibraryOwnership => this;
+    public ShellBlockSyntax Body { get; internal init; } = null!;
 }
 
 public sealed record ExecutionRegionSyntax : ShellSyntaxNode
 {
-    public override ShellSyntaxKind Kind => ShellSyntaxKind.ExecutionRegion;
-    public ExecutionRegionOrigin Origin { get; init; }
-    public int? HostClauseElementIndex { get; init; }
-    public ExecutionRegionPhase Phase { get; init; }
-    public ExecutionRegionTiming Timing { get; init; }
-    public ExecutionRegionCardinality Cardinality { get; init; }
-    public ShellBlockSyntax Body { get; init; } = new();
+    internal ExecutionRegionSyntax() { }
+    private protected override object LibraryOwnership => this;
+    public ExecutionRegionOrigin Origin { get; internal init; }
+    public ClauseElement? HostArgument { get; internal init; }
+    public ExecutionRegionPhase Phase { get; internal init; }
+    public ExecutionRegionTiming Timing { get; internal init; }
+    public ExecutionRegionCardinality Cardinality { get; internal init; }
+    public ShellBlockSyntax Body { get; internal init; } = null!;
 }
 
 public enum ExecutionRegionOrigin
@@ -604,21 +563,34 @@ PowerShell expressions share a grammar. Direct-source nodes have exact ranges
 into `ParsedCommand.Source`. Nodes lifted from decoded, escaped, or encoded
 wrapper content use null ranges unless an exact outer mapping exists.
 
-Every v0.3 enum reserves zero as `Unknown`. Consumers fail closed on
-`Unknown` or an unrecognized numeric value when the fact affects policy.
+Every new v0.3 result-type constructor and new v0.3 member setter is
+library-owned. Every `IReadOnlyList<T>` introduced by v0.3 is a defensive
+snapshot, not a mutable array or list that a consumer can cast and change.
+Stable v0.2 construction, setters, and list semantics remain unchanged.
+Runtime type is the discriminant for each closed
+record family; consumers keep a default fail-closed switch arm for future
+library-owned alternatives. Compatibility is required against stable v0.2,
+not against any experimental `0.3.0-alpha.*` surface.
+
+Every v0.3 enum whose model admits an unknown state reserves zero as
+`Unknown`. Consumers fail closed on `Unknown` or an unrecognized numeric value
+when the fact affects policy. `FileRedirectMode` has no `Unknown` member:
+unresolved operations use `UnresolvedRedirectAnalysis`, and only the library
+can construct a `FileRedirectAnalysis` with a known mode.
 
 ### Command occurrences and bounded values (v0.3)
 
 ```csharp
 public sealed record CommandOccurrence
 {
-    public Clause Clause { get; init; } = new();
-    public CommandOccurrenceRole ImmediateRole { get; init; }
-    public IReadOnlyList<CommandAncestryFrame> Ancestry { get; init; } = [];
-    public IReadOnlyList<EffectiveArgument> EffectiveArguments { get; init; } = [];
-    public ShellValueDomain WorkingDirectory { get; init; } = ShellValueDomain.Unknown;
-    public IReadOnlyList<RedirectAnalysis> Redirects { get; init; } = [];
-    public bool IsComplete { get; init; }
+    internal CommandOccurrence() { }
+    public Clause Clause { get; internal init; } = new();
+    public CommandOccurrenceRole ImmediateRole { get; internal init; }
+    public IReadOnlyList<CommandAncestryFrame> Ancestry { get; internal init; } = [];
+    public IReadOnlyList<AnalyzedArgument> Arguments { get; internal init; } = [];
+    public ShellValueDomain WorkingDirectory { get; internal init; } = null!;
+    public IReadOnlyList<RedirectAnalysis> Redirects { get; internal init; } = [];
+    public bool IsComplete { get; internal init; }
 }
 
 public enum CommandOccurrenceRole
@@ -626,21 +598,18 @@ public enum CommandOccurrenceRole
     Unknown,
     Ordinary,
     PipelineStage,
-    Condition,
     Iterator,
     LoopBody,
-    Branch,
     Substitution,
     ExecutionRegion,
 }
 
 public sealed record CommandAncestryFrame
 {
-    public ShellSyntaxKind AncestorKind { get; init; }
-    public CommandAncestryRegion Region { get; init; }
-    public int? ChildIndex { get; init; }
-    public int? SourceStart { get; init; }
-    public int? SourceLength { get; init; }
+    internal CommandAncestryFrame() { }
+    public ShellSyntaxNode Ancestor { get; internal init; } = null!;
+    public CommandAncestryRegion Region { get; internal init; }
+    public int? ChildIndex { get; internal init; }
 }
 
 public enum CommandAncestryRegion
@@ -652,41 +621,34 @@ public enum CommandAncestryRegion
     GroupBody,
     Iterator,
     LoopBody,
-    Condition,
-    Branch,
     Substitution,
     ExecutionRegion,
 }
 
-public sealed record EffectiveArgument
+public sealed record AnalyzedArgument
 {
-    public int ClauseElementIndex { get; init; } = -1;
-    public ShellValueDomain Value { get; init; } = ShellValueDomain.Unknown;
+    internal AnalyzedArgument() { }
+    public Arg Argument { get; internal init; } = null!;
+    public ClauseElement Element { get; internal init; } = null!;
+    public ShellValueDomain Value { get; internal init; } = null!;
 }
 
-public sealed record ShellValueDomain
+public abstract record ShellValueDomain
 {
-    public static ShellValueDomain Unknown { get; } = new();
+    private protected ShellValueDomain() { }
+    private protected abstract object LibraryOwnership { get; }
 
-    public ShellValueDomainKind Kind { get; init; }
-    public IReadOnlyList<string> Values { get; init; } = [];
-    public string? Pattern { get; init; }
-    public string? CoveringDirectory { get; init; }
-}
-
-public enum ShellValueDomainKind
-{
-    Unknown,
-    Exact,
-    FiniteSet,
-    Pattern,
-}
-
-public static class ShellAnalysisLimits
-{
-    public static int MaxValueCandidates => 32;
-    public static int MaxStructuralNesting => 16;
-    public static int MaxWrapperRecursionDepth => 5;
+    public sealed record Unknown : ShellValueDomain { ... }
+    public sealed record Exact : ShellValueDomain { public string Value { get; } }
+    public sealed record FiniteSet : ShellValueDomain
+    {
+        public IReadOnlyList<string> Values { get; }
+    }
+    public sealed record PathPattern : ShellValueDomain
+    {
+        public string Pattern { get; }
+        public string CoveringDirectory { get; }
+    }
 }
 ```
 
@@ -717,11 +679,11 @@ that a proved or conservatively unknown command binding may execute. The
 unchanged host `Clause` retains its authored script-block `DynamicSkip`
 argument. A direct PowerShell `& {}` or `. {}` region appears as a statement,
 carries `Origin=DirectCall` or `Origin=DotSource`, has
-`HostClauseElementIndex=null`, and creates no synthetic occurrence for the
+`HostArgument=null`, and creates no synthetic occurrence for the
 invocation operator. A command-owned region carries `Origin=CommandArgument`
-and the non-negative index of its script-block token in the host
-`Clause.Elements`. Consumers use `Origin`, rather than reparsing source text,
-to distinguish the different direct-invocation state semantics.
+and `HostArgument` references the exact script-block `ClauseElement` in the
+host command. Consumers use `Origin`, rather than reparsing source text, to
+distinguish the different direct-invocation state semantics.
 
 Execution-region origin, phase, timing, and cardinality are independent
 structural facts. Attached regions retain authored script-block order even when a
@@ -745,49 +707,49 @@ zero-based `ChildIndex` in the structural collection that owns the
 `CommandSubstitutionSyntax`. For a simple command this is its `Substitutions`
 collection; for an iterator it is the containing iterator-command collection.
 
-Each ancestry frame describes the relationship from its `AncestorKind` to the
-next node on the path. The root block uses `Root`; non-root blocks and command
+Each ancestry frame references the actual `Ancestor` node and describes its
+relationship to the next node on the path. The root block uses `Root`; non-root blocks and command
 lists use `Statement`; pipelines use `PipelineStage`; groups use `GroupBody`;
-foreach nodes use `Iterator` or `LoopBody`; condition loops use `Condition` or
-`LoopBody`; conditionals use `Branch`; conditional-branch nodes use
-`Condition` or `Branch`; command substitutions use `Substitution`; and
+foreach nodes use `Iterator` or `LoopBody`; command substitutions use `Substitution`; and
 execution regions use `ExecutionRegion`.
-Repeated children use their zero-based authored index. The `else` child uses
-the branch count, placing it after every condition/body pair. Frame source
-ranges belong to the ancestor. Blocks, command lists, and groups retain the
+Repeated children use their zero-based authored index. Source ranges are read
+from the referenced ancestor. Blocks, command lists, and groups retain the
 incoming immediate role; pipeline stages, iterator/body regions,
-condition/body regions, branches, substitutions, and execution regions replace
-it with their nearer execution role.
+substitutions, and execution regions replace it with their nearer execution role.
 
 Projection accepts only a parser-owned tree: a syntax-node or `Clause`
 reference cannot appear at two authored positions, node and fragment spans are
 either both unavailable or a non-negative start/length pair, and structural
 enum values consumed by the projector must be known. Empty blocks remain
-valid, but empty pipelines, command lists, and conditionals are malformed.
-Joined value domains, effective-argument coordinates, cwd facts, redirect
+valid, but empty pipelines and command lists are malformed.
+Joined value domains, analyzed-argument references, cwd facts, redirect
 coordinates, redirect shapes, and heredoc facts must satisfy their contracts.
 Any violation discards the partial `Commands` and `Clauses` collections and
 makes the outer parse unparseable; it is never published as a complete
 occurrence.
 
-`EffectiveArgument.ClauseElementIndex` is a stable authored coordinate. The
-analysis never mutates a compatibility `Arg` to hold loop-specific values.
-An occurrence can be structurally complete while one effective value remains
-`Unknown`; completeness and value precision are independent.
+`Arguments` contains exactly one `AnalyzedArgument` for each non-cwd
+`Clause.Args` entry in authored order. `Argument` and `Element` reference the
+existing compatibility objects directly. Inline equals/colon forms may create
+multiple arguments that share one source element. The analysis never mutates a
+compatibility `Arg` to hold loop-specific values. An occurrence can be
+structurally complete while one value remains `Unknown`; completeness and
+value precision are independent.
 
 The parser emits only these value-domain combinations:
 
-- `Unknown`: no values, pattern, or covering directory;
-- `Exact`: exactly one value and no pattern fields;
-- `FiniteSet`: 2–32 distinct values and no pattern fields;
-- `Pattern`: no values, a non-empty pattern, and a non-empty covering directory.
+- `Unknown`: no payload;
+- `Exact`: exactly one non-null value;
+- `FiniteSet`: 2–32 distinct non-null values;
+- `PathPattern`: a non-empty pattern and non-empty covering directory.
 
 The parser does not execute commands, inspect runtime variables, enumerate the
 filesystem, or truncate an over-limit set and call it complete. A result with
-33 or more candidates becomes `Unknown`. Structural depth starts at zero for
-the root and increments on foreach loops, condition loops, conditionals,
-groups, command substitutions, and execution regions; blocks, lists,
-pipelines, branches, and
+33 or more candidates becomes `Unknown`. The candidate cap of 32, structural
+depth cap of 16, and wrapper-recursion cap of 5 are parser contracts, not
+public tuning knobs. Structural depth starts at zero for the root and
+increments on foreach loops, groups, command substitutions, and execution
+regions; blocks, lists, pipelines, and
 simple-command leaves do not independently increment it. Exceeding 16
 structural containers or 5 decoded-command wrapper recursions makes the entire
 result unparseable.
@@ -943,25 +905,69 @@ Occurrence-specific redirect analysis is additive. The existing `Redirect`
 record remains the v0.2 compatibility leaf and is not reinterpreted.
 
 ```csharp
-public sealed record RedirectAnalysis
+public abstract record RedirectSource
 {
-    public int RedirectIndex { get; init; } = -1;
-    public RedirectSource Source { get; init; } = new();
-    public RedirectOperation Operation { get; init; }
-    public int? TargetDescriptor { get; init; }
-    public ShellValueDomain Target { get; init; } = ShellValueDomain.Unknown;
-    public HereDocumentAnalysis? HereDocument { get; init; }
-    public bool IsPathRelevant { get; init; }
-    public bool IsComplete { get; init; }
+    private protected RedirectSource() { }
+    private protected abstract object LibraryOwnership { get; }
+
+    public sealed record Unknown : RedirectSource { ... }
+    public sealed record Default : RedirectSource { ... }
+    public sealed record Descriptor : RedirectSource { public int Value { get; } }
+    public sealed record PowerShellAllStreams : RedirectSource { ... }
+}
+
+public abstract record RedirectAnalysis
+{
+    private protected RedirectAnalysis() { }
+    private protected abstract object LibraryOwnership { get; }
+
+    public Redirect Authored { get; internal init; } = null!;
+    public RedirectSource Source { get; internal init; } = null!;
+    public bool IsComplete { get; internal init; }
+}
+
+public sealed record FileRedirectAnalysis : RedirectAnalysis
+{
+    public FileRedirectMode Mode { get; }
+    public ShellValueDomain Target { get; internal init; } = null!;
+}
+
+public sealed record UnresolvedRedirectAnalysis : RedirectAnalysis { ... }
+public sealed record DescriptorDuplicateRedirectAnalysis : RedirectAnalysis
+{
+    public int TargetDescriptor { get; internal init; }
+}
+public sealed record DescriptorMoveRedirectAnalysis : RedirectAnalysis
+{
+    public int TargetDescriptor { get; internal init; }
+}
+public sealed record DescriptorCloseRedirectAnalysis : RedirectAnalysis { ... }
+public sealed record HereDocumentRedirectAnalysis : RedirectAnalysis
+{
+    public HereDocumentAnalysis Document { get; internal init; } = null!;
+}
+public sealed record HereStringRedirectAnalysis : RedirectAnalysis
+{
+    public ShellValueDomain Data { get; internal init; } = null!;
+}
+
+public enum FileRedirectMode
+{
+    Input,
+    Output,
+    Append,
+    CombinedOutput,
+    CombinedOutputAppend,
 }
 
 public sealed record HereDocumentAnalysis
 {
-    public ShellSourceFragment Delimiter { get; init; } = new();
-    public ShellSourceFragment Body { get; init; } = new();
-    public HereDocumentExpansionMode ExpansionMode { get; init; }
-    public bool StripLeadingTabs { get; init; }
-    public bool IsComplete { get; init; }
+    internal HereDocumentAnalysis() { }
+    public ShellSourceFragment Delimiter { get; internal init; } = null!;
+    public ShellSourceFragment Body { get; internal init; } = null!;
+    public HereDocumentExpansionMode ExpansionMode { get; internal init; }
+    public bool StripLeadingTabs { get; internal init; }
+    public bool IsComplete { get; internal init; }
 }
 
 public enum HereDocumentExpansionMode
@@ -971,48 +977,26 @@ public enum HereDocumentExpansionMode
     Expand,
 }
 
-public sealed record RedirectSource
-{
-    public RedirectSourceKind Kind { get; init; }
-    public int? Descriptor { get; init; }
-}
-
-public enum RedirectSourceKind
-{
-    Unknown,
-    Default,
-    Descriptor,
-    PowerShellAllStreams,
-}
-
-public enum RedirectOperation
-{
-    Unknown,
-    FileInput,
-    FileOutput,
-    FileAppend,
-    DescriptorDuplicate,
-    DescriptorClose,
-    DescriptorMove,
-    CombinedOutput,
-    CombinedOutputAppend,
-    HereDocument,
-    HereString,
-}
 ```
 
-`RedirectIndex` correlates to `Clause.Redirects`. `RedirectSource` preserves a
-shell-default stream, an explicit numeric descriptor, or PowerShell's `*`
-selector without erasing shell identity. Invalid source-kind/descriptor
-combinations are incomplete and fail closed. File targets are path-relevant;
-static descriptor duplicate, close, and move operations are not paths.
+`Authored` references the exact corresponding `Clause.Redirects` leaf.
+`RedirectSource` preserves a shell-default stream, an explicit numeric
+descriptor, or PowerShell's `*` selector without erasing shell identity. File
+alternatives are path-relevant; descriptor alternatives are not paths.
 
-`HereDocument` is non-null only for `HereDocument`. A quoted delimiter makes
-the body `Literal`; an expanding body is complete only when every supported
-execution-bearing substitution has been discovered as its own command
-occurrence. Bash `HereString` data uses `Target`, includes the shell's trailing
-newline in an exact value, and is not path-relevant. PowerShell here-strings
-remain ordinary value tokens rather than redirect operations.
+A quoted heredoc delimiter makes the body `Literal`; an expanding body is
+complete only when every supported execution-bearing substitution has been
+discovered as its own command occurrence. Bash `HereString` data uses `Data`,
+includes the shell's trailing newline in an exact value, and is not
+path-relevant. PowerShell here-strings remain ordinary value tokens.
+
+`RedirectSource.Unknown` is valid only with `UnresolvedRedirectAnalysis`.
+`RedirectSource.Default` may own ordinary or combined file, descriptor,
+heredoc, or here-string alternatives.
+`RedirectSource.Descriptor` may own ordinary file, descriptor, heredoc, or
+here-string alternatives but never combined-output. PowerShell all-streams may
+own only output/append file alternatives or descriptor duplication to stream
+1. Any other internal pairing discards the authorization projection.
 
 A Bash file redirect whose expansion cannot prove exactly one target has an
 `Unknown` target and `IsComplete=false`; its containing command occurrence is

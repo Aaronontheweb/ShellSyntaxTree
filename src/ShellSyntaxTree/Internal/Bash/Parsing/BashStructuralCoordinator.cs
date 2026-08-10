@@ -67,6 +67,7 @@ internal static partial class BashCommandParser
             CreateDependencySets(projection.Commands, analyzedFacts),
             CreateValueProvenanceSets(projection.Commands, analyzedFacts),
             CreateRedirectProvenanceSets(projection.Commands, analyzedFacts),
+            CreateRedirectAnalysisSets(projection.Commands, analyzedFacts),
             analyzedForInPlans);
     }
 
@@ -122,6 +123,21 @@ internal static partial class BashCommandParser
         return sets;
     }
 
+    private static IReadOnlyList<RedirectAnalysisSet> CreateRedirectAnalysisSets(
+        IReadOnlyList<CommandOccurrence> commands,
+        Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory)
+    {
+        var sets = new RedirectAnalysisSet[commands.Count];
+        for (var index = 0; index < sets.Length; index++)
+        {
+            var clause = commands[index].Clause;
+            var facts = factsFactory(new SimpleCommandSyntax { Clause = clause });
+            sets[index] = new RedirectAnalysisSet(clause, facts.Redirects);
+        }
+
+        return sets;
+    }
+
     private static BashParseResult StructuralFailure(
         string source,
         string? reason,
@@ -138,6 +154,7 @@ internal static partial class BashCommandParser
             Array.Empty<CwdPathDependencySet>(),
             Array.Empty<ShellValueProvenanceSet>(),
             Array.Empty<RedirectTargetProvenanceSet>(),
+            Array.Empty<RedirectAnalysisSet>(),
             Array.Empty<BashForInAnalysisPlanReference>());
 
     private sealed class StructuralCoordinator
@@ -1376,7 +1393,7 @@ internal static partial class BashCommandParser
         }
 
         private static bool AreRedirectsComplete(
-            IReadOnlyList<RedirectAnalysis> redirects)
+            IReadOnlyList<RedirectAnalysisFacts> redirects)
         {
             foreach (var redirect in redirects)
             {
@@ -1485,9 +1502,18 @@ internal static partial class BashCommandParser
                     return false;
                 }
 
+                if (!TryFindRedirectAnalysis(
+                        innerResult.RedirectAnalysisSets,
+                        source.Clause,
+                        out var redirectAnalysis))
+                {
+                    error = "decoded bash -c redirect analysis could not be mapped safely";
+                    return false;
+                }
+
                 _facts.Add(clonedClause, new CommandOccurrenceFacts
                 {
-                    Redirects = ClearDecodedHereDocumentSpans(source.Redirects),
+                    Redirects = ClearDecodedHereDocumentSpans(redirectAnalysis),
                     RedirectTargetProvenance = redirectProvenance,
                     CwdPathDependencies = cwdPathDependencies,
                     ValueProvenance = valueProvenance,
@@ -1510,10 +1536,10 @@ internal static partial class BashCommandParser
             return true;
         }
 
-        private static IReadOnlyList<RedirectAnalysis> ClearDecodedHereDocumentSpans(
-            IReadOnlyList<RedirectAnalysis> redirects)
+        private static IReadOnlyList<RedirectAnalysisFacts> ClearDecodedHereDocumentSpans(
+            IReadOnlyList<RedirectAnalysisFacts> redirects)
         {
-            var rewritten = new RedirectAnalysis[redirects.Count];
+            var rewritten = new RedirectAnalysisFacts[redirects.Count];
             var changed = false;
             for (var index = 0; index < rewritten.Length; index++)
             {
@@ -1580,6 +1606,24 @@ internal static partial class BashCommandParser
             }
 
             provenance = Array.Empty<RedirectTargetProvenance>();
+            return false;
+        }
+
+        private static bool TryFindRedirectAnalysis(
+            IReadOnlyList<RedirectAnalysisSet> analysisSets,
+            Clause clause,
+            out IReadOnlyList<RedirectAnalysisFacts> redirects)
+        {
+            for (var index = 0; index < analysisSets.Count; index++)
+            {
+                if (ReferenceEquals(analysisSets[index].Clause, clause))
+                {
+                    redirects = analysisSets[index].Redirects;
+                    return true;
+                }
+            }
+
+            redirects = Array.Empty<RedirectAnalysisFacts>();
             return false;
         }
 
@@ -2063,11 +2107,32 @@ internal static partial class BashCommandParser
                     Elements = ClauseElementProvenance.WithoutOuterSourceSpans(
                         simple.Clause.Elements),
                 };
+                var attachedExecutionRegions = new List<ExecutionRegionSyntax>(
+                    executionRegions.Count);
+                foreach (var executionRegion in executionRegions)
+                {
+                    var hostIndex = executionRegion.HostClauseElementIndex;
+                    if (executionRegion.Origin == ExecutionRegionOrigin.CommandArgument &&
+                        (hostIndex is null ||
+                         hostIndex < 0 ||
+                         hostIndex >= clonedClause.Elements.Count))
+                    {
+                        return false;
+                    }
+
+                    attachedExecutionRegions.Add(executionRegion with
+                    {
+                        HostArgument = hostIndex.HasValue
+                            ? clonedClause.Elements[hostIndex.Value]
+                            : null,
+                    });
+                }
+
                 clone = new SimpleCommandSyntax
                 {
                     Clause = clonedClause,
                     Substitutions = substitutions,
-                    ExecutionRegions = executionRegions,
+                    ExecutionRegions = attachedExecutionRegions,
                 };
                 referenceMap.Add(simple.Clause, clonedClause);
                 return true;
@@ -2264,6 +2329,7 @@ internal static partial class BashCommandParser
                 clone = new ExecutionRegionSyntax
                 {
                     Origin = executionRegion.Origin,
+                    HostArgument = executionRegion.HostArgument,
                     HostClauseElementIndex = executionRegion.HostClauseElementIndex,
                     Phase = executionRegion.Phase,
                     Timing = executionRegion.Timing,

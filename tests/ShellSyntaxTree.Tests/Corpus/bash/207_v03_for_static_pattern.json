@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash for-in static path pattern",
-  "input": "for f in /tmp/*.txt; do rm -- \"$f\"; done",
+  "input": "for f in /tmp/*.txt; do rm -- \u0022$f\u0022; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -18,7 +18,7 @@
             "isFlag": true
           },
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -120,8 +120,21 @@
             "sourceLength": 13
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
             "clauseElementIndex": 2,
             "value": {
               "kind": "Pattern",
@@ -133,7 +146,9 @@
         ],
         "workingDirectory": {
           "kind": "Exact",
-          "values": ["/work"],
+          "values": [
+            "/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         }

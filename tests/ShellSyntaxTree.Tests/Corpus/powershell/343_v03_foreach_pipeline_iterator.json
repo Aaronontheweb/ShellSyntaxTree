@@ -142,7 +142,20 @@
             "sourceLength": 22
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "C:\\input"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -179,8 +192,21 @@
             "sourceLength": 29
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-LiteralPath"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
             "clauseElementIndex": 2,
             "value": {
               "kind": "Unknown",

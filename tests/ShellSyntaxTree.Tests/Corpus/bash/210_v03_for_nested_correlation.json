@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash nested for-in correlation",
-  "input": "for d in a b; do for f in x y; do echo \"$d/$f/$d\"; done; done",
+  "input": "for d in a b; do for f in x y; do echo \u0022$d/$f/$d\u0022; done; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"$d/$f/$d\"",
+            "raw": "\u0022$d/$f/$d\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -167,8 +167,9 @@
             "sourceLength": 18
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "FiniteSet",
@@ -185,7 +186,9 @@
         ],
         "workingDirectory": {
           "kind": "Exact",
-          "values": ["/work"],
+          "values": [
+            "/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         }

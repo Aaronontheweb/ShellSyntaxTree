@@ -38,10 +38,10 @@ internal sealed record BashForInAnalysisPlanReference(
     BashForInAnalysisPlan Plan);
 
 internal sealed record BashIterationPlan(
-    IReadOnlyList<ShellValueDomain> OrderedCandidates,
+    IReadOnlyList<ShellValueDomainFacts> OrderedCandidates,
     BashIterationCardinality Cardinality,
     bool RequiresFixedPoint,
-    ShellValueDomain Summary);
+    ShellValueDomainFacts Summary);
 
 /// <summary>
 /// Preserves bounded loop-variable proofs while the Bash structural parser
@@ -55,7 +55,7 @@ internal sealed class BashLoopBindingContext
 
     internal BashLoopBindingContext WithBinding(
         string name,
-        ShellValueDomain domain)
+        ShellValueDomainFacts domain)
     {
         var clone = Clone();
         for (var index = clone._bindings.Count - 1; index >= 0; index--)
@@ -116,7 +116,7 @@ internal sealed class BashLoopBindingContext
                 {
                     next.Add(state.WithBinding(
                         binding.Name,
-                        new ShellValueDomain
+                        new ShellValueDomainFacts
                         {
                             Kind = ShellValueDomainKind.Exact,
                             Values = new[] { value },
@@ -218,7 +218,7 @@ internal sealed class BashLoopBindingContext
             joined._bindings.Add(new BindingFrame(
                 name,
                 leftBinding is null || rightBinding is null
-                    ? ShellValueDomain.Unknown
+                    ? ShellValueDomainFacts.Unknown
                     : JoinDomains(leftBinding.Domain, rightBinding.Domain)));
         }
 
@@ -251,7 +251,7 @@ internal sealed class BashLoopBindingContext
                 rightBinding is not null &&
                 DomainEquals(leftBinding.Domain, rightBinding.Domain)
                     ? leftBinding.Domain
-                    : ShellValueDomain.Unknown));
+                    : ShellValueDomainFacts.Unknown));
         }
 
         return widened;
@@ -281,13 +281,13 @@ internal sealed class BashLoopBindingContext
         if (words.Count == 0)
         {
             return new BashIterationPlan(
-                Array.Empty<ShellValueDomain>(),
+                Array.Empty<ShellValueDomainFacts>(),
                 BashIterationCardinality.Never,
                 RequiresFixedPoint: false,
-                ShellValueDomain.Unknown);
+                ShellValueDomainFacts.Unknown);
         }
 
-        var ordered = new List<ShellValueDomain>(words.Count);
+        var ordered = new List<ShellValueDomainFacts>(words.Count);
         var summary = new List<string>(words.Count);
         var distinct = new HashSet<string>(StringComparer.Ordinal);
         foreach (var word in words)
@@ -296,7 +296,7 @@ internal sealed class BashLoopBindingContext
             {
                 return FixedPointPlan(
                     BashIterationCardinality.ZeroOrMore,
-                    ShellValueDomain.Unknown);
+                    ShellValueDomainFacts.Unknown);
             }
 
             if (TryBuildStaticPattern(
@@ -308,10 +308,10 @@ internal sealed class BashLoopBindingContext
                 return FixedPointPlan(BashIterationCardinality.ZeroOrMore, pattern);
             }
 
-            ShellValueDomain domain;
+            ShellValueDomainFacts domain;
             if (IsEntirelyLiteral(word.Value))
             {
-                domain = new ShellValueDomain
+                domain = new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.Exact,
                     Values = new[] { word.Value.Decoded },
@@ -336,7 +336,7 @@ internal sealed class BashLoopBindingContext
             {
                 return FixedPointPlan(
                     BashIterationCardinality.OneOrMore,
-                    ShellValueDomain.Unknown);
+                    ShellValueDomainFacts.Unknown);
             }
         }
 
@@ -364,15 +364,15 @@ internal sealed class BashLoopBindingContext
 
     private static BashIterationPlan FixedPointPlan(
         BashIterationCardinality cardinality,
-        ShellValueDomain summary) => new(
-            Array.Empty<ShellValueDomain>(),
+        ShellValueDomainFacts summary) => new(
+            Array.Empty<ShellValueDomainFacts>(),
             cardinality,
             RequiresFixedPoint: true,
             summary);
 
-    internal static ShellValueDomain JoinDomains(
-        ShellValueDomain left,
-        ShellValueDomain right)
+    internal static ShellValueDomainFacts JoinDomains(
+        ShellValueDomainFacts left,
+        ShellValueDomainFacts right)
     {
         if (DomainEquals(left, right))
         {
@@ -384,7 +384,7 @@ internal sealed class BashLoopBindingContext
             right.Kind is not (
                 ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
         {
-            return ShellValueDomain.Unknown;
+            return ShellValueDomainFacts.Unknown;
         }
 
         var values = new List<string>(left.Values.Count + right.Values.Count);
@@ -403,7 +403,7 @@ internal sealed class BashLoopBindingContext
             {
                 if (distinct.Count > ShellAnalysisLimits.MaxValueCandidates)
                 {
-                    return ShellValueDomain.Unknown;
+                    return ShellValueDomainFacts.Unknown;
                 }
 
                 values.Add(candidate);
@@ -414,8 +414,8 @@ internal sealed class BashLoopBindingContext
     }
 
     private static bool DomainEquals(
-        ShellValueDomain left,
-        ShellValueDomain right)
+        ShellValueDomainFacts left,
+        ShellValueDomainFacts right)
     {
         if (left.Kind != right.Kind ||
             !string.Equals(left.Pattern, right.Pattern, StringComparison.Ordinal) ||
@@ -441,7 +441,7 @@ internal sealed class BashLoopBindingContext
 
     internal bool TryAnalyzeEffectiveValue(
         ShellValue value,
-        out ShellValueDomain domain)
+        out ShellValueDomainFacts domain)
     {
         var referenced = new List<BindingFrame>();
         var dependentButUnsupported = false;
@@ -478,13 +478,13 @@ internal sealed class BashLoopBindingContext
 
         if (referenced.Count == 0 && !dependentButUnsupported)
         {
-            domain = ShellValueDomain.Unknown;
+            domain = ShellValueDomainFacts.Unknown;
             return false;
         }
 
         if (dependentButUnsupported || ContainsUnresolvedFragment(value, referenced))
         {
-            domain = ShellValueDomain.Unknown;
+            domain = ShellValueDomainFacts.Unknown;
             return true;
         }
 
@@ -493,7 +493,7 @@ internal sealed class BashLoopBindingContext
         {
             domain = IsOneBindingExpansion(value, referenced[0])
                 ? referenced[0].Domain
-                : ShellValueDomain.Unknown;
+                : ShellValueDomainFacts.Unknown;
             return true;
         }
 
@@ -502,7 +502,7 @@ internal sealed class BashLoopBindingContext
             if (binding.Domain.Kind is not (
                     ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
             {
-                domain = ShellValueDomain.Unknown;
+                domain = ShellValueDomainFacts.Unknown;
                 return true;
             }
         }
@@ -518,7 +518,7 @@ internal sealed class BashLoopBindingContext
                 candidates,
                 distinct))
         {
-            domain = ShellValueDomain.Unknown;
+            domain = ShellValueDomainFacts.Unknown;
             return true;
         }
 
@@ -526,11 +526,11 @@ internal sealed class BashLoopBindingContext
         return true;
     }
 
-    internal ShellValueDomain AnalyzeWordForTransfer(ShellValue value)
+    internal ShellValueDomainFacts AnalyzeWordForTransfer(ShellValue value)
     {
         if (IsEntirelyLiteral(value))
         {
-            return new ShellValueDomain
+            return new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Exact,
                 Values = new[] { value.Decoded },
@@ -539,7 +539,7 @@ internal sealed class BashLoopBindingContext
 
         return TryAnalyzeEffectiveValue(value, out var domain)
             ? domain
-            : ShellValueDomain.Unknown;
+            : ShellValueDomainFacts.Unknown;
     }
 
     private bool TryComposeCandidates(
@@ -751,7 +751,7 @@ internal sealed class BashLoopBindingContext
         ShellValue value,
         BashParserOptions options,
         bool workingDirectoryUnknown,
-        out ShellValueDomain pattern)
+        out ShellValueDomainFacts pattern)
     {
         var containsGlob = false;
         foreach (var fragment in value.Fragments)
@@ -765,7 +765,7 @@ internal sealed class BashLoopBindingContext
                 fragment.Expansion is null ||
                 fragment.Expansion.Value.Kind != ShellExpansionKind.Glob)
             {
-                pattern = ShellValueDomain.Unknown;
+                pattern = ShellValueDomainFacts.Unknown;
                 return false;
             }
 
@@ -779,7 +779,7 @@ internal sealed class BashLoopBindingContext
             ContainsParentTraversal(authored) ||
             HasGlobBearingDotSegment(authored))
         {
-            pattern = ShellValueDomain.Unknown;
+            pattern = ShellValueDomainFacts.Unknown;
             return false;
         }
 
@@ -799,11 +799,11 @@ internal sealed class BashLoopBindingContext
             ShellResolutionConsumer.BashArgument);
         if (resolved.Resolved is null)
         {
-            pattern = ShellValueDomain.Unknown;
+            pattern = ShellValueDomainFacts.Unknown;
             return false;
         }
 
-        pattern = new ShellValueDomain
+        pattern = new ShellValueDomainFacts
         {
             Kind = ShellValueDomainKind.Pattern,
             Pattern = authored,
@@ -872,20 +872,20 @@ internal sealed class BashLoopBindingContext
         token.Kind == BashTokenKind.Word &&
         (token.Value.IndexOf('{') >= 0 || token.Value.IndexOf('}') >= 0);
 
-    private static ShellValueDomain CreateFiniteDomain(IReadOnlyList<string> values) =>
+    private static ShellValueDomainFacts CreateFiniteDomain(IReadOnlyList<string> values) =>
         values.Count switch
         {
-            1 => new ShellValueDomain
+            1 => new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Exact,
                 Values = new[] { values[0] },
             },
-            >= 2 and <= 32 => new ShellValueDomain
+            >= 2 and <= 32 => new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.FiniteSet,
                 Values = Copy(values),
             },
-            _ => ShellValueDomain.Unknown,
+            _ => ShellValueDomainFacts.Unknown,
         };
 
     private static string[] Copy(IReadOnlyList<string> values)
@@ -901,7 +901,7 @@ internal sealed class BashLoopBindingContext
 
     private sealed class BindingFrame
     {
-        internal BindingFrame(string name, ShellValueDomain domain)
+        internal BindingFrame(string name, ShellValueDomainFacts domain)
         {
             Name = name;
             Domain = domain;
@@ -909,6 +909,6 @@ internal sealed class BashLoopBindingContext
 
         internal string Name { get; }
 
-        internal ShellValueDomain Domain { get; }
+        internal ShellValueDomainFacts Domain { get; }
     }
 }

@@ -19,6 +19,7 @@ public class ShellSyntaxProjectionTests
     {
         var clause = ClauseFor("echo") with
         {
+            Args = new[] { new Arg { Raw = "ready", Kind = ArgKind.Literal } },
             Elements = new[]
             {
                 new ClauseElement { Role = ClauseElementRole.Verb },
@@ -40,10 +41,10 @@ public class ShellSyntaxProjectionTests
         };
         var effectiveArguments = new[]
         {
-            new EffectiveArgument
+            new EffectiveArgumentFacts
             {
                 ClauseElementIndex = 1,
-                Value = new ShellValueDomain
+                Value = new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.Exact,
                     Values = new[] { "ready" },
@@ -52,12 +53,12 @@ public class ShellSyntaxProjectionTests
         };
         var redirects = new[]
         {
-            new RedirectAnalysis
+            new RedirectAnalysisFacts
             {
                 RedirectIndex = 0,
-                Source = new RedirectSource { Kind = RedirectSourceKind.Default },
+                Source = new RedirectSourceFacts { Kind = RedirectSourceKind.Default },
                 Operation = RedirectOperation.FileOutput,
-                Target = new ShellValueDomain
+                Target = new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.Exact,
                     Values = new[] { "/work/out.txt" },
@@ -66,7 +67,7 @@ public class ShellSyntaxProjectionTests
                 IsComplete = true,
             },
         };
-        var workingDirectory = new ShellValueDomain
+        var workingDirectory = new ShellValueDomainFacts
         {
             Kind = ShellValueDomainKind.Exact,
             Values = new[] { "/work" },
@@ -89,11 +90,19 @@ public class ShellSyntaxProjectionTests
         Assert.Same(clause, Assert.Single(result.Clauses));
         Assert.Equal(CommandOccurrenceRole.Ordinary, occurrence.ImmediateRole);
         Assert.True(occurrence.IsComplete);
-        Assert.Same(workingDirectory, occurrence.WorkingDirectory);
-        Assert.NotSame(effectiveArguments, occurrence.EffectiveArguments);
-        Assert.Same(effectiveArguments[0], Assert.Single(occurrence.EffectiveArguments));
-        Assert.NotSame(redirects, occurrence.Redirects);
-        Assert.Same(redirects[0], Assert.Single(occurrence.Redirects));
+        Assert.Equal("/work", Assert.IsType<ShellValueDomain.Exact>(
+            occurrence.WorkingDirectory).Value);
+        var argument = Assert.Single(occurrence.Arguments);
+        Assert.Same(clause.Args[0], argument.Argument);
+        Assert.Same(clause.Elements[1], argument.Element);
+        Assert.Equal("ready", Assert.IsType<ShellValueDomain.Exact>(argument.Value).Value);
+        var redirect = Assert.IsType<FileRedirectAnalysis>(
+            Assert.Single(occurrence.Redirects));
+        Assert.Same(clause.Redirects[0], redirect.Authored);
+        Assert.IsType<RedirectSource.Default>(redirect.Source);
+        Assert.Equal(FileRedirectMode.Output, redirect.Mode);
+        Assert.Equal("/work/out.txt", Assert.IsType<ShellValueDomain.Exact>(
+            redirect.Target).Value);
 
         var rootFrame = Assert.Single(occurrence.Ancestry);
         Assert.Equal(ShellSyntaxKind.Block, rootFrame.AncestorKind);
@@ -234,6 +243,11 @@ public class ShellSyntaxProjectionTests
     {
         var hostClause = ClauseFor("ForEach-Object") with
         {
+            Args = new[]
+            {
+                new Arg { Raw = "end", Kind = ArgKind.DynamicSkip },
+                new Arg { Raw = "begin", Kind = ArgKind.DynamicSkip },
+            },
             Elements = new[]
             {
                 new ClauseElement { Role = ClauseElementRole.Verb },
@@ -262,13 +276,19 @@ public class ShellSyntaxProjectionTests
                     hostClauseElementIndex: 1,
                     2,
                     Leaf("end", 3),
-                    ExecutionRegionPhase.End),
+                    ExecutionRegionPhase.End) with
+                {
+                    HostArgument = hostClause.Elements[1],
+                },
                 ExecutionRegion(
                     ExecutionRegionOrigin.CommandArgument,
                     hostClauseElementIndex: 2,
                     4,
                     Leaf("begin", 5),
-                    ExecutionRegionPhase.Begin),
+                    ExecutionRegionPhase.Begin) with
+                {
+                    HostArgument = hostClause.Elements[2],
+                },
             },
         };
         var pipeline = new PipelineSyntax
@@ -313,6 +333,7 @@ public class ShellSyntaxProjectionTests
     {
         var clause = ClauseFor("Invoke-Custom") with
         {
+            Args = new[] { new Arg { Raw = "body", Kind = ArgKind.DynamicSkip } },
             Elements = new[]
             {
                 new ClauseElement { Role = ClauseElementRole.Verb },
@@ -330,6 +351,7 @@ public class ShellSyntaxProjectionTests
                 new ExecutionRegionSyntax
                 {
                     Origin = ExecutionRegionOrigin.CommandArgument,
+                    HostArgument = clause.Elements[1],
                     HostClauseElementIndex = 1,
                     Body = Block(2, Leaf("Remove-Item", 3)),
                 },
@@ -449,15 +471,10 @@ public class ShellSyntaxProjectionTests
     [Fact]
     public void Invalid_or_reused_substitution_children_discard_partial_projections()
     {
-        var nullCollection = Leaf("null-collection", 0) with
+        Assert.Throws<ArgumentNullException>(() => Leaf("null-collection", 0) with
         {
             Substitutions = null!,
-        };
-        Assert.False(ShellSyntaxProjection.TryProject(
-            Block(0, nullCollection),
-            out var nullCollectionResult));
-        Assert.Empty(nullCollectionResult.Commands);
-        Assert.Empty(nullCollectionResult.Clauses);
+        });
 
         var nullChild = Leaf("null-child", 0) with
         {
@@ -488,11 +505,6 @@ public class ShellSyntaxProjectionTests
         var iteratorSort = Leaf("sort-iterator", 20);
         var print = Leaf("printf", 40);
         var bodySort = Leaf("sort-body", 50);
-        var test = Leaf("test", 70);
-        var remove = Leaf("rm", 80);
-        var probe = Leaf("probe", 90);
-        var echo = Leaf("echo", 100);
-        var fallback = Leaf("fallback", 110);
         var inner = Leaf("inner", 130);
 
         var loop = new ForEachSyntax
@@ -518,29 +530,6 @@ public class ShellSyntaxProjectionTests
                     Stages = new ShellSyntaxNode[] { print, bodySort },
                 }),
         };
-        var conditional = new ConditionalSyntax
-        {
-            SourceStart = 65,
-            SourceLength = 55,
-            Branches = new[]
-            {
-                new ConditionalBranchSyntax
-                {
-                    SourceStart = 65,
-                    SourceLength = 20,
-                    Condition = Block(68, test),
-                    Body = Block(78, remove),
-                },
-                new ConditionalBranchSyntax
-                {
-                    SourceStart = 86,
-                    SourceLength = 20,
-                    Condition = Block(88, probe),
-                    Body = Block(98, echo),
-                },
-            },
-            Else = Block(108, fallback),
-        };
         var substitution = new CommandSubstitutionSyntax
         {
             SourceStart = 125,
@@ -551,7 +540,7 @@ public class ShellSyntaxProjectionTests
         {
             SourceStart = 0,
             SourceLength = 140,
-            Statements = new ShellSyntaxNode[] { loop, conditional, substitution },
+            Statements = new ShellSyntaxNode[] { loop, substitution },
         };
 
         var succeeded = ShellSyntaxProjection.TryProject(root, out var result);
@@ -560,8 +549,7 @@ public class ShellSyntaxProjectionTests
         Assert.Equal(
             new[]
             {
-                "find", "sort-iterator", "printf", "sort-body", "test",
-                "rm", "probe", "echo", "fallback", "inner",
+                "find", "sort-iterator", "printf", "sort-body", "inner",
             },
             result.Commands.Select(Verb));
         Assert.Equal(
@@ -571,11 +559,6 @@ public class ShellSyntaxProjectionTests
                 CommandOccurrenceRole.PipelineStage,
                 CommandOccurrenceRole.PipelineStage,
                 CommandOccurrenceRole.PipelineStage,
-                CommandOccurrenceRole.Condition,
-                CommandOccurrenceRole.Branch,
-                CommandOccurrenceRole.Condition,
-                CommandOccurrenceRole.Branch,
-                CommandOccurrenceRole.Branch,
                 CommandOccurrenceRole.Substitution,
             },
             result.Commands.Select(command => command.ImmediateRole));
@@ -590,52 +573,8 @@ public class ShellSyntaxProjectionTests
         AssertFrames(
             result.Commands[4],
             (ShellSyntaxKind.Block, CommandAncestryRegion.Root, 1),
-            (ShellSyntaxKind.Conditional, CommandAncestryRegion.Branch, 0),
-            (ShellSyntaxKind.ConditionalBranch, CommandAncestryRegion.Condition, null),
+            (ShellSyntaxKind.CommandSubstitution, CommandAncestryRegion.Substitution, 1),
             (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0));
-        AssertFrames(
-            result.Commands[8],
-            (ShellSyntaxKind.Block, CommandAncestryRegion.Root, 1),
-            (ShellSyntaxKind.Conditional, CommandAncestryRegion.Branch, 2),
-            (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0));
-        AssertFrames(
-            result.Commands[9],
-            (ShellSyntaxKind.Block, CommandAncestryRegion.Root, 2),
-            (ShellSyntaxKind.CommandSubstitution, CommandAncestryRegion.Substitution, 2),
-            (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0));
-    }
-
-    [Fact]
-    public void Compatibility_projection_preserves_authored_operators_without_synthesizing_relations()
-    {
-        var condition = ClauseFor("test");
-        var thenClause = ClauseFor("rm", CompoundOperator.AndIf);
-        var elseClause = ClauseFor("echo");
-        var root = Block(
-            0,
-            new ConditionalSyntax
-            {
-                Branches = new[]
-                {
-                    new ConditionalBranchSyntax
-                    {
-                        Condition = Block(1, Leaf(condition, 1)),
-                        Body = Block(2, Leaf(thenClause, 2)),
-                    },
-                },
-                Else = Block(3, Leaf(elseClause, 3)),
-            });
-
-        var succeeded = ShellSyntaxProjection.TryProject(root, out var result);
-
-        Assert.True(succeeded);
-        Assert.Equal(3, result.Clauses.Count);
-        Assert.Same(condition, result.Clauses[0]);
-        Assert.Same(thenClause, result.Clauses[1]);
-        Assert.Same(elseClause, result.Clauses[2]);
-        Assert.Equal(
-            new[] { CompoundOperator.None, CompoundOperator.AndIf, CompoundOperator.None },
-            result.Clauses.Select(clause => clause.Operator));
     }
 
     [Fact]
@@ -710,7 +649,7 @@ public class ShellSyntaxProjectionTests
     }
 
     [Fact]
-    public void Cyclic_syntax_discards_partial_projections()
+    public void Published_collections_cannot_be_mutated_into_cycles()
     {
         var statements = new List<ShellSyntaxNode>();
         var root = new ShellBlockSyntax { Statements = statements };
@@ -719,7 +658,7 @@ public class ShellSyntaxProjectionTests
 
         var succeeded = ShellSyntaxProjection.TryProject(root, out var result);
 
-        Assert.False(succeeded);
+        Assert.True(succeeded);
         Assert.Empty(result.Commands);
         Assert.Empty(result.Clauses);
     }
@@ -827,6 +766,7 @@ public class ShellSyntaxProjectionTests
     {
         var clause = ClauseFor("host") with
         {
+            Args = new[] { new Arg { Raw = "body", Kind = ArgKind.DynamicSkip } },
             Elements = new[]
             {
                 new ClauseElement { Role = ClauseElementRole.Verb },
@@ -841,10 +781,12 @@ public class ShellSyntaxProjectionTests
             ExecutionRegionOrigin.CommandArgument,
             hostClauseElementIndex: 1,
             2,
-            Leaf("body", 3));
+            Leaf("body", 3)) with
+        {
+            HostArgument = clause.Elements[1],
+        };
         var invalidCollections = new IReadOnlyList<ExecutionRegionSyntax>[]
         {
-            null!,
             new ExecutionRegionSyntax[] { null! },
             new[] { valid with { Origin = ExecutionRegionOrigin.DirectCall } },
             new[] { valid with { HostClauseElementIndex = null } },
@@ -862,6 +804,9 @@ public class ShellSyntaxProjectionTests
                 },
             },
         };
+
+        Assert.Throws<ArgumentNullException>(() =>
+            Leaf(clause, 1) with { ExecutionRegions = null! });
 
         foreach (var executionRegions in invalidCollections)
         {
@@ -898,22 +843,14 @@ public class ShellSyntaxProjectionTests
     }
 
     [Fact]
-    public void Group_and_command_list_retain_condition_and_body_roles()
+    public void Group_and_command_list_preserve_ordinary_role_and_ancestry()
     {
-        var condition = Leaf("condition", 4);
         var body = Leaf("body", 12);
         var root = Block(
             0,
-            new ConditionLoopSyntax
+            new GroupSyntax
             {
-                LoopKind = ConditionLoopKind.While,
-                Condition = Block(
-                    2,
-                    new GroupSyntax
-                    {
-                        GroupKind = ShellGroupKind.CurrentScope,
-                        Body = Block(3, condition),
-                    }),
+                GroupKind = ShellGroupKind.CurrentScope,
                 Body = Block(
                     10,
                     new CommandListSyntax
@@ -932,19 +869,11 @@ public class ShellSyntaxProjectionTests
         var succeeded = ShellSyntaxProjection.TryProject(root, out var result);
 
         Assert.True(succeeded);
-        Assert.Equal(CommandOccurrenceRole.Condition, result.Commands[0].ImmediateRole);
-        Assert.Equal(CommandOccurrenceRole.LoopBody, result.Commands[1].ImmediateRole);
+        Assert.Equal(CommandOccurrenceRole.Ordinary, result.Commands[0].ImmediateRole);
         AssertFrames(
             result.Commands[0],
             (ShellSyntaxKind.Block, CommandAncestryRegion.Root, 0),
-            (ShellSyntaxKind.ConditionLoop, CommandAncestryRegion.Condition, null),
-            (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0),
             (ShellSyntaxKind.Group, CommandAncestryRegion.GroupBody, null),
-            (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0));
-        AssertFrames(
-            result.Commands[1],
-            (ShellSyntaxKind.Block, CommandAncestryRegion.Root, 0),
-            (ShellSyntaxKind.ConditionLoop, CommandAncestryRegion.LoopBody, null),
             (ShellSyntaxKind.Block, CommandAncestryRegion.Statement, 0),
             (ShellSyntaxKind.CommandList, CommandAncestryRegion.Statement, 0));
     }
@@ -977,6 +906,7 @@ public class ShellSyntaxProjectionTests
     {
         var clause = ClauseFor("echo") with
         {
+            Args = new[] { new Arg { Raw = "value", Kind = ArgKind.Literal } },
             Elements = new[]
             {
                 new ClauseElement { Role = ClauseElementRole.Verb },
@@ -988,7 +918,7 @@ public class ShellSyntaxProjectionTests
         {
             () => new CommandOccurrenceFacts
             {
-                WorkingDirectory = new ShellValueDomain
+                WorkingDirectory = new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.FiniteSet,
                     Values = new[] { "/a", "/b" },
@@ -998,10 +928,10 @@ public class ShellSyntaxProjectionTests
             {
                 EffectiveArguments = new[]
                 {
-                    new EffectiveArgument
+                    new EffectiveArgumentFacts
                     {
                         ClauseElementIndex = 0,
-                        Value = ShellValueDomain.Unknown,
+                        Value = ShellValueDomainFacts.Unknown,
                     },
                 },
             },
@@ -1009,10 +939,10 @@ public class ShellSyntaxProjectionTests
             {
                 EffectiveArguments = new[]
                 {
-                    new EffectiveArgument
+                    new EffectiveArgumentFacts
                     {
                         ClauseElementIndex = 1,
-                        Value = new ShellValueDomain { Kind = ShellValueDomainKind.Exact },
+                        Value = new ShellValueDomainFacts { Kind = ShellValueDomainKind.Exact },
                     },
                 },
             },
@@ -1020,15 +950,15 @@ public class ShellSyntaxProjectionTests
             {
                 EffectiveArguments = new[]
                 {
-                    new EffectiveArgument
+                    new EffectiveArgumentFacts
                     {
                         ClauseElementIndex = 1,
-                        Value = ShellValueDomain.Unknown,
+                        Value = ShellValueDomainFacts.Unknown,
                     },
-                    new EffectiveArgument
+                    new EffectiveArgumentFacts
                     {
                         ClauseElementIndex = 1,
-                        Value = ShellValueDomain.Unknown,
+                        Value = ShellValueDomainFacts.Unknown,
                     },
                 },
             },
@@ -1051,6 +981,7 @@ public class ShellSyntaxProjectionTests
     {
         var clause = ClauseFor("echo") with
         {
+            Args = new[] { new Arg { Raw = "value", Kind = ArgKind.Literal } },
             Elements = new[]
             {
                 new ClauseElement { Role = ClauseElementRole.Verb },
@@ -1060,18 +991,18 @@ public class ShellSyntaxProjectionTests
         var root = Block(0, Leaf(clause, 0));
         var validDomains = new[]
         {
-            ShellValueDomain.Unknown,
-            new ShellValueDomain
+            ShellValueDomainFacts.Unknown,
+            new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Exact,
                 Values = new[] { "one" },
             },
-            new ShellValueDomain
+            new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.FiniteSet,
                 Values = new[] { "one", "two" },
             },
-            new ShellValueDomain
+            new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Pattern,
                 Pattern = "/work/*.txt",
@@ -1096,38 +1027,38 @@ public class ShellSyntaxProjectionTests
             .ToArray();
         var invalidDomains = new[]
         {
-            new ShellValueDomain
+            new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Unknown,
                 Values = new[] { "unexpected" },
             },
-            new ShellValueDomain { Kind = ShellValueDomainKind.Exact },
-            new ShellValueDomain
+            new ShellValueDomainFacts { Kind = ShellValueDomainKind.Exact },
+            new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Exact,
                 Values = new[] { "one", "two" },
             },
-            new ShellValueDomain
+            new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.FiniteSet,
                 Values = new[] { "one" },
             },
-            new ShellValueDomain
+            new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.FiniteSet,
                 Values = new[] { "duplicate", "duplicate" },
             },
-            new ShellValueDomain
+            new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.FiniteSet,
                 Values = overLimit,
             },
-            new ShellValueDomain
+            new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Pattern,
                 Pattern = "/work/*.txt",
             },
-            new ShellValueDomain { Kind = (ShellValueDomainKind)999 },
+            new ShellValueDomainFacts { Kind = (ShellValueDomainKind)999 },
         };
 
         foreach (var domain in invalidDomains)
@@ -1152,24 +1083,24 @@ public class ShellSyntaxProjectionTests
         var root = Block(0, Leaf(clause, 0));
         var invalidRedirects = new[]
         {
-            new RedirectAnalysis
+            new RedirectAnalysisFacts
             {
                 RedirectIndex = 1,
-                Source = new RedirectSource { Kind = RedirectSourceKind.Default },
+                Source = new RedirectSourceFacts { Kind = RedirectSourceKind.Default },
                 Operation = RedirectOperation.FileOutput,
                 IsPathRelevant = true,
             },
-            new RedirectAnalysis
+            new RedirectAnalysisFacts
             {
                 RedirectIndex = 0,
                 Operation = RedirectOperation.FileOutput,
                 IsPathRelevant = true,
                 IsComplete = true,
             },
-            new RedirectAnalysis
+            new RedirectAnalysisFacts
             {
                 RedirectIndex = 0,
-                Source = new RedirectSource
+                Source = new RedirectSourceFacts
                 {
                     Kind = RedirectSourceKind.Default,
                     Descriptor = 1,
@@ -1177,16 +1108,16 @@ public class ShellSyntaxProjectionTests
                 Operation = RedirectOperation.FileOutput,
                 IsPathRelevant = true,
             },
-            new RedirectAnalysis
+            new RedirectAnalysisFacts
             {
                 RedirectIndex = 0,
-                Source = new RedirectSource { Kind = RedirectSourceKind.Default },
+                Source = new RedirectSourceFacts { Kind = RedirectSourceKind.Default },
                 Operation = RedirectOperation.HereDocument,
             },
-            new RedirectAnalysis
+            new RedirectAnalysisFacts
             {
                 RedirectIndex = 0,
-                Source = new RedirectSource { Kind = RedirectSourceKind.Default },
+                Source = new RedirectSourceFacts { Kind = RedirectSourceKind.Default },
                 Operation = RedirectOperation.HereDocument,
                 HereDocument = new HereDocumentAnalysis
                 {
@@ -1213,6 +1144,45 @@ public class ShellSyntaxProjectionTests
             Assert.Empty(result.Commands);
             Assert.Empty(result.Clauses);
         }
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, 2)]
+    public void Known_redirect_sources_cannot_publish_an_unresolved_operation(
+        bool isDescriptor,
+        int? descriptor)
+    {
+        var clause = ClauseFor("echo") with
+        {
+            Redirects = new[] { new Redirect() },
+        };
+        var root = Block(0, Leaf(clause, 0));
+
+        var succeeded = ShellSyntaxProjection.TryProject(
+            root,
+            _ => new CommandOccurrenceFacts
+            {
+                Redirects = new[]
+                {
+                    new RedirectAnalysisFacts
+                    {
+                        RedirectIndex = 0,
+                        Source = new RedirectSourceFacts
+                        {
+                            Kind = isDescriptor
+                                ? RedirectSourceKind.Descriptor
+                                : RedirectSourceKind.Default,
+                            Descriptor = descriptor,
+                        },
+                    },
+                },
+            },
+            out var result);
+
+        Assert.False(succeeded);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
     }
 
     [Fact]
@@ -1306,6 +1276,7 @@ public class ShellSyntaxProjectionTests
                         Leaf("body", 3),
                         ExecutionRegionPhase.End) with
                     {
+                        HostArgument = hostClause.Elements[1],
                         Timing = ExecutionRegionTiming.Concurrent,
                         Cardinality = ExecutionRegionCardinality.ZeroOrMore,
                     },
@@ -1458,12 +1429,12 @@ public class ShellSyntaxProjectionTests
             Source = new ShellSourceFragment { Raw = name },
         };
 
-    private static CommandOccurrenceFacts FactsForArgument(ShellValueDomain domain) =>
+    private static CommandOccurrenceFacts FactsForArgument(ShellValueDomainFacts domain) =>
         new()
         {
             EffectiveArguments = new[]
             {
-                new EffectiveArgument
+                new EffectiveArgumentFacts
                 {
                     ClauseElementIndex = 1,
                     Value = domain,

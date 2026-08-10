@@ -15,11 +15,11 @@ namespace ShellSyntaxTree.Internal.Pwsh.Parsing;
 /// </summary>
 internal static class PwshRedirectAnalysis
 {
-    internal static IReadOnlyList<RedirectAnalysis> Analyze(Clause clause)
+    internal static IReadOnlyList<RedirectAnalysisFacts> Analyze(Clause clause)
     {
         if (clause.Redirects.Count == 0)
         {
-            return Array.Empty<RedirectAnalysis>();
+            return Array.Empty<RedirectAnalysisFacts>();
         }
 
         var elements = new List<ClauseElement>(clause.Redirects.Count);
@@ -31,7 +31,7 @@ internal static class PwshRedirectAnalysis
             }
         }
 
-        var result = new RedirectAnalysis[clause.Redirects.Count];
+        var result = new RedirectAnalysisFacts[clause.Redirects.Count];
         for (var index = 0; index < result.Length; index++)
         {
             result[index] = index < elements.Count
@@ -42,7 +42,7 @@ internal static class PwshRedirectAnalysis
         return result;
     }
 
-    private static RedirectAnalysis Analyze(
+    private static RedirectAnalysisFacts Analyze(
         int redirectIndex,
         Redirect compatibility,
         ClauseElement element)
@@ -58,7 +58,7 @@ internal static class PwshRedirectAnalysis
 
         if (operation == RedirectOperation.DescriptorDuplicate)
         {
-            return new RedirectAnalysis
+            return new RedirectAnalysisFacts
             {
                 RedirectIndex = redirectIndex,
                 Source = source,
@@ -73,22 +73,18 @@ internal static class PwshRedirectAnalysis
             compatibility.Target.Equals("$null", StringComparison.OrdinalIgnoreCase))
         {
             // The public v0.3 operation vocabulary has no discard-sink member.
-            // Preserve the source coordinate, but keep the fact incomplete.
-            return new RedirectAnalysis
-            {
-                RedirectIndex = redirectIndex,
-                Source = source,
-            };
+            // No known source may pair with an unresolved operation.
+            return Incomplete(redirectIndex);
         }
 
-        return new RedirectAnalysis
+        return new RedirectAnalysisFacts
         {
             RedirectIndex = redirectIndex,
             Source = source,
             Operation = operation,
             Target = compatibility.IsDynamicSkip
-                ? ShellValueDomain.Unknown
-                : new ShellValueDomain
+                ? ShellValueDomainFacts.Unknown
+                : new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.Exact,
                     Values = new[] { compatibility.Target },
@@ -102,11 +98,11 @@ internal static class PwshRedirectAnalysis
 
     private static bool TryReadOperator(
         string raw,
-        out RedirectSource source,
+        out RedirectSourceFacts source,
         out RedirectOperation operation,
         out int length)
     {
-        source = new RedirectSource { Kind = RedirectSourceKind.Default };
+        source = new RedirectSourceFacts { Kind = RedirectSourceKind.Default };
         operation = RedirectOperation.Unknown;
         length = 0;
         if (string.IsNullOrEmpty(raw))
@@ -117,7 +113,7 @@ internal static class PwshRedirectAnalysis
         var operatorStart = 0;
         if (raw[0] == '*')
         {
-            source = new RedirectSource
+            source = new RedirectSourceFacts
             {
                 Kind = RedirectSourceKind.PowerShellAllStreams,
             };
@@ -125,7 +121,7 @@ internal static class PwshRedirectAnalysis
         }
         else if (raw[0] is >= '1' and <= '6')
         {
-            source = new RedirectSource
+            source = new RedirectSourceFacts
             {
                 Kind = RedirectSourceKind.Descriptor,
                 Descriptor = raw[0] - '0',
@@ -159,11 +155,11 @@ internal static class PwshRedirectAnalysis
             return true;
         }
 
-        source = new RedirectSource();
+        source = new RedirectSourceFacts();
         return false;
     }
 
-    private static RedirectAnalysis Incomplete(int redirectIndex) => new()
+    private static RedirectAnalysisFacts Incomplete(int redirectIndex) => new()
     {
         RedirectIndex = redirectIndex,
     };

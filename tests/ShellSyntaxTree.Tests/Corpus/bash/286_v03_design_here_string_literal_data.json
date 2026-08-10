@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Static here-string data does not force a raw-command approval prompt",
-  "input": "cat <<< \"hello\"",
+  "input": "cat \u003C\u003C\u003C \u0022hello\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -30,7 +30,7 @@
             "isPath": false
           },
           {
-            "raw": "<<< \"hello\"",
+            "raw": "\u003C\u003C\u003C \u0022hello\u0022",
             "value": "hello",
             "role": "Redirect",
             "sourceStart": 4,
@@ -81,7 +81,7 @@
             "sourceLength": 15
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -93,20 +93,18 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "HereStringRedirectAnalysis",
             "sourceKind": "Default",
             "sourceDescriptor": null,
-            "operation": "HereString",
-            "targetDescriptor": null,
-            "target": {
+            "isComplete": true,
+            "value": {
               "kind": "Exact",
               "values": [
                 "hello\n"
               ],
               "pattern": null,
               "coveringDirectory": null
-            },
-            "isPathRelevant": false,
-            "isComplete": true
+            }
           }
         ]
       }

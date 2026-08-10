@@ -65,7 +65,7 @@
             "sourceLength": 4
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [

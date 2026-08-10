@@ -1292,14 +1292,16 @@ about which stream produced it:
 | stream merge `N>&1` for `N` in `2`–`6`, or `*>&1` | `ErrOut` when `N` is `2`, else `Out`; `Target` carries `&1` verbatim with `IsDynamicSkip=true` |
 
 The table above remains the v0.2 `Redirect` compatibility mapping. v0.3 also
-populates `RedirectAnalysis`: `RedirectSourceKind.PowerShellAllStreams`
-preserves `*`, `Descriptor` preserves numeric streams, and `Operation`
-distinguishes file output/append from static descriptor duplication. Static
-descriptor operations are not path-relevant. PowerShell's grammar does not
+populates the closed `RedirectAnalysis` family:
+`RedirectSource.PowerShellAllStreams` preserves `*`,
+`RedirectSource.Descriptor` preserves numeric streams, and runtime alternatives
+distinguish `FileRedirectAnalysis` output/append from static
+`DescriptorDuplicateRedirectAnalysis`. Descriptor alternatives are not paths.
+PowerShell's grammar does not
 admit descriptor close, move, computed merge targets, or file input
 redirection; those spellings make the whole parse unparseable. `$null` and
 `${null}`
-remains an incomplete explicit redirect until the public operation vocabulary
+remain an incomplete explicit redirect until the public operation vocabulary
 has a discard-sink representation; consumers must continue to fail closed.
 
 ---

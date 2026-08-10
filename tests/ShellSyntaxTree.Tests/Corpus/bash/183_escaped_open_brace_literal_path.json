@@ -1,6 +1,6 @@
 {
   "name": "Escaped interpolation start remains a literal path",
-  "input": "cat \"\\${HOME\"",
+  "input": "cat \u0022\\${HOME\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"\\${HOME\"",
+            "raw": "\u0022\\${HOME\u0022",
             "kind": "Literal",
             "isPath": true,
             "resolved": "/work/${HOME",
@@ -32,7 +32,7 @@
             "isPath": false
           },
           {
-            "raw": "\"\\${HOME\"",
+            "raw": "\u0022\\${HOME\u0022",
             "value": "${HOME",
             "role": "Argument",
             "sourceStart": 4,
@@ -84,8 +84,9 @@
             "sourceLength": 13
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Exact",

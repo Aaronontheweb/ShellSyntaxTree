@@ -1,25 +1,96 @@
 {
   "name": "v0.3 Bash for-in literal finite binding",
-  "input": "for f in a.txt b.txt; do rm -- \"$f\"; done",
+  "input": "for f in a.txt b.txt; do rm -- \u0022$f\u0022; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["rm"],
+        "verb": [
+          "rm"
+        ],
         "args": [
-          { "raw": "--", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": true },
-          { "raw": "\"$f\"", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false }
+          {
+            "raw": "--",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\u0022$f\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
         ],
         "redirects": []
       }
     ],
     "syntax": [
-      { "kind": "Block", "parentIndex": null, "region": "Unknown", "childIndex": null, "sourceStart": 0, "sourceLength": 41, "clauseIndex": null, "groupKind": null, "listOperator": null },
-      { "kind": "ForEach", "parentIndex": 0, "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 41, "clauseIndex": null, "groupKind": null, "listOperator": null, "bindingName": "f", "bindingRaw": "f", "bindingSourceStart": 4, "bindingSourceLength": 1, "iterableRaw": "a.txt b.txt", "iterableSourceStart": 9, "iterableSourceLength": 11 },
-      { "kind": "Block", "parentIndex": 1, "region": "Iterator", "childIndex": null, "sourceStart": 9, "sourceLength": 11, "clauseIndex": null, "groupKind": null, "listOperator": null },
-      { "kind": "Block", "parentIndex": 1, "region": "LoopBody", "childIndex": null, "sourceStart": 24, "sourceLength": 13, "clauseIndex": null, "groupKind": null, "listOperator": null },
-      { "kind": "SimpleCommand", "parentIndex": 3, "region": "Statement", "childIndex": 0, "sourceStart": 25, "sourceLength": 10, "clauseIndex": 0, "groupKind": null, "listOperator": null }
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 41,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 41,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "f",
+        "bindingRaw": "f",
+        "bindingSourceStart": 4,
+        "bindingSourceLength": 1,
+        "iterableRaw": "a.txt b.txt",
+        "iterableSourceStart": 9,
+        "iterableSourceLength": 11
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 9,
+        "sourceLength": 11,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 24,
+        "sourceLength": 13,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 25,
+        "sourceLength": 10,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
     ],
     "commands": [
       {
@@ -27,14 +98,63 @@
         "immediateRole": "LoopBody",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 41 },
-          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 41 },
-          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 24, "sourceLength": 13 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 41
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 41
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 24,
+            "sourceLength": 13
+          }
         ],
-        "effectiveArguments": [
-          { "clauseElementIndex": 2, "value": { "kind": "FiniteSet", "values": ["a.txt", "b.txt"], "pattern": null, "coveringDirectory": null } }
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "FiniteSet",
+              "values": [
+                "a.txt",
+                "b.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
         ],
-        "workingDirectory": { "kind": "Exact", "values": ["/work"], "pattern": null, "coveringDirectory": null }
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       }
     ]
   },

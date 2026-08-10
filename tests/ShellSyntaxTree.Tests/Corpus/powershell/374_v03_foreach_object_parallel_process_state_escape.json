@@ -313,7 +313,7 @@
             "sourceLength": 69
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -350,7 +350,30 @@
             "sourceLength": 69
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-Parallel"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -401,7 +424,32 @@
             "sourceLength": 38
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "Env:SST_PARALLEL_PATH"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "child"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Unknown",
           "values": [],
@@ -429,7 +477,20 @@
             "sourceLength": 88
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "host.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Unknown",
           "values": [],

@@ -85,7 +85,20 @@
             "sourceLength": 26
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "Win32_OperatingSystem"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Exact",
           "values": [

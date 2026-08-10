@@ -1,15 +1,21 @@
 {
   "name": "v0.3 Bash static descriptor move",
-  "input": "command 2>&1-",
+  "input": "command 2\u003E\u00261-",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["command"],
+        "verb": [
+          "command"
+        ],
         "args": [],
         "redirects": [
-          { "direction": "ErrOut", "target": "&1-", "isDynamicSkip": true }
+          {
+            "direction": "ErrOut",
+            "target": "\u00261-",
+            "isDynamicSkip": true
+          }
         ]
       }
     ],
@@ -19,18 +25,31 @@
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 13 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 13
+          }
         ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "DescriptorMoveRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 2,
-            "operation": "DescriptorMove",
-            "targetDescriptor": 1,
-            "target": { "kind": "Unknown" },
-            "isPathRelevant": false,
-            "isComplete": true
+            "isComplete": true,
+            "targetDescriptor": 1
           }
         ]
       }

@@ -581,7 +581,7 @@ public class PublicApiSnapshotTests
     {
         var actual = LibAssembly
             .GetExportedTypes()
-            .Where(t => t.Namespace == "ShellSyntaxTree")
+            .Where(t => t.Namespace == "ShellSyntaxTree" && t.DeclaringType is null)
             .Select(t => t.Name)
             .OrderBy(n => n)
             .ToArray();
@@ -589,6 +589,7 @@ public class PublicApiSnapshotTests
         var expected = new[]
         {
             nameof(Arg),
+            nameof(AnalyzedArgument),
             nameof(ArgKind),
             nameof(BashParser),
             nameof(BashInitialStateMode),
@@ -604,22 +605,21 @@ public class PublicApiSnapshotTests
             nameof(CommandOccurrenceRole),
             nameof(CommandSubstitutionSyntax),
             nameof(CompoundOperator),
-            nameof(ConditionalBranchSyntax),
-            nameof(ConditionalSyntax),
-            nameof(ConditionLoopKind),
-            nameof(ConditionLoopSyntax),
-            nameof(EffectiveArgument),
+            nameof(DescriptorCloseRedirectAnalysis),
+            nameof(DescriptorDuplicateRedirectAnalysis),
+            nameof(DescriptorMoveRedirectAnalysis),
             nameof(ExecutionRegionCardinality),
             nameof(ExecutionRegionOrigin),
             nameof(ExecutionRegionPhase),
             nameof(ExecutionRegionSyntax),
             nameof(ExecutionRegionTiming),
             nameof(ForEachSyntax),
+            nameof(FileRedirectAnalysis),
+            nameof(FileRedirectMode),
             nameof(GroupSyntax),
             nameof(HereDocumentAnalysis),
             nameof(HereDocumentExpansionMode),
             nameof(IShellParser),
-            nameof(LoopBindingSyntax),
             nameof(ParsedCommand),
             nameof(PipelineSyntax),
             nameof(PwshParser),
@@ -629,19 +629,17 @@ public class PublicApiSnapshotTests
             nameof(Redirect),
             nameof(RedirectAnalysis),
             nameof(RedirectDirection),
-            nameof(RedirectOperation),
             nameof(RedirectSource),
-            nameof(RedirectSourceKind),
-            nameof(ShellAnalysisLimits),
             nameof(ShellBlockSyntax),
             nameof(ShellGroupKind),
             nameof(ShellParserOptions),
             nameof(ShellSourceFragment),
-            nameof(ShellSyntaxKind),
             nameof(ShellSyntaxNode),
             nameof(ShellValueDomain),
-            nameof(ShellValueDomainKind),
             nameof(SimpleCommandSyntax),
+            nameof(HereDocumentRedirectAnalysis),
+            nameof(HereStringRedirectAnalysis),
+            nameof(UnresolvedRedirectAnalysis),
             nameof(VerbChain),
         }.OrderBy(n => n).ToArray();
 

@@ -1,6 +1,6 @@
 {
   "name": "v0.3 tab-stripping heredoc command substitution",
-  "input": "cat <<-EOF\n\t$(id)\n\tEOF",
+  "input": "cat \u003C\u003C-EOF\n\t$(id)\n\tEOF",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -21,8 +21,7 @@
         "redirects": [
           {
             "direction": "In",
-            "target": "<<EOF>",
-            "isDynamicSkip": false
+            "target": "\u003C\u003CEOF\u003E"
           }
         ]
       }
@@ -111,17 +110,46 @@
             "sourceStart": 14,
             "sourceLength": 2
           }
-        ]
+        ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       },
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
         "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 22
+          }
+        ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "HereDocumentRedirectAnalysis",
             "sourceKind": "Default",
-            "operation": "HereDocument",
+            "sourceDescriptor": null,
+            "isComplete": true,
             "hereDocument": {
               "delimiter": {
                 "raw": "EOF",
@@ -136,22 +164,11 @@
               "expansionMode": "Expand",
               "stripLeadingTabs": true,
               "isComplete": true
-            },
-            "isPathRelevant": false,
-            "isComplete": true
-          }
-        ],
-        "ancestry": [
-          {
-            "ancestorKind": "Block",
-            "region": "Root",
-            "childIndex": 0,
-            "sourceStart": 0,
-            "sourceLength": 22
+            }
           }
         ]
       }
     ]
   },
-  "notes": "The <<- delimiter accepts authored leading tabs without hiding an expanding-body substitution."
+  "notes": "The \u003C\u003C- delimiter accepts authored leading tabs without hiding an expanding-body substitution."
 }

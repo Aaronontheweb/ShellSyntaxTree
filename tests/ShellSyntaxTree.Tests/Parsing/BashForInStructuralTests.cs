@@ -636,6 +636,19 @@ public class BashForInStructuralTests
     }
 
     [Fact]
+    public void Zero_or_more_loop_joins_the_zero_iteration_cwd_path()
+    {
+        var result = Parse(
+            "for f in /tmp/*.txt; do cd /tmp; done; pwd");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var pwd = Assert.Single(result.Commands, command => CommandVerb(command) == "pwd");
+        Assert.IsType<ShellValueDomain.Unknown>(pwd.WorkingDirectory);
+        Assert.Contains(pwd.Clause.Args, argument =>
+            argument.IsCwdAttribution && argument.Kind == ArgKind.DynamicSkip);
+    }
+
+    [Fact]
     public void Thirty_two_visits_preserve_the_last_value_after_the_loop()
     {
         var values = Enumerable.Range(1, ShellAnalysisLimits.MaxValueCandidates)
@@ -1056,7 +1069,7 @@ public class BashForInStructuralTests
 
     private static string CommandVerb(CommandOccurrence command) => command.Clause.Verb.Joined;
 
-    private static ShellValueDomain FiniteDomain(int count) => new()
+    private static ShellValueDomainFacts FiniteDomain(int count) => new()
     {
         Kind = ShellValueDomainKind.FiniteSet,
         Values = Enumerable.Range(0, count).Select(index => $"v{index}").ToArray(),

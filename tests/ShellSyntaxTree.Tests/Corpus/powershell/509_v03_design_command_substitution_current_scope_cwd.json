@@ -306,7 +306,20 @@
             "sourceLength": 33
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "/tmp"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -357,7 +370,7 @@
             "sourceLength": 33
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -387,8 +400,9 @@
             "sourceLength": 72
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Unknown",
@@ -425,7 +439,20 @@
             "sourceLength": 72
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "relative.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Unknown",
           "values": [],

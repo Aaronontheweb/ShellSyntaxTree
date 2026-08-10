@@ -83,7 +83,8 @@ foreach (var occurrence in parsed.Commands)
     var clause = occurrence.Clause;
     Console.WriteLine(
         $"{occurrence.ImmediateRole} {clause.Verb.Joined} " +
-        $"complete={occurrence.IsComplete} cwd={occurrence.WorkingDirectory.Kind}");
+        $"complete={occurrence.IsComplete} " +
+        $"cwd={Describe(occurrence.WorkingDirectory)}");
 
     foreach (var arg in clause.Args.Where(a => a.IsPath))
     {
@@ -91,19 +92,42 @@ foreach (var occurrence in parsed.Commands)
         Console.WriteLine($"    {marker}: {arg.Resolved}");
     }
 
-    foreach (var effective in occurrence.EffectiveArguments)
+    foreach (var argument in occurrence.Arguments)
     {
         Console.WriteLine(
-            $"    element[{effective.ClauseElementIndex}]: {effective.Value.Kind}");
+            $"    {argument.Argument.Raw}: {Describe(argument.Value)}");
     }
 
     foreach (var redirect in occurrence.Redirects)
     {
-        Console.WriteLine(
-            $"    {redirect.Operation}: {redirect.Target.Kind} " +
-            $"complete={redirect.IsComplete}");
+        Console.WriteLine($"    {Describe(redirect)}");
     }
 }
+
+static string Describe(ShellValueDomain value) => value switch
+{
+    ShellValueDomain.Exact exact => exact.Value,
+    ShellValueDomain.FiniteSet finite => string.Join(" | ", finite.Values),
+    ShellValueDomain.PathPattern pattern => pattern.Pattern,
+    ShellValueDomain.Unknown => "unknown",
+    _ => "unknown",
+};
+
+static string Describe(RedirectAnalysis redirect) => redirect switch
+{
+    FileRedirectAnalysis file =>
+        $"{file.Mode} to {Describe(file.Target)} complete={file.IsComplete}",
+    DescriptorDuplicateRedirectAnalysis duplicate =>
+        $"duplicate to fd {duplicate.TargetDescriptor}",
+    DescriptorMoveRedirectAnalysis move =>
+        $"move to fd {move.TargetDescriptor}",
+    DescriptorCloseRedirectAnalysis => "close descriptor",
+    HereDocumentRedirectAnalysis => "heredoc stdin data",
+    HereStringRedirectAnalysis hereString =>
+        $"here-string stdin data: {Describe(hereString.Data)}",
+    UnresolvedRedirectAnalysis => "unresolved redirect",
+    _ => "unknown redirect",
+};
 ```
 
 ## Consumer guide
@@ -131,9 +155,11 @@ public enum PwshDialect { Unknown, PowerShell7, WindowsPowerShell51 }
 
 public sealed record ParsedCommand { /* Source, Syntax, Commands, Clauses, IsUnparseable, … */ }
 public abstract record ShellSyntaxNode;
-public sealed record CommandOccurrence { /* Clause, role, ancestry, effective values, cwd, redirects, completeness */ }
-public sealed record ShellValueDomain  { /* Exact, FiniteSet, Pattern, or Unknown */ }
-public sealed record RedirectAnalysis  { /* source, operation, target, heredoc facts, completeness */ }
+public sealed record CommandOccurrence { /* Clause, role, ancestry, analyzed arguments, cwd, redirects, completeness */ }
+public sealed record AnalyzedArgument  { /* direct Arg + ClauseElement + ShellValueDomain join */ }
+public abstract record ShellValueDomain; // nested Unknown, Exact, FiniteSet, PathPattern
+public abstract record RedirectSource;   // nested Unknown, Default, Descriptor, PowerShellAllStreams
+public abstract record RedirectAnalysis; // file, descriptor, heredoc, here-string, or unresolved alternative
 public sealed record Clause        { /* Operator, Verb, Args, Redirects, Elements, IsSubshell, IsCommandStringWrapped */ }
 public sealed record ClauseElement { /* Raw, Value, Role, source span, verb-relative position, path facts */ }
 public sealed record VerbChain     { /* Tokens, Joined, CanonicalVerb, IsDynamic */ }

@@ -21,9 +21,9 @@ public class PwshRedirectAnalysisTests
     [InlineData("*>>", RedirectSourceKind.PowerShellAllStreams, null, RedirectOperation.FileAppend)]
     public void File_redirect_preserves_source_operation_and_path(
         string op,
-        RedirectSourceKind sourceKind,
+        object sourceKind,
         int? descriptor,
-        RedirectOperation operation)
+        object operation)
     {
         var result = Parse($"Get-Date {op} out.txt");
 
@@ -32,9 +32,9 @@ public class PwshRedirectAnalysisTests
         Assert.True(occurrence.IsComplete);
         var redirect = Assert.Single(occurrence.Redirects);
         Assert.Equal(0, redirect.RedirectIndex);
-        Assert.Equal(sourceKind, redirect.Source.Kind);
-        Assert.Equal(descriptor, redirect.Source.Descriptor);
-        Assert.Equal(operation, redirect.Operation);
+        Assert.Equal((RedirectSourceKind)sourceKind, redirect.Source.Kind);
+        Assert.Equal(descriptor, redirect.Source.DescriptorValue);
+        Assert.Equal((RedirectOperation)operation, redirect.Operation);
         Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
         Assert.Equal("C:/work/out.txt", Assert.Single(redirect.Target.Values));
         Assert.True(redirect.IsPathRelevant);
@@ -47,7 +47,7 @@ public class PwshRedirectAnalysisTests
     [InlineData("*>&1", RedirectSourceKind.PowerShellAllStreams, null)]
     public void Stream_merge_preserves_source_and_success_stream_target(
         string op,
-        RedirectSourceKind sourceKind,
+        object sourceKind,
         int? sourceDescriptor)
     {
         var result = Parse($"Get-Date {op}");
@@ -56,8 +56,8 @@ public class PwshRedirectAnalysisTests
         var occurrence = Assert.Single(result.Commands);
         Assert.True(occurrence.IsComplete);
         var redirect = Assert.Single(occurrence.Redirects);
-        Assert.Equal(sourceKind, redirect.Source.Kind);
-        Assert.Equal(sourceDescriptor, redirect.Source.Descriptor);
+        Assert.Equal((RedirectSourceKind)sourceKind, redirect.Source.Kind);
+        Assert.Equal(sourceDescriptor, redirect.Source.DescriptorValue);
         Assert.Equal(RedirectOperation.DescriptorDuplicate, redirect.Operation);
         Assert.Equal(1, redirect.TargetDescriptor);
         Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
@@ -75,7 +75,7 @@ public class PwshRedirectAnalysisTests
         Assert.Equal(new[] { 0, 1 }, redirects.Select(item => item.RedirectIndex));
         Assert.Equal(
             new[] { 1, 2 },
-            redirects.Select(item => item.Source.Descriptor ?? 1));
+            redirects.Select(item => item.Source.DescriptorValue ?? 1));
         Assert.Equal(
             new[] { "C:/work/out.txt", "C:/work/err.txt" },
             redirects.Select(item => Assert.Single(item.Target.Values)));
@@ -137,7 +137,7 @@ public class PwshRedirectAnalysisTests
         var redirects = Assert.Single(result.Commands).Redirects;
         Assert.Equal(2, redirects.Count);
         Assert.Equal(RedirectSourceKind.PowerShellAllStreams, redirects[0].Source.Kind);
-        Assert.Equal(2, redirects[1].Source.Descriptor);
+        Assert.Equal(2, redirects[1].Source.DescriptorValue);
     }
 
     [Fact]

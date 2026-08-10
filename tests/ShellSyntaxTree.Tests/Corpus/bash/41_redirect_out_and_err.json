@@ -1,19 +1,25 @@
 {
-  "name": "Multiple redirects: cmd > out 2> err",
-  "input": "cmd > out 2> err",
+  "name": "Multiple redirects: cmd \u003E out 2\u003E err",
+  "input": "cmd \u003E out 2\u003E err",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["cmd"],
+        "verb": [
+          "cmd"
+        ],
         "args": [],
         "redirects": [
-          { "direction": "Out", "target": "/work/out" },
-          { "direction": "ErrOut", "target": "/work/err" }
-        ],
-        "isSubshell": false,
-        "isCommandStringWrapped": false
+          {
+            "direction": "Out",
+            "target": "/work/out"
+          },
+          {
+            "direction": "ErrOut",
+            "target": "/work/err"
+          }
+        ]
       }
     ],
     "commands": [
@@ -22,25 +28,55 @@
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 16 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 16
+          }
         ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "FileRedirectAnalysis",
             "sourceKind": "Default",
-            "operation": "FileOutput",
-            "target": { "kind": "Exact", "values": ["/work/out"] },
-            "isPathRelevant": true,
-            "isComplete": true
+            "sourceDescriptor": null,
+            "isComplete": true,
+            "fileMode": "Output",
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "/work/out"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
           },
           {
             "redirectIndex": 1,
+            "kind": "FileRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 2,
-            "operation": "FileOutput",
-            "target": { "kind": "Exact", "values": ["/work/err"] },
-            "isPathRelevant": true,
-            "isComplete": true
+            "isComplete": true,
+            "fileMode": "Output",
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "/work/err"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
           }
         ]
       }

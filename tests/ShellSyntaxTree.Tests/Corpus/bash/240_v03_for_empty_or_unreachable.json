@@ -6,18 +6,42 @@
     "clauses": [
       {
         "operator": "None",
-        "verb": ["false"],
+        "verb": [
+          "false"
+        ],
         "args": [
-          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false, "isCwdAttribution": true }
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false,
+            "isCwdAttribution": true
+          }
         ],
         "redirects": []
       },
       {
         "operator": "OrIf",
-        "verb": ["cat"],
+        "verb": [
+          "cat"
+        ],
         "args": [
-          { "raw": "relative.txt", "kind": "Literal", "isPath": true, "resolved": "__NULL__", "isFlag": false },
-          { "raw": "\u003Cdynamic-cwd\u003E", "kind": "DynamicSkip", "isPath": false, "resolved": "__NULL__", "isFlag": false, "isCwdAttribution": true }
+          {
+            "raw": "relative.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "__NULL__",
+            "isFlag": false
+          },
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false,
+            "isCwdAttribution": true
+          }
         ],
         "redirects": []
       }
@@ -28,24 +52,83 @@
         "immediateRole": "LoopBody",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 44 },
-          { "ancestorKind": "CommandList", "region": "Statement", "childIndex": 0, "sourceStart": 0, "sourceLength": 44 },
-          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 24 },
-          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 12, "sourceLength": 8 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 44
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 44
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 24
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 12,
+            "sourceLength": 8
+          }
         ],
-        "effectiveArguments": [],
-        "workingDirectory": { "kind": "Unknown", "values": [], "pattern": null, "coveringDirectory": null }
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       },
       {
         "clauseIndex": 1,
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 44 },
-          { "ancestorKind": "CommandList", "region": "Statement", "childIndex": 1, "sourceStart": 0, "sourceLength": 44 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 44
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 44
+          }
         ],
-        "effectiveArguments": [],
-        "workingDirectory": { "kind": "Unknown", "values": [], "pattern": null, "coveringDirectory": null }
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "relative.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       }
     ]
   },

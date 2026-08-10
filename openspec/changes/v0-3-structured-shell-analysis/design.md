@@ -1123,9 +1123,11 @@ constructed by the library and exposes read-only facts to consumers. Internal
 constructors and `internal init` accessors are shown to make ownership explicit
 but are not consumer-callable API.
 
-Every exposed `IReadOnlyList<T>` is backed by a library-owned immutable
-collection or a defensive copy. The parser never publishes a mutable array or
-list that a consumer can cast and change after projection.
+Every `IReadOnlyList<T>` introduced by v0.3 is backed by a library-owned
+immutable collection or a defensive copy. The parser never publishes a mutable
+array or list for a new v0.3 member that a consumer can cast and change after
+projection. Stable v0.2 construction, setters, and list semantics are
+unchanged.
 
 Runtime type is the discriminant for each closed family. Consumers use an
 exhaustive type switch with a default fail-closed arm. The library may add a

@@ -1,6 +1,6 @@
 {
   "name": "v0.3 heredoc sibling command substitutions",
-  "input": "cat <<EOF\n$(first)\n$(second)\nEOF",
+  "input": "cat \u003C\u003CEOF\n$(first)\n$(second)\nEOF",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -29,8 +29,7 @@
         "redirects": [
           {
             "direction": "In",
-            "target": "<<EOF>",
-            "isDynamicSkip": false
+            "target": "\u003C\u003CEOF\u003E"
           }
         ]
       }
@@ -152,7 +151,16 @@
             "sourceStart": 12,
             "sourceLength": 5
           }
-        ]
+        ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       },
       {
         "clauseIndex": 1,
@@ -180,17 +188,46 @@
             "sourceStart": 21,
             "sourceLength": 6
           }
-        ]
+        ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
       },
       {
         "clauseIndex": 2,
         "immediateRole": "Ordinary",
         "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 32
+          }
+        ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "HereDocumentRedirectAnalysis",
             "sourceKind": "Default",
-            "operation": "HereDocument",
+            "sourceDescriptor": null,
+            "isComplete": true,
             "hereDocument": {
               "delimiter": {
                 "raw": "EOF",
@@ -205,18 +242,7 @@
               "expansionMode": "Expand",
               "stripLeadingTabs": false,
               "isComplete": true
-            },
-            "isPathRelevant": false,
-            "isComplete": true
-          }
-        ],
-        "ancestry": [
-          {
-            "ancestorKind": "Block",
-            "region": "Root",
-            "childIndex": 0,
-            "sourceStart": 0,
-            "sourceLength": 32
+            }
           }
         ]
       }

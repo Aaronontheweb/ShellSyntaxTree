@@ -187,7 +187,7 @@
             "sourceLength": 46
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -217,7 +217,20 @@
             "sourceLength": 46
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "relative.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Unknown",
           "values": [],
@@ -245,8 +258,9 @@
             "sourceLength": 46
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Unknown",

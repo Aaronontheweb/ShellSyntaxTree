@@ -6,14 +6,14 @@
 namespace ShellSyntaxTree;
 
 /// <summary>Fixed resource and proof bounds for structured shell analysis.</summary>
-public static class ShellAnalysisLimits
+internal static class ShellAnalysisLimits
 {
     /// <summary>Gets the maximum number of finite value candidates.</summary>
-    public static int MaxValueCandidates => 32;
+    internal static int MaxValueCandidates => 32;
 
     /// <summary>Gets the maximum structural container depth.</summary>
-    public static int MaxStructuralNesting => 16;
+    internal static int MaxStructuralNesting => 16;
 
     /// <summary>Gets the maximum decoded command-string wrapper depth.</summary>
-    public static int MaxWrapperRecursionDepth => 5;
+    internal static int MaxWrapperRecursionDepth => 5;
 }

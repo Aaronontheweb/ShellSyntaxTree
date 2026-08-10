@@ -129,8 +129,8 @@ Once parsed, a security-oriented consumer normally follows this sequence:
 2. Walk every command occurrence; do not authorize only the first stage of a
    compound, pipeline, loop, substitution, or execution region.
 3. Determine a conservative command identity.
-4. Overlay effective values on authored elements, then evaluate working-
-   directory and redirect facts.
+4. Evaluate the already-joined arguments, working-directory domain, and
+   redirect alternatives.
 5. Elevate dynamic or unresolved content when it affects the policy decision.
 6. Apply product-specific rules and produce a decision.
 
@@ -152,31 +152,22 @@ var commandDecision = GateDecision.Allow();
 
 foreach (var occurrence in parsed.Commands)
 {
+    var gateKey = GetGateKey(occurrence.Clause.Verb);
     GateDecision occurrenceDecision;
 
     if (!occurrence.IsComplete
         || !IsKnownRole(occurrence.ImmediateRole)
-        || occurrence.Clause.Verb.IsDynamic)
+        || gateKey is null)
     {
         occurrenceDecision = GateDecision.Prompt(
             "command execution is not statically bounded");
     }
     else
     {
-        var gateKey = GetGateKey(occurrence.Clause.Verb);
-        if (gateKey is null)
-        {
-            occurrenceDecision = GateDecision.Prompt(
-                "occurrence has no statically known command");
-        }
-        else
-        {
-            // This application-owned step must interpret the authored
-            // Clause.Elements, overlay EffectiveArguments by
-            // ClauseElementIndex, and apply the complete grammar for gateKey
-            // to every exact or finite candidate.
-            occurrenceDecision = EvaluateOccurrence(gateKey, occurrence);
-        }
+        // Arguments already joins each non-cwd Arg to its source element and
+        // effective value. Apply the complete grammar for gateKey to every
+        // exact or finite candidate.
+        occurrenceDecision = EvaluateOccurrence(gateKey, occurrence);
     }
 
     // Do not return early on Prompt: a later occurrence may be Deny.
@@ -190,10 +181,8 @@ return commandDecision;
 static bool IsKnownRole(CommandOccurrenceRole role) => role is
     CommandOccurrenceRole.Ordinary
     or CommandOccurrenceRole.PipelineStage
-    or CommandOccurrenceRole.Condition
     or CommandOccurrenceRole.Iterator
     or CommandOccurrenceRole.LoopBody
-    or CommandOccurrenceRole.Branch
     or CommandOccurrenceRole.Substitution
     or CommandOccurrenceRole.ExecutionRegion;
 ```
@@ -209,28 +198,48 @@ approval must never bypass a deny.
 
 ## v0.3 authorization and migration contract
 
-The `0.3.0-alpha.1` package adds `ParsedCommand.Commands` as the authorization
-projection and `ParsedCommand.Syntax` as the typed display/analysis tree. This
-guide describes the stable v0.3 contract; constructs not yet complete in an
-installed prerelease remain prompt-or-deny cases. The migration rules are:
+`ParsedCommand.Commands` is the authorization projection and
+`ParsedCommand.Syntax` is the typed display/analysis tree. The stable v0.2
+surface remains available: `Source`, `Clauses`, `IsUnparseable`, and
+`UnparseableReason` retain their existing contract throughout v0.3.
+
+The stable v0.3 migration rules are:
 
 1. Check `IsUnparseable` first. An unparseable result has empty `Commands` and
    `Clauses`; any partial `Syntax` is diagnostic only.
-2. Authorize every `CommandOccurrence`, including iterator, condition, branch,
-   substitution, and loop-body commands. Do not recursively walk `Syntax` to
-   discover commands.
+2. Authorize every `CommandOccurrence`, including iterator, loop-body,
+   substitution, and execution-region commands. Do not recursively walk
+   `Syntax` to discover commands.
 3. Require `CommandOccurrence.IsComplete`, a recognized `ImmediateRole`, and a
    static command identity before considering approval reuse.
 4. Preserve authored PowerShell parameter/argument classification, then apply
    shell binding and executable-specific grammar to every exact or finite
    effective value. A value that begins with `-` can affect a native command;
    it does not retroactively become a PowerShell cmdlet parameter token.
-5. Evaluate every redirect through its explicit operation, source, target,
-   path relevance, and completeness. Do not infer descriptor safety from raw
-   prefixes.
+5. Evaluate every redirect through its closed runtime alternative, source,
+   value, and completeness. Do not infer descriptor safety from raw prefixes.
 6. Prompt or deny when an unknown value can affect identity, options, path
    scope, cwd, or redirects. A structurally complete occurrence may still have
    an unknown value; those are separate facts.
+
+The prerelease `0.3.0-alpha.*` surface was experimental and has no
+compatibility promise. Consumers moving from an alpha must make these source
+changes:
+
+| Prerelease shape | Stable v0.3 shape |
+|---|---|
+| `EffectiveArguments` plus `ClauseElementIndex` | `Arguments`, with direct `Argument` and `Element` references |
+| `ShellValueDomain.Kind`, `Values`, `Pattern` | pattern-match `Unknown`, `Exact`, `FiniteSet`, or `PathPattern` |
+| `RedirectAnalysis.Operation` property bag | pattern-match the redirect record alternative |
+| `RedirectSource.Kind` plus `Descriptor` | pattern-match `Default`, `Descriptor`, `PowerShellAllStreams`, or `Unknown` |
+| copied ancestry kind/span fields | `CommandAncestryFrame.Ancestor` plus `Region` and `ChildIndex` |
+| `ExecutionRegionSyntax.HostClauseElementIndex` | `HostArgument`, the actual `ClauseElement` |
+| `ShellSyntaxKind` | pattern-match the runtime syntax-node type |
+| public condition/branch nodes and roles | removed because no parser published them |
+
+There are intentionally no obsolete aliases or adapters for those alpha
+shapes. Recompile against the selected package and fix every use; this avoids
+silently preserving an obsolete property-bag policy interpretation.
 
 This authorization is about authored shell syntax. `IsComplete` means the
 parser found and classified every executable region in the submitted command;
@@ -339,23 +348,26 @@ release; no removal version is scheduled. A later removal would require a
 deliberate minor-version breaking change and release-note migration mapping
 under the repository's `0.x` versioning contract.
 
-The new records participate in generated record equality, hashing, and
-`ToString()`. Adding `Syntax` and `Commands` also changes those generated
+All new v0.3 result-type constructors and member setters are parser-owned, and
+all lists introduced by v0.3 are defensive read-only snapshots. Stable v0.2
+construction and list semantics remain unchanged. The records participate in generated
+record equality, hashing, and `ToString()`. Adding `Syntax` and `Commands` also changes those generated
 results for `ParsedCommand`, even when the compatibility `Clauses` are equal.
 Do not use a parser result's record hash or `ToString()` as a durable approval
 key. ShellSyntaxTree does not promise a stable serialized wire format for its
 closed polymorphic syntax family and does not configure polymorphic JSON
 serialization. Consumers that persist results should map them to a
-consumer-owned, versioned DTO and reject unknown enum values or node kinds
-when reading it.
+consumer-owned, versioned DTO and reject unknown enum values or runtime
+alternatives when reading it.
 
 ## Display traversal is not authorization traversal
 
 `ParsedCommand.Syntax` preserves authored nesting for explainers, diagnostics,
 and visualizations. A display can recursively visit `ShellBlockSyntax`,
 `PipelineSyntax`, `ForEachSyntax`, `CommandSubstitutionSyntax`,
-`ExecutionRegionSyntax`, and the other known node types. It must include a
-default branch for a node type or `ShellSyntaxKind` added by a future package.
+`ExecutionRegionSyntax`, and the other known node types through runtime type
+patterns. It must include a default branch for a node type added by a future
+package; stable v0.3 deliberately has no redundant public `ShellSyntaxKind`.
 
 Do not use that recursive display walk to build an authorization list. The
 library has already projected every supported executable leaf exactly once
@@ -366,37 +378,168 @@ types can omit executable regions. If `IsUnparseable` is true, any partial
 
 ## Interpreting occurrence analysis
 
-`EffectiveArguments` overlays bounded runtime values onto authored
-`Clause.Elements` by `ClauseElementIndex`; it does not replace the authored
-token or its shell classification. Validate each coordinate before use and
-apply the executable's complete argument grammar to every candidate:
+Each `AnalyzedArgument` directly joins one authored `Arg`, its source
+`ClauseElement`, and its effective `ShellValueDomain`. There is exactly one
+entry for every non-cwd `Clause.Args` entry, in authored order. Attached forms
+such as `--work-tree=../repo` and `-Path:C:\repo` can produce two `Arg`
+records that share one source element; consumers do not need to reconstruct
+that normal many-to-one relationship from indexes or source spans.
+
+The examples in this guide use a compact result notation rather than dumping
+the complete object graph. Each one shows the submitted input, the
+policy-relevant facts returned by the parser, and the decision those facts
+enable. Names such as `Exact("/work")` and `Descriptor(2)` denote the
+corresponding closed runtime alternatives, not strings that consumers need to
+parse.
+
+For example, parse this with `BashParser`, `WorkingDirectory = "/work"`:
+
+```bash
+cat file.txt | grep x && rm /tmp/stale
+```
+
+The authorization projection is:
+
+| `Commands` index | Authored command | `ImmediateRole` | `IsComplete` | `WorkingDirectory` |
+|---:|---|---|---|---|
+| 0 | `cat file.txt` | `PipelineStage` | `true` | `Exact("/work")` |
+| 1 | `grep x` | `PipelineStage` | `true` | `Exact("/work")` |
+| 2 | `rm /tmp/stale` | `Ordinary` | `true` | `Exact("/work")` |
+
+The consumer evaluates all three rows. It may group the first two into one
+pipeline-shaped prompt for display, but that grouping does not authorize the
+second stage implicitly. The final `rm` occurrence is also evaluated even if
+an earlier occurrence already requires a prompt, because it may produce a
+hard deny.
+
+Attached option forms demonstrate why `AnalyzedArgument` includes direct
+object references. For this Bash input:
+
+```bash
+git --work-tree=../repo status
+```
+
+`Commands[0].Arguments` contains three entries:
+
+| `Argument.Raw` | `Value` | `Element.Raw` |
+|---|---|---|
+| `--work-tree` | `Exact("--work-tree")` | `--work-tree=../repo` |
+| `../repo` | `Exact("../repo")` | `--work-tree=../repo` |
+| `status` | `Exact("status")` | `status` |
+
+The first two entries reference the same `ClauseElement`. A consumer can bind
+the option and its operand without source-span arithmetic or re-tokenizing the
+command. PowerShell attached parameters such as
+`Remove-Item -Path:C:\repo` use the same many-to-one shape.
+
+Apply the executable's complete argument grammar to every value:
+
+```csharp
+foreach (var analyzed in occurrence.Arguments)
+{
+    var current = analyzed.Value switch
+    {
+        ShellValueDomain.Exact exact =>
+            EvaluateArgument(analyzed.Argument, analyzed.Element, exact.Value),
+        ShellValueDomain.FiniteSet finite =>
+            EvaluateEveryCandidate(
+                analyzed.Argument,
+                analyzed.Element,
+                finite.Values),
+        ShellValueDomain.PathPattern pattern =>
+            EvaluatePattern(pattern.Pattern, pattern.CoveringDirectory),
+        ShellValueDomain.Unknown =>
+            GateDecision.Prompt("policy-sensitive argument is unknown"),
+        _ => GateDecision.Prompt("unrecognized value-domain alternative"),
+    };
+
+    decision = MostRestrictive(decision, current);
+}
+```
 
 - `Exact` contains one proved value.
 - `FiniteSet` contains 2 through 32 distinct proved values. Every candidate
   must independently satisfy policy; do not authorize only the first.
-- `Pattern` is a Bash path-shaped glob plus a conservative
+- `PathPattern` is a Bash path-shaped glob plus a conservative
   `CoveringDirectory`. Accept it only when policy understands both the pattern
   and the full covering scope without enumerating the filesystem.
 - `Unknown` is not an empty string or wildcard grant. Prompt or deny whenever
   the value can affect identity, option binding, a path, or another
   policy-sensitive position.
 
-Only the combinations documented above are valid. An empty `Exact`, a
-one-value `FiniteSet`, populated `Values` on `Unknown`, or an unrecognized
-`ShellValueDomainKind` is invalid external data and must fail closed.
+Use runtime type patterns rather than a parallel kind enum. Keep a default
+prompt-or-deny branch so a future library-owned alternative cannot be treated
+as safe accidentally.
 
 `WorkingDirectory` uses the same domain type, but stable v0.3 publishes only
 `Exact` or `Unknown`. `Exact` means all modeled reachable states agree. A
-branch, loop, failed location change, or unmodeled mutation whose exits do not
-agree produces `Unknown`; never substitute the process cwd as a fallback.
+branch, zero-or-more loop, failed location change, or unmodeled mutation whose
+exits do not agree produces `Unknown`; never substitute the process cwd as a
+fallback.
 
-Redirect analysis is independent. Require `RedirectAnalysis.IsComplete`, a
-recognized source and operation, valid descriptor combinations, and a value
-domain appropriate to the operation. Evaluate every path-relevant target.
-Descriptor operations are not paths, while heredoc and here-string targets are
-stdin data; executable-specific policy still decides whether that data is
-code. An occurrence can be structurally complete while one argument, cwd, or
-redirect target remains unknown, so test all of these facts separately.
+Redirect analysis is independent. Require `RedirectAnalysis.IsComplete` and
+pattern-match its closed runtime alternative. File alternatives carry path
+domains; descriptor alternatives are not paths; heredoc and here-string
+alternatives carry stdin data whose meaning remains receiver-specific. An
+occurrence can be complete while an argument, cwd, or redirect value is
+unknown, so test all facts separately.
+
+## Evaluating loops
+
+A loop body is represented once as authored syntax. ShellSyntaxTree does not
+pretend that it executed the loop or duplicate a command occurrence for every
+candidate value. Instead, it gives the loop-dependent argument a value domain.
+
+With `BashInitialStateMode.IsolatedNonInteractive` and
+`WorkingDirectory = "/work"`, this input:
+
+```bash
+for f in a.txt b.txt; do rm -- "$f"; done
+```
+
+produces one loop-body occurrence:
+
+```text
+Commands[0]
+  Clause.Verb.Tokens: ["rm"]
+  ImmediateRole: LoopBody
+  IsComplete: true
+  WorkingDirectory: Exact("/work")
+  Arguments[0]: "--"     -> Exact("--")
+  Arguments[1]: "\"$f\"" -> FiniteSet("a.txt", "b.txt")
+```
+
+The consumer applies the complete `rm` grammar and path policy to both
+`a.txt` and `b.txt`. It must not approve only the first candidate, and it must
+not mistake one occurrence for proof that the command runs only once.
+
+PowerShell uses the same consumer shape. Under
+`PwshInitialStateMode.IsolatedNonInteractiveNoProfile`, this input:
+
+```powershell
+foreach ($f in @('a.txt', 'b.txt', 'a.txt')) { Write-Output $F }
+```
+
+produces one `LoopBody` occurrence whose `$F` argument is
+`FiniteSet("a.txt", "b.txt")`; PowerShell's case-insensitive variable binding
+and duplicate elimination have already been reflected in the domain.
+
+The isolated modes are executor assertions, not parser optimizations. With
+the safe default initial-state modes, these ambient-variable-dependent proofs
+remain unknown or make the construct unparseable as specified earlier. A
+consumer must not select an isolated mode merely to obtain a finite set.
+
+Loops also affect later state even when their body facts are static. With an
+incoming cwd of `/work`:
+
+```bash
+for f in /tmp/*.txt; do cd /tmp; done; pwd
+```
+
+the loop may execute zero times, so both the body `cd` occurrence and the
+later `pwd` occurrence report `WorkingDirectory = Unknown`. The reachable
+states are `/work` and `/tmp`; the parser does not choose whichever value
+would make policy easiest. A cwd-sensitive consumer prompts or denies.
 
 ## Choosing a command identity
 
@@ -523,6 +666,19 @@ For `cd /repo && cat file.txt`, the `cat` clause receives a synthetic
 directory. PowerShell provides the same contract for `Set-Location` and its
 aliases.
 
+With an incoming cwd of `/work`, the relevant output is:
+
+| Occurrence | `WorkingDirectory` | Authored path | `Arg.Resolved` |
+|---|---|---|---|
+| `cd /repo` | `Exact("/work")` | `/repo` | `/repo` |
+| `cat file.txt` | `Exact("/repo")` | `file.txt` | `/repo/file.txt` |
+
+The `cd` row reports the directory in which `cd` itself runs; the `cat` row
+reports the successful `AndIf` continuation state. This is why consumers
+should use the occurrence's `WorkingDirectory` for execution context and the
+argument's `Resolved` value for path-zone policy rather than trying to infer
+either from clause order.
+
 The attributed argument is derived context:
 
 - use it when evaluating where a clause operates;
@@ -542,6 +698,18 @@ write outside an allowed zone:
 ```text
 echo safe > /etc/profile.d/example.sh
 ```
+
+With a Bash working directory of `/work`, representative results are:
+
+| Input | Redirect alternative | Source | Relevant value | Complete? | Consumer consequence |
+|---|---|---|---|---:|---|
+| `echo safe > /etc/profile.d/example.sh` | `FileRedirectAnalysis` with `Mode = Output` | `Default` | `Target = Exact("/etc/profile.d/example.sh")` | yes | Apply write-path policy to the exact target. |
+| `command 2>&1` | `DescriptorDuplicateRedirectAnalysis` | `Descriptor(2)` | `TargetDescriptor = 1` | yes | Apply descriptor policy; do not treat `1` as a path. |
+| `command 2>&$FD` | `UnresolvedRedirectAnalysis` | `Unknown` | no proved target descriptor | no | Prompt or deny the occurrence. |
+
+Those are runtime alternatives, not interpretations of a string prefix. In
+particular, the incomplete third row cannot accidentally pass a rule written
+for ordinary stderr-to-stdout duplication.
 
 For a v0.2 compatibility consumer, walk `Clause.Redirects` independently of
 `Args`:
@@ -571,69 +739,46 @@ var redirectDecision = GateDecision.Allow();
 
 foreach (var redirect in occurrence.Redirects)
 {
-    GateDecision current;
-
-    if (!redirect.IsComplete
-        || !IsKnownRedirectSource(redirect.Source)
-        || !IsKnownRedirectOperation(redirect.Operation))
-    {
-        current = GateDecision.Prompt("redirect analysis is incomplete");
-    }
-    else if (!redirect.IsPathRelevant)
-    {
-        if (redirect.Operation is RedirectOperation.HereDocument
-            or RedirectOperation.HereString)
+    var current = !redirect.IsComplete || !IsKnownSource(redirect.Source)
+        ? GateDecision.Prompt("redirect analysis is incomplete")
+        : redirect switch
         {
-            // Preserve Target and HereDocument for receiver-specific stdin
-            // policy; this data may be code for the receiving executable.
-            current = EvaluateStdinData(occurrence, redirect);
-        }
-        else
-        {
-            current = EvaluateDescriptorOperation(
-                redirect.Source,
-                redirect.Operation,
-                redirect.TargetDescriptor);
-        }
-    }
-    else if (redirect.Target.Kind is not (
-            ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
-    {
-        current = GateDecision.Prompt("redirect path is unknown");
-    }
-    else
-    {
-        current = GateDecision.Allow();
-        foreach (var path in redirect.Target.Values)
-        {
-            current = MostRestrictive(current, EvaluatePath(path));
-        }
-    }
+            FileRedirectAnalysis file => EvaluateFileRedirect(file),
+            DescriptorDuplicateRedirectAnalysis duplicate =>
+                EvaluateDescriptorDuplicate(redirect.Source, duplicate.TargetDescriptor),
+            DescriptorMoveRedirectAnalysis move =>
+                EvaluateDescriptorMove(redirect.Source, move.TargetDescriptor),
+            DescriptorCloseRedirectAnalysis =>
+                EvaluateDescriptorClose(redirect.Source),
+            HereDocumentRedirectAnalysis heredoc =>
+                EvaluateStdinData(occurrence, heredoc.Document),
+            HereStringRedirectAnalysis hereString =>
+                EvaluateStdinData(occurrence, hereString.Data),
+            UnresolvedRedirectAnalysis =>
+                GateDecision.Prompt("redirect operation is unresolved"),
+            _ => GateDecision.Prompt("unrecognized redirect alternative"),
+        };
 
     redirectDecision = MostRestrictive(redirectDecision, current);
 }
 
 return redirectDecision;
 
-static bool IsKnownRedirectSource(RedirectSource source) => source.Kind switch
-{
-    RedirectSourceKind.Default => source.Descriptor is null,
-    RedirectSourceKind.Descriptor => source.Descriptor >= 0,
-    RedirectSourceKind.PowerShellAllStreams => source.Descriptor is null,
-    _ => false,
-};
+static bool IsKnownSource(RedirectSource source) => source is
+    RedirectSource.Default
+    or RedirectSource.Descriptor
+    or RedirectSource.PowerShellAllStreams;
 
-static bool IsKnownRedirectOperation(RedirectOperation operation) =>
-    operation is RedirectOperation.FileInput
-        or RedirectOperation.FileOutput
-        or RedirectOperation.FileAppend
-        or RedirectOperation.DescriptorDuplicate
-        or RedirectOperation.DescriptorClose
-        or RedirectOperation.DescriptorMove
-        or RedirectOperation.CombinedOutput
-        or RedirectOperation.CombinedOutputAppend
-        or RedirectOperation.HereDocument
-        or RedirectOperation.HereString;
+static GateDecision EvaluateFileRedirect(FileRedirectAnalysis redirect) =>
+    redirect.Target switch
+    {
+        ShellValueDomain.Exact exact => EvaluatePath(exact.Value),
+        ShellValueDomain.FiniteSet finite => EvaluateEveryPath(finite.Values),
+        ShellValueDomain.PathPattern pattern =>
+            EvaluatePattern(pattern.Pattern, pattern.CoveringDirectory),
+        ShellValueDomain.Unknown => GateDecision.Prompt("redirect path is unknown"),
+        _ => GateDecision.Prompt("unrecognized redirect target alternative"),
+    };
 ```
 
 Completeness and value precision are intentionally independent. For example,
@@ -642,7 +787,7 @@ target, so path policy still prompts. Under an isolated fresh-process
 PowerShell initial state,
 `foreach ($f in @('one.txt','two.txt')) {
 Write-Output x > $f }` can instead expose a finite set of two absolute target
-paths. The loop target is not added to `EffectiveArguments`, because a
+paths. The loop target is not added to `Arguments`, because a
 redirect operand is not part of the command's argv.
 
 PowerShell stream facts retain numbered sources and the all-streams selector:
@@ -698,6 +843,24 @@ invocation. By contrast, `& $(Write-Output Get-Date)` also retains an
 incomplete dynamic outer occurrence because PowerShell invokes the produced
 name.
 
+Bash exposes the same execution-before-container ordering. For:
+
+```bash
+rm "$(find /tmp)"
+```
+
+the relevant projection is:
+
+| `Commands` index | Command | `ImmediateRole` | Argument value |
+|---:|---|---|---|
+| 0 | `find /tmp` | `Substitution` | `/tmp` is `Exact("/tmp")` |
+| 1 | `rm "$(find /tmp)"` | `Ordinary` | produced filename is `Unknown` |
+
+The `find` occurrence is independently authorizable, but its presence does not
+make the bytes it prints a statically known `rm` operand. A path-sensitive
+policy therefore evaluates `find` and still prompts or denies `rm`. It does not
+walk `Syntax` afterward and authorize `find` a second time.
+
 Quoting also determines the scope of host-wrapper substitutions. In
 `pwsh -Command "Write-Output $(Get-Date)"`, the parent evaluates `Get-Date`, so
 the result contains that parent-scope occurrence plus an incomplete outer
@@ -733,6 +896,18 @@ grant:
 The recoverable outcome is normally a user prompt with a one-time option, or a
 deny. A false-negative approval match causes another prompt; a false-positive
 match can silently execute something the operator did not authorize.
+
+Two different result shapes reach that same safe outcome:
+
+| Input and parser | Relevant output | Why reusable approval stops |
+|---|---|---|
+| PowerShell: `& $exe` | `IsUnparseable = false`; one occurrence with `IsComplete = false` and `Verb.IsDynamic = true` | The syntax is recognized, but the executable identity is not bounded. |
+| Bash: `if true; then echo ok; fi` | `IsUnparseable = true`; `Commands` and `Clauses` are empty | The unsupported control construct may contain execution, so partial syntax is diagnostic only. |
+
+`IsUnparseable = false` is therefore not an allow signal. It means only that
+the whole input was not rejected as an unsupported or unsafe-to-project
+construct; the consumer still checks every occurrence and every
+policy-sensitive domain.
 
 ## Worked use cases
 

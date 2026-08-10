@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using ShellSyntaxTree.Internal;
 
 namespace ShellSyntaxTree;
 
@@ -13,6 +14,8 @@ namespace ShellSyntaxTree;
 /// </summary>
 public sealed record ParsedCommand
 {
+    private IReadOnlyList<CommandOccurrence> _commands = Array.Empty<CommandOccurrence>();
+
     /// <summary>The original input string, verbatim.</summary>
     public string Source { get; init; } = "";
 
@@ -21,14 +24,17 @@ public sealed record ParsedCommand
     /// source ranges; decoded wrapper nodes use unavailable ranges unless an
     /// exact outer mapping exists.
     /// </summary>
-    public ShellBlockSyntax Syntax { get; init; } = new();
+    public ShellBlockSyntax Syntax { get; internal init; } = new();
 
     /// <summary>
     /// Canonical authorization projection containing every authored simple
     /// command that may execute exactly once in deterministic source order.
     /// </summary>
-    public IReadOnlyList<CommandOccurrence> Commands { get; init; } =
-        Array.Empty<CommandOccurrence>();
+    public IReadOnlyList<CommandOccurrence> Commands
+    {
+        get => _commands;
+        internal init => _commands = PublicCollection.Copy(value);
+    }
 
     /// <summary>
     /// Conservative v0.2 compatibility projection. Existing simple-command

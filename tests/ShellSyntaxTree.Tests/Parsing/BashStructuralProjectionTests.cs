@@ -39,6 +39,25 @@ public class BashStructuralProjectionTests
     }
 
     [Fact]
+    public void Inline_native_option_joins_two_arguments_to_one_source_element()
+    {
+        var occurrence = Assert.Single(
+            Parse("git --work-tree=../repo status").Commands);
+
+        Assert.Equal(3, occurrence.Arguments.Count);
+        var option = occurrence.Arguments[0];
+        var operand = occurrence.Arguments[1];
+        Assert.Equal("--work-tree", option.Argument.Raw);
+        Assert.Equal("../repo", operand.Argument.Raw);
+        Assert.Same(option.Element, operand.Element);
+        Assert.Equal("--work-tree=../repo", option.Element.Raw);
+        Assert.Equal("--work-tree", Assert.IsType<ShellValueDomain.Exact>(
+            option.Value).Value);
+        Assert.Equal("../repo", Assert.IsType<ShellValueDomain.Exact>(
+            operand.Value).Value);
+    }
+
+    [Fact]
     public void Mixed_pipeline_and_list_preserve_authored_structure_and_roles()
     {
         var result = Parse("printf x | grep x && echo ok");
@@ -245,7 +264,7 @@ public class BashStructuralProjectionTests
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(0, redirect.RedirectIndex);
         Assert.Equal(RedirectSourceKind.Default, redirect.Source.Kind);
-        Assert.Null(redirect.Source.Descriptor);
+        Assert.Null(redirect.Source.DescriptorValue);
         Assert.Equal(RedirectOperation.FileOutput, redirect.Operation);
         Assert.Equal(ShellValueDomainKind.Exact, redirect.Target.Kind);
         Assert.Equal("/work/out.txt", Assert.Single(redirect.Target.Values));
@@ -265,9 +284,9 @@ public class BashStructuralProjectionTests
     [InlineData("command 10>&2-", RedirectSourceKind.Descriptor, 10, RedirectOperation.DescriptorMove, 2)]
     public void Literal_descriptor_redirects_are_complete_and_not_paths(
         string source,
-        RedirectSourceKind sourceKind,
+        object sourceKind,
         int? sourceDescriptor,
-        RedirectOperation operation,
+        object operation,
         int? targetDescriptor)
     {
         var result = Parse(source);
@@ -276,9 +295,9 @@ public class BashStructuralProjectionTests
         var command = Assert.Single(result.Commands);
         Assert.True(command.IsComplete);
         var redirect = Assert.Single(command.Redirects);
-        Assert.Equal(sourceKind, redirect.Source.Kind);
-        Assert.Equal(sourceDescriptor, redirect.Source.Descriptor);
-        Assert.Equal(operation, redirect.Operation);
+        Assert.Equal((RedirectSourceKind)sourceKind, redirect.Source.Kind);
+        Assert.Equal(sourceDescriptor, redirect.Source.DescriptorValue);
+        Assert.Equal((RedirectOperation)operation, redirect.Operation);
         Assert.Equal(targetDescriptor, redirect.TargetDescriptor);
         Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
         Assert.False(redirect.IsPathRelevant);
@@ -292,7 +311,7 @@ public class BashStructuralProjectionTests
     public void Numeric_source_file_redirect_preserves_descriptor(
         string source,
         int sourceDescriptor,
-        RedirectOperation operation)
+        object operation)
     {
         var result = Parse(source);
 
@@ -301,8 +320,8 @@ public class BashStructuralProjectionTests
         Assert.True(command.IsComplete);
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(RedirectSourceKind.Descriptor, redirect.Source.Kind);
-        Assert.Equal(sourceDescriptor, redirect.Source.Descriptor);
-        Assert.Equal(operation, redirect.Operation);
+        Assert.Equal(sourceDescriptor, redirect.Source.DescriptorValue);
+        Assert.Equal((RedirectOperation)operation, redirect.Operation);
         Assert.True(redirect.IsPathRelevant);
         Assert.True(redirect.IsComplete);
     }
@@ -327,7 +346,7 @@ public class BashStructuralProjectionTests
     public void Continued_numeric_source_preserves_descriptor_semantics(
         string source,
         int sourceDescriptor,
-        RedirectOperation operation,
+        object operation,
         int? targetDescriptor)
     {
         var result = Parse(source);
@@ -338,8 +357,8 @@ public class BashStructuralProjectionTests
         Assert.DoesNotContain(command.Clause.Args, argument => argument.Raw is "3" or "10");
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(RedirectSourceKind.Descriptor, redirect.Source.Kind);
-        Assert.Equal(sourceDescriptor, redirect.Source.Descriptor);
-        Assert.Equal(operation, redirect.Operation);
+        Assert.Equal(sourceDescriptor, redirect.Source.DescriptorValue);
+        Assert.Equal((RedirectOperation)operation, redirect.Operation);
         Assert.Equal(targetDescriptor, redirect.TargetDescriptor);
         Assert.True(redirect.IsComplete);
     }
@@ -402,11 +421,10 @@ public class BashStructuralProjectionTests
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var command = Assert.Single(result.Commands);
         Assert.False(command.IsComplete);
-        var redirect = Assert.Single(command.Redirects);
-        Assert.Equal(RedirectOperation.DescriptorDuplicate, redirect.Operation);
-        Assert.Null(redirect.TargetDescriptor);
-        Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
-        Assert.False(redirect.IsPathRelevant);
+        var redirect = Assert.IsType<UnresolvedRedirectAnalysis>(
+            Assert.Single(command.Redirects));
+        Assert.NotNull(redirect.Source);
+        Assert.Same(command.Clause.Redirects[0], redirect.Authored);
         Assert.False(redirect.IsComplete);
     }
 
@@ -415,7 +433,7 @@ public class BashStructuralProjectionTests
     [InlineData("command &>> out.log", RedirectOperation.CombinedOutputAppend)]
     public void Combined_output_redirects_have_explicit_operations(
         string source,
-        RedirectOperation operation)
+        object operation)
     {
         var result = Parse(source);
 
@@ -424,7 +442,7 @@ public class BashStructuralProjectionTests
         Assert.True(command.IsComplete);
         var redirect = Assert.Single(command.Redirects);
         Assert.Equal(RedirectSourceKind.Default, redirect.Source.Kind);
-        Assert.Equal(operation, redirect.Operation);
+        Assert.Equal((RedirectOperation)operation, redirect.Operation);
         Assert.Equal("/work/out.log", Assert.Single(redirect.Target.Values));
         Assert.True(redirect.IsPathRelevant);
         Assert.True(redirect.IsComplete);
@@ -1094,7 +1112,7 @@ public class BashStructuralProjectionTests
         var redirect = occurrence.Redirects[1];
         Assert.Equal(1, redirect.RedirectIndex);
         Assert.Equal(RedirectSourceKind.Default, redirect.Source.Kind);
-        Assert.Null(redirect.Source.Descriptor);
+        Assert.Null(redirect.Source.DescriptorValue);
         Assert.Equal(RedirectOperation.HereDocument, redirect.Operation);
         Assert.Equal(ShellValueDomainKind.Unknown, redirect.Target.Kind);
         Assert.False(redirect.IsPathRelevant);
@@ -1156,7 +1174,7 @@ public class BashStructuralProjectionTests
                 ? RedirectSourceKind.Default
                 : RedirectSourceKind.Descriptor,
             redirect.Source.Kind);
-        Assert.Equal(expectedDescriptor, redirect.Source.Descriptor);
+        Assert.Equal(expectedDescriptor, redirect.Source.DescriptorValue);
 
         var compatibility = Assert.Single(occurrence.Clause.Redirects);
         Assert.Equal(RedirectDirection.In, compatibility.Direction);
@@ -1283,7 +1301,7 @@ public class BashStructuralProjectionTests
         Assert.True(occurrence.IsComplete);
         var redirect = Assert.Single(occurrence.Redirects);
         Assert.Equal(RedirectSourceKind.Descriptor, redirect.Source.Kind);
-        Assert.Equal(sourceDescriptor, redirect.Source.Descriptor);
+        Assert.Equal(sourceDescriptor, redirect.Source.DescriptorValue);
         Assert.Equal(RedirectOperation.HereDocument, redirect.Operation);
         Assert.True(redirect.IsComplete);
         var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
@@ -1299,20 +1317,18 @@ public class BashStructuralProjectionTests
     }
 
     [Fact]
-    public void Overflow_numeric_source_heredoc_preserves_body_but_remains_incomplete()
+    public void Overflow_numeric_source_heredoc_is_explicitly_unresolved()
     {
         var result = Parse("cat 999999999999999999999<<EOF\nbody\nEOF");
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var occurrence = Assert.Single(result.Commands);
         Assert.False(occurrence.IsComplete);
-        var redirect = Assert.Single(occurrence.Redirects);
-        Assert.Equal(RedirectSourceKind.Unknown, redirect.Source.Kind);
-        Assert.Equal(RedirectOperation.HereDocument, redirect.Operation);
+        var redirect = Assert.IsType<UnresolvedRedirectAnalysis>(
+            Assert.Single(occurrence.Redirects));
+        Assert.IsType<RedirectSource.Unknown>(redirect.Source);
         Assert.False(redirect.IsComplete);
-        var hereDocument = Assert.IsType<HereDocumentAnalysis>(redirect.HereDocument);
-        Assert.Equal("body\n", hereDocument.Body.Raw);
-        Assert.True(hereDocument.IsComplete);
+        Assert.Same(occurrence.Clause.Redirects[0], redirect.Authored);
     }
 
     [Theory]

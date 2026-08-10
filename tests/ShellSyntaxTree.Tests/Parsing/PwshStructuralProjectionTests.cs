@@ -37,6 +37,25 @@ public class PwshStructuralProjectionTests
     }
 
     [Fact]
+    public void Inline_cmdlet_parameter_joins_two_arguments_to_one_source_element()
+    {
+        var occurrence = Assert.Single(
+            Parse("Remove-Item -Path:C:\\repo").Commands);
+
+        Assert.Equal(2, occurrence.Arguments.Count);
+        var parameter = occurrence.Arguments[0];
+        var operand = occurrence.Arguments[1];
+        Assert.Equal("-Path", parameter.Argument.Raw);
+        Assert.Equal("C:\\repo", operand.Argument.Raw);
+        Assert.Same(parameter.Element, operand.Element);
+        Assert.Equal("-Path:C:\\repo", parameter.Element.Raw);
+        Assert.Equal("-Path", Assert.IsType<ShellValueDomain.Exact>(
+            parameter.Value).Value);
+        Assert.Equal("C:\\repo", Assert.IsType<ShellValueDomain.Exact>(
+            operand.Value).Value);
+    }
+
+    [Fact]
     public void Mixed_pipeline_and_list_preserve_authored_structure_and_roles()
     {
         var result = Parse("Get-Item x | Select-Object Name && Get-Date");
@@ -1052,7 +1071,7 @@ public class PwshStructuralProjectionTests
         null)]
     public void Child_process_home_depends_on_proved_process_environment(
         string source,
-        ShellValueDomainKind expectedKind,
+        object expectedKind,
         string? expectedValue)
     {
         var result = ParseIsolatedWithHome(source, "C:/Users/test");
@@ -1061,7 +1080,7 @@ public class PwshStructuralProjectionTests
             result.Commands,
             occurrence => occurrence.Clause.Verb.Tokens[0] == "Get-Content");
         var effective = Assert.Single(command.EffectiveArguments);
-        Assert.Equal(expectedKind, effective.Value.Kind);
+        Assert.Equal((ShellValueDomainKind)expectedKind, effective.Value.Kind);
         if (expectedValue is not null)
         {
             Assert.Equal(expectedValue, Assert.Single(effective.Value.Values));

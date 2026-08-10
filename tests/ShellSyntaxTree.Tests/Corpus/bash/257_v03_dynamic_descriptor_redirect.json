@@ -1,15 +1,21 @@
 {
   "name": "v0.3 Bash computed descriptor target remains incomplete",
-  "input": "command 2>&$FD",
+  "input": "command 2\u003E\u0026$FD",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["command"],
+        "verb": [
+          "command"
+        ],
         "args": [],
         "redirects": [
-          { "direction": "ErrOut", "target": "&$FD", "isDynamicSkip": true }
+          {
+            "direction": "ErrOut",
+            "target": "\u0026$FD",
+            "isDynamicSkip": true
+          }
         ]
       }
     ],
@@ -19,16 +25,29 @@
         "immediateRole": "Ordinary",
         "isComplete": false,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 14 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 14
+          }
         ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
-            "sourceKind": "Descriptor",
-            "sourceDescriptor": 2,
-            "operation": "DescriptorDuplicate",
-            "target": { "kind": "Unknown" },
-            "isPathRelevant": false,
+            "kind": "UnresolvedRedirectAnalysis",
+            "sourceKind": "Unknown",
+            "sourceDescriptor": null,
             "isComplete": false
           }
         ]

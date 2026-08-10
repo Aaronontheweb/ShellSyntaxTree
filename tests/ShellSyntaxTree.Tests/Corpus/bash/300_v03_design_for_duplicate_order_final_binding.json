@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Ordered loop final binding",
-  "input": "for f in a b a; do :; done; printf '%s' \"$f\"",
+  "input": "for f in a b a; do :; done; printf \u0027%s\u0027 \u0022$f\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -32,14 +32,14 @@
         ],
         "args": [
           {
-            "raw": "'%s'",
+            "raw": "\u0027%s\u0027",
             "kind": "Literal",
             "isPath": false,
             "resolved": "__NULL__",
             "isFlag": false
           },
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "kind": "EnvVar",
             "isPath": false,
             "resolved": "__NULL__",
@@ -60,7 +60,7 @@
             "isPath": false
           },
           {
-            "raw": "'%s'",
+            "raw": "\u0027%s\u0027",
             "value": "%s",
             "role": "Argument",
             "sourceStart": 35,
@@ -71,7 +71,7 @@
             "isPath": false
           },
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "value": "$f",
             "role": "Argument",
             "sourceStart": 40,
@@ -205,7 +205,7 @@
             "sourceLength": 4
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -213,8 +213,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       },
       {
         "clauseIndex": 1,
@@ -236,8 +235,21 @@
             "sourceLength": 44
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "%s"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
             "clauseElementIndex": 2,
             "value": {
               "kind": "Exact",
@@ -256,8 +268,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       }
     ]
   },

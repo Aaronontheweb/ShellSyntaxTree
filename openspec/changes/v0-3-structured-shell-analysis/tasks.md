@@ -29,7 +29,7 @@
   `PwshDialect` contract. Preserve PowerShell 7 as the compatibility default,
   make Windows PowerShell 5.1 explicit, keep Bash and PowerShell top-level
   parsing separate, and require dialect-local grammar/catalog proof.
-- [ ] 1.14 Correct the unreleased v0.3 consumer API before stable release.
+- [x] 1.14 Correct the unreleased v0.3 consumer API before stable release.
   Preserve every stable v0.2 type and the `Syntax` / `Commands` / `Clauses`
   lanes, but do not preserve alpha-only v0.3 members. Replace sparse effective-
   argument coordinates with one joined analyzed argument per authored non-cwd
@@ -37,11 +37,12 @@
   closed parser-owned alternatives; reference actual syntax ancestors; remove
   redundant kind/source copies and public condition/branch types that stable
   v0.3 never emits; keep executable policy consumer-owned.
-- [ ] 1.15 Synchronize the corrected API into `SPEC.md`, implementation,
+- [x] 1.15 Synchronize the corrected API into `SPEC.md`, implementation,
   public-API snapshots, corpus DTOs, README, and consumer guide in one vertical
   slice. Add prerelease migration notes for alpha consumers without an adapter
   or obsolete compatibility layer. Defensively copy or immutably back every
-  published `IReadOnlyList<T>` and pin many-to-one inline-option argument joins.
+  `IReadOnlyList<T>` introduced by v0.3 and pin many-to-one inline-option
+  argument joins without changing stable v0.2 list semantics.
 - [ ] 1.16 Migrate Netclaw from alpha.5 to the corrected prerelease, delete its
   coordinate/property-bag validation, and rerun the full Linux plus native-
   Windows approval matrices before stable v0.3.
@@ -71,7 +72,7 @@
   - [x] 3.10b Implement the bounded expanding-heredoc slice with quote-removed delimiters, literal quoted/escaped bodies, tab stripping, exact provenance, and fail-closed unsupported header/body forms.
   - [x] 3.10c Require proved Bash variable-attribute state for simple named-parameter dereferences and fail closed globally on the locked unmodeled execution-bearing builtin catalog, including exact dispatch-wrapper bypasses.
   - [x] 3.10d Fail closed globally on Bash `exec`, mutating or ambiguous `hash`, alias, `shopt`, and `enable` forms, and unmodeled reserved execution prefixes/groups while retaining only exact static query grammar.
-- [ ] 3.11 Implement PowerShell `$()` discovery in supported words, redirect values, foreach expressions, call-operator dynamic identities, standalone expression statements, double-quoted strings, and expandable here-strings; never invent invocation from standalone output, retain literal/escaped spellings, and fail closed on trailing command-style arguments, call-operator script blocks, or unsupported execution-bearing `@()` / `@{}` forms.
+- [x] 3.11 Implement PowerShell `$()` discovery in supported words, redirect values, foreach expressions, call-operator dynamic identities, standalone expression statements, double-quoted strings, and expandable here-strings; never invent invocation from standalone output, retain literal/escaped spellings, and fail closed on trailing command-style arguments, call-operator script blocks, or unsupported execution-bearing `@()` / `@{}` forms.
   - [x] 3.11a Implement words, redirect values, call-operator dynamic identities, standalone statements, expandable strings/here-strings, and parent-versus-child host payload provenance; fail closed on arbitrary expression values and unsupported execution-bearing `@()` / `@{}` forms.
 - [x] 3.12 Pin substitution parentage, authored sibling indices, innermost-first ordering, Bash-isolated versus PowerShell-current-scope state, unknown-state propagation, nesting/depth limits, and incomplete dynamic identities in direct tests.
   - [x] 3.12a Pin the Bash argument/redirect slice, isolated cwd behavior, wrapper provenance, and the shared structural-depth budget.
@@ -83,8 +84,8 @@
   - [x] 3.13a Promote the Bash ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, and hidden-execution cases into its executable corpus.
   - [x] 3.13b Promote the PowerShell ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, expression-boundary, and hidden-execution cases into its executable corpus.
   - [x] 3.13c Promote expanding, literal, tab-stripped, multiple, and malformed Bash heredoc cases with full structural expectations into the executable corpus.
-  - [ ] 3.13d Promote sanitized nameref, unknown-state dereference, and execution-bearing builtin failures into the Bash executable corpus and Netclaw strict matrix.
-  - [ ] 3.13e Promote sanitized Bash hash, alias/option, exec, builtin-enable, and reserved execution syntax failures into the executable corpus and Netclaw strict matrix.
+  - [x] 3.13d Promote sanitized nameref, unknown-state dereference, and execution-bearing builtin failures into the Bash executable corpus and Netclaw strict matrix.
+  - [x] 3.13e Promote sanitized Bash hash, alias/option, exec, builtin-enable, and reserved execution syntax failures into the executable corpus and Netclaw strict matrix.
 - [x] 3.14 Add `ExecutionRegionSyntax`, its four discriminant enums,
   `SimpleCommandSyntax.ExecutionRegions`, and appended occurrence/ancestry enum
   members to the public API and snapshot without changing existing enum values.
@@ -146,7 +147,7 @@
 - [x] 6.2 Emit condition-free loop-body occurrences and conservative compatibility clauses.
 - [x] 6.3 Derive exact and finite literal binding domains within the locked candidate cap.
 - [x] 6.4 Substitute a bounded binding only where Bash quoting proves argument boundaries.
-- [ ] 6.5 Propagate and conservatively join cwd and supported binding state across zero-or-more loop execution.
+- [x] 6.5 Propagate and conservatively join cwd and supported binding state across zero-or-more loop execution.
   - [x] 6.5a Lock outcome-partitioned Bash flow, failure-aware `cd`,
     conservative `lastpipe` / `pipefail`, ordered iteration plans,
     decoded-wrapper inheritance, and dynamic fail-closed compatibility
@@ -154,7 +155,7 @@
   - [x] 6.5b Apply outcome-sensitive cwd analysis to existing Bash lists,
     pipelines, substitutions, subshells, and decoded wrappers; rebase exact
     compatibility paths and retain `<dynamic-cwd>` after conservative joins.
-  - [ ] 6.5c Carry ordered loop binding and cwd state through zero-or-more
+  - [x] 6.5c Carry ordered loop binding and cwd state through zero-or-more
     iterations, then remove the temporary loop-mutation rejection.
     - [x] 6.5c.1 Correct the contract after adversarial review: require an
       explicit isolated initial-state mode and supported scalar-name boundary;
@@ -187,7 +188,11 @@
   - The executable corpus includes indirect and parameter-operator rejection,
     loop-body substitution, and atomic transition-budget overflow; native
     oracles pin the shell semantics behind the conservative boundaries.
-- [ ] 6.8 Add sanitized Bash corpus entries and Netclaw allow/prompt/deny integration cases.
+- [ ] 6.8 Add sanitized Bash corpus entries and Netclaw disposition cases.
+  Under Netclaw's enforced `BashInitialStateMode.Unknown` contract, bounded
+  loop cases must remain prompt or deny; require an allow case only if the
+  executor later proves the full isolated non-interactive startup/environment
+  contract rather than selecting that parser mode solely to reduce prompts.
 
 ## 7. PowerShell Foreach Vertical Slice
 
@@ -255,13 +260,13 @@
     sanitizes unknown joins. Broader wrapper,
     pipeline, alias/cmdlet/native, redirect, and adversarial matrices remain in
     tasks 7.5-7.7.
-- [ ] 7.5 Cover aliases, cmdlets, native commands, nested loops, pipelines, script blocks, and wrapper boundaries.
+- [x] 7.5 Cover aliases, cmdlets, native commands, nested loops, pipelines, script blocks, and wrapper boundaries.
   - [x] 7.5a Implement the version-pinned PowerShell 7 script-block receiver and
     parameter-binding catalog, including aliases, supported module-qualified
     identities, parameter abbreviations/inline values, positional binding,
     parameter sets, `ScriptBlock[]`, and ForEach-Object Begin/Process/End
     assignment.
-  - [ ] 7.5b Implement direct `& {}` and `. {}` plus synchronous current-runspace
+  - [x] 7.5b Implement direct `& {}` and `. {}` plus synchronous current-runspace
     regions for ForEach-Object, Where-Object, Measure-Command, Trace-Command,
     in-process Invoke-Command, and New-Module with shell-specific state flow.
   - [x] 7.5c Implement Start-Job and initialization, ForEach-Object -Parallel,
@@ -283,7 +288,7 @@
       proved data, an unknown receiver, proved local `Invoke-Command`, the exact
       module-qualified-looking mutation boundary, and canonical-target
       invalidation through `echo`.
-  - [ ] 7.5f Pin authored projection order separately from semantic phase order,
+  - [x] 7.5f Pin authored projection order separately from semantic phase order,
     exact host element coordinates, nested regions, wrappers, pipelines, loops,
     and the 16-container depth boundary.
   - [x] 7.5g Retain explicit atomic-failure behavior for direct-block arguments
@@ -327,7 +332,7 @@
       passed on Ubuntu and Windows. Both jobs used the hash-pinned PowerShell
       7.6.4 oracle; the Windows job additionally discovered native Windows
       PowerShell 5.1 from Bash and passed all 2,815 tests plus package creation.
-- [ ] 7.10 Migrate Netclaw's native Windows environment to prefer a compatible
+- [x] 7.10 Migrate Netclaw's native Windows environment to prefer a compatible
   `pwsh.exe`, fall back to `powershell.exe`, and carry one canonical platform,
   executable, and dialect identity through LLM context, parser, approval
   policy, and executor. Reparse and reauthorize if fallback selection changes.
@@ -348,23 +353,26 @@
 
 ## 11. Verification and Release
 
-- [ ] 11.1 Replace the alpha public-API default-value, equality, serialization,
+- [x] 11.1 Replace the alpha public-API default-value, equality, serialization,
   immutability, and unknown-case tests with the corrected stable-v0.3 contract.
-  - Alpha evidence: `V03PublicApiSnapshotTests` currently pins every additive record default and enum
-    zero value, proves `Syntax` and `Commands` participate in generated record
-    equality and `ToString()` plus equal-record hash consistency, demonstrates
-    that default JSON is not a polymorphic round-trip contract, and makes every
-    policy-sensitive unknown numeric enum value detectable for consumer rejection.
-- [ ] 11.2 Assert every supported executable region appears exactly once and every unsupported executable region makes the result unparseable.
-- [ ] 11.3 Run the complete Bash and PowerShell corpus suites plus the PII audit against the corrected implementation.
-  - Alpha evidence: the complete suites and PII audit pass on the superseded alpha surface.
-- [ ] 11.4 Run `dotnet build -c Release`, `dotnet test -c Release`, `dotnet pack -c Release`, and header verification against the corrected implementation.
-  - Alpha evidence: these gates pass on the superseded alpha implementation.
-- [ ] 11.5 Validate the corrected public API field-for-field against the synchronized shared and PowerShell specifications.
-  - Alpha evidence: `PublicApiSnapshotTests` and `V03PublicApiSnapshotTests` currently enumerate the exact
-    exported namespace, type family, exact property sets, parser constructors
-    and entry points, enum ordering, reference nullability, defaults, and fixed
-    limits synchronized into `SPEC.md` and `SPEC.POWERSHELL.md`.
+  - Corrected evidence: `V03PublicApiSnapshotTests` pins the closed record
+    families, parser-owned construction, defensive lists, generated
+    `ParsedCommand` equality/hash/`ToString()` behavior, absence of a default
+    polymorphic JSON round trip, and detectable future enum values.
+- [x] 11.2 Assert every supported executable region appears exactly once and every unsupported executable region makes the result unparseable.
+- [x] 11.3 Run the complete Bash and PowerShell corpus suites plus the PII audit against the corrected implementation.
+  - Corrected evidence: the complete Release suite passes 2,870/2,870 and the
+    explicit PII audit passes 1/1, including Bash corpus case 309.
+- [x] 11.4 Run `dotnet build -c Release`, `dotnet test -c Release`, `dotnet pack -c Release`, and header verification against the corrected implementation.
+  - Corrected evidence: Release build passes with zero warnings, all 2,870
+    tests pass, package and symbols pack successfully, and header verification
+    reports every file compliant.
+- [x] 11.5 Validate the corrected public API field-for-field against the synchronized shared and PowerShell specifications.
+  - Corrected evidence: `PublicApiSnapshotTests` and
+    `V03PublicApiSnapshotTests` enumerate the exact exported namespace, stable
+    v0.2 members, corrected v0.3 type families, property accessors, parser
+    entry points, enum ordering, and nullability synchronized into `SPEC.md`
+    and `SPEC.POWERSHELL.md`.
 - [ ] 11.6 Validate Netclaw's ordinary-command, redirect, bounded-loop, and unknown-value approval matrices against the prerelease package.
 - [x] 11.7 Update release notes and remove Netclaw's temporary descriptor workaround only after explicit redirect integration is live.
   - The `0.3.0-alpha` release notes document the explicit redirect model. The

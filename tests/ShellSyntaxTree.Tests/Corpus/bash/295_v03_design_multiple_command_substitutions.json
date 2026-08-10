@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Multiple command substitutions",
-  "input": "printf '%s %s' \"$(first)\" \"$(second)\"",
+  "input": "printf \u0027%s %s\u0027 \u0022$(first)\u0022 \u0022$(second)\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -53,21 +53,21 @@
         ],
         "args": [
           {
-            "raw": "'%s %s'",
+            "raw": "\u0027%s %s\u0027",
             "kind": "Literal",
             "isPath": false,
             "resolved": "__NULL__",
             "isFlag": false
           },
           {
-            "raw": "\"$(first)\"",
+            "raw": "\u0022$(first)\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
             "isFlag": false
           },
           {
-            "raw": "\"$(second)\"",
+            "raw": "\u0022$(second)\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -88,7 +88,7 @@
             "isPath": false
           },
           {
-            "raw": "'%s %s'",
+            "raw": "\u0027%s %s\u0027",
             "value": "%s %s",
             "role": "Argument",
             "sourceStart": 7,
@@ -99,7 +99,7 @@
             "isPath": false
           },
           {
-            "raw": "\"$(first)\"",
+            "raw": "\u0022$(first)\u0022",
             "value": "$(first)",
             "role": "Argument",
             "sourceStart": 15,
@@ -110,7 +110,7 @@
             "isPath": false
           },
           {
-            "raw": "\"$(second)\"",
+            "raw": "\u0022$(second)\u0022",
             "value": "$(second)",
             "role": "Argument",
             "sourceStart": 26,
@@ -241,7 +241,7 @@
             "sourceLength": 5
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -249,8 +249,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       },
       {
         "clauseIndex": 1,
@@ -279,7 +278,7 @@
             "sourceLength": 6
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -287,8 +286,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       },
       {
         "clauseIndex": 2,
@@ -303,8 +301,21 @@
             "sourceLength": 37
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "%s %s"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
             "clauseElementIndex": 2,
             "value": {
               "kind": "Unknown",
@@ -314,6 +325,7 @@
             }
           },
           {
+            "clauseArgumentIndex": 2,
             "clauseElementIndex": 3,
             "value": {
               "kind": "Unknown",
@@ -330,8 +342,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       }
     ]
   },

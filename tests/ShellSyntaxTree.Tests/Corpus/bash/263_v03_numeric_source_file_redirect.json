@@ -1,15 +1,20 @@
 {
   "name": "v0.3 Bash numeric source file redirect",
-  "input": "command 3> out.log",
+  "input": "command 3\u003E out.log",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["command"],
+        "verb": [
+          "command"
+        ],
         "args": [],
         "redirects": [
-          { "direction": "Out", "target": "/work/out.log", "isDynamicSkip": false }
+          {
+            "direction": "Out",
+            "target": "/work/out.log"
+          }
         ]
       }
     ],
@@ -19,17 +24,39 @@
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 18 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 18
+          }
         ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "FileRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 3,
-            "operation": "FileOutput",
-            "target": { "kind": "Exact", "values": ["/work/out.log"] },
-            "isPathRelevant": true,
-            "isComplete": true
+            "isComplete": true,
+            "fileMode": "Output",
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "/work/out.log"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
           }
         ]
       }

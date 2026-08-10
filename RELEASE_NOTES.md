@@ -1,16 +1,35 @@
 #### Unreleased ####
 
+## Changed
+
+- Replace the experimental v0.3 sparse `EffectiveArguments` coordinate overlay
+  with one parser-owned `AnalyzedArgument` per authored non-cwd argument. Each
+  entry directly references its `Arg`, source `ClauseElement`, and effective
+  value, including many-to-one inline option bindings.
+- Replace the experimental value, redirect-source, and redirect-operation
+  property bags with closed record families intended for runtime type
+  matching. Ancestry frames now reference actual syntax nodes, and execution
+  regions reference their actual host argument.
+- Remove alpha-only public syntax kinds, condition/branch vocabulary, analysis
+  limits, and other shapes the stable parser never emits. Every new v0.3 result
+  is parser-owned and every read-only list introduced by v0.3 is defensively
+  backed; stable v0.2 construction and list semantics remain unchanged.
+
 ## Consumer migration
 
 - v0.3 security consumers authorize `ParsedCommand.Commands` and use
   `ParsedCommand.Syntax` only for display and diagnostics. The conservative
   v0.2 `Clauses` projection remains supported throughout v0.3, including every
   v0.3.x release; no removal version is scheduled.
-- The additive v0.3 records and `ParsedCommand` members change generated record
+- The new v0.3 records and `ParsedCommand` members change generated record
   equality, hashing, `ToString()`, and reflection-based serialization output.
   ShellSyntaxTree does not define a stable serialized wire format. Persisted
   results require a consumer-owned, versioned DTO or explicit serializer
-  mapping that fails closed on unknown node and enum values.
+  mapping that fails closed on unknown runtime alternatives and enum values.
+- No source or binary compatibility is provided for `0.3.0-alpha.*` packages.
+  Stable v0.2 remains the compatibility boundary. Alpha consumers must migrate
+  to `CommandOccurrence.Arguments` and pattern-match the closed value and
+  redirect families; no aliases or obsolete adapters preserve the old model.
 - `PwshParserOptions.Dialect` is additive and defaults to `PowerShell7` for
   compatibility. Native Windows consumers select it only for a compatible
   PowerShell 7.6 host (`>=7.6.4` and `<7.7`) and select

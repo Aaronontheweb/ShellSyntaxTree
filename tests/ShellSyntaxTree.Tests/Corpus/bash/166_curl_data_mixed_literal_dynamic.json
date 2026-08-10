@@ -1,6 +1,6 @@
 {
   "name": "Curl data mixed literal dynamic",
-  "input": "curl --data='@$HOME'\".json\" https://example.invalid/api",
+  "input": "curl --data=\u0027@$HOME\u0027\u0022.json\u0022 https://example.invalid/api",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -18,7 +18,7 @@
             "isFlag": true
           },
           {
-            "raw": "'@$HOME'\".json\"",
+            "raw": "\u0027@$HOME\u0027\u0022.json\u0022",
             "kind": "Literal",
             "isPath": true,
             "resolved": "/work/$HOME.json",
@@ -46,7 +46,7 @@
             "isPath": false
           },
           {
-            "raw": "--data='@$HOME'\".json\"",
+            "raw": "--data=\u0027@$HOME\u0027\u0022.json\u0022",
             "value": "--data=@$HOME.json",
             "role": "Argument",
             "sourceStart": 5,
@@ -109,13 +109,38 @@
             "sourceLength": 55
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--data"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Exact",
               "values": [
                 "--data=@$HOME.json"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 2,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "https://example.invalid/api"
               ],
               "pattern": null,
               "coveringDirectory": null

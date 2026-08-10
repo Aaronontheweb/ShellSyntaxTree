@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Literal and expandable regions compose within one token",
-  "input": "echo \"\\${HOME}-$HOME\"",
+  "input": "echo \u0022\\${HOME}-$HOME\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"\\${HOME}-$HOME\"",
+            "raw": "\u0022\\${HOME}-$HOME\u0022",
             "kind": "Tilde",
             "isPath": false,
             "resolved": "__NULL__",
@@ -32,7 +32,7 @@
             "isPath": false
           },
           {
-            "raw": "\"\\${HOME}-$HOME\"",
+            "raw": "\u0022\\${HOME}-$HOME\u0022",
             "value": "${HOME}-$HOME",
             "role": "Argument",
             "sourceStart": 5,
@@ -83,8 +83,9 @@
             "sourceLength": 21
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Exact",

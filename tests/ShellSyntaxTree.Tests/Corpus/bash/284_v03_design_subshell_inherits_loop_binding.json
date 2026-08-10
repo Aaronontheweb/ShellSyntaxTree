@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: A parenthesized subshell inherits shell bindings while isolating exit state",
-  "input": "for f in a; do (printf \"%s\" \"$f\"); done",
+  "input": "for f in a; do (printf \u0022%s\u0022 \u0022$f\u0022); done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,14 +11,14 @@
         ],
         "args": [
           {
-            "raw": "\"%s\"",
+            "raw": "\u0022%s\u0022",
             "kind": "Literal",
             "isPath": false,
             "resolved": "__NULL__",
             "isFlag": false
           },
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "kind": "EnvVar",
             "isPath": false,
             "resolved": "__NULL__",
@@ -39,7 +39,7 @@
             "isPath": false
           },
           {
-            "raw": "\"%s\"",
+            "raw": "\u0022%s\u0022",
             "value": "%s",
             "role": "Argument",
             "sourceStart": 23,
@@ -50,7 +50,7 @@
             "isPath": false
           },
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "value": "$f",
             "role": "Argument",
             "sourceStart": 28,
@@ -192,8 +192,21 @@
             "sourceLength": 16
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "%s"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
             "clauseElementIndex": 2,
             "value": {
               "kind": "Exact",

@@ -1,15 +1,21 @@
 {
   "name": "v0.3 Bash continued numeric source duplicate",
-  "input": "command 3\\\n>&1",
+  "input": "command 3\\\n\u003E\u00261",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["command"],
+        "verb": [
+          "command"
+        ],
         "args": [],
         "redirects": [
-          { "direction": "Out", "target": "&1", "isDynamicSkip": true }
+          {
+            "direction": "Out",
+            "target": "\u00261",
+            "isDynamicSkip": true
+          }
         ]
       }
     ],
@@ -19,18 +25,31 @@
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 14 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 14
+          }
         ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "DescriptorDuplicateRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 3,
-            "operation": "DescriptorDuplicate",
-            "targetDescriptor": 1,
-            "target": { "kind": "Unknown" },
-            "isPathRelevant": false,
-            "isComplete": true
+            "isComplete": true,
+            "targetDescriptor": 1
           }
         ]
       }

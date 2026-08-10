@@ -129,12 +129,6 @@ internal static class CorpusJson
         bool includeV03Assertions,
         bool isRootBlock = false)
     {
-        if (node.Kind == ShellSyntaxKind.Unknown)
-        {
-            throw new InvalidOperationException(
-                "Cannot generate corpus expectations for an unknown syntax node");
-        }
-
         var currentIndex = nodes.Count;
         var clause = (node as SimpleCommandSyntax)?.Clause;
         var forEachNode = node as ForEachSyntax;
@@ -142,7 +136,7 @@ internal static class CorpusJson
         var clauseIndex = clause is null ? (int?)null : FindClauseIndex(parsed, clause);
         var syntax = new JsonObject
         {
-            ["kind"] = node.Kind.ToString(),
+            ["kind"] = SyntaxKind(node),
             ["parentIndex"] = JsonValue.Create(parentIndex),
             ["region"] = region.ToString(),
             ["childIndex"] = JsonValue.Create(childIndex),
@@ -154,10 +148,10 @@ internal static class CorpusJson
         };
         if (includeV03Assertions && forEachNode is not null)
         {
-            syntax["bindingName"] = forEachNode.Binding.Name;
-            syntax["bindingRaw"] = forEachNode.Binding.Source.Raw;
-            syntax["bindingSourceStart"] = forEachNode.Binding.Source.SourceStart;
-            syntax["bindingSourceLength"] = forEachNode.Binding.Source.SourceLength;
+            syntax["bindingName"] = forEachNode.BindingName;
+            syntax["bindingRaw"] = forEachNode.BindingSource.Raw;
+            syntax["bindingSourceStart"] = forEachNode.BindingSource.SourceStart;
+            syntax["bindingSourceLength"] = forEachNode.BindingSource.SourceLength;
             syntax["iterableRaw"] = forEachNode.Iterable.Raw;
             syntax["iterableSourceStart"] = forEachNode.Iterable.SourceStart;
             syntax["iterableSourceLength"] = forEachNode.Iterable.SourceLength;
@@ -166,7 +160,7 @@ internal static class CorpusJson
         {
             syntax["executionOrigin"] = executionRegionNode.Origin.ToString();
             syntax["hostClauseElementIndex"] =
-                JsonValue.Create(executionRegionNode.HostClauseElementIndex);
+                JsonValue.Create(FindClauseElementIndex(parsed, executionRegionNode.HostArgument));
             syntax["executionPhase"] = executionRegionNode.Phase.ToString();
             syntax["executionTiming"] = executionRegionNode.Timing.ToString();
             syntax["executionCardinality"] =
@@ -284,74 +278,6 @@ internal static class CorpusJson
                     nodes,
                     includeV03Assertions);
                 break;
-            case ConditionLoopSyntax loop:
-                AppendSyntax(
-                    loop.Condition,
-                    currentIndex,
-                    CommandAncestryRegion.Condition,
-                    childIndex: null,
-                    listOperator: null,
-                    parsed,
-                    nodes,
-                    includeV03Assertions);
-                AppendSyntax(
-                    loop.Body,
-                    currentIndex,
-                    CommandAncestryRegion.LoopBody,
-                    childIndex: null,
-                    listOperator: null,
-                    parsed,
-                    nodes,
-                    includeV03Assertions);
-                break;
-            case ConditionalSyntax conditional:
-                for (var index = 0; index < conditional.Branches.Count; index++)
-                {
-                    AppendSyntax(
-                        conditional.Branches[index],
-                        currentIndex,
-                        CommandAncestryRegion.Branch,
-                        index,
-                        listOperator: null,
-                        parsed,
-                        nodes,
-                        includeV03Assertions);
-                }
-
-                if (conditional.Else is not null)
-                {
-                    AppendSyntax(
-                        conditional.Else,
-                        currentIndex,
-                        CommandAncestryRegion.Branch,
-                        conditional.Branches.Count,
-                        listOperator: null,
-                        parsed,
-                        nodes,
-                        includeV03Assertions);
-                }
-
-                break;
-            case ConditionalBranchSyntax branch:
-                AppendSyntax(
-                    branch.Condition,
-                    currentIndex,
-                    CommandAncestryRegion.Condition,
-                    childIndex: null,
-                    listOperator: null,
-                    parsed,
-                    nodes,
-                    includeV03Assertions);
-                AppendSyntax(
-                    branch.Body,
-                    currentIndex,
-                    CommandAncestryRegion.Branch,
-                    childIndex: null,
-                    listOperator: null,
-                    parsed,
-                    nodes,
-                    includeV03Assertions);
-                break;
             case CommandSubstitutionSyntax substitution:
                 AppendSyntax(
                     substitution.Body,
@@ -398,8 +324,7 @@ internal static class CorpusJson
             var ancestry = new JsonArray();
             foreach (var frame in command.Ancestry)
             {
-                if (frame.AncestorKind == ShellSyntaxKind.Unknown ||
-                    frame.Region == CommandAncestryRegion.Unknown)
+                if (frame.Region == CommandAncestryRegion.Unknown)
                 {
                     throw new InvalidOperationException(
                         "Cannot generate corpus expectations for unknown command ancestry");
@@ -407,11 +332,11 @@ internal static class CorpusJson
 
                 ancestry.Add(new JsonObject
                 {
-                    ["ancestorKind"] = frame.AncestorKind.ToString(),
+                    ["ancestorKind"] = SyntaxKind(frame.Ancestor),
                     ["region"] = frame.Region.ToString(),
                     ["childIndex"] = JsonValue.Create(frame.ChildIndex),
-                    ["sourceStart"] = JsonValue.Create(frame.SourceStart),
-                    ["sourceLength"] = JsonValue.Create(frame.SourceLength),
+                    ["sourceStart"] = JsonValue.Create(frame.Ancestor.SourceStart),
+                    ["sourceLength"] = JsonValue.Create(frame.Ancestor.SourceLength),
                 });
             }
 
@@ -424,37 +349,34 @@ internal static class CorpusJson
             };
             if (includeV03Assertions)
             {
-                var effectiveArguments = new JsonArray();
-                foreach (var effective in command.EffectiveArguments)
+                var arguments = new JsonArray();
+                foreach (var analyzed in command.Arguments)
                 {
-                    effectiveArguments.Add(new JsonObject
+                    arguments.Add(new JsonObject
                     {
-                        ["clauseElementIndex"] = effective.ClauseElementIndex,
-                        ["value"] = BuildValueDomain(effective.Value),
+                        ["clauseArgumentIndex"] = FindClauseArgumentIndex(
+                            command.Clause,
+                            analyzed.Argument),
+                        ["clauseElementIndex"] = FindClauseElementIndex(
+                            command.Clause,
+                            analyzed.Element),
+                        ["value"] = BuildValueDomain(analyzed.Value),
                     });
                 }
 
-                commandJson["effectiveArguments"] = effectiveArguments;
+                commandJson["arguments"] = arguments;
                 commandJson["workingDirectory"] = BuildValueDomain(command.WorkingDirectory);
 
                 if (command.Redirects.Count > 0)
                 {
                     var redirects = new JsonArray();
-                    foreach (var redirect in command.Redirects)
+                    for (var redirectIndex = 0;
+                         redirectIndex < command.Redirects.Count;
+                         redirectIndex++)
                     {
-                        redirects.Add(new JsonObject
-                        {
-                            ["redirectIndex"] = redirect.RedirectIndex,
-                            ["sourceKind"] = redirect.Source.Kind.ToString(),
-                            ["sourceDescriptor"] = JsonValue.Create(
-                                redirect.Source.Descriptor),
-                            ["operation"] = redirect.Operation.ToString(),
-                            ["targetDescriptor"] = JsonValue.Create(
-                                redirect.TargetDescriptor),
-                            ["target"] = BuildValueDomain(redirect.Target),
-                            ["isPathRelevant"] = redirect.IsPathRelevant,
-                            ["isComplete"] = redirect.IsComplete,
-                        });
+                        redirects.Add(BuildRedirectAnalysis(
+                            command.Redirects[redirectIndex],
+                            redirectIndex));
                     }
 
                     commandJson["redirects"] = redirects;
@@ -470,19 +392,107 @@ internal static class CorpusJson
     private static JsonObject BuildValueDomain(ShellValueDomain domain)
     {
         var values = new JsonArray();
-        foreach (var value in domain.Values)
+        if (domain is ShellValueDomain.Exact exact)
         {
-            values.Add(value);
+            values.Add(exact.Value);
+        }
+        else if (domain is ShellValueDomain.FiniteSet finiteSet)
+        {
+            foreach (var value in finiteSet.Values)
+            {
+                values.Add(value);
+            }
         }
 
         return new JsonObject
         {
-            ["kind"] = domain.Kind.ToString(),
+            ["kind"] = domain switch
+            {
+                ShellValueDomain.Unknown => "Unknown",
+                ShellValueDomain.Exact => "Exact",
+                ShellValueDomain.FiniteSet => "FiniteSet",
+                ShellValueDomain.PathPattern => "Pattern",
+                _ => throw new InvalidOperationException(
+                    $"Unknown value-domain type {domain.GetType().FullName}"),
+            },
             ["values"] = values,
-            ["pattern"] = domain.Pattern,
-            ["coveringDirectory"] = domain.CoveringDirectory,
+            ["pattern"] = (domain as ShellValueDomain.PathPattern)?.Pattern,
+            ["coveringDirectory"] =
+                (domain as ShellValueDomain.PathPattern)?.CoveringDirectory,
         };
     }
+
+    private static JsonObject BuildRedirectAnalysis(
+        RedirectAnalysis analysis,
+        int redirectIndex)
+    {
+        var result = new JsonObject
+        {
+            ["redirectIndex"] = redirectIndex,
+            ["kind"] = analysis.GetType().Name,
+            ["sourceKind"] = analysis.Source.GetType().Name,
+            ["sourceDescriptor"] = JsonValue.Create(
+                (analysis.Source as RedirectSource.Descriptor)?.Value),
+            ["isComplete"] = analysis.IsComplete,
+        };
+
+        switch (analysis)
+        {
+            case FileRedirectAnalysis file:
+                result["fileMode"] = file.Mode.ToString();
+                result["value"] = BuildValueDomain(file.Target);
+                break;
+            case DescriptorDuplicateRedirectAnalysis duplicate:
+                result["targetDescriptor"] = duplicate.TargetDescriptor;
+                break;
+            case DescriptorMoveRedirectAnalysis move:
+                result["targetDescriptor"] = move.TargetDescriptor;
+                break;
+            case HereStringRedirectAnalysis hereString:
+                result["value"] = BuildValueDomain(hereString.Data);
+                break;
+            case HereDocumentRedirectAnalysis hereDocument:
+                result["hereDocument"] = new JsonObject
+                {
+                    ["delimiter"] = BuildSourceFragment(
+                        hereDocument.Document.Delimiter),
+                    ["body"] = BuildSourceFragment(hereDocument.Document.Body),
+                    ["expansionMode"] =
+                        hereDocument.Document.ExpansionMode.ToString(),
+                    ["stripLeadingTabs"] = hereDocument.Document.StripLeadingTabs,
+                    ["isComplete"] = hereDocument.Document.IsComplete,
+                };
+                break;
+            case UnresolvedRedirectAnalysis or DescriptorCloseRedirectAnalysis:
+                break;
+            default:
+                throw new InvalidOperationException(
+                    $"Unknown redirect-analysis type {analysis.GetType().FullName}");
+        }
+
+        return result;
+    }
+
+    private static JsonObject BuildSourceFragment(ShellSourceFragment fragment) => new()
+    {
+        ["raw"] = fragment.Raw,
+        ["sourceStart"] = JsonValue.Create(fragment.SourceStart),
+        ["sourceLength"] = JsonValue.Create(fragment.SourceLength),
+    };
+
+    private static string SyntaxKind(ShellSyntaxNode node) => node switch
+    {
+        ShellBlockSyntax => "Block",
+        SimpleCommandSyntax => "SimpleCommand",
+        PipelineSyntax => "Pipeline",
+        CommandListSyntax => "CommandList",
+        GroupSyntax => "Group",
+        ForEachSyntax => "ForEach",
+        CommandSubstitutionSyntax => "CommandSubstitution",
+        ExecutionRegionSyntax => "ExecutionRegion",
+        _ => throw new InvalidOperationException(
+            $"Unknown syntax-node type {node.GetType().FullName}"),
+    };
 
     private static int FindClauseIndex(ParsedCommand parsed, Clause clause)
     {
@@ -496,6 +506,58 @@ internal static class CorpusJson
 
         throw new InvalidOperationException(
             "Structural corpus generation found a Clause outside ParsedCommand.Clauses");
+    }
+
+    private static int FindClauseArgumentIndex(Clause clause, Arg argument)
+    {
+        for (var index = 0; index < clause.Args.Count; index++)
+        {
+            if (ReferenceEquals(clause.Args[index], argument))
+            {
+                return index;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Analyzed argument was not owned by its command clause");
+    }
+
+    private static int? FindClauseElementIndex(
+        ParsedCommand parsed,
+        ClauseElement? element)
+    {
+        if (element is null)
+        {
+            return null;
+        }
+
+        foreach (var clause in parsed.Clauses)
+        {
+            for (var index = 0; index < clause.Elements.Count; index++)
+            {
+                if (ReferenceEquals(clause.Elements[index], element))
+                {
+                    return index;
+                }
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Execution-region host argument was not owned by a parsed clause");
+    }
+
+    private static int FindClauseElementIndex(Clause clause, ClauseElement element)
+    {
+        for (var index = 0; index < clause.Elements.Count; index++)
+        {
+            if (ReferenceEquals(clause.Elements[index], element))
+            {
+                return index;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Analyzed element was not owned by its command clause");
     }
 
     private static JsonObject BuildClause(

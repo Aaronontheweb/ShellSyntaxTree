@@ -1,27 +1,102 @@
 {
   "name": "v0.3 Bash loop binding in redirect target",
-  "input": "for f in a b; do printf '%s' \"$f\" > \"$f.out\"; done",
+  "input": "for f in a b; do printf \u0027%s\u0027 \u0022$f\u0022 \u003E \u0022$f.out\u0022; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["printf"],
+        "verb": [
+          "printf"
+        ],
         "args": [
-          { "raw": "'%s'", "kind": "Literal", "isPath": false, "resolved": "__NULL__", "isFlag": false },
-          { "raw": "\"$f\"", "kind": "EnvVar", "isPath": false, "resolved": "__NULL__", "isFlag": false }
+          {
+            "raw": "\u0027%s\u0027",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          },
+          {
+            "raw": "\u0022$f\u0022",
+            "kind": "EnvVar",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
         ],
         "redirects": [
-          { "direction": "Out", "target": "\"$f.out\"", "isDynamicSkip": true }
+          {
+            "direction": "Out",
+            "target": "\u0022$f.out\u0022",
+            "isDynamicSkip": true
+          }
         ]
       }
     ],
     "syntax": [
-      { "kind": "Block", "parentIndex": null, "region": "Unknown", "childIndex": null, "sourceStart": 0, "sourceLength": 50, "clauseIndex": null, "groupKind": null, "listOperator": null },
-      { "kind": "ForEach", "parentIndex": 0, "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 50, "clauseIndex": null, "groupKind": null, "listOperator": null, "bindingName": "f", "bindingRaw": "f", "bindingSourceStart": 4, "bindingSourceLength": 1, "iterableRaw": "a b", "iterableSourceStart": 9, "iterableSourceLength": 3 },
-      { "kind": "Block", "parentIndex": 1, "region": "Iterator", "childIndex": null, "sourceStart": 9, "sourceLength": 3, "clauseIndex": null, "groupKind": null, "listOperator": null },
-      { "kind": "Block", "parentIndex": 1, "region": "LoopBody", "childIndex": null, "sourceStart": 16, "sourceLength": 30, "clauseIndex": null, "groupKind": null, "listOperator": null },
-      { "kind": "SimpleCommand", "parentIndex": 3, "region": "Statement", "childIndex": 0, "sourceStart": 17, "sourceLength": 27, "clauseIndex": 0, "groupKind": null, "listOperator": null }
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 50,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 50,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "f",
+        "bindingRaw": "f",
+        "bindingSourceStart": 4,
+        "bindingSourceLength": 1,
+        "iterableRaw": "a b",
+        "iterableSourceStart": 9,
+        "iterableSourceLength": 3
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 9,
+        "sourceLength": 3,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 16,
+        "sourceLength": 30,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 17,
+        "sourceLength": 27,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
     ],
     "commands": [
       {
@@ -29,14 +104,79 @@
         "immediateRole": "LoopBody",
         "isComplete": false,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 50 },
-          { "ancestorKind": "ForEach", "region": "LoopBody", "childIndex": null, "sourceStart": 0, "sourceLength": 50 },
-          { "ancestorKind": "Block", "region": "Statement", "childIndex": 0, "sourceStart": 16, "sourceLength": 30 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 50
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 50
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 16,
+            "sourceLength": 30
+          }
         ],
-        "effectiveArguments": [
-          { "clauseElementIndex": 2, "value": { "kind": "FiniteSet", "values": ["a", "b"], "pattern": null, "coveringDirectory": null } }
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "%s"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "FiniteSet",
+              "values": [
+                "a",
+                "b"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
         ],
-        "workingDirectory": { "kind": "Exact", "values": ["/work"], "pattern": null, "coveringDirectory": null }
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "kind": "FileRedirectAnalysis",
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "isComplete": false,
+            "fileMode": "Output",
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ]
       }
     ]
   },

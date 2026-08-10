@@ -1,6 +1,6 @@
 {
   "name": "Adjacent escaped redirect fragments form one literal target",
-  "input": "echo ok > \\$HOME\".txt\"",
+  "input": "echo ok \u003E \\$HOME\u0022.txt\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -42,7 +42,7 @@
             "isPath": false
           },
           {
-            "raw": "> \\$HOME\".txt\"",
+            "raw": "\u003E \\$HOME\u0022.txt\u0022",
             "value": "$HOME.txt",
             "role": "Redirect",
             "sourceStart": 8,
@@ -94,7 +94,7 @@
             "sourceLength": 22
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -106,20 +106,19 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "FileRedirectAnalysis",
             "sourceKind": "Default",
             "sourceDescriptor": null,
-            "operation": "FileOutput",
-            "targetDescriptor": null,
-            "target": {
+            "isComplete": true,
+            "fileMode": "Output",
+            "value": {
               "kind": "Exact",
               "values": [
                 "/work/$HOME.txt"
               ],
               "pattern": null,
               "coveringDirectory": null
-            },
-            "isPathRelevant": true,
-            "isComplete": true
+            }
           }
         ]
       }

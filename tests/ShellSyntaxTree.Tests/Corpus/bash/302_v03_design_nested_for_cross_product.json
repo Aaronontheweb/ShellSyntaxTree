@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Nested loop cross product",
-  "input": "for d in a b; do for f in x y; do echo \"$d/$f\"; done; done",
+  "input": "for d in a b; do for f in x y; do echo \u0022$d/$f\u0022; done; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"$d/$f\"",
+            "raw": "\u0022$d/$f\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -32,7 +32,7 @@
             "isPath": false
           },
           {
-            "raw": "\"$d/$f\"",
+            "raw": "\u0022$d/$f\u0022",
             "value": "$d/$f",
             "role": "Argument",
             "sourceStart": 39,
@@ -191,8 +191,9 @@
             "sourceLength": 15
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "FiniteSet",
@@ -214,8 +215,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       }
     ]
   },

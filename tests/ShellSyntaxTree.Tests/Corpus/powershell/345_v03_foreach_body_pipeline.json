@@ -149,8 +149,9 @@
             "sourceLength": 29
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "FiniteSet",
@@ -206,7 +207,7 @@
             "sourceLength": 29
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [

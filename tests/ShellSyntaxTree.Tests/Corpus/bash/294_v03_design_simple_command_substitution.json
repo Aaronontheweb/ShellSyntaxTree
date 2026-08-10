@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Simple command substitution",
-  "input": "rm \"$(find /tmp)\"",
+  "input": "rm \u0022$(find /tmp)\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -52,7 +52,7 @@
         ],
         "args": [
           {
-            "raw": "\"$(find /tmp)\"",
+            "raw": "\u0022$(find /tmp)\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -73,7 +73,7 @@
             "isPath": false
           },
           {
-            "raw": "\"$(find /tmp)\"",
+            "raw": "\u0022$(find /tmp)\u0022",
             "value": "$(find /tmp)",
             "role": "Argument",
             "sourceStart": 3,
@@ -171,7 +171,20 @@
             "sourceLength": 9
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "/tmp"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -179,8 +192,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       },
       {
         "clauseIndex": 1,
@@ -195,8 +207,9 @@
             "sourceLength": 17
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Unknown",
@@ -213,8 +226,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       }
     ]
   },
