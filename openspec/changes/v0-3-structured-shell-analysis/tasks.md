@@ -43,9 +43,16 @@
   or obsolete compatibility layer. Defensively copy or immutably back every
   `IReadOnlyList<T>` introduced by v0.3 and pin many-to-one inline-option
   argument joins without changing stable v0.2 list semantics.
-- [ ] 1.16 Migrate Netclaw from alpha.5 to the corrected prerelease, delete its
+- [x] 1.16 Migrate Netclaw from alpha.5 to the corrected prerelease, delete its
   coordinate/property-bag validation, and rerun the full Linux plus native-
   Windows approval matrices before stable v0.3.
+  - Netclaw PR [#1855](https://github.com/netclaw-dev/netclaw/pull/1855)
+    migrated to `0.3.0-alpha.6`, removed the superseded coordinate and
+    property-bag checks, and passed 21 Linux, Windows, macOS, native-smoke,
+    package, and security checks before merge `12193d78`.
+  - Netclaw PR [#1857](https://github.com/netclaw-dev/netclaw/pull/1857)
+    then ran the corrected package through the complete 240-row downstream
+    catalog and merged as `b5de8d42` after all 21 GitHub check runs passed.
 
 ## 2. Resolver Provenance Correction and Shared Preparation
 
@@ -80,7 +87,11 @@
   - [x] 3.12c Pin expanding-heredoc sibling/nested ordering, exact spans, isolated state, delimiter modes, escape parity, depth limits, and atomic failure.
   - [x] 3.12d Pin default-versus-isolated parameter dereferences, nameref and integer hidden execution, reachable mutation invalidation, substitution/subshell scope boundaries, and direct/wrapped execution-bearing builtins with native Bash oracles.
   - [x] 3.12e Pin Bash command-resolution mutation, reserved-prefix/group rejection, and exact-query boundaries with direct tests, recursive wrapper cases, and native Bash oracles.
-- [ ] 3.13 Promote ordinary, multiple, nested, iterator, redirect, quoted, escaped, stateful, malformed, and hidden-execution substitution cases into both executable corpora and the Netclaw approval matrix.
+- [x] 3.13 Promote ordinary, multiple, nested, iterator, redirect, quoted, escaped, stateful, malformed, and hidden-execution substitution cases into both executable corpora and the Netclaw approval matrix.
+  - Netclaw PR [#1857](https://github.com/netclaw-dev/netclaw/pull/1857)
+    promoted the downstream Bash and PowerShell substitution dispositions into
+    the executable 240-row approval catalog and merged as `b5de8d42` after the
+    refreshed cross-platform acceptance matrix passed.
   - [x] 3.13a Promote the Bash ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, and hidden-execution cases into its executable corpus.
   - [x] 3.13b Promote the PowerShell ordinary, multiple, nested, redirect, quoted, escaped, stateful, malformed, expression-boundary, and hidden-execution cases into its executable corpus.
   - [x] 3.13c Promote expanding, literal, tab-stripped, multiple, and malformed Bash heredoc cases with full structural expectations into the executable corpus.
@@ -125,6 +136,11 @@
   - [x] 5.1a Document the PowerShell `$()` occurrence ordering, standalone/call-operator distinction, parent-versus-child host payload provenance, and completeness-versus-value-safety contract.
 - [x] 5.2 Document syntax-tree display traversal separately from authorization traversal.
 - [x] 5.3 Document exact, finite, pattern, unknown, joined-state, redirect, and incomplete-result handling.
+  - The consumer guide also demonstrates command-owned execution-region
+    accounting: correlate the exact `HostArgument` by reference only from a
+    complete nonempty body occurrence with known origin, phase, timing, and
+    cardinality; authorize every host and body occurrence independently; and
+    keep unknown, empty, or incomplete regions strict.
 - [x] 5.4 Document record equality, hashing, `ToString()`, serialization, and `Clauses` compatibility effects.
 - [x] 5.5 Update the README getting-started and migration examples to direct v0.3 consumers to the command-occurrence API and full consumer guide.
 - [x] 5.6 Publish a 0.3.0 prerelease containing the contracted structural,
@@ -188,11 +204,13 @@
   - The executable corpus includes indirect and parameter-operator rejection,
     loop-body substitution, and atomic transition-budget overflow; native
     oracles pin the shell semantics behind the conservative boundaries.
-- [ ] 6.8 Add sanitized Bash corpus entries and Netclaw disposition cases.
+- [x] 6.8 Add sanitized Bash corpus entries and Netclaw disposition cases.
   Under Netclaw's enforced `BashInitialStateMode.Unknown` contract, bounded
   loop cases must remain prompt or deny; require an allow case only if the
   executor later proves the full isolated non-interactive startup/environment
   contract rather than selecting that parser mode solely to reduce prompts.
+  Netclaw PR #1857 pins 199 Bash catalog rows on POSIX, including bounded-loop,
+  redirect, substitution, unknown-state, stored-grant, and hard-deny outcomes.
 
 ## 7. PowerShell Foreach Vertical Slice
 
@@ -298,13 +316,17 @@
   - Direct and generated corpus cases pin unknown pipeline-object values,
     provider and variable mutation, incomplete dynamic identities, opaque
     splats, the 32-candidate boundary, and overflow-to-Unknown behavior.
-- [ ] 7.7 Add PowerShell corpus entries, live `pwsh` oracle coverage, and Netclaw integration cases.
-  - `PwshCorpusTool` now supports case-specific `PwshInitialStateMode`; keep
-    the generated 540-case manifest and live-oracle matrix aligned, then
-    complete the Netclaw PowerShell policy matrix. Exact generated cases now
-    cover the final stable dynamic-loop and invalid local `Invoke-Command
+- [x] 7.7 Add PowerShell corpus entries, live `pwsh` oracle coverage, and Netclaw integration cases.
+  - `PwshCorpusTool` supports case-specific `PwshInitialStateMode`; the
+    generated 540-case manifest and live-oracle matrix are aligned. Exact
+    generated cases cover the final stable dynamic-loop and invalid local `Invoke-Command
     -AsJob` cases, plus `Measure-Command`, `Trace-Command`, and
     `ForEach-Object -RemainingScripts` directly.
+  - Netclaw PR #1857 adds 36 PowerShell 7 and five Windows PowerShell 5.1
+    approval rows covering safe commands, redirects, subexpressions, loops,
+    execution regions, dialect differences, stored grants, and fail-closed
+    unknown or destructive cases. Its Ubuntu, Windows, and macOS managed-test
+    jobs and Linux/macOS native-smoke jobs passed.
 - [x] 7.8 Implement the additive `PwshDialect` API, PowerShell 7 compatibility
   default, unknown-value safe-fail, Windows PowerShell 5.1 pipeline-chain
   rejection, dialect-specific alias and execution-region metadata, and static
@@ -373,7 +395,15 @@
     v0.2 members, corrected v0.3 type families, property accessors, parser
     entry points, enum ordering, and nullability synchronized into `SPEC.md`
     and `SPEC.POWERSHELL.md`.
-- [ ] 11.6 Validate Netclaw's ordinary-command, redirect, bounded-loop, and unknown-value approval matrices against the prerelease package.
+- [x] 11.6 Validate Netclaw's ordinary-command, redirect, bounded-loop, and unknown-value approval matrices against the prerelease package.
+  - Netclaw PR #1857 validates 240 catalog rows: 199 Bash, 36 PowerShell 7,
+    and five Windows PowerShell 5.1. The POSIX test class passes 244 cases after
+    its three retry regressions and review-table snapshot are included. All 21
+    refreshed GitHub check runs passed, including Ubuntu, Windows, macOS,
+    Linux/macOS native smoke, screenshot, package, header, Slopwatch, and
+    CodeQL. Rebased local acceptance separately passed the Release build, 61
+    focused security tests, the 244-case POSIX matrix, the full solution suite,
+    header verification, and strict OpenSpec validation.
 - [x] 11.7 Update release notes and remove Netclaw's temporary descriptor workaround only after explicit redirect integration is live.
   - The `0.3.0-alpha` release notes document the explicit redirect model. The
     workaround was removed only in the reviewed Netclaw migration after the
