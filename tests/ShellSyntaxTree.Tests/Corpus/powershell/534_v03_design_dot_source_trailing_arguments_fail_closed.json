@@ -1,0 +1,11 @@
+{
+  "name": "V03 design dot source trailing arguments fail closed",
+  "input": ". { Write-Output $args } alpha",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "direct PowerShell script-block arguments are not supported"
+  },
+  "notes": "Promotes stable fail-closed design case pwsh-dot-source-trailing-arguments-fail-closed.",
+  "oracleExpectation": "OutOfScope"
+}

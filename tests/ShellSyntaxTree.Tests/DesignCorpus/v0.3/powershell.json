@@ -437,6 +437,7 @@
     },
     {
       "id": "pwsh-pipeline-foreach-alias",
+      "compatibilityProjectionLanded": true,
       "concern": "Contextual foreach alias is not a foreach statement",
       "input": "Get-ChildItem | foreach { Remove-Item $_ }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
@@ -1028,6 +1029,7 @@
     },
     {
       "id": "pwsh-static-stream-merge",
+      "compatibilityProjectionLanded": true,
       "concern": "Static PowerShell stream merge",
       "input": "Get-ChildItem 2>&1",
       "current": { "isUnparseable": false },
@@ -1053,6 +1055,7 @@
     },
     {
       "id": "pwsh-contextual-foreach-argument",
+      "compatibilityProjectionLanded": true,
       "concern": "Control keyword used as ordinary argument",
       "input": "Write-Output foreach",
       "current": { "isUnparseable": false },
@@ -1110,6 +1113,7 @@
     },
     {
       "id": "pwsh-literal-here-string-is-value",
+      "compatibilityProjectionLanded": true,
       "concern": "PowerShell here-string syntax remains an argument rather than a redirect",
       "input": "Write-Output @'\n$literal text\n'@",
       "current": { "isUnparseable": false },
@@ -1314,6 +1318,7 @@
     },
     {
       "id": "pwsh-double-quoted-literal-expandable-composition",
+      "compatibilityProjectionLanded": true,
       "concern": "Literal and expandable regions compose within one token",
       "input": "Write-Output \"`${HOME}-$HOME\"",
       "current": { "isUnparseable": false },
@@ -2235,6 +2240,7 @@
     },
     {
       "id": "pwsh-where-object-filter-region",
+      "compatibilityProjectionLanded": true,
       "concern": "Where-Object FilterScript executes once per pipeline input object",
       "input": "Get-ChildItem | Where-Object -FilterScript { Test-Path $_ }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
@@ -2260,6 +2266,7 @@
     },
     {
       "id": "pwsh-foreach-object-authored-versus-phase-order",
+      "compatibilityProjectionLanded": true,
       "concern": "ForEach-Object retains authored script-block order while exposing semantic phases",
       "input": "ForEach-Object -End { Write-Output end } -Begin { Write-Output begin } -Process { Write-Output process }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
@@ -2290,6 +2297,7 @@
     },
     {
       "id": "pwsh-invoke-command-local-region",
+      "compatibilityProjectionLanded": true,
       "concern": "Local Invoke-Command exposes a synchronous main execution region",
       "input": "Invoke-Command -ScriptBlock { Get-Item child.txt }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
@@ -2312,6 +2320,7 @@
     },
     {
       "id": "pwsh-invoke-command-remote-region",
+      "compatibilityProjectionLanded": true,
       "concern": "Remote Invoke-Command exposes its body while withholding unproved remote state",
       "input": "Invoke-Command -ComputerName server -ScriptBlock { Get-Item child.txt }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
@@ -2334,6 +2343,7 @@
     },
     {
       "id": "pwsh-start-job-initialization-and-main",
+      "compatibilityProjectionLanded": true,
       "concern": "Start-Job exposes authored main and initialization blocks while analysis schedules initialization first",
       "input": "Start-Job -ScriptBlock { Write-Output main } -InitializationScript { Write-Output init }",
       "current": { "isUnparseable": false },
@@ -2359,6 +2369,7 @@
     },
     {
       "id": "pwsh-foreach-object-parallel-region",
+      "compatibilityProjectionLanded": true,
       "concern": "ForEach-Object Parallel exposes a concurrent child-runspace process region",
       "input": "Get-ChildItem | ForEach-Object -Parallel { Remove-Item $_ }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
@@ -2428,6 +2439,7 @@
     },
     {
       "id": "pwsh-new-module-initialization-region",
+      "compatibilityProjectionLanded": true,
       "concern": "New-Module script block is immediate module initialization rather than opaque data",
       "input": "New-Module -ScriptBlock { Write-Output initialized }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
@@ -2468,6 +2480,7 @@
     },
     {
       "id": "pwsh-direct-call-trailing-arguments-fail-closed",
+      "compatibilityProjectionLanded": true,
       "concern": "Direct call-operator block arguments remain atomic until parameter binding is modeled",
       "input": "& { Write-Output $args } alpha",
       "current": { "isUnparseable": true },
@@ -2484,6 +2497,7 @@
     },
     {
       "id": "pwsh-dot-source-trailing-arguments-fail-closed",
+      "compatibilityProjectionLanded": true,
       "concern": "Dot-source block arguments remain atomic until parameter binding is modeled",
       "input": ". { Write-Output $args } alpha",
       "current": { "isUnparseable": true },
@@ -2500,6 +2514,7 @@
     },
     {
       "id": "pwsh-execution-region-param-header-fail-closed",
+      "compatibilityProjectionLanded": true,
       "concern": "A leading param declaration keeps the complete argument-completer region atomic until declaration grammar lands",
       "input": "Register-ArgumentCompleter -CommandName tool -ScriptBlock { param($commandName) Write-Output $commandName }",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
