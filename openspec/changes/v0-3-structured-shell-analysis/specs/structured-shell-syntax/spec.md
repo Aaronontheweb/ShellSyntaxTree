@@ -90,13 +90,12 @@ preserves the authored nesting and source order of supported command lists,
 pipelines, groups, simple commands, substitutions, execution regions, and
 foreach loops.
 
-The public syntax family SHALL be a closed hierarchy of records derived from
-`ShellSyntaxNode`. Every node SHALL expose a `ShellSyntaxKind` discriminant and
-zero SHALL mean `Unknown`. The locked family SHALL include block, simple
-command, pipeline, command list, group, foreach, condition loop, conditional,
-conditional branch, command substitution, and execution-region nodes.
-Condition-loop and conditional node kinds are reserved structural vocabulary;
-stable v0.3 does not emit them because their grammar remains fail closed.
+The public syntax family SHALL be a closed, library-constructed hierarchy of
+records derived from `ShellSyntaxNode`. Runtime type SHALL be its only
+discriminant. Stable v0.3 SHALL expose only block, simple-command, pipeline,
+command-list, group, foreach, command-substitution, and execution-region nodes.
+It SHALL NOT publish a redundant kind enum or public condition/branch types
+that no stable-v0.3 parser can emit.
 
 #### Scenario: Existing flat command receives a structural root
 - **WHEN** either parser parses `git status && dotnet test`
@@ -107,8 +106,8 @@ stable v0.3 does not emit them because their grammar remains fail closed.
 - **WHEN** a consumer references the public syntax-node base type
 - **THEN** it cannot derive and inject an external node implementation
 
-#### Scenario: Later node kind is not silently authorized
-- **WHEN** a later package returns a derived node or kind an older consumer does not recognize
+#### Scenario: Later node type is not silently authorized
+- **WHEN** a later package returns a derived node an older consumer does not recognize
 - **THEN** a display visitor may show an unknown node
 - **THEN** an authorization visitor fails closed
 
@@ -201,7 +200,7 @@ An `ExecutionRegionSyntax` SHALL represent a completely delimited authored
 body that may execute because of a direct shell invocation operator or a
 recognized command argument binding. It SHALL expose an execution origin,
 phase, timing, cardinality, exact-or-null source range, optional host
-`ClauseElement` coordinate, and body. Origin, phase, timing, and cardinality
+argument `ClauseElement` reference, and body. Origin, phase, timing, and cardinality
 SHALL be independent enum facts whose zero values are `Unknown`.
 
 Origin SHALL have `Unknown`, `DirectCall`, `DotSource`, and `CommandArgument`
@@ -219,10 +218,10 @@ The containing command's `ExecutionRegions` collection SHALL preserve authored
 script-block order. Semantic phase order MAY differ and SHALL be consumed by
 the shell-specific analyzer rather than by reordering authored syntax. A direct
 `& {}` or `. {}` region SHALL appear as a statement, SHALL use `DirectCall` or
-`DotSource` respectively, and SHALL have no host element coordinate. A region
+`DotSource` respectively, and SHALL have a null host argument. A region
 bound to a command argument SHALL be attached to
 that `SimpleCommandSyntax` and SHALL identify the exact script-block
-`ClauseElement` when the binding is proved.
+`ClauseElement` by reference when the binding is proved.
 
 #### Scenario: Reordered pipeline phases retain both orders
 - **WHEN** PowerShell parses `1 | ForEach-Object -End { Write-Output end } -Begin { Write-Output begin } -Process { Write-Output $_ }`
@@ -300,6 +299,9 @@ without treating the script block as one opaque argument.
 binding source, the raw iterable source fragment, commands discovered in the
 iterator, and the body. It SHALL NOT normalize Bash words and PowerShell
 expressions into a false shared expression grammar.
+
+The binding name and source SHALL be direct `ForEachSyntax` properties rather
+than a separately constructible one-use binding record.
 
 #### Scenario: Iterator with no exact outer span
 - **WHEN** a loop is lifted from decoded wrapper content without an exact mapping to the outer source

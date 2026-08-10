@@ -14,7 +14,7 @@ of whether the command is top-level or nested.
 - **WHEN** a selected Bash or PowerShell corpus entry is marked for structural verification
 - **THEN** the corpus records the complete syntax tree and command-occurrence collection in authored order
 - **THEN** every simple-command node and occurrence references the exact compatibility clause by index and object identity
-- **THEN** roles, completeness, ancestry coordinates, and exact-or-null source ranges are compared without weakening legacy corpus entries that omit structural expectations
+- **THEN** roles, completeness, joined arguments, ancestor identities, child indices, and exact-or-null node source ranges are compared without weakening legacy corpus entries that omit structural expectations
 
 ### Requirement: Occurrences identify structural execution roles
 Each command occurrence SHALL identify its immediate structural execution role
@@ -23,23 +23,21 @@ grouping.
 
 `CommandOccurrenceRole.Unknown` and `CommandAncestryRegion.Unknown` SHALL be
 their enum zero values. Ancestry SHALL be ordered outermost to innermost,
-exclude the simple-command leaf, and retain child indices and exact-or-null
-source ranges for correlation.
+exclude the simple-command leaf, and retain the actual ancestor node plus a
+child index. A frame SHALL NOT copy a kind or source range that can disagree
+with that node.
 
 Each frame SHALL describe the relationship from its ancestor to the next node
 on the path. The root block SHALL use `Root`; non-root blocks and command lists
 SHALL use `Statement`; pipelines SHALL use `PipelineStage`; groups SHALL use
-`GroupBody`; foreach nodes SHALL use `Iterator` or `LoopBody`; condition loops
-SHALL use `Condition` or `LoopBody`; conditionals SHALL use `Branch`;
-conditional-branch nodes SHALL use `Condition` or `Branch`; and substitutions
-SHALL use `Substitution`; execution regions SHALL use `ExecutionRegion`.
-Repeated children SHALL use their zero-based authored
-index, with an `else` child indexed after all conditional branches. Frame
-source ranges SHALL identify the ancestor. Blocks, command lists, and groups
-SHALL retain the incoming immediate role; a nearer pipeline, iterator, body,
-condition, branch, substitution, or execution-region relation SHALL replace it.
+`GroupBody`; foreach nodes SHALL use `Iterator` or `LoopBody`; substitutions
+SHALL use `Substitution`; and execution regions SHALL use `ExecutionRegion`.
+Condition loops and branches are not part of stable v0.3. Repeated children
+SHALL use their zero-based authored index. Blocks, command lists, and groups
+SHALL retain the incoming immediate role; a nearer pipeline, iterator, body, substitution, or
+execution-region relation SHALL replace it.
 
-#### Scenario: Root and nested block coordinates are deterministic
+#### Scenario: Root and nested ancestry is deterministic
 - **WHEN** a root statement contains a loop-body pipeline
 - **THEN** a stage occurrence has outer-to-inner `Root`, `LoopBody`,
   `Statement`, and `PipelineStage` ancestry
@@ -50,13 +48,12 @@ The projector SHALL accept only a tree with one syntax-node and one `Clause`
 reference per authored simple-command position. Node and source-fragment spans
 SHALL be both unavailable or a non-negative start/length pair. Structural enum
 values consumed by projection SHALL be known. Empty blocks MAY be valid, but
-empty pipelines, command lists, and conditionals SHALL be rejected.
+empty pipelines and command lists SHALL be rejected.
 
-Value domains, cwd facts, effective-argument coordinates, redirect
-coordinates, redirect shapes, and heredoc facts SHALL satisfy their locked
-record invariants before projection succeeds. Any repeated identity, malformed
-shape, invalid coordinate, cycle, or depth overflow SHALL discard every
-partial command and compatibility result.
+Value domains, cwd facts, joined argument identities, redirect alternatives,
+and heredoc facts SHALL satisfy their locked invariants before projection
+succeeds. Any repeated identity, malformed shape, invalid join, cycle, or
+depth overflow SHALL discard every partial command and compatibility result.
 
 #### Scenario: Shared leaf identity is not counted twice
 - **WHEN** an internal parser bug places one syntax leaf or `Clause` reference
@@ -66,9 +63,48 @@ partial command and compatibility result.
 
 #### Scenario: Complete occurrence cannot contain invalid facts
 - **WHEN** parser-owned analysis supplies an invalid value domain, argument
-  coordinate, redirect shape, or unknown scope-affecting structural kind
+  join, redirect alternative, or unknown scope-affecting structural relation
 - **THEN** projection fails closed
 - **THEN** the occurrence is not published with `IsComplete=true`
+
+### Requirement: Occurrences expose fully joined authored arguments
+Each command occurrence SHALL expose exactly one `AnalyzedArgument` for every
+non-cwd-attribution compatibility `Arg`, in authored order. Each entry SHALL
+reference that exact `Arg`, its exact argument-role `ClauseElement`, and one
+closed shell-value domain. Static authored values SHALL normally be exact;
+bounded visits MAY be finite or path-pattern values; unproved values SHALL be
+unknown. Consumers SHALL NOT correlate a sparse coordinate back into
+`Clause.Elements`.
+
+The join SHALL permit multiple compatibility arguments to reference the same
+authored element. Inline equals-form native options and PowerShell colon-bound
+parameters can split one token into multiple `Arg` records; all split entries
+SHALL remain present, ordered, and linked to that one `ClauseElement`.
+
+#### Scenario: Static and loop-derived arguments share one ingestion path
+- **WHEN** an occurrence contains a static option and a bounded loop variable
+- **THEN** both appear once in `Arguments` in authored order
+- **THEN** each entry directly exposes its compatibility argument, authored element, and effective value
+
+#### Scenario: Synthetic cwd attribution is not an authored argument
+- **WHEN** the v0.2 clause carries a synthetic cwd-attribution `Arg`
+- **THEN** it remains available through `Clause.Args`
+- **THEN** it is absent from `Arguments` because `WorkingDirectory` is the canonical v0.3 cwd fact
+
+#### Scenario: Inline option creates a many-to-one authored join
+- **WHEN** a supported inline option produces an option `Arg` and an operand `Arg` from one authored token
+- **THEN** two analyzed arguments reference their two exact compatibility arguments
+- **THEN** both analyzed arguments reference the same exact authored `ClauseElement`
+- **THEN** each analyzed value describes its corresponding split `Arg`, not the unsplit element text
+
+### Requirement: Published collections are not consumer-mutable
+Every v0.3 `IReadOnlyList<T>` SHALL use an immutable backing collection or a
+defensive copy. The library SHALL NOT expose an array or mutable list that a
+consumer can cast and mutate after a successful projection.
+
+#### Scenario: Caller retains a parser input collection
+- **WHEN** internal lowering receives a mutable collection and publishes a v0.3 fact
+- **THEN** later mutation of the original collection cannot change the parsed result
 
 #### Scenario: Dynamic Bash command string remains incomplete
 - **WHEN** Bash parses a `bash` or `sh` clause with dynamic wrapper-control input, decoded or combined command-string options, or an expanding quoted body that does not match the complete literal exactly-one wrapper production

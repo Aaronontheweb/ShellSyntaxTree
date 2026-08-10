@@ -152,9 +152,11 @@ and IDE-grade concrete syntax remain non-goals.
 ## Architectural Constraints
 
 - **Public API in `SPEC.md` §2 is the contract.** Everything else is
-  `internal`. During `0.x`, renaming or removing public fields requires a
-  deliberate minor version bump and migration notes; after `1.0`, it requires
-  a major version bump.
+  `internal`. Stable `0.x` releases use the minor version as their breaking
+  boundary. Prerelease APIs may change before their corresponding stable
+  release and receive explicit prerelease migration notes; they do not force a
+  second minor-version bump. After `1.0`, breaking changes require a major
+  version bump.
 - **`IShellParser` is the multi-shell seam.** Additional parsers such as
   Windows `cmd` must be addable without reshaping consumer code.
 - **No native dependencies.** AOT-trim friendly; ship a single managed

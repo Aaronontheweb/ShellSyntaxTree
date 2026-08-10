@@ -29,6 +29,22 @@
   `PwshDialect` contract. Preserve PowerShell 7 as the compatibility default,
   make Windows PowerShell 5.1 explicit, keep Bash and PowerShell top-level
   parsing separate, and require dialect-local grammar/catalog proof.
+- [ ] 1.14 Correct the unreleased v0.3 consumer API before stable release.
+  Preserve every stable v0.2 type and the `Syntax` / `Commands` / `Clauses`
+  lanes, but do not preserve alpha-only v0.3 members. Replace sparse effective-
+  argument coordinates with one joined analyzed argument per authored non-cwd
+  argument; make value domains, redirect sources, and redirect operations
+  closed parser-owned alternatives; reference actual syntax ancestors; remove
+  redundant kind/source copies and public condition/branch types that stable
+  v0.3 never emits; keep executable policy consumer-owned.
+- [ ] 1.15 Synchronize the corrected API into `SPEC.md`, implementation,
+  public-API snapshots, corpus DTOs, README, and consumer guide in one vertical
+  slice. Add prerelease migration notes for alpha consumers without an adapter
+  or obsolete compatibility layer. Defensively copy or immutably back every
+  published `IReadOnlyList<T>` and pin many-to-one inline-option argument joins.
+- [ ] 1.16 Migrate Netclaw from alpha.5 to the corrected prerelease, delete its
+  coordinate/property-bag validation, and rerun the full Linux plus native-
+  Windows approval matrices before stable v0.3.
 
 ## 2. Resolver Provenance Correction and Shared Preparation
 
@@ -41,8 +57,8 @@
 
 ## 3. Structural and Projection Skeleton
 
-- [x] 3.1 Add the locked public syntax-node hierarchy and defaults to the public API snapshot.
-- [x] 3.2 Add the locked command-occurrence, role, ancestry, completeness, and analysis records to the public API snapshot.
+- [x] 3.1 Add the alpha public syntax-node hierarchy and defaults to the public API snapshot. Superseded for stable v0.3 by tasks 1.14-1.15.
+- [x] 3.2 Add the alpha command-occurrence, role, ancestry, completeness, and analysis records to the public API snapshot. Superseded for stable v0.3 by tasks 1.14-1.15.
 - [x] 3.3 Add `ParsedCommand.Syntax` and `ParsedCommand.Commands` while retaining all v0.2 members.
 - [x] 3.4 Build a library-owned traversal that emits each simple command occurrence exactly once in deterministic source order.
 - [x] 3.5 Build the conservative `Clauses` compatibility flattener without inventing cross-structure compound operators.
@@ -332,17 +348,20 @@
 
 ## 11. Verification and Release
 
-- [x] 11.1 Add public API default-value, equality, serialization, and unknown-enum compatibility tests.
-  - `V03PublicApiSnapshotTests` pins every additive record default and enum
+- [ ] 11.1 Replace the alpha public-API default-value, equality, serialization,
+  immutability, and unknown-case tests with the corrected stable-v0.3 contract.
+  - Alpha evidence: `V03PublicApiSnapshotTests` currently pins every additive record default and enum
     zero value, proves `Syntax` and `Commands` participate in generated record
     equality and `ToString()` plus equal-record hash consistency, demonstrates
     that default JSON is not a polymorphic round-trip contract, and makes every
     policy-sensitive unknown numeric enum value detectable for consumer rejection.
 - [ ] 11.2 Assert every supported executable region appears exactly once and every unsupported executable region makes the result unparseable.
-- [x] 11.3 Run the complete Bash and PowerShell corpus suites plus the PII audit.
-- [x] 11.4 Run `dotnet build -c Release`, `dotnet test -c Release`, `dotnet pack -c Release`, and header verification.
-- [x] 11.5 Validate the public API field-for-field against the synchronized shared and PowerShell specifications.
-  - `PublicApiSnapshotTests` and `V03PublicApiSnapshotTests` enumerate the exact
+- [ ] 11.3 Run the complete Bash and PowerShell corpus suites plus the PII audit against the corrected implementation.
+  - Alpha evidence: the complete suites and PII audit pass on the superseded alpha surface.
+- [ ] 11.4 Run `dotnet build -c Release`, `dotnet test -c Release`, `dotnet pack -c Release`, and header verification against the corrected implementation.
+  - Alpha evidence: these gates pass on the superseded alpha implementation.
+- [ ] 11.5 Validate the corrected public API field-for-field against the synchronized shared and PowerShell specifications.
+  - Alpha evidence: `PublicApiSnapshotTests` and `V03PublicApiSnapshotTests` currently enumerate the exact
     exported namespace, type family, exact property sets, parser constructors
     and entry points, enum ordering, reference nullability, defaults, and fixed
     limits synchronized into `SPEC.md` and `SPEC.POWERSHELL.md`.

@@ -17,6 +17,16 @@ priorities.
 > below). What remains is the downstream Netclaw integration, which needs
 > actions outside this repository.
 
+- [ ] **v0.3 prerelease consumer-API correction.** Preserve the stable v0.2
+      API and the `Syntax` / `Commands` / `Clauses` ingestion lanes, but replace
+      the alpha-only sparse coordinate and public property-bag model before
+      stable v0.3. Return one parser-owned analyzed argument per authored
+      non-cwd argument, use closed value-domain and redirect alternatives,
+      reference actual ancestor nodes, and remove public syntax vocabulary
+      that stable v0.3 never emits. Update the OpenSpec and source mocks first;
+      then update implementation, snapshots, corpus DTOs, consumer guide,
+      README, and Netclaw together. No compatibility shim for 0.3 alphas.
+
 - [x] **v0.3 host-selected grammar and PowerShell dialect — library slice.** The executor
       selects one top-level parser; Bash never cross-parses `pwsh` payloads and
       PowerShell never cross-parses `bash -c` payloads. Add the extend-only

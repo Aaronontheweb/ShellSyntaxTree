@@ -27,6 +27,11 @@ fail-closed behavior for incomplete analysis.
 - Add a library-owned command-occurrence projection containing every command
   that may execute in supported grammar, including iterator, loop-body,
   wrapped, substitution, and PowerShell script-block execution-region commands.
+- Make the unreleased v0.3 result model parser-owned and invalid-state-resistant.
+  Each authored argument is returned already joined to its v0.2 `Arg` and
+  `ClauseElement`; value domains, redirect sources, and redirect operations use
+  closed typed alternatives instead of public property bags. Prune public
+  condition/branch vocabulary that stable v0.3 never emits.
 - Define authorization completeness over authored shell syntax. A complete
   occurrence proves that the parser discovered and classified the submitted
   executable region; it does not prove the runtime executable selected by
@@ -70,6 +75,10 @@ fail-closed behavior for incomplete analysis.
   that check `IsUnparseable` continue to fail closed and do not silently miss
   nested executable commands. Unparseable results expose no command or clause
   authorization projection.
+- Preserve compatibility with stable v0.2, not with any v0.3 prerelease.
+  Every `0.3.0-alpha*` package was an integration preview;
+  their new public members may be renamed, removed, or reshaped before stable
+  `0.3.0`. Netclaw migrates in lockstep to the corrected prerelease.
 - Expand grammar in vertical slices through Bash `for ... in` and PowerShell
   `foreach`. Preserve the existing Bash
   heredoc grammar while adding body, delimiter, and expansion facts, and add
@@ -119,12 +128,14 @@ into `SPEC.md` and `SPEC.POWERSHELL.md` before implementation.
 
 ## Impact
 
-This is an additive but release-shaped public API change affecting
-`ParsedCommand`, new syntax and analysis records, redirect modeling, both
+This is an additive change from stable v0.2 and a deliberately breaking
+correction from the v0.3 prereleases. It affects `ParsedCommand`, new syntax
+and analysis records, redirect modeling, both
 shell parsers, corpus schemas, public API snapshots, the shared and
-PowerShell specifications, and `docs/CONSUMER_GUIDE.md`. Adding properties to
-public records also changes generated equality, hashing, `ToString()`, and
-default serialization and therefore requires explicit migration notes.
+PowerShell specifications, and `docs/CONSUMER_GUIDE.md`. Stable v0.2 types and
+members remain source and binary compatible. The corrected v0.3 result types
+are library-owned in-memory models, not consumer-constructible DTOs or a stable
+serialized wire format.
 
 This accepted scope supersedes the earlier assumption that every ordinary
 PowerShell script-block argument is non-executing. Canonical receivers proved
