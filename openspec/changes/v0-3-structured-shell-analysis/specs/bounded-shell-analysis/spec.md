@@ -305,8 +305,8 @@ reserved syntax.
 - **THEN** the whole result is unparseable until coprocess structure and timing are modeled
 
 ### Requirement: PowerShell approvals prove authored commands, not ambient resolution
-`PwshParserOptions.InitialStateMode` SHALL default to `Unknown` and SHALL remain
-source and binary compatible. Neither that default nor an ambient alias,
+`PwshParserOptions.InitialStateMode` SHALL default to `Unknown`. Neither that
+default nor an ambient alias,
 function, module, profile, executable lookup, or inherited variable SHALL by
 itself make a static authored command occurrence incomplete. The parser SHALL
 prove that it discovered the executable syntax submitted by the caller; it
@@ -434,10 +434,11 @@ The analysis SHALL classify a policy-relevant shell value as exact, finite,
 bounded symbolic pattern, or unknown, and SHALL NOT present a weaker proof as a
 stronger domain.
 
-`Unknown` SHALL contain no values or pattern fields. `Exact` SHALL contain one
-value. `FiniteSet` SHALL contain 2–32 distinct values. `Pattern` SHALL contain
-no values and SHALL contain a non-empty pattern and covering directory. The
-parser SHALL NOT emit any other member combination.
+The public domain SHALL be a closed, library-constructed hierarchy.
+`Unknown` SHALL carry no payload. `Exact` SHALL contain one value. `FiniteSet`
+SHALL contain 2–32 distinct values. `PathPattern` SHALL contain a non-empty
+pattern and covering directory. No public property bag or kind enum SHALL let
+a consumer construct contradictory member combinations.
 
 #### Scenario: One literal value
 - **WHEN** an eligible isolated-mode loop binds a variable from the single literal `a.txt`
@@ -479,16 +480,18 @@ becomes unknown rather than being truncated.
 ### Requirement: Structural analysis has fixed depth limits
 The parser SHALL support at most 16 nested executable containers and at most 5
 decoded command-string wrapper recursions. Structural depth starts at zero for
-the root and increments once when entering a foreach loop, condition loop,
-conditional, group, command substitution, or execution region. Blocks, conditional-branch
-records, command lists, pipelines, and simple-command leaves do not increment
-the depth independently. These bounds SHALL NOT be caller-configurable.
+the root and increments once when entering a foreach loop, group, command
+substitution, or execution region. Blocks, command lists, pipelines, and
+simple-command leaves do not increment the depth independently. Future
+container types SHALL define their participation when their grammar is added;
+they do not reserve stable-v0.3 public vocabulary. These bounds SHALL NOT be
+caller-configurable.
 Exceeding either bound SHALL make the whole result unparseable rather than
 returning an authorization projection for a subset.
 
-The limits SHALL be exposed as static get-only properties rather than public
-compile-time constants so downstream assemblies read the installed parser's
-contract instead of inlining stale values.
+The limits SHALL be documented fixed parser contracts but SHALL NOT be exposed
+as public tuning options, constants, or properties. Consumers react to the
+resulting unknown or unparseable fact rather than reimplementing the bounds.
 
 #### Scenario: Structural nesting reaches the limit
 - **WHEN** a supported input enters exactly 16 nested executable containers

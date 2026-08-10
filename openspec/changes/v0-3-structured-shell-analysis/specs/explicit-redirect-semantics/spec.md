@@ -2,15 +2,25 @@
 
 ### Requirement: Redirect operation is explicit
 Each parsed redirect SHALL identify its operation independently from its raw
-text and compatibility direction. Supported operations SHALL distinguish file
-input, file output, append, descriptor duplicate, descriptor close,
-descriptor move, combined output, and any separately supported here-document
-or here-string form.
+text and compatibility direction through one closed, library-constructed
+redirect-analysis hierarchy. Distinct alternatives SHALL represent file,
+descriptor duplicate, descriptor close, descriptor move, here-document,
+here-string, and unresolved redirects. A file-mode enum SHALL distinguish
+input, output, append, combined output, and combined-output append.
 
-The redirect source SHALL distinguish the shell-default stream, a numeric
-descriptor, and PowerShell's all-streams selector. `Unknown` SHALL be the zero
-source kind and operation, and invalid source-kind/descriptor combinations
-SHALL be incomplete.
+The closed redirect-source hierarchy SHALL distinguish unknown, shell-default,
+numeric-descriptor, and PowerShell-all-streams sources. A descriptor source
+SHALL always contain one non-negative descriptor. An unresolved source or
+operation SHALL use its explicit `Unknown` / `UnresolvedRedirectAnalysis`
+alternative and SHALL be incomplete. Consumers SHALL NOT validate mutable
+kind/descriptor/operation property combinations.
+
+Valid pairs SHALL be limited to: unknown source with unresolved redirect;
+default source with ordinary file, Bash combined-output, descriptor, heredoc,
+or here-string alternatives; numeric source with ordinary file, descriptor,
+heredoc, or here-string alternatives; and PowerShell-all-streams source with
+output/append file alternatives or descriptor duplication to success stream
+descriptor `1`. Every other internal pair SHALL fail projection atomically.
 
 #### Scenario: PowerShell all-streams redirect
 - **WHEN** PowerShell parses `Get-ChildItem *> output.txt`
@@ -55,7 +65,9 @@ SHALL be incomplete.
 ### Requirement: Static and computed descriptor targets differ
 A descriptor operation SHALL expose a static target descriptor only when the
 complete target is a literal descriptor. A variable, substitution, malformed
-suffix, or other computed target SHALL remain dynamic or incomplete.
+suffix, or other computed target SHALL use the unresolved redirect alternative
+or make the whole result unparseable; it SHALL NOT create a descriptor variant
+with a nullable or sentinel target.
 
 #### Scenario: Variable descriptor target
 - **WHEN** Bash parses `command 2>&$FD`
@@ -79,11 +91,11 @@ overwritten or appended.
 - **WHEN** Bash parses `command &>> output.log`
 - **THEN** one combined-output append redirect targets `output.log`
 
-### Requirement: Redirect path relevance is independent
-Redirect details SHALL state whether the target is a filesystem path without
-overloading dynamic-value classification. Static descriptor operations SHALL
-not be paths; file targets SHALL retain normal literal, pattern, and unknown
-value facts.
+### Requirement: Redirect path relevance follows the typed alternative
+Every file-redirect alternative SHALL be filesystem-path relevant and SHALL
+retain normal exact, finite, path-pattern, or unknown target facts. Descriptor,
+heredoc, here-string, and unresolved alternatives SHALL NOT expose a
+path-relevance flag whose value can contradict their runtime type.
 
 #### Scenario: Static error file
 - **WHEN** Bash parses `command 2> error.log`

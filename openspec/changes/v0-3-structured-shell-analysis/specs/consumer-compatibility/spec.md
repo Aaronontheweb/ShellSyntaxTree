@@ -157,12 +157,24 @@ finite shell proof SHALL NOT itself grant authorization.
 ### Requirement: v0.2 consumers have a documented migration path
 Release notes and the consumer guide SHALL document the new canonical
 projections, retained compatibility fields, record equality and serialization
-effects, and the period during which `Clauses` remains supported.
+effects, and the period during which `Clauses` remains supported. Stable v0.2
+source and binary compatibility SHALL remain the binding baseline. Documented
+behavioral differences, including `ParsedCommand` record equality, hashing,
+`ToString()`, and explicit oracle-proved classification corrections, SHALL NOT
+be mislabeled as behavior-preserving.
+No compatibility SHALL be promised between v0.3 prereleases; the migration
+guide SHALL map the removed alpha-only members directly to the corrected
+stable-v0.3 shapes without shims.
 
 #### Scenario: Consumer remains on Clauses during alpha
 - **WHEN** a consumer upgrades to a v0.3 prerelease without adopting `Commands`
 - **THEN** existing simple-command behavior remains available
 - **THEN** supported nested constructs expose conservative authored clauses rather than omitting commands
+
+#### Scenario: Alpha consumer adopts the corrected result model
+- **WHEN** a consumer used sparse effective-argument coordinates or redirect/value property bags from an earlier v0.3 alpha
+- **THEN** it migrates to joined arguments and closed typed alternatives
+- **THEN** ShellSyntaxTree does not retain obsolete aliases or adapters for the prerelease surface
 
 #### Scenario: Netclaw adopts v0.3 analysis
 - **WHEN** Netclaw migrates to the occurrence and explicit redirect APIs
