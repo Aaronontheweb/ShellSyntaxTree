@@ -70,7 +70,7 @@ jobs:
           $installDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: "Verify copyright headers"
-        shell: pwsh
+        shell: pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '{0}'"
         run: ./scripts/Add-FileHeaders.ps1 -Verify
 
       - name: "Verify compatible PowerShell 7.6 is available (SPEC.POWERSHELL.md §13 oracle gate)"
