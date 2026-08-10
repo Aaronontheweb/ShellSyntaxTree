@@ -385,6 +385,53 @@ such as `--work-tree=../repo` and `-Path:C:\repo` can produce two `Arg`
 records that share one source element; consumers do not need to reconstruct
 that normal many-to-one relationship from indexes or source spans.
 
+The examples in this guide use a compact result notation rather than dumping
+the complete object graph. Each one shows the submitted input, the
+policy-relevant facts returned by the parser, and the decision those facts
+enable. Names such as `Exact("/work")` and `Descriptor(2)` denote the
+corresponding closed runtime alternatives, not strings that consumers need to
+parse.
+
+For example, parse this with `BashParser`, `WorkingDirectory = "/work"`:
+
+```bash
+cat file.txt | grep x && rm /tmp/stale
+```
+
+The authorization projection is:
+
+| `Commands` index | Authored command | `ImmediateRole` | `IsComplete` | `WorkingDirectory` |
+|---:|---|---|---|---|
+| 0 | `cat file.txt` | `PipelineStage` | `true` | `Exact("/work")` |
+| 1 | `grep x` | `PipelineStage` | `true` | `Exact("/work")` |
+| 2 | `rm /tmp/stale` | `Ordinary` | `true` | `Exact("/work")` |
+
+The consumer evaluates all three rows. It may group the first two into one
+pipeline-shaped prompt for display, but that grouping does not authorize the
+second stage implicitly. The final `rm` occurrence is also evaluated even if
+an earlier occurrence already requires a prompt, because it may produce a
+hard deny.
+
+Attached option forms demonstrate why `AnalyzedArgument` includes direct
+object references. For this Bash input:
+
+```bash
+git --work-tree=../repo status
+```
+
+`Commands[0].Arguments` contains three entries:
+
+| `Argument.Raw` | `Value` | `Element.Raw` |
+|---|---|---|
+| `--work-tree` | `Exact("--work-tree")` | `--work-tree=../repo` |
+| `../repo` | `Exact("../repo")` | `--work-tree=../repo` |
+| `status` | `Exact("status")` | `status` |
+
+The first two entries reference the same `ClauseElement`. A consumer can bind
+the option and its operand without source-span arithmetic or re-tokenizing the
+command. PowerShell attached parameters such as
+`Remove-Item -Path:C:\repo` use the same many-to-one shape.
+
 Apply the executable's complete argument grammar to every value:
 
 ```csharp
@@ -436,6 +483,63 @@ domains; descriptor alternatives are not paths; heredoc and here-string
 alternatives carry stdin data whose meaning remains receiver-specific. An
 occurrence can be complete while an argument, cwd, or redirect value is
 unknown, so test all facts separately.
+
+## Evaluating loops
+
+A loop body is represented once as authored syntax. ShellSyntaxTree does not
+pretend that it executed the loop or duplicate a command occurrence for every
+candidate value. Instead, it gives the loop-dependent argument a value domain.
+
+With `BashInitialStateMode.IsolatedNonInteractive` and
+`WorkingDirectory = "/work"`, this input:
+
+```bash
+for f in a.txt b.txt; do rm -- "$f"; done
+```
+
+produces one loop-body occurrence:
+
+```text
+Commands[0]
+  Clause.Verb.Tokens: ["rm"]
+  ImmediateRole: LoopBody
+  IsComplete: true
+  WorkingDirectory: Exact("/work")
+  Arguments[0]: "--"     -> Exact("--")
+  Arguments[1]: "\"$f\"" -> FiniteSet("a.txt", "b.txt")
+```
+
+The consumer applies the complete `rm` grammar and path policy to both
+`a.txt` and `b.txt`. It must not approve only the first candidate, and it must
+not mistake one occurrence for proof that the command runs only once.
+
+PowerShell uses the same consumer shape. Under
+`PwshInitialStateMode.IsolatedNonInteractiveNoProfile`, this input:
+
+```powershell
+foreach ($f in @('a.txt', 'b.txt', 'a.txt')) { Write-Output $F }
+```
+
+produces one `LoopBody` occurrence whose `$F` argument is
+`FiniteSet("a.txt", "b.txt")`; PowerShell's case-insensitive variable binding
+and duplicate elimination have already been reflected in the domain.
+
+The isolated modes are executor assertions, not parser optimizations. With
+the safe default initial-state modes, these ambient-variable-dependent proofs
+remain unknown or make the construct unparseable as specified earlier. A
+consumer must not select an isolated mode merely to obtain a finite set.
+
+Loops also affect later state even when their body facts are static. With an
+incoming cwd of `/work`:
+
+```bash
+for f in /tmp/*.txt; do cd /tmp; done; pwd
+```
+
+the loop may execute zero times, so both the body `cd` occurrence and the
+later `pwd` occurrence report `WorkingDirectory = Unknown`. The reachable
+states are `/work` and `/tmp`; the parser does not choose whichever value
+would make policy easiest. A cwd-sensitive consumer prompts or denies.
 
 ## Choosing a command identity
 
@@ -562,6 +666,19 @@ For `cd /repo && cat file.txt`, the `cat` clause receives a synthetic
 directory. PowerShell provides the same contract for `Set-Location` and its
 aliases.
 
+With an incoming cwd of `/work`, the relevant output is:
+
+| Occurrence | `WorkingDirectory` | Authored path | `Arg.Resolved` |
+|---|---|---|---|
+| `cd /repo` | `Exact("/work")` | `/repo` | `/repo` |
+| `cat file.txt` | `Exact("/repo")` | `file.txt` | `/repo/file.txt` |
+
+The `cd` row reports the directory in which `cd` itself runs; the `cat` row
+reports the successful `AndIf` continuation state. This is why consumers
+should use the occurrence's `WorkingDirectory` for execution context and the
+argument's `Resolved` value for path-zone policy rather than trying to infer
+either from clause order.
+
 The attributed argument is derived context:
 
 - use it when evaluating where a clause operates;
@@ -581,6 +698,18 @@ write outside an allowed zone:
 ```text
 echo safe > /etc/profile.d/example.sh
 ```
+
+With a Bash working directory of `/work`, representative results are:
+
+| Input | Redirect alternative | Source | Relevant value | Complete? | Consumer consequence |
+|---|---|---|---|---:|---|
+| `echo safe > /etc/profile.d/example.sh` | `FileRedirectAnalysis` with `Mode = Output` | `Default` | `Target = Exact("/etc/profile.d/example.sh")` | yes | Apply write-path policy to the exact target. |
+| `command 2>&1` | `DescriptorDuplicateRedirectAnalysis` | `Descriptor(2)` | `TargetDescriptor = 1` | yes | Apply descriptor policy; do not treat `1` as a path. |
+| `command 2>&$FD` | `UnresolvedRedirectAnalysis` | `Unknown` | no proved target descriptor | no | Prompt or deny the occurrence. |
+
+Those are runtime alternatives, not interpretations of a string prefix. In
+particular, the incomplete third row cannot accidentally pass a rule written
+for ordinary stderr-to-stdout duplication.
 
 For a v0.2 compatibility consumer, walk `Clause.Redirects` independently of
 `Args`:
@@ -714,6 +843,24 @@ invocation. By contrast, `& $(Write-Output Get-Date)` also retains an
 incomplete dynamic outer occurrence because PowerShell invokes the produced
 name.
 
+Bash exposes the same execution-before-container ordering. For:
+
+```bash
+rm "$(find /tmp)"
+```
+
+the relevant projection is:
+
+| `Commands` index | Command | `ImmediateRole` | Argument value |
+|---:|---|---|---|
+| 0 | `find /tmp` | `Substitution` | `/tmp` is `Exact("/tmp")` |
+| 1 | `rm "$(find /tmp)"` | `Ordinary` | produced filename is `Unknown` |
+
+The `find` occurrence is independently authorizable, but its presence does not
+make the bytes it prints a statically known `rm` operand. A path-sensitive
+policy therefore evaluates `find` and still prompts or denies `rm`. It does not
+walk `Syntax` afterward and authorize `find` a second time.
+
 Quoting also determines the scope of host-wrapper substitutions. In
 `pwsh -Command "Write-Output $(Get-Date)"`, the parent evaluates `Get-Date`, so
 the result contains that parent-scope occurrence plus an incomplete outer
@@ -749,6 +896,18 @@ grant:
 The recoverable outcome is normally a user prompt with a one-time option, or a
 deny. A false-negative approval match causes another prompt; a false-positive
 match can silently execute something the operator did not authorize.
+
+Two different result shapes reach that same safe outcome:
+
+| Input and parser | Relevant output | Why reusable approval stops |
+|---|---|---|
+| PowerShell: `& $exe` | `IsUnparseable = false`; one occurrence with `IsComplete = false` and `Verb.IsDynamic = true` | The syntax is recognized, but the executable identity is not bounded. |
+| Bash: `if true; then echo ok; fi` | `IsUnparseable = true`; `Commands` and `Clauses` are empty | The unsupported control construct may contain execution, so partial syntax is diagnostic only. |
+
+`IsUnparseable = false` is therefore not an allow signal. It means only that
+the whole input was not rejected as an unsupported or unsafe-to-project
+construct; the consumer still checks every occurrence and every
+policy-sensitive domain.
 
 ## Worked use cases
 

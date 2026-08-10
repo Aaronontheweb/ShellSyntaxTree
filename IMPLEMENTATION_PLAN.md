@@ -135,7 +135,10 @@ priorities.
 - [x] **Consumer guide.** Added `docs/CONSUMER_GUIDE.md` with the
       shell-neutral security-consumer algorithm, Bash and PowerShell guidance,
       worked public use cases, and immutable permalinks to Netclaw's production
-      integration. Linked it from the README and aligned stale PowerShell
+      integration. Added compact input-to-result-to-policy examples for command
+      occurrences, attached arguments, bounded and zero-or-more loops, cwd
+      propagation, file and descriptor redirects, substitutions, and safe-fail
+      results. Linked it from the README and aligned stale PowerShell
       prerelease/status wording in the public project docs.
 - [x] **Issue #52 — hyphenated PowerShell parameters/native options.**
       Preserve internal hyphens, apply bash-compatible native
