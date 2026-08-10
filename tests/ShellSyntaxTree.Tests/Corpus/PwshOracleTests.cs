@@ -17,23 +17,23 @@ using Xunit.Sdk;
 namespace ShellSyntaxTree.Tests.Corpus;
 
 /// <summary>
-/// The real-<c>pwsh</c> validation gate (SPEC.POWERSHELL.md §13). Feeds
-/// every PowerShell corpus <c>input</c> to the real PowerShell parser and
+/// The dialect-selected PowerShell validation gate (SPEC.POWERSHELL.md §13).
+/// Feeds every PowerShell corpus <c>input</c> to the matching real parser and
 /// enforces the §13 oracle matrix:
 /// <list type="bullet">
-///   <item><c>isUnparseable=false</c> → real <c>pwsh</c> reports 0 parse
+///   <item><c>isUnparseable=false</c> → real PowerShell reports 0 parse
 ///         errors (the input is valid PowerShell).</item>
 ///   <item><c>isUnparseable=true</c> + <c>SyntaxError</c> → ≥1 parse error.</item>
 ///   <item><c>isUnparseable=true</c> + <c>OutOfScope</c> → 0 parse errors
 ///         (valid PowerShell the parser declines to model).</item>
 /// </list>
-/// A developer without <c>pwsh</c> on PATH sees the gate skip; CI installs
-/// <c>pwsh</c> and a workflow step fails loudly if it is absent.
+/// A developer without the selected executable on PATH sees that dialect's
+/// gate skip; CI verifies both supported executables where they are required.
 /// </summary>
 public class PwshOracleTests
 {
     [Fact]
-    public void PowerShell_corpus_inputs_are_consistent_with_real_pwsh()
+    public void PowerShell_corpus_inputs_are_consistent_with_selected_dialect_oracle()
     {
         var entries = LoadPowershellCorpus();
         if (entries.Count == 0)
@@ -41,14 +41,38 @@ public class PwshOracleTests
             return; // CorpusRunnerTests asserts the corpus is present.
         }
 
-        if (!PwshOracle.IsAvailable())
+        foreach (var dialect in new[]
+                 {
+                     PwshDialect.PowerShell7,
+                     PwshDialect.WindowsPowerShell51,
+                 })
         {
-            Console.WriteLine("pwsh not on PATH — the §13 oracle gate is skipped locally.");
+            ValidateDialectCorpus(
+                dialect,
+                entries.Where(entry =>
+                    (entry.Entry.PowerShellDialect ?? PwshDialect.PowerShell7) == dialect)
+                    .ToList());
+        }
+    }
+
+    private static void ValidateDialectCorpus(
+        PwshDialect dialect,
+        IReadOnlyList<(string File, CorpusEntry Entry)> entries)
+    {
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        if (!PwshOracle.IsAvailable(dialect))
+        {
+            Console.WriteLine(
+                $"{dialect} compatible oracle is unavailable — its §13 gate is skipped locally.");
             return;
         }
 
         var inputs = entries.Select(e => e.Entry.Input).ToList();
-        var counts = PwshOracle.CountParseErrors(inputs);
+        var counts = PwshOracle.CountParseErrors(inputs, dialect);
         Assert.NotNull(counts);
 
         var failures = new List<string>();
@@ -62,21 +86,21 @@ public class PwshOracleTests
             {
                 if (errors != 0)
                 {
-                    failures.Add($"{file}: corpus marks it parseable, but real pwsh reports {errors} parse error(s).");
+                    failures.Add($"{file}: corpus marks it parseable, but {dialect} reports {errors} parse error(s).");
                 }
             }
             else if (entry.OracleExpectation == OracleExpectation.SyntaxError)
             {
                 if (errors == 0)
                 {
-                    failures.Add($"{file}: corpus marks it SyntaxError, but real pwsh accepts it (0 errors) — use oracleExpectation 'OutOfScope'.");
+                    failures.Add($"{file}: corpus marks it SyntaxError, but {dialect} accepts it (0 errors) — use oracleExpectation 'OutOfScope'.");
                 }
             }
             else // OutOfScope
             {
                 if (errors != 0)
                 {
-                    failures.Add($"{file}: corpus marks it OutOfScope, but real pwsh reports {errors} parse error(s) — it is a genuine SyntaxError.");
+                    failures.Add($"{file}: corpus marks it OutOfScope, but {dialect} reports {errors} parse error(s) — it is a genuine SyntaxError.");
                 }
             }
         }
@@ -84,47 +108,80 @@ public class PwshOracleTests
         if (failures.Count > 0)
         {
             throw new XunitException(
-                "The pwsh oracle gate found corpus entries inconsistent with real PowerShell:\n"
+                $"The {dialect} oracle gate found corpus entries inconsistent with real PowerShell:\n"
                 + string.Join("\n", failures.Select(f => "  - " + f)));
         }
     }
 
-    [Fact]
-    public void PwshAliases_table_covers_every_live_alias()
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7)]
+    [InlineData(PwshDialect.WindowsPowerShell51)]
+    public void PwshAliases_table_covers_every_live_alias(PwshDialect dialect)
     {
-        if (!PwshOracle.IsAvailable())
+        if (!PwshOracle.IsAvailable(dialect))
         {
-            Console.WriteLine("pwsh not on PATH — the §6.3 alias completeness gate is skipped locally.");
+            Console.WriteLine(
+                $"{dialect} compatible oracle is unavailable — its §6.3 alias gate is skipped locally.");
             return;
         }
 
-        var live = PwshOracle.GetAliasNames();
+        var live = PwshOracle.GetAliasDefinitions(dialect);
         Assert.NotNull(live);
 
         var gaps = live!
-            .Where(name => !PwshAliases.NeverAliased.Contains(name))
-            .Where(name => !PwshAliases.Map.ContainsKey(name))
-            .OrderBy(name => name, StringComparer.Ordinal)
+            .Where(alias => dialect != PwshDialect.PowerShell7 ||
+                            !PwshAliases.PowerShell7NativeCollisions.Contains(alias.Name))
+            .Where(alias => PwshAliases.Resolve(alias.Name, dialect) is null)
+            .OrderBy(alias => alias.Name, StringComparer.Ordinal)
+            .Select(alias => alias.Name)
             .ToArray();
 
         if (gaps.Length > 0)
         {
             throw new XunitException(
-                "PwshAliases is missing live Get-Alias entries (SPEC.POWERSHELL.md §6.3):\n  "
+                $"PwshAliases is missing {dialect} Get-Alias entries " +
+                "(SPEC.POWERSHELL.md §6.3):\n  "
                 + string.Join(", ", gaps));
+        }
+
+        var mismatches = live
+            .Where(alias => dialect != PwshDialect.PowerShell7 ||
+                            !PwshAliases.PowerShell7NativeCollisions.Contains(alias.Name))
+            .Select(alias => new
+            {
+                alias.Name,
+                Live = NormalizeAliasDefinition(alias.Definition),
+                Parsed = PwshAliases.Resolve(alias.Name, dialect),
+            })
+            .Where(alias => alias.Parsed is not null &&
+                            !string.Equals(alias.Live, alias.Parsed, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(alias => alias.Name, StringComparer.Ordinal)
+            .Select(alias => $"{alias.Name}: live={alias.Live}, parser={alias.Parsed}")
+            .ToArray();
+
+        if (mismatches.Length > 0)
+        {
+            throw new XunitException(
+                $"PwshAliases has incorrect {dialect} canonical definitions " +
+                "(SPEC.POWERSHELL.md §6.3):\n  "
+                + string.Join("\n  ", mismatches));
         }
     }
 
-    [Fact]
-    public void Foreach_binding_boundary_covers_every_fresh_host_variable()
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7)]
+    [InlineData(PwshDialect.WindowsPowerShell51)]
+    public void Foreach_binding_boundary_covers_every_fresh_host_variable(
+        PwshDialect dialect)
     {
-        if (!PwshOracle.IsAvailable())
+        if (!PwshOracle.IsAvailable(dialect))
         {
-            Console.WriteLine("pwsh not on PATH — the foreach binding gate is skipped locally.");
+            Console.WriteLine(
+                $"{dialect} compatible oracle is unavailable — its foreach binding gate is skipped locally.");
             return;
         }
 
-        var live = PwshOracle.GetVariableNames();
+        var live = PwshOracle.GetVariableNames(dialect);
         Assert.NotNull(live);
 
         var gaps = live!
@@ -134,7 +191,7 @@ public class PwshOracleTests
             .ToArray();
         Assert.True(
             gaps.Length == 0,
-            "The isolated foreach binding boundary is missing fresh-host variables: "
+            $"The isolated {dialect} foreach binding boundary is missing fresh-host variables: "
             + string.Join(", ", gaps));
     }
 
@@ -146,6 +203,23 @@ public class PwshOracleTests
         }
 
         return name.Skip(1).All(character => character == '_' || char.IsLetterOrDigit(character));
+    }
+
+    private static string NormalizeAliasDefinition(string definition)
+    {
+        var separator = definition.LastIndexOf('\\');
+        var unqualified = separator >= 0 ? definition.Substring(separator + 1) : definition;
+        if (string.Equals(unqualified, "help", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Get-Help";
+        }
+
+        if (string.Equals(unqualified, "mkdir", StringComparison.OrdinalIgnoreCase))
+        {
+            return "New-Item";
+        }
+
+        return unqualified;
     }
 
     private static List<(string File, CorpusEntry Entry)> LoadPowershellCorpus()

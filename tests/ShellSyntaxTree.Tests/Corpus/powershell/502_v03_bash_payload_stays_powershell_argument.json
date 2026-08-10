@@ -1,0 +1,30 @@
+{
+  "name": "V03 bash payload stays powershell argument",
+  "input": "bash -c \u0027rm target.txt\u0027",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "bash"
+        ],
+        "args": [
+          {
+            "raw": "-c",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0027rm target.txt\u0027",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/rm target.txt"
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "PowerShell treats bash as an ordinary external command and does not parse its Bash payload."
+}

@@ -101,7 +101,8 @@ public class PwshExecutionRegionBindingCatalogTests
     {
         var resolved = PwshExecutionRegionBindingCatalog.TryResolveStaticCommandName(
             "Microsoft.PowerShell.Core\\ForEach-Object",
-            out var canonical);
+            out var canonical,
+            PwshDialect.PowerShell7);
         var conservative = Parser.Parse(
             "Microsoft.PowerShell.Core\\ForEach-Object { Remove-Item victim.txt }");
         var parsed = IsolatedParser.Parse(
@@ -644,7 +645,8 @@ public class PwshExecutionRegionBindingCatalogTests
         var clause = ParseClause(source);
         var result = PwshExecutionRegionBindingCatalog.Bind(
             clause,
-            commandIdentityProven: true);
+            commandIdentityProven: true,
+            dialect: PwshDialect.PowerShell7);
 
         var elementIndex = Assert.IsType<int>(result.WorkingDirectoryElementIndex);
         Assert.EndsWith(expectedValue, clause.Elements[elementIndex].Value);
@@ -743,10 +745,12 @@ public class PwshExecutionRegionBindingCatalogTests
 
         var executing = PwshExecutionRegionBindingCatalog.Bind(
             executingClause,
-            commandIdentityProven: false);
+            commandIdentityProven: false,
+            dialect: PwshDialect.PowerShell7);
         var data = PwshExecutionRegionBindingCatalog.Bind(
             dataClause,
-            commandIdentityProven: false);
+            commandIdentityProven: false,
+            dialect: PwshDialect.PowerShell7);
 
         Assert.Equal(PwshExecutionRegionBindingStatus.Ambiguous, executing.Status);
         Assert.Equal(PwshExecutionRegionBindingStatus.Ambiguous, data.Status);
@@ -762,10 +766,12 @@ public class PwshExecutionRegionBindingCatalogTests
         var unpinned = PwshExecutionRegionBindingCatalog.Bind(
             clause,
             commandIdentityProven: true,
+            dialect: PwshDialect.PowerShell7,
             threadJobModuleProven: false);
         var pinned = PwshExecutionRegionBindingCatalog.Bind(
             clause,
             commandIdentityProven: true,
+            dialect: PwshDialect.PowerShell7,
             threadJobModuleProven: true);
 
         Assert.Equal(PwshExecutionRegionBindingStatus.Ambiguous, unpinned.Status);
@@ -786,6 +792,7 @@ public class PwshExecutionRegionBindingCatalogTests
         var result = PwshExecutionRegionBindingCatalog.Bind(
             clause,
             commandIdentityProven: true,
+            dialect: PwshDialect.PowerShell7,
             threadJobModuleProven: true);
 
         Assert.Equal(PwshExecutionRegionBindingStatus.Ambiguous, result.Status);
@@ -802,6 +809,7 @@ public class PwshExecutionRegionBindingCatalogTests
         var result = PwshExecutionRegionBindingCatalog.Bind(
             ParseClause(source),
             commandIdentityProven: true,
+            dialect: PwshDialect.PowerShell7,
             threadJobModuleProven: true);
 
         Assert.Equal(PwshExecutionRegionBindingStatus.Ambiguous, result.Status);
@@ -824,7 +832,8 @@ public class PwshExecutionRegionBindingCatalogTests
         var clause = ParseClause(source);
         var result = PwshExecutionRegionBindingCatalog.Bind(
             clause,
-            commandIdentityProven: true);
+            commandIdentityProven: true,
+            dialect: PwshDialect.PowerShell7);
         Assert.All(result.Bindings, binding =>
         {
             Assert.InRange(binding.HostClauseElementIndex, 0, clause.Elements.Count - 1);

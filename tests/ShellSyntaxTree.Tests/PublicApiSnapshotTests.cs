@@ -238,12 +238,13 @@ public class PublicApiSnapshotTests
         AssertInitProperty(t, "HomeDirectory", typeof(string), nullable: true);
         AssertInitProperty(t, "WorkingDirectory", typeof(string), nullable: true);
         AssertInitProperty(t, "InitialStateMode", typeof(PwshInitialStateMode));
+        AssertInitProperty(t, "Dialect", typeof(PwshDialect));
 
         var declaredProps = DeclaredInstanceProps(t)
             .Where(p => p.Name != "EqualityContract")
             .Select(p => p.Name)
             .ToArray();
-        Assert.Equal(new[] { "InitialStateMode" }, declaredProps);
+        Assert.Equal(new[] { "InitialStateMode", "Dialect" }, declaredProps);
     }
 
     [Fact]
@@ -258,6 +259,31 @@ public class PublicApiSnapshotTests
             {
                 InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
             }.InitialStateMode);
+    }
+
+    [Fact]
+    public void PwshDialect_has_expected_values_and_compatible_default()
+    {
+        Assert.Equal(0, (int)PwshDialect.Unknown);
+        Assert.Equal(1, (int)PwshDialect.PowerShell7);
+        Assert.Equal(2, (int)PwshDialect.WindowsPowerShell51);
+        Assert.Equal(PwshDialect.PowerShell7, new PwshParserOptions().Dialect);
+    }
+
+    [Fact]
+    public void PwshDialect_participates_in_record_value_behavior()
+    {
+        var powerShell7 = new PwshParserOptions();
+        var equivalent = new PwshParserOptions { Dialect = PwshDialect.PowerShell7 };
+        var windowsPowerShell = new PwshParserOptions
+        {
+            Dialect = PwshDialect.WindowsPowerShell51,
+        };
+
+        Assert.Equal(powerShell7, equivalent);
+        Assert.Equal(powerShell7.GetHashCode(), equivalent.GetHashCode());
+        Assert.NotEqual(powerShell7, windowsPowerShell);
+        Assert.Contains("Dialect = PowerShell7", powerShell7.ToString());
     }
 
     // -------- ParsedCommand --------
@@ -597,6 +623,7 @@ public class PublicApiSnapshotTests
             nameof(ParsedCommand),
             nameof(PipelineSyntax),
             nameof(PwshParser),
+            nameof(PwshDialect),
             nameof(PwshInitialStateMode),
             nameof(PwshParserOptions),
             nameof(Redirect),

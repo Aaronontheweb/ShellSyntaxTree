@@ -62,6 +62,21 @@ command can consume it.
 - Performance tuning beyond "fast enough to invoke per shell call without
   noticeable latency" (~1ms per typical input).
 
+### Parser selection and language boundary (v0.3)
+
+The execution environment selects exactly one top-level parser. Consumers use
+`BashParser` only when Bash will execute the submitted source and `PwshParser`
+only when PowerShell will execute it. Neither parser guesses a language from
+command text or delegates an argument payload to the other parser.
+
+Therefore Bash input such as `pwsh -Command 'Get-Content x'` remains one
+ordinary external `pwsh` command with a Bash argument; it does not surface a
+PowerShell child command. PowerShell input such as `bash -c 'rm x'` likewise
+remains one ordinary external `bash` command. Same-language wrapper recursion
+remains parser-local: Bash owns supported `bash` / `sh -c` recursion, while
+PowerShell owns its PowerShell-host and static `Invoke-Expression` recursion.
+The library never auto-detects the host shell or probes the machine.
+
 ---
 
 ## 2. Public API Surface
@@ -130,11 +145,28 @@ public enum PwshInitialStateMode
     IsolatedNonInteractiveNoProfile,
 }
 
+/// <summary>Selects the PowerShell grammar and versioned metadata.</summary>
+public enum PwshDialect
+{
+    Unknown,
+    // PowerShell 7.6 servicing releases from 7.6.4; versioned tables are pinned.
+    PowerShell7,
+    WindowsPowerShell51,
+}
+
 /// <summary>Configuration knobs for PwshParser.</summary>
 public sealed record PwshParserOptions : ShellParserOptions
 {
     public PwshInitialStateMode InitialStateMode { get; init; }
+    public PwshDialect Dialect { get; init; } = PwshDialect.PowerShell7;
 }
+
+`PwshDialect` and `PwshParserOptions.Dialect` are source- and binary-additive.
+The property initializer preserves the released PowerShell 7 parser semantics
+for existing constructors and object initializers. Like every additive public
+record property, it deliberately changes generated equality, hashing,
+`ToString()`, reflection, and default serializer shape; parser results and
+options are not a stable implicit wire format.
 
 // The pre-v0.2.0 BashParserOptions body, now hoisted onto ShellParserOptions:
 public abstract record ShellParserOptions
@@ -1038,10 +1070,11 @@ public sealed record Clause
     public bool IsSubshell { get; init; }
 
     /// <summary>
-    /// True when this clause is the result of recursing into a
-    /// command-string wrapper — `bash -c "..."` / `sh -c "..."`, or (v0.2.0)
+    /// True when this clause is the result of parser-local recursion into a
+    /// command-string wrapper — Bash `bash -c "..."` / `sh -c "..."`, or
     /// PowerShell `pwsh -Command "..."` / `pwsh -EncodedCommand ...` /
-    /// static `Invoke-Expression '...'`. Useful
+    /// static `Invoke-Expression '...'`. One parser never delegates wrapper
+    /// payloads to the other parser. Useful
     /// for consumers that want to surface "this came from a wrapped
     /// invocation" in UI.
     /// </summary>

@@ -40,14 +40,36 @@ jobs:
         shell: pwsh
         run: ./scripts/Add-FileHeaders.ps1 -Verify
 
-      - name: "Verify pwsh is available (SPEC.POWERSHELL.md §13 oracle gate)"
+      - name: "Verify compatible PowerShell 7.6 is available (SPEC.POWERSHELL.md §13 oracle gate)"
         shell: bash
         run: |
           if ! command -v pwsh >/dev/null 2>&1; then
             echo "::error::pwsh is not on PATH — the PowerShell corpus oracle gate (PwshOracleTests) would silently skip."
             exit 1
           fi
-          pwsh --version
+          pwsh -NoProfile -NoLogo -NonInteractive -Command '
+            $v = $PSVersionTable.PSVersion
+            if ($v -lt [version]"7.6.4" -or $v -ge [version]"7.7") {
+              throw "Expected PowerShell >= 7.6.4 and < 7.7, found $v"
+            }
+            $v.ToString()
+          '
+
+      - name: "Verify Windows PowerShell 5.1 is available"
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if ! command -v powershell.exe >/dev/null 2>&1; then
+            echo "::error::powershell.exe is not on the Bash PATH used by dotnet test — the Windows PowerShell 5.1 oracle would silently skip."
+            exit 1
+          fi
+          powershell.exe -NoProfile -NoLogo -NonInteractive -Command '
+            $v = $PSVersionTable.PSVersion
+            if ($v.Major -ne 5 -or $v.Minor -ne 1) {
+              throw "Expected Windows PowerShell 5.1, found $v"
+            }
+            $v.ToString()
+          '
 
       - name: "dotnet restore"
         run: dotnet restore

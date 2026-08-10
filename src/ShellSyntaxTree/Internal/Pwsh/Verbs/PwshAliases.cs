@@ -9,10 +9,9 @@ using System.Collections.Generic;
 namespace ShellSyntaxTree.Internal.Pwsh.Verbs;
 
 /// <summary>
-/// The default PowerShell built-in alias table — a case-insensitive map
-/// from a typed alias to its canonical cmdlet (SPEC.POWERSHELL.md §6.3).
-/// Alias resolution is unconditional: the most security-relevant
-/// normalization the parser performs.
+/// The default PowerShell built-in alias tables — case-insensitive maps
+/// from a typed alias to its canonical command (SPEC.POWERSHELL.md §6.3).
+/// Alias resolution is unconditional within the selected dialect.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -28,14 +27,15 @@ namespace ShellSyntaxTree.Internal.Pwsh.Verbs;
 /// — a false-negative-shaped failure (§6.3).
 /// </para>
 /// <para>
-/// The <c>PwshAliasCompletenessTests</c> [Fact] diffs this table against
-/// live <c>Get-Alias</c> and fails on any gap (a live alias absent here);
-/// extra Windows-only entries are expected and allowed.
+/// The <c>PwshOracleTests</c> alias gate diffs this table against live
+/// <c>Get-Alias</c>, including canonical definitions, and fails on any gap;
+/// extra Windows-only entries are expected and allowed for PowerShell 7.
 /// </para>
 /// <para>
-/// <c>curl</c>, <c>wget</c>, <c>sc</c>, <c>set</c>, <c>start</c>, and
-/// <c>where</c> are deliberately absent: §6.3 collision rule 3 treats them
-/// as native commands, never aliased. <c>md</c> / <c>mkdir</c> map to
+/// PowerShell 7 treats <c>curl</c>, <c>wget</c>, <c>sc</c>, <c>set</c>,
+/// <c>start</c>, and <c>where</c> as native commands. Windows PowerShell 5.1
+/// defines aliases for those spellings, so its dialect table restores their
+/// canonical cmdlets. <c>md</c> / <c>mkdir</c> map to
 /// <c>New-Item</c> — the effective cmdlet — rather than the thin
 /// <c>mkdir</c> function PowerShell's own <c>Get-Alias</c> reports.
 /// </para>
@@ -43,11 +43,12 @@ namespace ShellSyntaxTree.Internal.Pwsh.Verbs;
 internal static class PwshAliases
 {
     /// <summary>
-    /// Aliases §6.3 collision rule 3 forbids resolving — their cmdlet vs.
-    /// native-tool meaning is version-dependent. Absent from
-    /// <see cref="Map"/>; the parser treats them as native commands.
+    /// Aliases §6.3 collision rule 3 forbids resolving in PowerShell 7 —
+    /// their cmdlet vs. native-tool meaning is edition-dependent. They are
+    /// absent from <see cref="Map"/> and restored only by the Windows
+    /// PowerShell 5.1 table.
     /// </summary>
-    internal static readonly HashSet<string> NeverAliased =
+    internal static readonly HashSet<string> PowerShell7NativeCollisions =
         new(StringComparer.OrdinalIgnoreCase)
         {
             "curl", "wget", "sc", "set", "start", "where",
@@ -210,13 +211,83 @@ internal static class PwshAliases
         };
 
     /// <summary>
-    /// Resolve <paramref name="token"/> to its canonical cmdlet. Returns
-    /// null when the token is not a known alias or is one of the
-    /// <see cref="NeverAliased"/> commands. Case-insensitive.
+    /// Aliases present in Windows PowerShell 5.1 but absent from the
+    /// PowerShell 7 compatibility table. This includes removed Windows-only
+    /// commands as well as spellings that became native-command collisions.
     /// </summary>
-    internal static string? Resolve(string token)
+    internal static readonly IReadOnlyDictionary<string, string> WindowsPowerShell51Map =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["curl"] = "Invoke-WebRequest",
+            ["wget"] = "Invoke-WebRequest",
+            ["sc"] = "Set-Content",
+            ["set"] = "Set-Variable",
+            ["start"] = "Start-Process",
+            ["where"] = "Where-Object",
+            ["asnp"] = "Add-PSSnapIn",
+            ["epsn"] = "Export-PSSession",
+            ["gsnp"] = "Get-PSSnapIn",
+            ["gwmi"] = "Get-WmiObject",
+            ["ipsn"] = "Import-PSSession",
+            ["ise"] = "powershell_ise.exe",
+            ["iwmi"] = "Invoke-WmiMethod",
+            ["npssc"] = "New-PSSessionConfigurationFile",
+            ["rsnp"] = "Remove-PSSnapIn",
+            ["rwmi"] = "Remove-WmiObject",
+            ["swmi"] = "Set-WmiInstance",
+            ["trcm"] = "Trace-Command",
+        };
+
+    /// <summary>
+    /// Compatibility-table entries that Windows PowerShell 5.1 must not
+    /// inherit. <c>gerr</c> was added with <c>Get-Error</c> in PowerShell 7;
+    /// <c>chy</c> is a retained v0.2 compatibility spelling rather than a
+    /// Windows PowerShell 5.1 default alias.
+    /// </summary>
+    private static readonly HashSet<string> WindowsPowerShell51ExcludedAliases =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "gerr", "chy",
+        };
+
+    private static readonly HashSet<string> PowerShell7CanonicalCommands =
+        new(Map.Values, StringComparer.OrdinalIgnoreCase);
+
+    private static readonly HashSet<string> WindowsPowerShell51CanonicalCommands =
+        BuildWindowsPowerShell51CanonicalCommands();
+
+    /// <summary>
+    /// Resolve <paramref name="token"/> to its canonical cmdlet. Returns
+    /// null when the token is not a known alias in the selected dialect.
+    /// Case-insensitive.
+    /// </summary>
+    internal static string? Resolve(
+        string token,
+        PwshDialect dialect)
     {
-        if (string.IsNullOrEmpty(token) || NeverAliased.Contains(token))
+        if (string.IsNullOrEmpty(token))
+        {
+            return null;
+        }
+
+        if (dialect == PwshDialect.WindowsPowerShell51)
+        {
+            if (WindowsPowerShell51Map.TryGetValue(token, out var windowsCanonical))
+            {
+                return windowsCanonical;
+            }
+
+            if (WindowsPowerShell51ExcludedAliases.Contains(token))
+            {
+                return null;
+            }
+        }
+        else if (dialect != PwshDialect.PowerShell7)
+        {
+            return null;
+        }
+
+        if (PowerShell7NativeCollisions.Contains(token))
         {
             return null;
         }
@@ -224,16 +295,33 @@ internal static class PwshAliases
         return Map.TryGetValue(token, out var canonical) ? canonical : null;
     }
 
-    internal static bool IsKnownCanonical(string token)
-    {
-        foreach (var canonical in Map.Values)
+    internal static bool IsKnownCanonical(
+        string token,
+        PwshDialect dialect)
+        => dialect switch
         {
-            if (string.Equals(canonical, token, StringComparison.OrdinalIgnoreCase))
+            PwshDialect.PowerShell7 => PowerShell7CanonicalCommands.Contains(token),
+            PwshDialect.WindowsPowerShell51 =>
+                WindowsPowerShell51CanonicalCommands.Contains(token),
+            _ => false,
+        };
+
+    private static HashSet<string> BuildWindowsPowerShell51CanonicalCommands()
+    {
+        var commands = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var alias in Map)
+        {
+            if (!WindowsPowerShell51ExcludedAliases.Contains(alias.Key))
             {
-                return true;
+                commands.Add(alias.Value);
             }
         }
 
-        return false;
+        foreach (var canonical in WindowsPowerShell51Map.Values)
+        {
+            commands.Add(canonical);
+        }
+
+        return commands;
     }
 }

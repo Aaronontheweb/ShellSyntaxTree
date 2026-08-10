@@ -29,7 +29,8 @@ internal sealed record ManifestEntry(
     bool IncludeOptionalAssertions = false,
     bool IncludeV03Assertions = false,
     string? DisplayName = null,
-    PwshInitialStateMode? PowerShellInitialStateMode = null)
+    PwshInitialStateMode? PowerShellInitialStateMode = null,
+    PwshDialect? PowerShellDialect = null)
 {
     /// <summary>Explicit display name when supplied; otherwise derived from the slug.</summary>
     public string Name =>
@@ -69,6 +70,23 @@ internal static class CorpusManifest
             ManifestTransform.None,
             PowerShellInitialStateMode:
                 PwshInitialStateMode.IsolatedNonInteractiveNoProfile);
+
+    private static ManifestEntry W(
+        string slug,
+        string input,
+        string notes,
+        bool outOfScope = false) =>
+        new(
+            slug,
+            input,
+            notes,
+            outOfScope,
+            ManifestTransform.None,
+            IncludeElements: true,
+            IncludeStructure: true,
+            IncludeOptionalAssertions: true,
+            IncludeV03Assertions: true,
+            PowerShellDialect: PwshDialect.WindowsPowerShell51);
 
     private static ManifestEntry P(string slug, string input, string notes) =>
         new(slug, input, notes, false, ManifestTransform.None, IncludeElements: true);
@@ -1361,5 +1379,44 @@ internal static class CorpusManifest
         VIE("v03_iex_native_tilde_binding",
             "iex 'curl ~'",
             "A static current-scope Invoke-Expression payload preserves native binding and expands an unquoted tilde from the configured home."),
+        W("v03_windows_powershell_pipeline_chain_syntax_error",
+            "Get-Item a && Get-Item b",
+            "Windows PowerShell 5.1 rejects PowerShell 7 pipeline-chain syntax."),
+        W("v03_windows_powershell_curl_alias",
+            "curl example.test",
+            "Windows PowerShell 5.1 resolves curl to its default Invoke-WebRequest alias."),
+        W("v03_windows_powershell_parallel_receiver_unknown",
+            "ForEach-Object -Parallel { Get-Date }",
+            "The PowerShell 7-only Parallel receiver contract is not borrowed by Windows PowerShell 5.1.",
+            outOfScope: true),
+        W("v03_windows_powershell_wmi_alias",
+            "gwmi Win32_OperatingSystem",
+            "Windows PowerShell 5.1 retains the removed Get-WmiObject alias contract."),
+        W("v03_windows_powershell_no_get_error_alias",
+            "gerr",
+            "Windows PowerShell 5.1 does not borrow PowerShell 7's Get-Error alias."),
+        W("v03_windows_powershell_nested_chain_foreach",
+            "foreach ($x in 1) { Get-Item a && Get-Item b }",
+            "Windows PowerShell 5.1 rejects pipeline-chain syntax inside a foreach body."),
+        W("v03_windows_powershell_nested_chain_direct_block",
+            "& { Get-Item a && Get-Item b }",
+            "Windows PowerShell 5.1 rejects pipeline-chain syntax inside a direct script block."),
+        W("v03_windows_powershell_nested_chain_command_block",
+            "ForEach-Object -Process { Get-Item a && Get-Item b }",
+            "Windows PowerShell 5.1 rejects pipeline-chain syntax inside a command-owned block."),
+        W("v03_windows_powershell_nested_chain_substitution",
+            "$(Get-Item a && Get-Item b)",
+            "Windows PowerShell 5.1 rejects pipeline-chain syntax inside a command substitution."),
+        W("v03_windows_powershell_nested_chain_child_host",
+            "powershell.exe -Command 'Get-Item a && Get-Item b'",
+            "A static Windows PowerShell child keeps the 5.1 grammar inside its decoded payload.",
+            outOfScope: true),
+        E("v03_bash_payload_stays_powershell_argument",
+            "bash -c 'rm target.txt'",
+            "PowerShell treats bash as an ordinary external command and does not parse its Bash payload."),
+        W("v03_windows_powershell_nested_chain_invoke_expression",
+            "Invoke-Expression 'Get-Item a && Get-Item b'",
+            "Static current-scope recursion keeps the selected 5.1 grammar while the outer parser sees data.",
+            outOfScope: true),
     };
 }

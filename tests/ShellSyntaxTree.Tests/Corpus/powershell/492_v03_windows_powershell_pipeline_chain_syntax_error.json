@@ -1,0 +1,10 @@
+{
+  "name": "V03 windows powershell pipeline chain syntax error",
+  "input": "Get-Item a \u0026\u0026 Get-Item b",
+  "powerShellDialect": "WindowsPowerShell51",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell pipeline-chain operators require the PowerShell 7 dialect"
+  },
+  "notes": "Windows PowerShell 5.1 rejects PowerShell 7 pipeline-chain syntax."
+}

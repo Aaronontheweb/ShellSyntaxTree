@@ -35,7 +35,8 @@ internal static class CorpusJson
         bool includeStructure,
         bool includeOptionalAssertions,
         bool includeV03Assertions,
-        PwshInitialStateMode? powerShellInitialStateMode = null)
+        PwshInitialStateMode? powerShellInitialStateMode = null,
+        PwshDialect? powerShellDialect = null)
     {
         var obj = new JsonObject
         {
@@ -46,6 +47,11 @@ internal static class CorpusJson
         if (powerShellInitialStateMode is PwshInitialStateMode initialStateMode)
         {
             obj["powerShellInitialStateMode"] = initialStateMode.ToString();
+        }
+
+        if (powerShellDialect is PwshDialect dialect)
+        {
+            obj["powerShellDialect"] = dialect.ToString();
         }
 
         obj["expected"] = BuildExpected(

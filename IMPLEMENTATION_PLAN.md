@@ -10,12 +10,26 @@ priorities.
 
 ---
 
-## NOW (0.2.0 downstream acceptance / 0.3.0 contract design)
+## NOW (0.3.0 host integration and release acceptance)
 
 > **Spec:** `SPEC.POWERSHELL.md` (v0.2.0). The PowerShell parser is
 > implemented — phases 1–14 of `SPEC.POWERSHELL.md` §16 are complete (see
 > below). What remains is the downstream Netclaw integration, which needs
 > actions outside this repository.
+
+- [x] **v0.3 host-selected grammar and PowerShell dialect — library slice.** The executor
+      selects one top-level parser; Bash never cross-parses `pwsh` payloads and
+      PowerShell never cross-parses `bash -c` payloads. Add the extend-only
+      `PwshDialect` option with PowerShell 7 as the compatibility default and
+      Windows PowerShell 5.1 as an explicit native-Windows fallback. Dialect-
+      local syntax/catalog behavior and paired direct/corpus coverage are
+      implemented. Windows CI must still prove both live oracles before this
+      slice merges.
+
+- [ ] **v0.3 native-Windows Netclaw integration.** Pass the exact selected
+      shell through Netclaw's executor, approval policy, and model context;
+      prefer a compatible `pwsh.exe`, fall back to `powershell.exe`, and
+      reparse and reauthorize if executable selection changes.
 
 - [ ] **v0.3 authored-command approval correction.** Treat PowerShell and Bash
       approval completeness consistently: prove every authored executable
@@ -599,18 +613,20 @@ priorities.
       [NuGet package](https://www.nuget.org/packages/ShellSyntaxTree/0.3.0-alpha.3)
       and [GitHub prerelease](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0-alpha.3)
       preserve the v0.2 projection and the existing public v0.3 API.
-- [ ] Publish `0.3.0-alpha.4` with the reviewed authored-command completeness
-      correction. Netclaw must validate default-mode static PowerShell commands
-      without requiring ambient profile, module, alias, function, `PATH`,
-      inherited-variable, or prior-runspace proofs. Unknown and source-mutated
-      policy facts must remain strict.
+- [x] Published `0.3.0-alpha.4` with the reviewed authored-command completeness
+      correction. The
+      [NuGet package](https://www.nuget.org/packages/ShellSyntaxTree/0.3.0-alpha.4)
+      and [GitHub prerelease](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0-alpha.4)
+      preserve strict unknown and source-mutated policy facts while default-mode
+      static PowerShell commands no longer require ambient resolution proof.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
       equality, hashing, `ToString()`, serialization, and `Clauses` migration
       behavior in the guide and release notes; direct the README quick start
       to `Commands` and the full guide.
-- [x] Close the v0.3 public-API compatibility gate. Existing reflection
+- [x] Re-closed the v0.3 public-API compatibility gate for the additive
+      `PwshDialect` enum and options property. Existing reflection
       snapshots pin the exact exported types, members, enum ordering,
       reference nullability, defaults, parser constructors and entry points,
       and fixed limits against the shared and PowerShell specifications.
@@ -618,6 +634,11 @@ priorities.
       plus equal-record hash consistency, demonstrate that default JSON is not
       a polymorphic round-trip contract, and make every policy-sensitive
       unknown numeric enum value detectable so consumers can reject it.
+      The dialect slice adds explicit default, unknown-value, record equality,
+      hash, `ToString()`, propagation, and parser-behavior coverage. A
+      `dotnet-inspect` assembly diff against the published 0.3.0-alpha.4 package
+      reports exactly two additive changes on both `net8.0` and
+      `netstandard2.0`: the enum and one options member, with no breaking change.
 - [x] Expose public Bash heredoc body, delimiter, expansion, tab-stripping, and
       completeness facts from the delivered bounded grammar. Direct tests pin
       literal and expanding delimiters, every supported substitution command,

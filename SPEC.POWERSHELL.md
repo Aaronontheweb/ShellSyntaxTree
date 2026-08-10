@@ -25,12 +25,15 @@ workflow, and consumer contract. Where this spec says "see `SPEC.md` §N" the
 referenced section applies unchanged; only the PowerShell-specific delta is
 written here.
 
-**Reference dialect.** This spec targets **PowerShell 7.x** (7.4 LTS) as the
-reference dialect — the cross-platform `pwsh` executable, not Windows
-PowerShell 5.1. The `&&` / `||` pipeline-chain operators (§4, added in
-PowerShell 7.0), the default alias set (§6.3), and the redirect stream
-syntax (§5) are all PowerShell 7 semantics. The `pwsh` validation oracle
-(§13) MUST run a 7.x build.
+**Explicit dialects.** Existing callers default to **PowerShell 7.6 servicing
+releases from 7.6.4 (`>=7.6.4` and `<7.7`)**, the
+cross-platform `pwsh` executable and the dialect shipped through v0.2. Stable
+v0.3 also accepts an explicit **Windows PowerShell 5.1** dialect for the native
+Windows fallback. The parser never infers an edition from the local machine.
+The `&&` / `||` pipeline-chain operators (§4), PowerShell 7 aliases and
+receiver parameters, and other versioned metadata apply only in PowerShell 7
+mode. Each corpus entry is validated by its matching oracle: `pwsh` for 7.x
+and `powershell.exe` for 5.1 on Windows.
 
 ---
 
@@ -122,10 +125,20 @@ public enum PwshInitialStateMode
     IsolatedNonInteractiveNoProfile,
 }
 
+/// <summary>Selects the PowerShell grammar and versioned metadata.</summary>
+public enum PwshDialect
+{
+    Unknown,
+    // PowerShell 7.6 servicing releases from 7.6.4.
+    PowerShell7,
+    WindowsPowerShell51,
+}
+
 /// <summary>Configuration knobs for PwshParser.</summary>
 public sealed record PwshParserOptions : ShellParserOptions
 {
     public PwshInitialStateMode InitialStateMode { get; init; }
+    public PwshDialect Dialect { get; init; } = PwshDialect.PowerShell7;
 }
 
 /// <summary>PowerShell implementation of IShellParser.</summary>
@@ -145,7 +158,8 @@ The shared v0.2 AST gains the following changes (see §3):
   `ClauseElement` and `ClauseElementRole` define its entries.
 - `Clause.IsBashCWrapped` is renamed `Clause.IsCommandStringWrapped`.
 
-**Versioning.** `PwshParser`, `PwshParserOptions`, `ShellParserOptions`,
+**Versioning.** `PwshParser`, `PwshParserOptions`, `PwshDialect`,
+`ShellParserOptions`,
 `VerbChain.CanonicalVerb`, `VerbChain.IsDynamic`, `Clause.Elements`,
 `ClauseElement`, and `ClauseElementRole` are additive. The
 `Clause` field rename and the `BashParserOptions` reparenting are
@@ -154,6 +168,39 @@ minor bump when `RELEASE_NOTES.md` carries the old→new mapping and Netclaw is
 updated in lockstep (§15). `PublicApiSnapshotTests` is updated in the same
 change. `PwshParser.Parse` throws `ArgumentNullException` on null input and
 never throws on a well-formed string, exactly like `BashParser`.
+Adding `Dialect` is source- and binary-additive and preserves default parser
+semantics, but it participates in generated record equality, hashing,
+`ToString()`, reflection, and default serialization. Consumers that persist
+options own a versioned representation.
+
+### Dialect and host-language boundary
+
+The consumer selects the top-level dialect from the executor it has already
+chosen. `new PwshParser()` and an options object that omits `Dialect` retain
+PowerShell 7 behavior. `Unknown` and unrecognized future enum values return an
+unparseable result with empty authorization projections.
+`PowerShell7` denotes the contract-defined PowerShell 7.6 servicing line from
+7.6.4: `>=7.6.4` and `<7.7`. The consumer verifies both bounds before using
+the dialect. Other PowerShell 7 minor lines have no v0.3 dialect value and
+remain outside the supported execution contract until their grammar and
+versioned metadata are independently proved.
+
+`PwshParser` never delegates `bash -c` payloads to `BashParser`; Bash is an
+ordinary external command in PowerShell source. Conversely, `BashParser` never
+delegates `pwsh -Command` payloads to this parser. Within a PowerShell parse,
+supported static PowerShell host wrappers remain parser-local: `pwsh` /
+`pwsh.exe` children use `PowerShell7`, and `powershell` / `powershell.exe`
+children use `WindowsPowerShell51`. A dynamic host identity remains incomplete.
+
+PowerShell 7 keeps the existing version-pinned grammar and catalogs. Windows
+PowerShell 5.1 accepts only facts proved for that edition. It rejects `&&` and
+`||` as syntax errors at every recursively parsed boundary, including loop and
+script-block bodies, substitutions, static expressions, and decoded child-host
+payloads. It does not publish PowerShell 7-only receiver semantics
+such as `ForEach-Object -Parallel`. Dialect-specific aliases and parameter
+bindings come from versioned tables; one edition never borrows proof from the
+other. In particular, unqualified `curl` and `wget` use the Windows PowerShell
+5.1 `Invoke-WebRequest` aliases but remain native spellings in PowerShell 7.
 
 ---
 
@@ -258,6 +305,9 @@ meaning is unchanged and now shell-neutral: *true when this clause is the
 result of recursing into a command-string wrapper* — bash `bash -c "..."` /
 `sh -c "..."`, or PowerShell `pwsh -Command "..."` / `pwsh -c "..."` /
 `pwsh -EncodedCommand ...` / static `Invoke-Expression '...'` (§10).
+The property is shared; recursion is not cross-language. `BashParser` sets it
+only for supported Bash wrappers and `PwshParser` only for supported
+PowerShell wrappers.
 
 ---
 
@@ -529,6 +579,14 @@ The version-pinned PowerShell 7 catalog covers:
 | `Start-Job -InitializationScript` | Initialization | Concurrent | Once | child process before Main |
 | `Start-Job -ScriptBlock` | Main | Concurrent | Once | child process; exit isolated |
 | `New-Module -ScriptBlock` | Initialization | Synchronous | Once | module state; current-runspace effects analyzed separately |
+
+For `WindowsPowerShell51`, direct `& { ... }` and `. { ... }` retain the
+grammar- and state-proved semantics above, and a statically authored
+`Write-Output { ... }` remains proved non-executing data. Other command-owned
+script blocks remain visible but incomplete with Unknown execution and state
+facts until their 5.1 receiver and binder metadata is independently
+oracle-proved. This deliberately prevents the 5.1 dialect from inheriting the
+PowerShell 7 catalog merely because command spellings overlap.
 
 Remote `Invoke-Command` bodies begin with Unknown working directory and
 host-dependent values. Their static authored command occurrences remain
@@ -822,29 +880,34 @@ pattern-prefix match.
 
 ### 6.3 Built-in alias table
 
-`PwshAliases` is a static, case-insensitive map from a typed alias to its
-canonical cmdlet. When the first token is a known alias the parser:
+`PwshAliases` owns static, case-insensitive maps from a typed alias to its
+canonical cmdlet for each supported dialect. When the first token is a known
+alias in the selected dialect the parser:
 
 - keeps the verbatim typed token in `VerbChain.Tokens` (source fidelity;
   pattern-matching sees what was typed), and
 - sets `VerbChain.CanonicalVerb` to the canonical cmdlet, which drives the
   per-cmdlet path rules (§7) and the Cwd/File verb classification (§6.4).
 
-Alias resolution is **unconditional** — it is the single most
+Alias resolution is **unconditional within the selected dialect** — it is the single most
 security-relevant normalization the PowerShell parser performs, and the v0.1
 doctrine ("consumers can relax, they can't un-execute") means it is not a
 knob. `VerbChain.Tokens` already preserves the verbatim token, so resolution
 costs no source fidelity; a switch to disable it would only weaken
 alias-keyed gate rules.
 
-`PwshAliases` MUST contain the **complete default alias set** of the
-reference PowerShell 7.x build — not a hand-picked subset. An alias absent
+`PwshAliases` MUST contain the **complete default alias set** of each supported
+dialect — not a hand-picked subset. An alias absent
 from the table degrades to a native command (§6.2); a file cmdlet so
 degraded silently loses its per-verb path classification (§7) — a
 false-negative-shaped failure in a security parser. The full set is finite
-and enumerable (`Get-Alias`), so a `[Fact]` (the §13 `pwsh` oracle already
-spawns `pwsh`) diffs `PwshAliases` against live `Get-Alias` output and fails
-on any gap. The table below is the **security-relevant excerpt** (file,
+and enumerable (`Get-Alias`), so the §13 oracle gate diffs each dialect table
+against live output from its matching executable and fails on any missing
+alias or mismatched canonical definition. A dialect table MUST NOT borrow an
+alias that exists only in another supported edition. Platform- or SKU-specific
+aliases may remain in the static table when the selected dialect can define
+them, because a CI host may not expose every optional Windows component. The
+table below is the **security-relevant common excerpt** (file,
 cwd, and code-execution verbs), not the whole table:
 
 | Alias(es) | Canonical cmdlet |
@@ -878,10 +941,20 @@ cwd, and code-execution verbs), not the whole table:
    **and** is immediately followed by `(` is the keyword → `IsUnparseable`.
    (`foreach ($x in $y)` is a loop; in `gci | foreach { ... }` the `foreach`
    follows `|` and precedes `{`, so it is the `ForEach-Object` alias.)
-2. Otherwise the alias table wins for known aliases.
-3. `curl`, `wget`, `sc`, `set`, `start`, and `where` are treated as **native
-   commands**, never aliased — their cmdlet vs. native-tool meaning is
-   version-dependent and aliasing would mis-apply cmdlet semantics.
+2. Otherwise the selected dialect's alias table wins for known aliases.
+3. In PowerShell 7, `curl`, `wget`, `sc`, `set`, `start`, and `where` remain
+   native commands. Windows PowerShell 5.1 instead applies its default aliases,
+   including `curl` / `wget` → `Invoke-WebRequest`, `sc` → `Set-Content`,
+   `set` → `Set-Variable`, `start` → `Start-Process`, and `where` →
+   `Where-Object`.
+
+`Get-Error` and its `gerr` alias are PowerShell 7-only and MUST NOT be
+resolved in the `WindowsPowerShell51` dialect. Conversely, Windows PowerShell
+5.1-only aliases such as `gwmi` → `Get-WmiObject`, `asnp` → `Add-PSSnapIn`,
+and `trcm` → `Trace-Command` remain edition-specific. `md` and `man` are
+normalized to the effective cmdlet reached through their default helper
+functions (`New-Item` and `Get-Help`) while the authored alias token remains
+unchanged.
 
 ### 6.4 Cwd / File / control-flow tables
 
@@ -1061,8 +1134,9 @@ positionals are paths," exactly as `SPEC.md` §7.
 
 ### 7.3 Native commands
 
-Native commands reuse the bash per-verb rules table verbatim — `git`,
-`curl`, `tar`, etc. behave identically to `SPEC.md` §7 (`curl` / `wget`:
+After selected-dialect alias resolution, commands that remain native reuse the
+bash per-verb rules table verbatim — `git`, PowerShell 7 `curl`, `tar`, etc.
+behave identically to `SPEC.md` §7 (`curl` / `wget`:
 the first positional is a URL; curl `-o` / `-D` values and Wget `-o` / `-O`
 values are paths, while curl `-d` data is non-path unless `@file` requests a
 file read; `@-` denotes stdin). Tar `-F` / `--info-script` /
@@ -1078,6 +1152,9 @@ tokenization: spaced curl operands beginning with `@` should be quoted because
 `--data=@request.json`, so the native command receives one value. An equals
 prefix adjacent to a quoted value, such as `--data='@C:\payload file'`, is
 also one native argument and one clause element.
+Windows PowerShell 5.1 `curl` / `wget` do not reach these native rules because
+their dialect aliases bind to `Invoke-WebRequest`; its cmdlet parameter rules
+apply instead. Explicit `curl.exe` remains native.
 
 ---
 
@@ -1621,26 +1698,36 @@ PowerShell-specific deltas:
 PowerShell corpus entries live in
 `tests/ShellSyntaxTree.Tests/Corpus/powershell/*.json`. Corpus files are
 **directory-routed by shell**: an entry under `Corpus/bash/` is parsed with
-`BashParser`, an entry under `Corpus/powershell/` with `PwshParser`. The
+`BashParser`; an entry under `Corpus/powershell/` is parsed with `PwshParser`
+using its optional dialect field. Omitting that field preserves PowerShell 7. The
 corpus runner and the PII audit are refactored to enumerate every
 `Corpus/<shell>/` directory rather than a hard-coded `bash` path.
 
 ### Schema additions
 
-The shared corpus DTO gains two optional fields:
+The shared corpus DTO gains three optional fields:
 
 - **`canonicalVerb`** (per clause) — the expected `VerbChain.CanonicalVerb`.
   Omit to assert `null` (every bash entry, and PowerShell canonical/unknown
   verbs); provide the canonical cmdlet to assert an alias was resolved.
 - **`oracleExpectation`** (per entry, meaningful only when
   `isUnparseable: true`) — `SyntaxError` (genuinely malformed PowerShell —
-  real `pwsh` must also reject it) or `OutOfScope` (valid PowerShell the
-  parser deliberately does not model — real `pwsh` must accept it). Defaults
+  the selected real shell must also reject it) or `OutOfScope` (valid
+  PowerShell the parser deliberately does not model — the selected real shell
+  must accept it). Defaults
   to `SyntaxError`. `OutOfScope` also covers an input that is valid
   PowerShell but that the parser declines for a non-grammar reason — an
   `-EncodedCommand` decode failure, dynamic pipeline-fed
   `Invoke-Expression`, an over-cap input (§11), or a recursion-depth overflow
-  — because real `pwsh` parses the *outer* invocation without error.
+  — because the selected real shell parses the *outer* invocation without error.
+  The same rule applies when ShellSyntaxTree decodes a static child-host or
+  `Invoke-Expression` payload and then rejects syntax inside it: the oracle sees
+  only the authored outer command, where that payload is still data, so the
+  entry is `OutOfScope` rather than `SyntaxError`.
+- **`powerShellDialect`** (per entry) — selects `PowerShell7` or
+  `WindowsPowerShell51` for both `PwshParserOptions.Dialect` and the live
+  oracle. Omit to preserve the PowerShell 7 behavior of every existing entry.
+  Unknown and unrecognized enum values are not silently defaulted.
 
 The shared v0.3 `syntax` and `commands` expectations defined in `SPEC.md` §13
 apply unchanged. Selected PowerShell entries SHALL pin current-scope groups,
@@ -1672,26 +1759,33 @@ PowerShell-specific net-new categories; parameter binding (§6.5) is the
 hardest part of the parser and is budgeted accordingly. Strive for 200+ once
 seeded from sanitized real-world commands.
 
-### The `pwsh` validation gate
+### The dialect-matched PowerShell validation gate
 
-A CI test feeds every PowerShell corpus `input` to the real PowerShell parser
+A CI test feeds every PowerShell corpus `input` to the matching real PowerShell parser
 (`[System.Management.Automation.Language.Parser]::ParseInput`) via a batched
-child-process `pwsh` invocation and enforces:
+child process: `pwsh` for `PowerShell7` and `powershell.exe` for
+`WindowsPowerShell51`. It enforces:
 
-| `isUnparseable` | `oracleExpectation` | real `pwsh` must report |
+| `isUnparseable` | `oracleExpectation` | selected real shell must report |
 |---|---|---|
 | `false` | (n/a) | zero parse errors — the input is valid PowerShell |
 | `true` | `SyntaxError` | at least one parse error |
 | `true` | `OutOfScope` | zero parse errors — valid PowerShell we decline to model |
 
-This validates corpus *inputs* against ground truth; it is **not** a
+This validates corpus *inputs* against dialect-matched ground truth; it is **not** a
 differential comparison of our AST against PowerShell's AST — a hand-authored
 `expected` AST with a wrong parameter binding (§6.5) still passes the gate.
 Author binding-category entries with extra care, and cross-check them with
 `tools/PwshCorpusTool`, which prints, for a given command, the parser's
-`expected` JSON block beside the real `pwsh` verdict; the tool is registered
-in `TOOLING.md`. A developer without `pwsh` on `PATH` sees the gate skipped;
-CI installs `pwsh` and an explicit step fails loudly if it is absent.
+`expected` JSON block beside the selected-shell verdict; the tool is registered
+in `TOOLING.md`. A developer without an oracle executable sees only that
+dialect's gate skipped. CI requires `pwsh` on both platforms and requires
+Windows PowerShell 5.1 on Windows, where the 5.1 corpus is validated.
+
+The same dialect-matched gate compares every live `Get-Alias` name and
+definition with the parser table. It fails for a missing alias or a different
+canonical command. Static platform/SKU supersets are permitted, but a dialect
+must not inherit an alias known to belong only to another supported edition.
 
 ---
 

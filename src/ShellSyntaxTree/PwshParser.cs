@@ -26,7 +26,7 @@ public sealed class PwshParser : IShellParser
     /// <summary>
     /// Create a parser with the supplied options.
     /// </summary>
-    /// <param name="options">Resolver and initial-runspace contract options.</param>
+    /// <param name="options">Dialect, resolver, and initial-runspace contract options.</param>
     public PwshParser(PwshParserOptions options)
     {
         if (options is null)

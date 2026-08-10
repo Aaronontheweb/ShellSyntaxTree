@@ -85,13 +85,43 @@ static IShellParser CreateParser(string shell, string workingDirectory) =>
         "pwsh" => new PwshParser(new PwshParserOptions
         {
             WorkingDirectory = workingDirectory,
+            Dialect = PwshDialect.PowerShell7,
+        }),
+        "powershell" => new PwshParser(new PwshParserOptions
+        {
+            WorkingDirectory = workingDirectory,
+            Dialect = PwshDialect.WindowsPowerShell51,
         }),
         _ => throw new ArgumentOutOfRangeException(nameof(shell)),
     };
 ```
 
 Do not guess the shell from the command text. `rm`, `cd`, quoting, redirects,
-and grouping can mean different things in Bash and PowerShell.
+and grouping can mean different things in Bash and PowerShell. Select the
+parser and PowerShell dialect from the executor before parsing. If executor
+selection changes, update the model context and parse the source again; do not
+silently execute it under a fallback shell after authorizing another grammar.
+
+Parser selection is not recursive language detection. Under `BashParser`,
+`pwsh -Command 'Get-Content x'` is one ordinary external command and the
+payload remains a Bash argument. Under `PwshParser`, `bash -c 'rm x'` is one
+ordinary external command. Consumers that deliberately compose languages need
+a separate policy contract; ShellSyntaxTree v0.3 does not cross-parse them.
+Generic operand heuristics may still classify a quoted outer payload as
+path-shaped. A consumer may apply a constrained `pwsh` / `bash` executable
+argument grammar or strict authored matching to that outer command, but it
+must not reinterpret the payload language or treat generic path metadata as
+cross-language proof.
+
+The PowerShell dialect also affects versioned syntax and classification. For
+example, Windows PowerShell 5.1 treats unqualified `curl` and `wget` as aliases
+for `Invoke-WebRequest` and retains `gwmi` as `Get-WmiObject`, while PowerShell
+7 does not. Conversely, `gerr` is the PowerShell 7 `Get-Error` alias and is not
+an alias in Windows PowerShell 5.1. Never parse under one dialect and execute
+under the other. `PwshDialect.PowerShell7` requires a
+PowerShell 7.6 servicing executable at least 7.6.4 but earlier than 7.7;
+verify both bounds during executor selection rather than asking the parser to
+probe the machine.
 
 Once parsed, a security-oriented consumer normally follows this sequence:
 
@@ -268,6 +298,7 @@ var parser = new PwshParser(new PwshParserOptions
 {
     WorkingDirectory = workingDirectory,
     InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+    Dialect = PwshDialect.PowerShell7,
 });
 ```
 
@@ -639,10 +670,14 @@ A UI may group a pipeline as one approval prompt, but authorization should
 still inspect every stage. `download | sh` is unsafe even if `download` alone
 is allowed.
 
-ShellSyntaxTree also looks through supported command-string wrappers. Clauses
-surfaced from `bash -c`, `pwsh -Command`, and `pwsh -EncodedCommand` carry
+Each parser also looks through its own supported command-string wrappers.
+Clauses surfaced by `BashParser` from `bash -c`, or by `PwshParser` from
+`pwsh -Command` and `pwsh -EncodedCommand`, carry
 `IsCommandStringWrapped = true`. The outer wrapper is not the action a
 verb-based policy should authorize; the surfaced inner clauses are.
+This is same-language recursion only. A `pwsh` executable seen by `BashParser`,
+or a `bash` executable seen by `PwshParser`, remains an ordinary external
+command with no cross-language child occurrences.
 Redirects authored on the outer PowerShell wrapper remain attached to the last
 surfaced clause, so redirect policy still sees paths such as
 `pwsh -Command "git status" > audit.log`.

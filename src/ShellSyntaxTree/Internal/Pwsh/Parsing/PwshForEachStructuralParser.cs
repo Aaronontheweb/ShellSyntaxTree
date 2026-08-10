@@ -327,7 +327,7 @@ internal static partial class PwshCommandParser
             }
 
             var significant = FilterSignificant(relativeTokens);
-            if (TryDetectAnomaly(significant, out error))
+            if (TryDetectAnomaly(significant, _options.Dialect, out error))
             {
                 body = new ShellBlockSyntax();
                 return false;

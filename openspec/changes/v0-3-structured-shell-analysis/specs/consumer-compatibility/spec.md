@@ -180,3 +180,34 @@ or explicit serializer configuration.
 - **WHEN** a consumer needs to store or transmit a v0.3 parser result
 - **THEN** it does not assume the closed record hierarchy is an implicit stable JSON union
 - **THEN** it owns an explicit versioned representation or serializer mapping
+
+### Requirement: Native Windows shell identity is consistent end to end
+Netclaw SHALL select one canonical native-Windows shell environment before
+producing or authorizing command text. It SHALL prefer a compatible `pwsh.exe`
+and SHALL fall back to Windows `powershell.exe` only when PowerShell 7 is not
+available. The selected platform, executable, and `PwshDialect` SHALL remain
+identical across LLM context, parser construction, approval policy, and process
+execution.
+
+If the selected executable becomes unavailable or fallback selection changes,
+Netclaw SHALL update the LLM/execution context and reparse the submitted source
+under the replacement dialect before execution. It SHALL NOT execute source
+that was authorized under a different grammar.
+
+#### Scenario: Compatible PowerShell 7 is available on Windows
+- **WHEN** Netclaw selects the native Windows shell and a supported `pwsh.exe` is available
+- **THEN** model context names that executable and PowerShell 7
+- **THEN** approval uses `PwshDialect.PowerShell7`
+- **THEN** execution invokes the same `pwsh.exe`
+
+#### Scenario: Windows PowerShell is the fallback
+- **WHEN** no supported `pwsh.exe` is available but Windows PowerShell 5.1 is available
+- **THEN** model context names `powershell.exe` and Windows PowerShell 5.1
+- **THEN** approval uses `PwshDialect.WindowsPowerShell51`
+- **THEN** execution invokes that same Windows PowerShell host
+
+#### Scenario: Shell selection changes before execution
+- **WHEN** the previously selected executable cannot be used
+- **THEN** Netclaw selects a replacement environment and updates model context
+- **THEN** it reparses and reauthorizes the source under the replacement dialect
+- **THEN** it never silently executes the earlier authorization under another shell
