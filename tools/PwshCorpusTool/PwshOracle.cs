@@ -35,7 +35,10 @@ $counts = foreach ($s in @($inputs)) {
     [void][System.Management.Automation.Language.Parser]::ParseInput([string]$s, [ref]$toks, [ref]$errs)
     $errs.Count
 }
-,@($counts) | ConvertTo-Json -Compress
+# Windows PowerShell 5.1's pipeline binder can adapt the nested array into a
+# { value, Count } object here. The values are parser-produced integers, so
+# emitting the JSON array directly is both dialect-neutral and unambiguous.
+[Console]::Out.Write('[' + (($counts | ForEach-Object { [string]$_ }) -join ',') + ']')
 ";
 
     /// <summary>
