@@ -23,8 +23,9 @@ priorities.
       `PwshDialect` option with PowerShell 7 as the compatibility default and
       Windows PowerShell 5.1 as an explicit native-Windows fallback. Dialect-
       local syntax/catalog behavior and paired direct/corpus coverage are
-      implemented. Windows CI must still prove both live oracles before this
-      slice merges.
+      implemented. GitHub Actions run 31357084413 proved the hash-pinned
+      PowerShell 7.6.4 oracle on Ubuntu and Windows, plus native Windows
+      PowerShell 5.1 discovery and its dialect-routed oracle on Windows.
 
 - [ ] **v0.3 native-Windows Netclaw integration.** Pass the exact selected
       shell through Netclaw's executor, approval policy, and model context;

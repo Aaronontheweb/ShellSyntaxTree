@@ -283,7 +283,7 @@
     execution-receiver and parameter metadata only after the matching
     `powershell.exe` oracle proves it. The stable v0.3 catalog remains
     deliberately conservative, so this optional expansion does not gate 7.8.
-- [ ] 7.9 Add direct and executable-corpus coverage for both parser boundaries
+- [x] 7.9 Add direct and executable-corpus coverage for both parser boundaries
   and both PowerShell dialects. Validate PowerShell 7 cases with `pwsh`,
   Windows PowerShell 5.1 cases with `powershell.exe` on Windows CI, and keep
   unsupported or unavailable oracle states explicit rather than silently
@@ -291,9 +291,14 @@
   - [x] 7.9a Pin public record behavior, both language boundaries, dialect
     propagation and switching, 5.1 aliases, pipeline-chain rejection, and
     conservative receiver behavior in direct tests and dialect-routed corpus.
-  - [ ] 7.9b Prove the dialect-selected corpus and alias oracles on Windows CI,
+  - [x] 7.9b Prove the dialect-selected corpus and alias oracles on Windows CI,
     including `powershell.exe` discovery from the Bash environment that runs
     `dotnet test`.
+    - GitHub Actions run
+      [31357084413](https://github.com/Aaronontheweb/ShellSyntaxTree/actions/runs/31357084413)
+      passed on Ubuntu and Windows. Both jobs used the hash-pinned PowerShell
+      7.6.4 oracle; the Windows job additionally discovered native Windows
+      PowerShell 5.1 from Bash and passed all 2,815 tests plus package creation.
 - [ ] 7.10 Migrate Netclaw's native Windows environment to prefer a compatible
   `pwsh.exe`, fall back to `powershell.exe`, and carry one canonical platform,
   executable, and dialect identity through LLM context, parser, approval
