@@ -17,8 +17,9 @@ namespace ShellSyntaxTree.Tools.PwshCorpus;
 /// Ground-truth validation oracle (SPEC.POWERSHELL.md §13): feeds command
 /// strings to the real PowerShell parser
 /// (<c>[System.Management.Automation.Language.Parser]::ParseInput</c>) via a
-/// batched child-process <c>pwsh</c> invocation and reports the parse-error
-/// count for each. Both the corpus tool's <c>check</c> mode and the
+/// batched child-process invocation of the dialect-selected executable and
+/// reports the parse-error count for each. Both the corpus tool's
+/// <c>check</c> mode and the
 /// <c>PwshOracleTests</c> CI gate consume this.
 /// </summary>
 public static class PwshOracle
@@ -27,27 +28,50 @@ public static class PwshOracle
     // emits a JSON array of parse-error counts.
     private const string OracleScript = @"
 param([string]$Path)
-$inputs = Get-Content -Raw -LiteralPath $Path | ConvertFrom-Json
+$inputs = Get-Content -Raw -Encoding UTF8 -LiteralPath $Path | ConvertFrom-Json
 $counts = foreach ($s in @($inputs)) {
     $errs = $null
     $toks = $null
     [void][System.Management.Automation.Language.Parser]::ParseInput([string]$s, [ref]$toks, [ref]$errs)
     $errs.Count
 }
-,@($counts) | ConvertTo-Json -Compress
+# Windows PowerShell 5.1's pipeline binder can adapt the nested array into a
+# { value, Count } object here. The values are parser-produced integers, so
+# emitting the JSON array directly is both dialect-neutral and unambiguous.
+[Console]::Out.Write('[' + (($counts | ForEach-Object { [string]$_ }) -join ',') + ']')
 ";
 
-    /// <summary>True when a <c>pwsh</c> executable is on PATH.</summary>
-    public static bool IsAvailable() =>
-        TryRunPwsh("-NoProfile -NoLogo -Command \"exit 0\"", 15000, out _);
+    /// <summary>
+    /// True when the selected executable is on PATH and its version matches
+    /// the requested dialect contract.
+    /// </summary>
+    public static bool IsAvailable(PwshDialect dialect)
+    {
+        var probe = VersionProbeArguments(dialect);
+        return probe is not null && TryRunPowerShell(
+            Executable(dialect),
+            probe,
+            15000,
+            out _,
+            out _);
+    }
 
     /// <summary>
-    /// Parse-error count from real <c>pwsh</c> for each input — 0 means the
-    /// input is valid PowerShell. Returns null when <c>pwsh</c> is not
-    /// available.
+    /// Parse-error count from the selected real PowerShell for each input —
+    /// 0 means the input is valid PowerShell. Returns null when the selected
+    /// executable is absent or does not satisfy the dialect's version contract.
+    /// Throws when a compatible executable starts but the oracle invocation or
+    /// response fails.
     /// </summary>
-    public static IReadOnlyList<int>? CountParseErrors(IReadOnlyList<string> inputs)
+    public static IReadOnlyList<int>? CountParseErrors(
+        IReadOnlyList<string> inputs,
+        PwshDialect dialect)
     {
+        if (!IsAvailable(dialect))
+        {
+            return null;
+        }
+
         if (inputs.Count == 0)
         {
             return Array.Empty<int>();
@@ -55,28 +79,39 @@ $counts = foreach ($s in @($inputs)) {
 
         var scriptPath = Path.Combine(Path.GetTempPath(), $"sst-oracle-{Guid.NewGuid():N}.ps1");
         var inputPath = Path.Combine(Path.GetTempPath(), $"sst-oracle-{Guid.NewGuid():N}.json");
+        var stdout = string.Empty;
         try
         {
             File.WriteAllText(scriptPath, OracleScript);
             File.WriteAllText(inputPath, JsonSerializer.Serialize(inputs));
 
-            if (!TryRunPwsh($"-NoProfile -NoLogo -File \"{scriptPath}\" \"{inputPath}\"", 120000, out var stdout))
+            if (!TryRunPowerShell(
+                    Executable(dialect),
+                    "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass " +
+                    $"-File \"{scriptPath}\" \"{inputPath}\"",
+                    120000,
+                    out stdout,
+                    out var failure))
             {
-                return null;
+                throw new InvalidOperationException(
+                    $"{Executable(dialect)} parse oracle failed: {failure}");
             }
 
             var counts = JsonSerializer.Deserialize<int[]>(stdout.Trim());
             if (counts is null || counts.Length != inputs.Count)
             {
                 throw new InvalidOperationException(
-                    $"pwsh oracle returned {counts?.Length ?? -1} counts for {inputs.Count} inputs. Output: {stdout}");
+                    $"{Executable(dialect)} oracle returned {counts?.Length ?? -1} counts " +
+                    $"for {inputs.Count} inputs. Output: {stdout}");
             }
 
             return counts;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return null;
+            throw new InvalidOperationException(
+                $"{Executable(dialect)} parse oracle returned invalid JSON. Output: {stdout}",
+                ex);
         }
         finally
         {
@@ -86,33 +121,49 @@ $counts = foreach ($s in @($inputs)) {
     }
 
     /// <summary>
-    /// The names of every alias the running <c>pwsh</c> defines — the live
-    /// <c>Get-Alias</c> set, for the <c>PwshAliases</c> completeness gate
-    /// (SPEC.POWERSHELL.md §6.3). Returns null when <c>pwsh</c> is absent.
+    /// Every alias and definition the selected PowerShell defines — the live
+    /// <c>Get-Alias</c> set for the <c>PwshAliases</c> completeness and
+    /// definition gate (SPEC.POWERSHELL.md §6.3). Returns null when the
+    /// selected executable is absent or incompatible.
     /// </summary>
-    public static IReadOnlyList<string>? GetAliasNames()
+    public static IReadOnlyList<PwshAliasDefinition>? GetAliasDefinitions(
+        PwshDialect dialect)
     {
-        if (!TryRunPwsh(
-                "-NoProfile -NoLogo -Command \"Get-Alias | ForEach-Object Name\"", 60000, out var stdout))
+        if (!IsAvailable(dialect) ||
+            !TryRunPowerShell(
+                Executable(dialect),
+                "-NoProfile -NoLogo -NonInteractive -Command \"@(Get-Alias | Select-Object Name,Definition) | ConvertTo-Json -Compress\"",
+                60000,
+                out var stdout,
+                out _))
         {
             return null;
         }
 
-        return stdout.Split(
-            new[] { '\r', '\n' },
-            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        try
+        {
+            return JsonSerializer.Deserialize<PwshAliasDefinition[]>(stdout.Trim());
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>
     /// The names of every variable a fresh no-profile <c>pwsh</c> process
-    /// defines. Returns null when <c>pwsh</c> is absent.
+    /// defines. Returns null when the selected executable is absent or incompatible.
     /// </summary>
-    public static IReadOnlyList<string>? GetVariableNames()
+    public static IReadOnlyList<string>? GetVariableNames(
+        PwshDialect dialect)
     {
-        if (!TryRunPwsh(
+        if (!IsAvailable(dialect) ||
+            !TryRunPowerShell(
+                Executable(dialect),
                 "-NoProfile -NoLogo -NonInteractive -Command \"Get-Variable | ForEach-Object Name\"",
                 60000,
-                out var stdout))
+                out var stdout,
+                out _))
         {
             return null;
         }
@@ -123,19 +174,31 @@ $counts = foreach ($s in @($inputs)) {
     }
 
     /// <summary>
-    /// Run <c>pwsh</c> with <paramref name="arguments"/> and capture stdout.
-    /// Returns false when <c>pwsh</c> is absent, the run times out, or it
+    /// Run the selected executable with <paramref name="arguments"/> and capture stdout.
+    /// Returns false when the executable is absent, the run times out, or it
     /// exits non-zero. stderr is drained concurrently so a chatty child can
     /// never deadlock on a full pipe buffer; a timed-out child is killed.
     /// </summary>
-    private static bool TryRunPwsh(string arguments, int timeoutMs, out string stdout)
+    private static bool TryRunPowerShell(
+        string? executable,
+        string arguments,
+        int timeoutMs,
+        out string stdout,
+        out string failure)
     {
         stdout = string.Empty;
+        failure = string.Empty;
+        if (executable is null)
+        {
+            failure = "executable is not selected";
+            return false;
+        }
+
         try
         {
             using var process = Process.Start(new ProcessStartInfo
             {
-                FileName = "pwsh",
+                FileName = executable,
                 Arguments = arguments,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -145,27 +208,68 @@ $counts = foreach ($s in @($inputs)) {
 
             if (process is null)
             {
+                failure = "process did not start";
                 return false;
             }
 
-            // Start draining stderr before the blocking stdout read.
-            Task<string> stderr = process.StandardError.ReadToEndAsync();
-            stdout = process.StandardOutput.ReadToEnd();
+            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
+            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
 
             if (!process.WaitForExit(timeoutMs))
             {
                 _ = TryKill(process);
+                _ = process.WaitForExit(5000);
+                _ = Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000);
+                failure = $"timed out after {timeoutMs} ms";
                 return false;
             }
 
-            stderr.Wait(5000);
-            return process.ExitCode == 0;
+            if (!Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000))
+            {
+                _ = TryKill(process);
+                failure = "stdout or stderr did not finish draining";
+                return false;
+            }
+
+            stdout = stdoutTask.GetAwaiter().GetResult();
+            var stderr = stderrTask.GetAwaiter().GetResult();
+            if (process.ExitCode == 0)
+            {
+                return true;
+            }
+
+            failure = $"exited with code {process.ExitCode}; stderr: {stderr.Trim()}";
+            return false;
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or FileNotFoundException)
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or
+                                   FileNotFoundException or
+                                   IOException or
+                                   AggregateException)
         {
+            failure = ex.Message;
             return false;
         }
     }
+
+    private static string? VersionProbeArguments(PwshDialect dialect) => dialect switch
+    {
+        PwshDialect.PowerShell7 =>
+            "-NoProfile -NoLogo -NonInteractive -Command \"" +
+            "$v = $PSVersionTable.PSVersion; " +
+            "if ($v -lt [version]'7.6.4' -or $v -ge [version]'7.7') { exit 2 }; exit 0\"",
+        PwshDialect.WindowsPowerShell51 =>
+            "-NoProfile -NoLogo -NonInteractive -Command \"" +
+            "$v = $PSVersionTable.PSVersion; " +
+            "if ($v.Major -ne 5 -or $v.Minor -ne 1) { exit 2 }; exit 0\"",
+        _ => null,
+    };
+
+    private static string? Executable(PwshDialect dialect) => dialect switch
+    {
+        PwshDialect.PowerShell7 => "pwsh",
+        PwshDialect.WindowsPowerShell51 => "powershell.exe",
+        _ => null,
+    };
 
     private static bool TryKill(Process process)
     {
@@ -197,3 +301,6 @@ $counts = foreach ($s in @($inputs)) {
         }
     }
 }
+
+/// <summary>An alias name and its canonical definition from real PowerShell.</summary>
+public sealed record PwshAliasDefinition(string Name, string Definition);

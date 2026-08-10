@@ -275,7 +275,8 @@ internal static class PwshExecutionRegionBindingCatalog
 
     internal static bool TryResolveStaticCommandName(
         string command,
-        out string? canonicalName)
+        out string? canonicalName,
+        PwshDialect dialect)
     {
         canonicalName = command;
         var separator = command.LastIndexOf('\\');
@@ -291,7 +292,7 @@ internal static class PwshExecutionRegionBindingCatalog
             return true;
         }
 
-        var alias = PwshAliases.Resolve(command);
+        var alias = PwshAliases.Resolve(command, dialect);
         if (alias is not null)
         {
             canonicalName = alias;
@@ -303,6 +304,7 @@ internal static class PwshExecutionRegionBindingCatalog
     internal static PwshExecutionRegionBindingResult Bind(
         Clause clause,
         bool commandIdentityProven,
+        PwshDialect dialect,
         bool threadJobModuleProven = false)
     {
         var scriptBlocks = FindScriptBlocks(clause.Elements);
@@ -314,7 +316,7 @@ internal static class PwshExecutionRegionBindingCatalog
             };
         }
 
-        if (!TryResolveCommand(clause.Verb, out var canonicalName, out var entry))
+        if (!TryResolveCommand(clause.Verb, dialect, out var canonicalName, out var entry))
         {
             return Unknown(canonicalName, scriptBlocks);
         }
@@ -338,6 +340,15 @@ internal static class PwshExecutionRegionBindingCatalog
                 Receiver = entry.Receiver,
                 CanonicalCommandName = canonicalName,
             };
+        }
+
+        if (dialect == PwshDialect.WindowsPowerShell51)
+        {
+            // The 5.1 callback/job parameter catalogs are intentionally not
+            // inferred from the PowerShell 7 metadata table. Keep completely
+            // delimited bodies visible, but incomplete, until each receiver
+            // table is proved against the Windows PowerShell oracle.
+            return Ambiguous(canonicalName, entry.Receiver, scriptBlocks);
         }
 
         var arguments = BindArguments(clause.Elements, entry);
@@ -1519,6 +1530,7 @@ internal static class PwshExecutionRegionBindingCatalog
 
     private static bool TryResolveCommand(
         VerbChain verb,
+        PwshDialect dialect,
         out string? canonicalName,
         out CommandEntry entry)
     {
@@ -1529,7 +1541,7 @@ internal static class PwshExecutionRegionBindingCatalog
             return false;
         }
 
-        return TryResolveStaticCommandName(canonicalName, out canonicalName)
+        return TryResolveStaticCommandName(canonicalName, out canonicalName, dialect)
             && Commands.TryGetValue(canonicalName!, out entry!);
     }
 

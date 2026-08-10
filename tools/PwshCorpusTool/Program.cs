@@ -14,21 +14,24 @@ using ShellSyntaxTree.Tools.PwshCorpus;
 //
 //   generate [outputDir]   Regenerate every Corpus/powershell/NNN_slug.json
 //                          from the curated CorpusManifest.
-//   check "<command>"      Print the parser's expected-AST JSON block for a
-//                          command beside the real-pwsh oracle verdict.
+//   check [--dialect <dialect>] "<command>"
+//                          Print the parser's expected-AST JSON block for a
+//                          command beside the selected PowerShell verdict.
 //   check-bash "<command>" Print Bash parser expectations using the same
 //                          resolver settings as the executable corpus.
 
 // The corpus runner pins these resolver knobs; generation must match.
-static PwshParser CreatePwshParser(PwshInitialStateMode? initialStateMode = null) =>
+static PwshParser CreatePwshParser(
+    PwshInitialStateMode? initialStateMode = null,
+    PwshDialect? dialect = null) =>
     new(new PwshParserOptions
     {
         HomeDirectory = "C:/Users/user",
         WorkingDirectory = "C:/work",
         InitialStateMode = initialStateMode ?? PwshInitialStateMode.Unknown,
+        Dialect = dialect ?? PwshDialect.PowerShell7,
     });
 
-var parser = CreatePwshParser();
 var bashParser = new BashParser(new BashParserOptions
 {
     HomeDirectory = "/home/test",
@@ -47,7 +50,7 @@ switch (args[0].ToLowerInvariant())
     case "generate":
         return Generate(args.Length > 1 ? args[1] : DefaultCorpusDir());
     case "check":
-        return Check(string.Join(' ', args.Skip(1)));
+        return Check(args.Skip(1).ToArray());
     case "check-bash":
         return CheckBash(string.Join(' ', args.Skip(1)));
     default:
@@ -71,7 +74,9 @@ int Generate(string outputDir)
     foreach (var entry in entries)
     {
         var input = entry.ResolveInput();
-        var parsed = CreatePwshParser(entry.PowerShellInitialStateMode).Parse(input);
+        var parsed = CreatePwshParser(
+            entry.PowerShellInitialStateMode,
+            entry.PowerShellDialect).Parse(input);
         var json = CorpusJson.BuildEntry(
             entry.Name,
             input,
@@ -82,7 +87,8 @@ int Generate(string outputDir)
             entry.IncludeStructure,
             entry.IncludeOptionalAssertions,
             entry.IncludeV03Assertions,
-            entry.PowerShellInitialStateMode);
+            entry.PowerShellInitialStateMode,
+            entry.PowerShellDialect);
         var fileName = $"{index:D3}_{entry.Slug}.json";
         File.WriteAllText(Path.Combine(outputDir, fileName), json);
         index++;
@@ -92,15 +98,33 @@ int Generate(string outputDir)
     return 0;
 }
 
-int Check(string command)
+int Check(string[] checkArgs)
 {
+    var dialect = PwshDialect.PowerShell7;
+    var commandStart = 0;
+    if (checkArgs.Length > 0 &&
+        string.Equals(checkArgs[0], "--dialect", StringComparison.OrdinalIgnoreCase))
+    {
+        if (checkArgs.Length < 3 ||
+            !Enum.TryParse(checkArgs[1], ignoreCase: true, out dialect) ||
+            dialect is not (PwshDialect.PowerShell7 or PwshDialect.WindowsPowerShell51))
+        {
+            Console.Error.WriteLine(
+                "check: --dialect must be PowerShell7 or WindowsPowerShell51.");
+            return 1;
+        }
+
+        commandStart = 2;
+    }
+
+    var command = string.Join(' ', checkArgs.Skip(commandStart));
     if (string.IsNullOrEmpty(command))
     {
         Console.Error.WriteLine("check: supply a command string.");
         return 1;
     }
 
-    var parsed = parser.Parse(command);
+    var parsed = CreatePwshParser(dialect: dialect).Parse(command);
     Console.WriteLine("---- parser expected AST ----");
     Console.WriteLine(CorpusJson.BuildEntry(
         "check",
@@ -111,20 +135,21 @@ int Check(string command)
         includeElements: true,
         includeStructure: true,
         includeOptionalAssertions: true,
-        includeV03Assertions: false));
+        includeV03Assertions: false,
+        powerShellDialect: dialect == PwshDialect.PowerShell7 ? null : dialect));
 
-    Console.WriteLine("---- real pwsh oracle ----");
-    var counts = PwshOracle.CountParseErrors(new[] { command });
+    Console.WriteLine($"---- {dialect} oracle ----");
+    var counts = PwshOracle.CountParseErrors(new[] { command }, dialect);
     if (counts is null)
     {
-        Console.WriteLine("pwsh not available — oracle skipped.");
+        Console.WriteLine($"{dialect} compatible executable not available — oracle skipped.");
     }
     else
     {
         var errors = counts[0];
         Console.WriteLine(errors == 0
-            ? "pwsh: 0 parse errors (valid PowerShell)."
-            : $"pwsh: {errors} parse error(s) (malformed PowerShell).");
+            ? $"{dialect}: 0 parse errors (valid PowerShell)."
+            : $"{dialect}: {errors} parse error(s) (malformed PowerShell).");
     }
 
     Console.WriteLine($"parser: IsUnparseable={parsed.IsUnparseable}"
@@ -162,6 +187,7 @@ static void PrintUsage()
     Console.WriteLine("PwshCorpusTool — PowerShell corpus authoring aid");
     Console.WriteLine();
     Console.WriteLine("  generate [outputDir]   Regenerate the Corpus/powershell/ entries.");
-    Console.WriteLine("  check \"<command>\"      Show the parser AST + the real-pwsh verdict.");
+    Console.WriteLine("  check [--dialect PowerShell7|WindowsPowerShell51] \"<command>\"");
+    Console.WriteLine("                          Show the parser AST + selected-shell verdict.");
     Console.WriteLine("  check-bash \"<command>\" Show the Bash parser AST for corpus authoring.");
 }

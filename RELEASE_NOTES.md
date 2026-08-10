@@ -11,6 +11,13 @@
   ShellSyntaxTree does not define a stable serialized wire format. Persisted
   results require a consumer-owned, versioned DTO or explicit serializer
   mapping that fails closed on unknown node and enum values.
+- `PwshParserOptions.Dialect` is additive and defaults to `PowerShell7` for
+  compatibility. Native Windows consumers select it only for a compatible
+  PowerShell 7.6 host (`>=7.6.4` and `<7.7`) and select
+  `WindowsPowerShell51` when falling back to `powershell.exe`; the host,
+  parser dialect, approval policy, and executor identity must agree. The new
+  property also participates in options-record equality, hashing, `ToString()`,
+  reflection, and default serialization shape.
 
 #### 0.3.0-alpha.4 2026-08-09 ####
 

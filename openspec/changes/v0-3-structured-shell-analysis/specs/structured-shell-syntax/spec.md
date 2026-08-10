@@ -1,5 +1,89 @@
 ## ADDED Requirements
 
+### Requirement: The execution environment selects one top-level grammar
+The consumer SHALL select exactly one parser from the shell that will execute
+the submitted source. A parser SHALL NOT auto-detect another shell from an
+executable name or delegate payload text to a different shell parser.
+Same-language command-string recursion SHALL remain owned by the selected
+parser and SHALL NOT imply cross-language parsing.
+
+#### Scenario: PowerShell host invoked by Bash stays a Bash command
+- **WHEN** `BashParser` parses `pwsh -NoProfile -Command 'Get-Content input.txt | Set-Content output.txt'`
+- **THEN** it exposes one ordinary external `pwsh` command occurrence
+- **THEN** the quoted payload remains a Bash argument
+- **THEN** no `Get-Content` or `Set-Content` child occurrence is invented
+
+#### Scenario: Bash host invoked by PowerShell stays a PowerShell command
+- **WHEN** `PwshParser` parses `bash -c 'rm target.txt'`
+- **THEN** it exposes one ordinary external `bash` command occurrence
+- **THEN** the quoted payload remains a PowerShell argument
+- **THEN** no Bash `rm` child occurrence is invented
+
+#### Scenario: Same-language wrapper recursion remains local
+- **WHEN** the selected parser encounters one of its supported static command-string wrappers
+- **THEN** it may surface decoded child commands using the same shell family
+- **THEN** it does not inspect that child for another shell language
+
+### Requirement: PowerShell parsing uses an explicit dialect
+`PwshParserOptions` SHALL expose a `PwshDialect` option with `Unknown=0`,
+`PowerShell7=1`, and `WindowsPowerShell51=2`. The option SHALL default to
+`PowerShell7` so existing constructors and object initializers retain their
+released behavior. The parser SHALL NOT discover or infer a dialect from the
+local machine.
+
+Each dialect SHALL use only grammar, aliases, parameter bindings, and
+execution-region receiver facts proved for that edition. `Unknown`, an
+unrecognized future enum value, or unsupported grammar in the selected dialect
+SHALL make the result unparseable with empty command and compatibility
+projections. A completely delimited execution region whose receiver metadata
+is unavailable for the selected dialect SHALL remain visible and incomplete;
+it is not an unavailable grammar production.
+
+#### Scenario: Existing callers retain PowerShell 7 behavior
+- **WHEN** a consumer constructs `new PwshParser()` or omits `Dialect` from `PwshParserOptions`
+- **THEN** the selected dialect is `PowerShell7`
+- **THEN** existing PowerShell 7 corpus behavior is unchanged
+
+#### Scenario: Windows PowerShell rejects PowerShell 7 pipeline chains
+- **WHEN** `WindowsPowerShell51` parses `Get-Item a && Get-Item b`
+- **THEN** the result is unparseable with empty authorization projections
+- **WHEN** `PowerShell7` parses the same source
+- **THEN** the existing pipeline-chain structure is retained
+
+#### Scenario: Dialect grammar applies inside every recursively parsed region
+- **WHEN** `WindowsPowerShell51` encounters `&&` or `||` inside a loop body, direct block, command-owned block, substitution, static expression, or decoded `powershell.exe` payload
+- **THEN** the entire result is unparseable with empty authorization projections
+- **THEN** no nested parser path silently accepts PowerShell 7 grammar
+
+#### Scenario: Dialect-specific receiver metadata does not leak
+- **WHEN** `WindowsPowerShell51` parses `ForEach-Object -Parallel { Get-Date }`
+- **THEN** PowerShell 7-only `-Parallel` receiver semantics are not published
+- **THEN** the host and completely delimited body remain visible and incomplete
+
+#### Scenario: Dialect-specific aliases do not leak
+- **WHEN** `WindowsPowerShell51` parses the unqualified command `curl example.test`
+- **THEN** its versioned default-alias classification identifies `Invoke-WebRequest`
+- **WHEN** `PowerShell7` parses the same authored command
+- **THEN** it remains a native `curl` spelling rather than borrowing the Windows PowerShell alias
+
+#### Scenario: Edition-only aliases stay in their owning dialect
+- **WHEN** `WindowsPowerShell51` parses `gwmi Win32_OperatingSystem`
+- **THEN** its versioned default-alias classification identifies `Get-WmiObject`
+- **WHEN** `WindowsPowerShell51` parses `gerr`
+- **THEN** it remains a native spelling rather than borrowing PowerShell 7's `Get-Error` alias
+
+#### Scenario: Static PowerShell child host selects its own dialect
+- **WHEN** a PowerShell parse recursively decodes a static `pwsh -Command` child
+- **THEN** the child uses `PowerShell7`
+- **WHEN** it recursively decodes a static `powershell.exe -Command` child
+- **THEN** the child uses `WindowsPowerShell51`
+- **THEN** dynamic or ambiguous host identity does not select either dialect
+
+#### Scenario: Current-scope analysis preserves the selected dialect
+- **WHEN** Windows PowerShell 5.1 parses a group, substitution, loop, redirect, or resolver-sensitive value
+- **THEN** every internal options clone and current-scope recursive parse retains `WindowsPowerShell51`
+- **THEN** only a statically recognized PowerShell child-host wrapper may select a different dialect
+
 ### Requirement: Parsed commands expose authored nested structure
 Every fully parsed command SHALL expose one library-owned syntax root that
 preserves the authored nesting and source order of supported command lists,

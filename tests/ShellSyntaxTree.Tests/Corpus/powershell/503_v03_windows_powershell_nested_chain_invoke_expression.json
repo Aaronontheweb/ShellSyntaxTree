@@ -1,0 +1,11 @@
+{
+  "name": "V03 windows powershell nested chain invoke expression",
+  "input": "Invoke-Expression \u0027Get-Item a \u0026\u0026 Get-Item b\u0027",
+  "powerShellDialect": "WindowsPowerShell51",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell pipeline-chain operators require the PowerShell 7 dialect"
+  },
+  "notes": "Static current-scope recursion keeps the selected 5.1 grammar while the outer parser sees data.",
+  "oracleExpectation": "OutOfScope"
+}

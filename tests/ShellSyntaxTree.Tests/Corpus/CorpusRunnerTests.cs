@@ -42,12 +42,14 @@ public class CorpusRunnerTests
         if (shell != "powershell")
         {
             Assert.Null(entry.PowerShellInitialStateMode);
+            Assert.Null(entry.PowerShellDialect);
         }
 
         var actual = CreateParser(
             shell,
             entry.BashInitialStateMode,
-            entry.PowerShellInitialStateMode).Parse(entry.Input);
+            entry.PowerShellInitialStateMode,
+            entry.PowerShellDialect).Parse(entry.Input);
         AstAssert.Equal(entry.Expected!, actual, $"{shell}/{fileName}");
         AssertClauseElementInvariants(actual, $"{shell}/{fileName}");
         AssertAuthoredTokenCoverage(shell, actual, $"{shell}/{fileName}");
@@ -880,7 +882,8 @@ public class CorpusRunnerTests
     internal static IShellParser CreateParser(
         string shell,
         BashInitialStateMode? bashInitialStateMode = null,
-        PwshInitialStateMode? powerShellInitialStateMode = null) => shell switch
+        PwshInitialStateMode? powerShellInitialStateMode = null,
+        PwshDialect? powerShellDialect = null) => shell switch
         {
             "bash" => new BashParser(new BashParserOptions
             {
@@ -894,6 +897,7 @@ public class CorpusRunnerTests
                 HomeDirectory = "C:/Users/user",
                 WorkingDirectory = "C:/work",
                 InitialStateMode = powerShellInitialStateMode ?? PwshInitialStateMode.Unknown,
+                Dialect = powerShellDialect ?? PwshDialect.PowerShell7,
             }),
             _ => throw new InvalidOperationException(
                 $"No parser is registered for corpus shell directory '{shell}'."),
@@ -957,12 +961,14 @@ public sealed record CorpusEntry
 
     public PwshInitialStateMode? PowerShellInitialStateMode { get; init; }
 
+    public PwshDialect? PowerShellDialect { get; init; }
+
     public ExpectedParsedCommand? Expected { get; init; }
 
     public string? Notes { get; init; }
 
     /// <summary>
-    /// Ground-truth expectation for the real-<c>pwsh</c> validation gate
+    /// Ground-truth expectation for the selected PowerShell validation gate
     /// (SPEC.POWERSHELL.md §13). Meaningful only when
     /// <c>expected.isUnparseable</c> is true; defaults to
     /// <see cref="OracleExpectation.SyntaxError"/>.
@@ -1164,18 +1170,18 @@ public sealed record ExpectedClause
 }
 
 /// <summary>
-/// Ground-truth expectation for the real-<c>pwsh</c> validation gate
+/// Ground-truth expectation for the selected PowerShell validation gate
 /// (SPEC.POWERSHELL.md §13). Meaningful only when <c>isUnparseable</c> is
 /// true.
 /// </summary>
 public enum OracleExpectation
 {
-    /// <summary>Genuinely malformed PowerShell — real <c>pwsh</c> must also
-    /// reject it.</summary>
+    /// <summary>Genuinely malformed PowerShell — the selected real shell must
+    /// also reject it.</summary>
     SyntaxError,
 
     /// <summary>Valid PowerShell the parser deliberately does not model —
-    /// real <c>pwsh</c> must accept it. Also covers an over-cap input, an
+    /// the selected real shell must accept it. Also covers an over-cap input, an
     /// <c>-EncodedCommand</c> decode failure, or a recursion overflow.</summary>
     OutOfScope,
 }

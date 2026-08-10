@@ -17,9 +17,19 @@ jobs:
     name: Test-${{matrix.os}}
     runs-on: ${{matrix.os}}
 
+    defaults:
+      run:
+        shell: bash
+
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            pwsh_asset: powershell-7.6.4-linux-x64-fxdependent.tar.gz
+            pwsh_sha256: e5c58d325a52200c37e6161b52e12141eb9a9d2685e2c8835c95018a614fd286
+          - os: windows-latest
+            pwsh_asset: PowerShell-7.6.4-win-fxdependent.zip
+            pwsh_sha256: 2a4036b4a0c4d1d69ed9069fa97deaf4a8cd81a0eacd1a30e6e4109fdc359796
 
     steps:
       - name: "Checkout"
@@ -36,18 +46,67 @@ jobs:
       - name: "Restore .NET tools"
         run: dotnet tool restore
 
-      - name: "Verify copyright headers"
+      - name: "Install pinned PowerShell 7.6.4 oracle"
         shell: pwsh
+        run: |
+          $asset = '${{ matrix.pwsh_asset }}'
+          $archive = Join-Path $env:RUNNER_TEMP $asset
+          $installDirectory = Join-Path $env:RUNNER_TEMP 'pwsh-7.6.4'
+          $uri = "https://github.com/PowerShell/PowerShell/releases/download/v7.6.4/$asset"
+
+          Invoke-WebRequest -Uri $uri -OutFile $archive
+          $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($actualHash -ne '${{ matrix.pwsh_sha256 }}') {
+            throw "PowerShell archive hash mismatch for ${asset}: $actualHash"
+          }
+
+          [void](New-Item -ItemType Directory -Force -Path $installDirectory)
+          if ($asset.EndsWith('.zip', [StringComparison]::OrdinalIgnoreCase)) {
+            Expand-Archive -LiteralPath $archive -DestinationPath $installDirectory -Force
+          }
+          else {
+            & tar -xzf $archive -C $installDirectory
+            if ($LASTEXITCODE -ne 0) {
+              throw "tar failed with exit code $LASTEXITCODE"
+            }
+          }
+
+          $installDirectory | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: "Verify copyright headers"
+        shell: pwsh -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ". '{0}'"
         run: ./scripts/Add-FileHeaders.ps1 -Verify
 
-      - name: "Verify pwsh is available (SPEC.POWERSHELL.md §13 oracle gate)"
+      - name: "Verify compatible PowerShell 7.6 is available (SPEC.POWERSHELL.md §13 oracle gate)"
         shell: bash
         run: |
           if ! command -v pwsh >/dev/null 2>&1; then
             echo "::error::pwsh is not on PATH — the PowerShell corpus oracle gate (PwshOracleTests) would silently skip."
             exit 1
           fi
-          pwsh --version
+          pwsh -NoProfile -NoLogo -NonInteractive -Command '
+            $v = $PSVersionTable.PSVersion
+            if ($v -lt [version]"7.6.4" -or $v -ge [version]"7.7") {
+              throw "Expected PowerShell >= 7.6.4 and < 7.7, found $v"
+            }
+            $v.ToString()
+          '
+
+      - name: "Verify Windows PowerShell 5.1 is available"
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          if ! command -v powershell.exe >/dev/null 2>&1; then
+            echo "::error::powershell.exe is not on the Bash PATH used by dotnet test — the Windows PowerShell 5.1 oracle would silently skip."
+            exit 1
+          fi
+          powershell.exe -NoProfile -NoLogo -NonInteractive -Command '
+            $v = $PSVersionTable.PSVersion
+            if ($v.Major -ne 5 -or $v.Minor -ne 1) {
+              throw "Expected Windows PowerShell 5.1, found $v"
+            }
+            $v.ToString()
+          '
 
       - name: "dotnet restore"
         run: dotnet restore

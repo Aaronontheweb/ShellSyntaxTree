@@ -16,6 +16,14 @@ fail-closed behavior for incomplete analysis.
 - Add a strongly typed syntax-node hierarchy above the existing `Clause` leaf
   model, with shell-specific front ends producing one shared structural
   contract where their semantics actually coincide.
+- Make the execution environment select exactly one top-level shell grammar.
+  A Bash parse never delegates a `pwsh` argument to the PowerShell parser, and
+  a PowerShell parse never delegates a `bash -c` argument to the Bash parser.
+  Same-language command-string recursion remains parser-local.
+- Add an explicit PowerShell dialect option. Preserve PowerShell 7 as the
+  compatibility default, add Windows PowerShell 5.1 for the native-Windows
+  fallback, and fail closed rather than borrowing syntax, aliases, or command
+  metadata from the wrong dialect.
 - Add a library-owned command-occurrence projection containing every command
   that may execute in supported grammar, including iterator, loop-body,
   wrapped, substitution, and PowerShell script-block execution-region commands.

@@ -42,6 +42,13 @@ internal static partial class PwshCommandParser
             throw new ArgumentNullException(nameof(options));
         }
 
+        if (!IsSupportedDialect(options.Dialect))
+        {
+            return Unparseable(
+                source,
+                $"unsupported PowerShell dialect value {(int)options.Dialect}");
+        }
+
         return ParseInternal(
             source, options, recursionDepth: 0, structuralDepth: 0, markWrapped: false,
             sharedLocation: null);
@@ -85,7 +92,7 @@ internal static partial class PwshCommandParser
             return new ParsedCommand { Source = source, Clauses = Array.Empty<Clause>() };
         }
 
-        if (TryDetectAnomaly(significant, out var anomalyReason))
+        if (TryDetectAnomaly(significant, options.Dialect, out var anomalyReason))
         {
             return Unparseable(source, anomalyReason);
         }
@@ -107,6 +114,23 @@ internal static partial class PwshCommandParser
         IsUnparseable = true,
         UnparseableReason = reason,
     };
+
+    private static bool IsSupportedDialect(PwshDialect dialect) =>
+        dialect is PwshDialect.PowerShell7 or PwshDialect.WindowsPowerShell51;
+
+    private static bool ContainsPipelineChainOperator(IReadOnlyList<PwshToken> tokens)
+    {
+        foreach (var token in tokens)
+        {
+            if (token.Kind == PwshTokenKind.Operator &&
+                token.OperatorText is "&&" or "||")
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     // ---------------------------------------------------------------- filtering
 
@@ -158,15 +182,25 @@ internal static partial class PwshCommandParser
 
     // ---------------------------------------------------------------- anomalies
 
-    private static bool TryDetectAnomaly(IReadOnlyList<PwshToken> tokens, out string? reason)
+    private static bool TryDetectAnomaly(
+        IReadOnlyList<PwshToken> tokens,
+        PwshDialect dialect,
+        out string? reason)
     {
+        if (dialect == PwshDialect.WindowsPowerShell51 &&
+            ContainsPipelineChainOperator(tokens))
+        {
+            reason = "PowerShell pipeline-chain operators require the PowerShell 7 dialect";
+            return true;
+        }
+
         // Item 3: control-flow / definition / block keyword at a verb slot.
         if (TryDetectKeywordAnomaly(tokens, out reason))
         {
             return true;
         }
 
-        if (TryDetectUnsupportedInvocationShape(tokens, out reason))
+        if (TryDetectUnsupportedInvocationShape(tokens, dialect, out reason))
         {
             return true;
         }
@@ -188,7 +222,9 @@ internal static partial class PwshCommandParser
     }
 
     private static bool TryDetectUnsupportedInvocationShape(
-        IReadOnlyList<PwshToken> tokens, out string? reason)
+        IReadOnlyList<PwshToken> tokens,
+        PwshDialect dialect,
+        out string? reason)
     {
         var verbSlot = true;
         for (var index = 0; index < tokens.Count; index++)
@@ -232,7 +268,7 @@ internal static partial class PwshCommandParser
                     }
                 }
 
-                if (IsUnsupportedModuleQualifiedCmdlet(token.Value))
+                if (IsUnsupportedModuleQualifiedCmdlet(token.Value, dialect))
                 {
                     reason = $"module-qualified cmdlet '{token.Value}' is not supported in v0.2";
                     return true;
@@ -240,7 +276,7 @@ internal static partial class PwshCommandParser
             }
 
             if (verbSlot && token.Kind == PwshTokenKind.QuotedString
-                && IsUnsupportedModuleQualifiedCmdlet(token.Value))
+                && IsUnsupportedModuleQualifiedCmdlet(token.Value, dialect))
             {
                 reason = $"module-qualified cmdlet '{token.Value}' is not supported in v0.2";
                 return true;
@@ -253,7 +289,9 @@ internal static partial class PwshCommandParser
         return false;
     }
 
-    private static bool IsUnsupportedModuleQualifiedCmdlet(string command)
+    private static bool IsUnsupportedModuleQualifiedCmdlet(
+        string command,
+        PwshDialect dialect)
     {
         if (string.Equals(
             command,
@@ -276,7 +314,7 @@ internal static partial class PwshCommandParser
 
         var commandName = command.Substring(separator + 1);
         return PwshApprovedVerbs.IsCmdletShaped(commandName) ||
-            PwshAliases.IsKnownCanonical(commandName);
+            PwshAliases.IsKnownCanonical(commandName, dialect);
     }
 
     private static bool TryDetectKeywordAnomaly(IReadOnlyList<PwshToken> tokens, out string? reason)
@@ -564,7 +602,7 @@ internal static partial class PwshCommandParser
         }
 
         // Classify the command.
-        var classified = ClassifyVerb(body, start);
+        var classified = ClassifyVerb(body, start, effectiveOptions.Dialect);
         if (TryHandleInvokeExpression(
             body, start, classified, source, baseOptions, recursionDepth,
             structuralDepth, segment, markWrapped, attribution, out var expressionResult))
@@ -715,7 +753,10 @@ internal static partial class PwshCommandParser
         public HashSet<int> VerbPositions { get; init; }
     }
 
-    private static ClassifiedVerb ClassifyVerb(List<PwshToken> body, int start)
+    private static ClassifiedVerb ClassifyVerb(
+        List<PwshToken> body,
+        int start,
+        PwshDialect dialect)
     {
         var head = body[start];
         var verbPositions = new HashSet<int> { start };
@@ -771,12 +812,12 @@ internal static partial class PwshCommandParser
                 Kind = PwshCommandKind.Cmdlet,
                 VerbTokens = new List<string> { word },
                 BindingSemanticsProven = PwshVerbs.FileVerbs.Contains(word)
-                    || PwshAliases.IsKnownCanonical(word),
+                    || PwshAliases.IsKnownCanonical(word, dialect),
                 VerbPositions = verbPositions,
             };
         }
 
-        var alias = PwshAliases.Resolve(word);
+        var alias = PwshAliases.Resolve(word, dialect);
         if (alias is not null)
         {
             return new ClassifiedVerb
@@ -2210,6 +2251,7 @@ internal static partial class PwshCommandParser
             var childOptions = redirectOptions with
             {
                 InitialStateMode = PwshInitialStateMode.Unknown,
+                Dialect = ChildHostDialect(verb.VerbTokens[0]),
             };
             PwshSetLocationContext? childLocation = null;
             if (workingDirectoryUnknown)
@@ -2343,6 +2385,13 @@ internal static partial class PwshCommandParser
         return name.Length >= 5
             && "-command".StartsWith(name, StringComparison.OrdinalIgnoreCase);
     }
+
+    private static PwshDialect ChildHostDialect(string host) =>
+        host is not null &&
+        (string.Equals(host, "powershell", StringComparison.OrdinalIgnoreCase) ||
+         string.Equals(host, "powershell.exe", StringComparison.OrdinalIgnoreCase))
+            ? PwshDialect.WindowsPowerShell51
+            : PwshDialect.PowerShell7;
 
     private static bool IsEncodedCommandParameter(string name)
     {

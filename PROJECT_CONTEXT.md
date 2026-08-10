@@ -24,8 +24,9 @@ The output is a `ParsedCommand` containing:
   elements; executable-specific semantics remain consumer-owned
 - Bash `cd <dir> && cmd` and PowerShell `Set-Location <dir>; cmd`
   propagation — the target is attributed to subsequent clauses
-- recursion into `bash -c`, `pwsh -Command`, and `pwsh -EncodedCommand` so
-  wrapped commands surface as clauses
+- parser-local recursion into Bash `bash -c` or PowerShell `pwsh -Command` /
+  `pwsh -EncodedCommand`; an external shell invoked from the other language
+  remains an ordinary command and its payload is not cross-parsed
 - PowerShell alias canonicalization and explicit dynamic-command identity
 - Bash subshell isolation and PowerShell grouping semantics for cwd attribution
 - safe-fail flag `IsUnparseable` for unsupported constructs (control flow,
@@ -70,10 +71,15 @@ zero-native-deps .NET parser sized to what security gates actually need.
 
 - Bash and PowerShell 7 pipeline parsing ship behind the shared
   `IShellParser` seam. Windows `cmd` remains deferred.
+- Stable v0.3 keeps PowerShell 7 as the compatibility default and adds an
+  explicit Windows PowerShell 5.1 dialect for native-Windows fallback. The
+  executor, parser, approval policy, and model context must agree on the exact
+  selected shell; ShellSyntaxTree does not auto-detect it.
 - Public API surface in SPEC §2 is **locked**. Internal changes are free.
 - Acceptance is the multi-shell corpus contract: every Bash and PowerShell
   JSON entry parses to its expected AST, and the PowerShell corpus also passes
-  the live `pwsh` oracle matrix.
+  the dialect-matched live oracle matrix (`pwsh` for PowerShell 7 and
+  `powershell.exe` for Windows PowerShell 5.1 on Windows CI).
 
 ### v0.3 (contract design)
 

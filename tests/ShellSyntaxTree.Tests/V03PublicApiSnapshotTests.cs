@@ -553,6 +553,7 @@ public class V03PublicApiSnapshotTests
         var policySensitiveEnums = new[]
         {
             typeof(BashInitialStateMode),
+            typeof(PwshDialect),
             typeof(PwshInitialStateMode),
             typeof(ShellSyntaxKind),
             typeof(ShellGroupKind),

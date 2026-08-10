@@ -364,12 +364,13 @@ internal static class PwshPersistentStateMutation
 {
     internal static bool TryGetEffect(
         Clause clause,
+        PwshDialect dialect,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
         bool providerLocationUnknown,
         out bool unknownCwd)
     {
         unknownCwd = false;
-        var verb = GetCanonicalVerb(clause);
+        var verb = GetCanonicalVerb(clause, dialect);
         if (verb is null)
         {
             return false;
@@ -414,9 +415,10 @@ internal static class PwshPersistentStateMutation
 
     internal static bool MayEscapeChildScope(
         Clause clause,
+        PwshDialect dialect,
         IReadOnlyList<EffectiveArgument> effectiveArguments)
     {
-        var verb = GetCanonicalVerb(clause);
+        var verb = GetCanonicalVerb(clause, dialect);
         if (verb is null)
         {
             return true;
@@ -500,10 +502,11 @@ internal static class PwshPersistentStateMutation
 
     internal static bool MayEscapeChildRunspaceProcess(
         Clause clause,
+        PwshDialect dialect,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
         bool providerLocationUnknown)
     {
-        var verb = GetCanonicalVerb(clause);
+        var verb = GetCanonicalVerb(clause, dialect);
         if (verb is null)
         {
             return true;
@@ -536,10 +539,11 @@ internal static class PwshPersistentStateMutation
 
     internal static bool MayMutateAutomaticHome(
         Clause clause,
+        PwshDialect dialect,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
         bool providerLocationUnknown)
     {
-        var verb = GetCanonicalVerb(clause);
+        var verb = GetCanonicalVerb(clause, dialect);
         if (verb is null)
         {
             return true;
@@ -635,9 +639,11 @@ internal static class PwshPersistentStateMutation
             .EndsWith(".ps1", StringComparison.OrdinalIgnoreCase);
     }
 
-    internal static bool PreservesCommandResolution(Clause clause)
+    internal static bool PreservesCommandResolution(
+        Clause clause,
+        PwshDialect dialect)
     {
-        var verb = GetCanonicalVerb(clause);
+        var verb = GetCanonicalVerb(clause, dialect);
         return verb is not null &&
             (verb.Equals("Set-Variable", StringComparison.OrdinalIgnoreCase) ||
              verb.Equals("New-Variable", StringComparison.OrdinalIgnoreCase) ||
@@ -647,6 +653,7 @@ internal static class PwshPersistentStateMutation
 
     internal static bool TryGetCommandResolutionMutation(
         Clause clause,
+        PwshDialect dialect,
         IReadOnlyList<EffectiveArgument> effectiveArguments,
         bool providerLocationUnknown,
         out bool invalidatesAll,
@@ -654,7 +661,7 @@ internal static class PwshPersistentStateMutation
     {
         invalidatesAll = false;
         commandNames = Array.Empty<string>();
-        var verb = GetCanonicalVerb(clause);
+        var verb = GetCanonicalVerb(clause, dialect);
         if (verb is null)
         {
             invalidatesAll = true;
@@ -1203,20 +1210,25 @@ internal static class PwshPersistentStateMutation
         }
     }
 
-    internal static bool HasVariableWritingArgument(Clause clause)
+    internal static bool HasVariableWritingArgument(
+        Clause clause,
+        PwshDialect dialect)
     {
-        var verb = GetCanonicalVerb(clause);
+        var verb = GetCanonicalVerb(clause, dialect);
         return verb is null || HasVariableWritingArgument(verb, clause);
     }
 
-    private static string? GetCanonicalVerb(Clause clause)
+    private static string? GetCanonicalVerb(
+        Clause clause,
+        PwshDialect dialect)
     {
         var verb = clause.Verb.CanonicalVerb ??
             (clause.Verb.Tokens.Count == 0 ? null : clause.Verb.Tokens[0]);
         if (verb is not null &&
             PwshExecutionRegionBindingCatalog.TryResolveStaticCommandName(
                 verb,
-                out var canonicalName))
+                out var canonicalName,
+                dialect))
         {
             return canonicalName;
         }
@@ -2060,6 +2072,7 @@ internal sealed class PwshForEachValueAnalyzer
         var hasCommandResolutionMutation =
             PwshPersistentStateMutation.TryGetCommandResolutionMutation(
                 simple.Clause,
+                _options.Dialect,
                 effective,
                 providerLocationUnknown: current.WorkingDirectory is null,
                 out var invalidatesAllCommandNames,
@@ -2070,11 +2083,14 @@ internal sealed class PwshForEachValueAnalyzer
             commandIdentityMayMutateState ||
             PwshPersistentStateMutation.MayMutateAutomaticHome(
                 simple.Clause,
+                _options.Dialect,
                 effective,
                 providerLocationUnknown: current.WorkingDirectory is null);
         var preservesCommandResolution =
             !commandIdentityMayMutateState &&
-            PwshPersistentStateMutation.PreservesCommandResolution(simple.Clause);
+            PwshPersistentStateMutation.PreservesCommandResolution(
+                simple.Clause,
+                _options.Dialect);
         if (commandIdentityMayMutateState)
         {
             // Computed command identities and explicit source mutations can
@@ -2104,6 +2120,7 @@ internal sealed class PwshForEachValueAnalyzer
             _locationStateMutationCount++;
             if (PwshPersistentStateMutation.TryGetEffect(
                     simple.Clause,
+                    _options.Dialect,
                     effective,
                     providerLocationUnknown: current.WorkingDirectory is null,
                     out var locationEffectUnknownCwd))
@@ -2111,10 +2128,12 @@ internal sealed class PwshForEachValueAnalyzer
                 var mayEscapeChildRunspaceProcess =
                     PwshPersistentStateMutation.MayEscapeChildRunspaceProcess(
                         simple.Clause,
+                        _options.Dialect,
                         effective,
                         providerLocationUnknown: current.WorkingDirectory is null);
                 if (PwshPersistentStateMutation.MayEscapeChildScope(
                         simple.Clause,
+                        _options.Dialect,
                         effective))
                 {
                     _childScopeEscapeRiskCount++;
@@ -2156,6 +2175,7 @@ internal sealed class PwshForEachValueAnalyzer
 
         if (PwshPersistentStateMutation.TryGetEffect(
                 simple.Clause,
+                _options.Dialect,
                 effective,
                 providerLocationUnknown: current.WorkingDirectory is null,
                 out var unknownCwd))
@@ -2164,10 +2184,12 @@ internal sealed class PwshForEachValueAnalyzer
             var mayEscapeChildRunspaceProcess =
                 PwshPersistentStateMutation.MayEscapeChildRunspaceProcess(
                     simple.Clause,
+                    _options.Dialect,
                     effective,
                     providerLocationUnknown: current.WorkingDirectory is null);
             if (PwshPersistentStateMutation.MayEscapeChildScope(
                     simple.Clause,
+                    _options.Dialect,
                     effective))
             {
                 _childScopeEscapeRiskCount++;
@@ -2247,7 +2269,8 @@ internal sealed class PwshForEachValueAnalyzer
             receiverInput);
         var binding = PwshExecutionRegionBindingCatalog.Bind(
             simple.Clause,
-            receiverIdentityProven);
+            receiverIdentityProven,
+            _options.Dialect);
         if (binding.Status == PwshExecutionRegionBindingStatus.ProvedData)
         {
             RecordExecutionRegions(
@@ -2335,7 +2358,8 @@ internal sealed class PwshForEachValueAnalyzer
         if (binding.ParameterSet == PwshExecutionRegionParameterSet.NewModuleScriptBlock)
         {
             var bodyInput = PwshPersistentStateMutation.HasVariableWritingArgument(
-                simple.Clause)
+                simple.Clause,
+                _options.Dialect)
                 ? receiverInput.Invalidate(unknownCwd: false)
                 : receiverInput;
             return AnalyzeNewModule(regions[0], bodyInput, flow);
@@ -2551,6 +2575,7 @@ internal sealed class PwshForEachValueAnalyzer
             HomeDirectory = _options.HomeDirectory,
             WorkingDirectory = receiverInput.WorkingDirectory,
             InitialStateMode = _options.InitialStateMode,
+            Dialect = _options.Dialect,
         };
         var resolved = PwshResolver.Resolve(
             targetValue,
@@ -3304,7 +3329,7 @@ internal sealed class PwshForEachValueAnalyzer
         }
     }
 
-    private static bool PipelineStageEffectsMayReachRegionBodies(PipelineSyntax pipeline)
+    private bool PipelineStageEffectsMayReachRegionBodies(PipelineSyntax pipeline)
     {
         var hasPipelineSensitiveRegion = false;
         var statefulStageCount = 0;
@@ -3321,7 +3346,7 @@ internal sealed class PwshForEachValueAnalyzer
         return hasPipelineSensitiveRegion && statefulStageCount > 1;
     }
 
-    private static bool ContainsPipelineSensitiveExecutionRegion(ShellSyntaxNode node) =>
+    private bool ContainsPipelineSensitiveExecutionRegion(ShellSyntaxNode node) =>
         node switch
         {
             SimpleCommandSyntax simple => IsPipelineSensitiveExecutionRegionHost(simple),
@@ -3339,7 +3364,7 @@ internal sealed class PwshForEachValueAnalyzer
             _ => false,
         };
 
-    private static bool MayMutatePipelineState(ShellSyntaxNode node) =>
+    private bool MayMutatePipelineState(ShellSyntaxNode node) =>
         node switch
         {
             SimpleCommandSyntax simple => SimpleMayMutatePipelineState(simple),
@@ -3353,11 +3378,12 @@ internal sealed class PwshForEachValueAnalyzer
             _ => false,
         };
 
-    private static bool IsPipelineSensitiveExecutionRegionHost(SimpleCommandSyntax simple)
+    private bool IsPipelineSensitiveExecutionRegionHost(SimpleCommandSyntax simple)
     {
         var binding = PwshExecutionRegionBindingCatalog.Bind(
             simple.Clause,
-            commandIdentityProven: true);
+            commandIdentityProven: true,
+            dialect: _options.Dialect);
         return binding.Status == PwshExecutionRegionBindingStatus.ProvedExecution &&
             binding.ParameterSet is PwshExecutionRegionParameterSet.ForEachScriptBlock or
                 PwshExecutionRegionParameterSet.ForEachParallel or
@@ -3368,7 +3394,7 @@ internal sealed class PwshForEachValueAnalyzer
                 PwshExecutionRegionParameterSet.NewModuleScriptBlock;
     }
 
-    private static bool SimpleMayMutatePipelineState(SimpleCommandSyntax simple)
+    private bool SimpleMayMutatePipelineState(SimpleCommandSyntax simple)
     {
         if (simple.Substitutions.Count > 0 ||
             simple.ExecutionRegions.Count > 0 ||
@@ -3379,6 +3405,7 @@ internal sealed class PwshForEachValueAnalyzer
 
         return PwshPersistentStateMutation.TryGetEffect(
             simple.Clause,
+            _options.Dialect,
             Array.Empty<EffectiveArgument>(),
             providerLocationUnknown: false,
             out _);
@@ -3799,6 +3826,7 @@ internal sealed class PwshForEachValueAnalyzer
             HomeDirectory = _options.HomeDirectory,
             WorkingDirectory = input.WorkingDirectory,
             InitialStateMode = _options.InitialStateMode,
+            Dialect = _options.Dialect,
         };
         var resolved = PwshResolver.Resolve(
             ShellValue.Literal(target),
@@ -4391,6 +4419,7 @@ internal sealed class PwshForEachValueAnalyzer
             HomeDirectory = _options.HomeDirectory,
             WorkingDirectory = workingDirectory,
             InitialStateMode = _options.InitialStateMode,
+            Dialect = _options.Dialect,
         };
         var resolved = PwshResolver.Resolve(
             ShellValue.Literal(value),

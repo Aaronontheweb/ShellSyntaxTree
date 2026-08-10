@@ -126,7 +126,8 @@ public sealed class PwshParser : IShellParser { /* … */ }   // v0.2.0
 
 public abstract record ShellParserOptions { /* HomeDirectory, WorkingDirectory */ }
 public sealed record BashParserOptions : ShellParserOptions; // InitialStateMode
-public sealed record PwshParserOptions : ShellParserOptions; // InitialStateMode
+public sealed record PwshParserOptions : ShellParserOptions; // InitialStateMode, Dialect
+public enum PwshDialect { Unknown, PowerShell7, WindowsPowerShell51 }
 
 public sealed record ParsedCommand { /* Source, Syntax, Commands, Clauses, IsUnparseable, … */ }
 public abstract record ShellSyntaxNode;
@@ -150,6 +151,14 @@ enumerate `Commands`; explainers and visualizers traverse `Syntax`; existing
 v0.2 consumers can migrate from the conservative `Clauses` projection. The
 shell-specific parsers retain different grammar and analysis rules. A Windows
 `cmd` parser remains deferred.
+
+Select the parser from the shell that will actually execute the source. The
+library does not auto-detect or cross-parse languages: `pwsh -Command ...`
+under `BashParser` is an ordinary external command. `PwshParserOptions.Dialect`
+defaults to PowerShell 7 for compatibility; select `WindowsPowerShell51`
+explicitly when the executor falls back to `powershell.exe`. The
+`PowerShell7` currently denotes the proved PowerShell 7.6 servicing line:
+version 7.6.4 or newer, but earlier than 7.7.
 
 Behavioral contract: [`SPEC.md`](./SPEC.md) (bash + shared surface) and
 [`SPEC.POWERSHELL.md`](./SPEC.POWERSHELL.md) (PowerShell).

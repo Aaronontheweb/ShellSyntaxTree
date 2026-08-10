@@ -1,0 +1,11 @@
+{
+  "name": "V03 windows powershell nested chain child host",
+  "input": "powershell.exe -Command \u0027Get-Item a \u0026\u0026 Get-Item b\u0027",
+  "powerShellDialect": "WindowsPowerShell51",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell pipeline-chain operators require the PowerShell 7 dialect"
+  },
+  "notes": "A static Windows PowerShell child keeps the 5.1 grammar inside its decoded payload.",
+  "oracleExpectation": "OutOfScope"
+}

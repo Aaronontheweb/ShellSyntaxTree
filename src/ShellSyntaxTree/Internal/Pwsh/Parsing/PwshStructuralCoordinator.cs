@@ -502,7 +502,10 @@ internal static partial class PwshCommandParser
 
             CollapseSafeForEachCommandArgument(segmentTokens, compatibilityOperator);
 
-            if (TryDetectUnsupportedInvocationShape(segmentTokens, out error))
+            if (TryDetectUnsupportedInvocationShape(
+                    segmentTokens,
+                    _options.Dialect,
+                    out error))
             {
                 return false;
             }
@@ -579,6 +582,7 @@ internal static partial class PwshCommandParser
                     HomeDirectory = _options.HomeDirectory,
                     WorkingDirectory = _attribution.ResolvedCwd,
                     InitialStateMode = _options.InitialStateMode,
+                    Dialect = _options.Dialect,
                 };
             }
             else if (_attribution.IsDynamic)
@@ -712,7 +716,8 @@ internal static partial class PwshCommandParser
         {
             var binding = PwshExecutionRegionBindingCatalog.Bind(
                 clause,
-                commandIdentityProven: false);
+                commandIdentityProven: false,
+                dialect: _options.Dialect);
             if (binding.Status == PwshExecutionRegionBindingStatus.NotApplicable)
             {
                 executionRegions = Array.Empty<ExecutionRegionSyntax>();
@@ -818,7 +823,7 @@ internal static partial class PwshCommandParser
             }
 
             var significant = FilterSignificant(relativeTokens);
-            if (TryDetectAnomaly(significant, out error))
+            if (TryDetectAnomaly(significant, _options.Dialect, out error))
             {
                 body = new ShellBlockSyntax();
                 return false;
@@ -1615,7 +1620,7 @@ internal static partial class PwshCommandParser
             }
 
             var significant = FilterSignificant(relativeTokens);
-            if (TryDetectAnomaly(significant, out error))
+            if (TryDetectAnomaly(significant, _options.Dialect, out error))
             {
                 body = new ShellBlockSyntax();
                 return false;

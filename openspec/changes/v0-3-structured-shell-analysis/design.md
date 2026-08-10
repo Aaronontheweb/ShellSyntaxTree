@@ -115,6 +115,75 @@ consumption, error recovery, quoting, and expression boundaries that already
 differ between the two shells. Shared components are composed as explicit
 classifiers and analysis passes instead.
 
+### Select one top-level grammar from the execution environment
+
+The consumer selects `BashParser` or `PwshParser` from the shell that will
+actually execute the submitted source. The parser does not infer a language
+from command names, payload strings, quoting, the host operating system, or an
+executable discovered inside another shell.
+
+Consequently, `pwsh -Command 'Get-Content x'` submitted to Bash remains one
+Bash-parsed external `pwsh` invocation whose payload is an argument. Bash does
+not call `PwshParser`. Likewise, `bash -c 'rm x'` submitted to PowerShell
+remains one PowerShell-parsed external `bash` invocation. PowerShell does not
+call `BashParser`. This prevents a policy from authorizing a different grammar
+than the executor will apply and avoids recursively interpreting arbitrary
+data merely because an executable name resembles another shell.
+
+Existing command-string recursion is parser-local. `BashParser` may recurse
+only into supported Bash `bash` / `sh -c` wrappers. `PwshParser` may recurse
+only into supported PowerShell host wrappers and static `Invoke-Expression`
+payloads. Cross-language composition, if ever added, requires a separate
+consumer-visible contract and is not part of v0.3.
+
+### Make the PowerShell dialect explicit and extend only
+
+`PwshParserOptions` gains one additive property and a new enum:
+
+```csharp
+public enum PwshDialect
+{
+    Unknown,
+    PowerShell7,
+    WindowsPowerShell51,
+}
+
+public sealed record PwshParserOptions : ShellParserOptions
+{
+    public PwshInitialStateMode InitialStateMode { get; init; }
+    public PwshDialect Dialect { get; init; } = PwshDialect.PowerShell7;
+}
+```
+
+The initializer preserves the behavior of both existing constructors and
+existing object initializers. Zero remains `Unknown` for forward-compatible
+enum handling, but the option defaults to `PowerShell7`, matching every
+released `PwshParser`. An explicit unknown or unrecognized value makes the
+whole result unparseable with empty authorization projections.
+
+The dialect is grammar and catalog input, not executable discovery. PowerShell
+7 uses the PowerShell 7.6 servicing line from 7.6.4 (`>=7.6.4` and `<7.7`),
+matching the pinned syntax, alias, parameter-binding, and execution-region
+receiver tables. Consumers MUST NOT select this dialect for PowerShell 7.7 or
+later because the parser does not probe the executable and a new default alias
+could otherwise be misclassified as a native command. A later minor line
+requires an independently proved dialect contract.
+Windows PowerShell 5.1 accepts only syntax
+and metadata proved for that edition. In particular, `&&` / `||` and
+`ForEach-Object -Parallel` cannot receive PowerShell 7 proof in 5.1 mode, and
+the 5.1 alias catalog must not be inferred from the PowerShell 7 process.
+Dialect-matched `Get-Alias` oracles compare canonical definitions as well as
+names: 5.1 restores removed aliases such as `gwmi` while excluding later
+PowerShell 7 aliases such as `gerr`.
+
+Inside a PowerShell parse, a statically recognized PowerShell host wrapper may
+select the dialect of its decoded child: `pwsh` / `pwsh.exe` selects
+`PowerShell7`, while `powershell` / `powershell.exe` selects
+`WindowsPowerShell51`. Dynamic or ambiguous host identity remains visible and
+incomplete instead of choosing a dialect. A consumer still selects the
+top-level dialect from its executor before parsing; the parser never probes
+the machine.
+
 ### Preserve resolver-relevant fragments through decoding
 
 The v0.2 lexer-to-resolver contract is too weak for a security parser. A
