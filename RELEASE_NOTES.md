@@ -19,6 +19,38 @@
   property also participates in options-record equality, hashing, `ToString()`,
   reflection, and default serialization shape.
 
+#### 0.3.0-alpha.5 2026-08-10 ####
+
+This prerelease adds an explicit host-selected PowerShell dialect contract and
+keeps Bash and PowerShell analysis at the native host boundary. The v0.2
+projection remains supported, and the public API changes are additive.
+
+## Added
+
+- Add `PwshDialect` and `PwshParserOptions.Dialect`, defaulting to the
+  compatible PowerShell 7 behavior and failing closed for unknown enum values.
+- Model Windows PowerShell 5.1 as an explicit native-Windows fallback with its
+  own alias catalog, receiver conservatism, and rejection of unsupported
+  `&&` / `||` pipeline-chain syntax.
+- Carry the selected dialect through nested PowerShell parsing and select the
+  matching dialect for static same-language `pwsh` and `powershell.exe` child
+  hosts.
+
+## Security and compatibility
+
+- Keep shell languages separate: Bash treats `pwsh` as an ordinary external
+  command, and PowerShell treats `bash` as an ordinary external command. The
+  parser never interprets a child command string in the other language.
+- Require consumers to select `PowerShell7` only for a compatible PowerShell
+  7.6 host (`>=7.6.4` and `<7.7`) and use `WindowsPowerShell51` for the native
+  `powershell.exe` fallback. Host selection, parser dialect, approval policy,
+  and executor identity must agree.
+- Preserve the v0.2 compatibility projection and report exactly two additive
+  public API changes: the dialect enum and the parser-options property.
+- Expand the generated PowerShell corpus to 504 entries. Linux and Windows CI
+  validate it with hash-pinned PowerShell 7.6.4; Windows additionally validates
+  the Windows PowerShell 5.1 dialect with the native executable.
+
 #### 0.3.0-alpha.4 2026-08-09 ####
 
 This prerelease corrects PowerShell occurrence completeness to describe the
