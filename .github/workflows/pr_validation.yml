@@ -53,7 +53,7 @@ jobs:
           Invoke-WebRequest -Uri $uri -OutFile $archive
           $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
           if ($actualHash -ne '${{ matrix.pwsh_sha256 }}') {
-            throw "PowerShell archive hash mismatch for $asset: $actualHash"
+            throw "PowerShell archive hash mismatch for ${asset}: $actualHash"
           }
 
           [void](New-Item -ItemType Directory -Force -Path $installDirectory)
