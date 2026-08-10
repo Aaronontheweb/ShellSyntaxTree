@@ -49,6 +49,7 @@ $counts = foreach ($s in @($inputs)) {
             Executable(dialect),
             probe,
             15000,
+            out _,
             out _);
     }
 
@@ -56,6 +57,8 @@ $counts = foreach ($s in @($inputs)) {
     /// Parse-error count from the selected real PowerShell for each input —
     /// 0 means the input is valid PowerShell. Returns null when the selected
     /// executable is absent or does not satisfy the dialect's version contract.
+    /// Throws when a compatible executable starts but the oracle invocation or
+    /// response fails.
     /// </summary>
     public static IReadOnlyList<int>? CountParseErrors(
         IReadOnlyList<string> inputs,
@@ -73,6 +76,7 @@ $counts = foreach ($s in @($inputs)) {
 
         var scriptPath = Path.Combine(Path.GetTempPath(), $"sst-oracle-{Guid.NewGuid():N}.ps1");
         var inputPath = Path.Combine(Path.GetTempPath(), $"sst-oracle-{Guid.NewGuid():N}.json");
+        var stdout = string.Empty;
         try
         {
             File.WriteAllText(scriptPath, OracleScript);
@@ -86,9 +90,11 @@ $counts = foreach ($s in @($inputs)) {
                     $"-NoProfile -NoLogo -NonInteractive {executionPolicy}" +
                     $"-File \"{scriptPath}\" \"{inputPath}\"",
                     120000,
-                    out var stdout))
+                    out stdout,
+                    out var failure))
             {
-                return null;
+                throw new InvalidOperationException(
+                    $"{Executable(dialect)} parse oracle failed: {failure}");
             }
 
             var counts = JsonSerializer.Deserialize<int[]>(stdout.Trim());
@@ -101,9 +107,11 @@ $counts = foreach ($s in @($inputs)) {
 
             return counts;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return null;
+            throw new InvalidOperationException(
+                $"{Executable(dialect)} parse oracle returned invalid JSON. Output: {stdout}",
+                ex);
         }
         finally
         {
@@ -126,7 +134,8 @@ $counts = foreach ($s in @($inputs)) {
                 Executable(dialect),
                 "-NoProfile -NoLogo -NonInteractive -Command \"@(Get-Alias | Select-Object Name,Definition) | ConvertTo-Json -Compress\"",
                 60000,
-                out var stdout))
+                out var stdout,
+                out _))
         {
             return null;
         }
@@ -153,7 +162,8 @@ $counts = foreach ($s in @($inputs)) {
                 Executable(dialect),
                 "-NoProfile -NoLogo -NonInteractive -Command \"Get-Variable | ForEach-Object Name\"",
                 60000,
-                out var stdout))
+                out var stdout,
+                out _))
         {
             return null;
         }
@@ -173,11 +183,14 @@ $counts = foreach ($s in @($inputs)) {
         string? executable,
         string arguments,
         int timeoutMs,
-        out string stdout)
+        out string stdout,
+        out string failure)
     {
         stdout = string.Empty;
+        failure = string.Empty;
         if (executable is null)
         {
+            failure = "executable is not selected";
             return false;
         }
 
@@ -195,6 +208,7 @@ $counts = foreach ($s in @($inputs)) {
 
             if (process is null)
             {
+                failure = "process did not start";
                 return false;
             }
 
@@ -206,24 +220,33 @@ $counts = foreach ($s in @($inputs)) {
                 _ = TryKill(process);
                 _ = process.WaitForExit(5000);
                 _ = Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000);
+                failure = $"timed out after {timeoutMs} ms";
                 return false;
             }
 
             if (!Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000))
             {
                 _ = TryKill(process);
+                failure = "stdout or stderr did not finish draining";
                 return false;
             }
 
             stdout = stdoutTask.GetAwaiter().GetResult();
-            _ = stderrTask.GetAwaiter().GetResult();
-            return process.ExitCode == 0;
+            var stderr = stderrTask.GetAwaiter().GetResult();
+            if (process.ExitCode == 0)
+            {
+                return true;
+            }
+
+            failure = $"exited with code {process.ExitCode}; stderr: {stderr.Trim()}";
+            return false;
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or
                                    FileNotFoundException or
                                    IOException or
                                    AggregateException)
         {
+            failure = ex.Message;
             return false;
         }
     }
