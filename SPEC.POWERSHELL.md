@@ -950,8 +950,9 @@ cwd, and code-execution verbs), not the whole table:
 
 `Get-Error` and its `gerr` alias are PowerShell 7-only and MUST NOT be
 resolved in the `WindowsPowerShell51` dialect. Conversely, Windows PowerShell
-5.1-only aliases such as `gwmi` → `Get-WmiObject`, `asnp` → `Add-PSSnapIn`,
-and `trcm` → `Trace-Command` remain edition-specific. `md` and `man` are
+5.1-only aliases such as `CFS` → `ConvertFrom-String`, `gwmi` →
+`Get-WmiObject`, `asnp` → `Add-PSSnapIn`, and `trcm` → `Trace-Command` remain
+edition-specific. `md` and `man` are
 normalized to the effective cmdlet reached through their default helper
 functions (`New-Item` and `Get-Help`) while the authored alias token remains
 unchanged.

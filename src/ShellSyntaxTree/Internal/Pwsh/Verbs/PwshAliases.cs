@@ -218,6 +218,7 @@ internal static class PwshAliases
     internal static readonly IReadOnlyDictionary<string, string> WindowsPowerShell51Map =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
+            ["cfs"] = "ConvertFrom-String",
             ["curl"] = "Invoke-WebRequest",
             ["wget"] = "Invoke-WebRequest",
             ["sc"] = "Set-Content",

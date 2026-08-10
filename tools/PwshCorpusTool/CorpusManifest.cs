@@ -1418,5 +1418,8 @@ internal static class CorpusManifest
             "Invoke-Expression 'Get-Item a && Get-Item b'",
             "Static current-scope recursion keeps the selected 5.1 grammar while the outer parser sees data.",
             outOfScope: true),
+        W("v03_windows_powershell_convert_from_string_alias",
+            "CFS",
+            "Windows PowerShell 5.1 defines CFS as the ConvertFrom-String alias."),
     };
 }

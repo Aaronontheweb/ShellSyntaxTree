@@ -122,6 +122,7 @@ public class ParserLanguageBoundaryTests
 
     [Theory]
     [InlineData("asnp", "Add-PSSnapIn")]
+    [InlineData("cfs", "ConvertFrom-String")]
     [InlineData("gwmi", "Get-WmiObject")]
     [InlineData("ise", "powershell_ise.exe")]
     [InlineData("trcm", "Trace-Command")]
