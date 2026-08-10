@@ -1,0 +1,11 @@
+{
+  "name": "V03 design structured module qualified mutation gated",
+  "input": "foreach ($f in \u0027safe.txt\u0027) { }; Write-Output C:/sensitive.txt | Microsoft.PowerShell.Utility\\Tee-Object -Variable f; Remove-Item $f",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "module-qualified cmdlet \u0027Microsoft.PowerShell.Utility\\Tee-Object\u0027 is not supported in v0.2"
+  },
+  "notes": "Promotes stable fail-closed design case pwsh-structured-module-qualified-mutation-gated.",
+  "oracleExpectation": "OutOfScope"
+}

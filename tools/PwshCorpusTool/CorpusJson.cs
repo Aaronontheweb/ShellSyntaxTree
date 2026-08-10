@@ -368,7 +368,9 @@ internal static class CorpusJson
                     executionRegion.Body,
                     currentIndex,
                     CommandAncestryRegion.ExecutionRegion,
-                    childIndex: 0,
+                    // The body ancestry keeps the owning region's authored
+                    // sibling coordinate so multiple host regions stay distinct.
+                    childIndex,
                     listOperator: null,
                     parsed,
                     nodes,

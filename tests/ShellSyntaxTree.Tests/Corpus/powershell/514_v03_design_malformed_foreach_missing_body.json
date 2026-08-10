@@ -1,0 +1,9 @@
+{
+  "name": "V03 design malformed foreach missing body",
+  "input": "foreach ($f in 1, 2) Remove-Item $f",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "unsupported PowerShell foreach literal-list expression"
+  },
+  "notes": "Promotes stable design case pwsh-malformed-foreach-missing-body."
+}

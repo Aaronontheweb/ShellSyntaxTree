@@ -1,0 +1,11 @@
+{
+  "name": "V03 design execution region param header fail closed",
+  "input": "Register-ArgumentCompleter -CommandName tool -ScriptBlock { param($commandName) Write-Output $commandName }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "control-flow / definition keyword \u0027param\u0027 is not supported in v0.2"
+  },
+  "notes": "Promotes stable fail-closed design case pwsh-execution-region-param-header-fail-closed.",
+  "oracleExpectation": "OutOfScope"
+}

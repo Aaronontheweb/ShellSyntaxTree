@@ -12,6 +12,10 @@
 - [ ] 1.10 Promote every design case for a stable-v0.3 construct into the
   executable corpus as its production parser slice lands. Retain future-scope
   design cases as non-gating evidence rather than release work.
+  - PowerShell now has exact generated expectations for 84 of 90 design cases.
+    Four future-scope cases remain non-gating. The stable bounded-loop dynamic
+    invocation and invalid local `Invoke-Command -AsJob` cases remain pending
+    production corrections and are not marked as promoted.
 - [x] 1.11 Correct the PowerShell script-block boundary and lock the additive
   execution-region node, origin/phase/timing/cardinality facts, authored-versus-semantic
   ordering, command projection, and independent shell-state analysis contract
@@ -270,8 +274,10 @@
 - [ ] 7.6 Add adversarial cases for object-valued iterables, mutation, dynamic invocation, splatting, and cap overflow.
 - [ ] 7.7 Add PowerShell corpus entries, live `pwsh` oracle coverage, and Netclaw integration cases.
   - `PwshCorpusTool` now supports case-specific `PwshInitialStateMode`; keep
-    promoting the remaining stable execution-region and adversarial cases into
-    its generated manifest, then add the Netclaw PowerShell policy matrix.
+    promoting the two remaining stable cases into its generated manifest after
+    their production corrections, then complete the Netclaw PowerShell policy
+    matrix. Exact generated cases now cover `Measure-Command`, `Trace-Command`,
+    and `ForEach-Object -RemainingScripts` directly.
 - [x] 7.8 Implement the additive `PwshDialect` API, PowerShell 7 compatibility
   default, unknown-value safe-fail, Windows PowerShell 5.1 pipeline-chain
   rejection, dialect-specific alias and execution-region metadata, and static

@@ -1,0 +1,11 @@
+{
+  "name": "V03 design direct call trailing arguments fail closed",
+  "input": "\u0026 { Write-Output $args } alpha",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "direct PowerShell script-block arguments are not supported"
+  },
+  "notes": "Promotes stable fail-closed design case pwsh-direct-call-trailing-arguments-fail-closed.",
+  "oracleExpectation": "OutOfScope"
+}

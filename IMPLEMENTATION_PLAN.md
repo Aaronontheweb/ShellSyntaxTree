@@ -574,6 +574,15 @@ priorities.
       authored `Set-Alias Env:...` invocation.
       The generator-owned executable corpus now supports per-entry initial-
       state mode and includes the promoted Parallel and remote/session cases.
+      It now contains exact generated expectations for 84 of the 90 PowerShell
+      design cases. Four intentionally deferred condition/deferred-action cases
+      remain parked. Two stable cases remain implementation work rather than
+      being mislabeled as corpus-complete: bounded-loop dynamic invocation
+      still fails atomically, and local `Invoke-Command -AsJob` still needs to
+      reject its invalid parameter-set combination. Direct generated cases for
+      `Measure-Command`, `Trace-Command`, and `ForEach-Object
+      -RemainingScripts` fill the remaining stable receiver-catalog evidence
+      without renumbering the existing corpus.
       Stable v0.3 stops at the delivered Start-Job, Parallel, and remote/session
       boundaries. Optional-module Start-ThreadJob and exact deferred
       breakpoint/event/completion actions are post-v0.3 catalog work; unknown
