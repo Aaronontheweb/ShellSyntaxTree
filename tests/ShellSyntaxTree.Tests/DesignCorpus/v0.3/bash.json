@@ -652,6 +652,7 @@
     },
     {
       "id": "bash-contextual-for-argument",
+      "compatibilityProjectionLanded": true,
       "concern": "Control keyword outside command position",
       "input": "echo for",
       "current": { "isUnparseable": false },
@@ -766,6 +767,7 @@
     },
     {
       "id": "bash-dynamic-fd-target",
+      "compatibilityProjectionLanded": true,
       "concern": "Computed descriptor target remains unknown",
       "input": "command 2>&$FD",
       "current": { "isUnparseable": false },

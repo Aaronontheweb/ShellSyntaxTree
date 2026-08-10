@@ -581,6 +581,7 @@
     {
       "id": "pwsh-foreach-dynamic-command-identity",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+      "compatibilityProjectionLanded": true,
       "concern": "Dynamic invocation in a bounded loop body",
       "input": "foreach ($f in @('a', 'b')) { & $exe $f }",
       "current": { "isUnparseable": true, "reasonContains": "dynamic invocation" },
@@ -2462,6 +2463,7 @@
     },
     {
       "id": "pwsh-invoke-command-local-asjob-invalid-parameter-set",
+      "compatibilityProjectionLanded": true,
       "concern": "In-process Invoke-Command never acquires invented concurrent semantics from an invalid AsJob combination",
       "input": "Invoke-Command -ScriptBlock { Get-Date } -AsJob",
       "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",

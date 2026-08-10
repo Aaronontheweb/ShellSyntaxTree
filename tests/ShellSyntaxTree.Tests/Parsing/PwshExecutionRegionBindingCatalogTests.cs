@@ -608,11 +608,20 @@ public class PwshExecutionRegionBindingCatalogTests
     }
 
     [Fact]
-    public void As_job_without_remote_target_does_not_invent_local_job_semantics()
+    public void As_job_without_remote_target_is_an_invalid_parameter_set()
     {
-        var result = Bind("Invoke-Command -AsJob -ScriptBlock { Get-Date }");
+        var parsed = IsolatedParser.Parse(
+            "Set-Alias Invoke-Command Write-Output; " +
+            "Invoke-Command -AsJob -ScriptBlock { Get-Date }");
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var clause = parsed.Clauses.Last(candidate => candidate.Elements.Any(element =>
+            element.Kind == ArgKind.DynamicSkip && element.Raw.Contains('{')));
+        var result = PwshExecutionRegionBindingCatalog.Bind(
+            clause,
+            commandIdentityProven: true,
+            dialect: PwshDialect.PowerShell7);
 
-        Assert.Equal(PwshExecutionRegionBindingStatus.Ambiguous, result.Status);
+        Assert.Equal(PwshExecutionRegionBindingStatus.InvalidParameterSet, result.Status);
         Assert.False(Assert.Single(result.Bindings).IsComplete);
     }
 

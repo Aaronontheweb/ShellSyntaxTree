@@ -299,8 +299,8 @@ priorities.
       Promotion also reconciled the unquoted wildcard
       redirect story with the fail-closed completeness contract, publishes
       sparse exact/unknown effective-value overlays, and pins quoted, escaped,
-      and continued tilde-prefix behavior against Bash. The PowerShell promotion
-      half keeps OpenSpec task 1.10 open.
+      and continued tilde-prefix behavior against Bash. The later PowerShell
+      execution-region and loop slices now complete OpenSpec task 1.10.
 - [x] Promote the first 22 stable PowerShell design cases covering value,
       path, and redirect provenance. Exact effective values are published only
       when parser-owned fragments prove the post-lexical value; runtime
@@ -331,8 +331,8 @@ priorities.
       the explicit constrained command-resolution baseline, including after
       decoded-host boundaries. The v0.3 authored-command approval correction
       above supersedes that behavior and is implemented in this slice.
-      Execution-region and loop/state design promotions remain, so OpenSpec
-      task 1.10 stays open.
+      Execution-region and loop/state design promotions remained for later
+      slices; the final promotion below now closes OpenSpec task 1.10.
 - [x] Deliver the first Bash `$()` substitution slice for supported
       simple-command arguments and redirect targets. Direct tests and corpus
       entries pin multiple and nested ordering, exact ancestry/spans, isolated
@@ -503,10 +503,11 @@ priorities.
       parameters, positional slots, parameter sets, `ScriptBlock[]`, authored
       ForEach-Object multi-block coordinates, and semantic Begin/Process/End
       phases. The optional Microsoft.PowerShell.ThreadJob entry remains an
-      unknown incomplete receiver and no longer gates stable v0.3. Local
-      `Invoke-Command -AsJob`, ambiguous prefixes, malformed value binding,
-      unproved identities, and unknown receivers retain unknown/incomplete
-      facts. Supported catalog-owned module qualifications now pass structural
+      unknown incomplete receiver and no longer gates stable v0.3. A proved
+      local `Invoke-Command -AsJob` combination now fails atomically because
+      PowerShell has no compatible in-process parameter set. Ambiguous prefixes,
+      malformed value binding, unproved identities, and unknown receivers retain
+      unknown/incomplete facts. Supported catalog-owned module qualifications now pass structural
       admission because every possible body remains visible; the occurrence
       analyzer still withholds typed receiver facts after an observed command-
       resolution mutation unless bounded mutation provenance proves the exact
@@ -574,12 +575,13 @@ priorities.
       authored `Set-Alias Env:...` invocation.
       The generator-owned executable corpus now supports per-entry initial-
       state mode and includes the promoted Parallel and remote/session cases.
-      It now contains exact generated expectations for 84 of the 90 PowerShell
+      It now contains exact generated expectations for 86 of the 90 PowerShell
       design cases. Four intentionally deferred condition/deferred-action cases
-      remain parked. Two stable cases remain implementation work rather than
-      being mislabeled as corpus-complete: bounded-loop dynamic invocation
-      still fails atomically, and local `Invoke-Command -AsJob` still needs to
-      reject its invalid parameter-set combination. Direct generated cases for
+      remain parked. Bounded-loop dynamic invocation is visible and incomplete,
+      retains finite loop-variable arguments for the occurrence, and invalidates
+      following state. A proved local `Invoke-Command -AsJob` combination fails
+      atomically as an invalid parameter set. Generated entries 539-540 pin
+      both corrections. Direct generated cases for
       `Measure-Command`, `Trace-Command`, and `ForEach-Object
       -RemainingScripts` fill the remaining stable receiver-catalog evidence
       without renumbering the existing corpus.
