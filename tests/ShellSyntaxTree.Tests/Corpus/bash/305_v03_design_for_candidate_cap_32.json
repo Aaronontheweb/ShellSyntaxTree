@@ -1,0 +1,216 @@
+{
+  "name": "v0.3 Bash design promotion: Candidate cap",
+  "input": "for f in v01 v02 v03 v04 v05 v06 v07 v08 v09 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 v21 v22 v23 v24 v25 v26 v27 v28 v29 v30 v31 v32; do printf '%s\\n' \"$f\"; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "printf"
+        ],
+        "args": [
+          {
+            "raw": "'%s\\n'",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/work/%s/n",
+            "isFlag": false
+          },
+          {
+            "raw": "\"$f\"",
+            "kind": "EnvVar",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "printf",
+            "value": "printf",
+            "role": "Verb",
+            "sourceStart": 141,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "'%s\\n'",
+            "value": "%s\\n",
+            "role": "Argument",
+            "sourceStart": 148,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/%s/n"
+          },
+          {
+            "raw": "\"$f\"",
+            "value": "$f",
+            "role": "Argument",
+            "sourceStart": 155,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 1,
+            "kind": "EnvVar",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 165,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 165,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "f",
+        "bindingRaw": "f",
+        "bindingSourceStart": 4,
+        "bindingSourceLength": 1,
+        "iterableRaw": "v01 v02 v03 v04 v05 v06 v07 v08 v09 v10 v11 v12 v13 v14 v15 v16 v17 v18 v19 v20 v21 v22 v23 v24 v25 v26 v27 v28 v29 v30 v31 v32",
+        "iterableSourceStart": 9,
+        "iterableSourceLength": 127
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 9,
+        "sourceLength": 127,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 140,
+        "sourceLength": 21,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 141,
+        "sourceLength": 18,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 165
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 165
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 140,
+            "sourceLength": 21
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "FiniteSet",
+              "values": [
+                "v01",
+                "v02",
+                "v03",
+                "v04",
+                "v05",
+                "v06",
+                "v07",
+                "v08",
+                "v09",
+                "v10",
+                "v11",
+                "v12",
+                "v13",
+                "v14",
+                "v15",
+                "v16",
+                "v17",
+                "v18",
+                "v19",
+                "v20",
+                "v21",
+                "v22",
+                "v23",
+                "v24",
+                "v25",
+                "v26",
+                "v27",
+                "v28",
+                "v29",
+                "v30",
+                "v31",
+                "v32"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Promotes stable design case bash-for-candidate-cap-32 into the executable corpus with exact compatibility, syntax, occurrence, value, and completeness assertions."
+}

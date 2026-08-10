@@ -1,0 +1,126 @@
+{
+  "name": "v0.3 Bash design promotion: Static descriptor duplication",
+  "input": "dotnet test 2>&1",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "dotnet",
+          "test"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "ErrOut",
+            "target": "&1",
+            "isDynamicSkip": true
+          }
+        ],
+        "elements": [
+          {
+            "raw": "dotnet",
+            "value": "dotnet",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "test",
+            "value": "test",
+            "role": "Verb",
+            "sourceStart": 7,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "2>&1",
+            "value": "&1",
+            "role": "Redirect",
+            "sourceStart": 12,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 2,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 16,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 16,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 16
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Descriptor",
+            "sourceDescriptor": 2,
+            "operation": "DescriptorDuplicate",
+            "targetDescriptor": 1,
+            "target": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "isPathRelevant": false,
+            "isComplete": true
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Promotes stable design case bash-static-fd-duplication into the executable corpus with exact compatibility, syntax, occurrence, value, redirect, and completeness assertions."
+}

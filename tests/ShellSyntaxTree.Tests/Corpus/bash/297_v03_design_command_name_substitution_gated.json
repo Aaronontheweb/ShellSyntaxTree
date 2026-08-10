@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash design promotion: Dynamic command identity remains gated",
+  "input": "r$(printf m) file",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "Bash command-name substitution is not supported"
+  },
+  "notes": "Promotes stable design case bash-command-name-substitution-gated into the executable corpus with exact compatibility, syntax, occurrence, value, and completeness assertions."
+}

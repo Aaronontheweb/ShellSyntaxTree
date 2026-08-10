@@ -1,0 +1,189 @@
+{
+  "name": "v0.3 Bash design promotion: cd failure-state join",
+  "input": "cd /maybe; pwd",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "args": [
+          {
+            "raw": "/maybe",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/maybe",
+            "isFlag": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "cd",
+            "value": "cd",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "/maybe",
+            "value": "/maybe",
+            "role": "Argument",
+            "sourceStart": 3,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/maybe"
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "pwd"
+        ],
+        "args": [
+          {
+            "raw": "<dynamic-cwd>",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "pwd",
+            "value": "pwd",
+            "role": "Verb",
+            "sourceStart": 11,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 14,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 14,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 9,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 11,
+        "sourceLength": 3,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 14
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 14
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": []
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 14
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 14
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Promotes stable design case bash-cd-sequence-failure-join into the executable corpus with exact compatibility, syntax, occurrence, value, and completeness assertions."
+}

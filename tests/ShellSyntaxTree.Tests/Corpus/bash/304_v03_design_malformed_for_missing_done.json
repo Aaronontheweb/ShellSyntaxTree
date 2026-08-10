@@ -1,0 +1,9 @@
+{
+  "name": "v0.3 Bash design promotion: Missing done fails closed",
+  "input": "for f in a b; do rm -- \"$f\"",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "Bash for-in loop is missing 'done'"
+  },
+  "notes": "Promotes stable design case bash-malformed-for-missing-done into the executable corpus with exact compatibility, syntax, occurrence, value, and completeness assertions."
+}
