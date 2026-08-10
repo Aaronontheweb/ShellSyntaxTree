@@ -1,5 +1,7 @@
 #### Unreleased ####
 
+#### 0.3.0-alpha.6 2026-08-10 ####
+
 ## Changed
 
 - Replace the experimental v0.3 sparse `EffectiveArguments` coordinate overlay
