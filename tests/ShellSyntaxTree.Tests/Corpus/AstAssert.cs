@@ -3,6 +3,7 @@
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -205,7 +206,7 @@ internal static class AstAssert
         string prefix)
     {
         if (expected.Count == 0 ||
-            expected[0].Kind != ShellSyntaxKind.Block ||
+            expected[0].Kind != "Block" ||
             expected[0].ParentIndex is not null ||
             expected[0].Region != CommandAncestryRegion.Unknown ||
             expected[0].ChildIndex is not null ||
@@ -218,10 +219,10 @@ internal static class AstAssert
         for (var index = 0; index < expected.Count; index++)
         {
             var node = expected[index];
-            var isExecutionRegion = node.Kind == ShellSyntaxKind.ExecutionRegion;
-            if (node.Kind == ShellSyntaxKind.Unknown ||
-                (node.Kind == ShellSyntaxKind.SimpleCommand) != node.ClauseIndex.HasValue ||
-                (node.Kind == ShellSyntaxKind.Group) != node.GroupKind.HasValue ||
+            var isExecutionRegion = node.Kind == "ExecutionRegion";
+            if (node.Kind == "Unknown" ||
+                (node.Kind == "SimpleCommand") != node.ClauseIndex.HasValue ||
+                (node.Kind == "Group") != node.GroupKind.HasValue ||
                 isExecutionRegion != node.ExecutionOrigin.HasValue ||
                 isExecutionRegion != node.ExecutionPhase.HasValue ||
                 isExecutionRegion != node.ExecutionTiming.HasValue ||
@@ -258,55 +259,44 @@ internal static class AstAssert
             var parent = expected[node.ParentIndex.Value];
             var relationshipIsValid = parent.Kind switch
             {
-                ShellSyntaxKind.Block =>
+                "Block" =>
                     node.Region == (node.ParentIndex == 0
                         ? CommandAncestryRegion.Root
                         : CommandAncestryRegion.Statement) &&
                     node.ChildIndex.HasValue,
-                ShellSyntaxKind.SimpleCommand =>
-                    ((node.Kind == ShellSyntaxKind.CommandSubstitution &&
+                "SimpleCommand" =>
+                    ((node.Kind == "CommandSubstitution" &&
                       node.Region == CommandAncestryRegion.Substitution) ||
-                     (node.Kind == ShellSyntaxKind.ExecutionRegion &&
+                     (node.Kind == "ExecutionRegion" &&
                       node.Region == CommandAncestryRegion.ExecutionRegion)) &&
                     node.ChildIndex.HasValue,
-                ShellSyntaxKind.Pipeline =>
+                "Pipeline" =>
                     node.Region == CommandAncestryRegion.PipelineStage &&
                     node.ChildIndex.HasValue,
-                ShellSyntaxKind.CommandList =>
+                "CommandList" =>
                     node.Region == CommandAncestryRegion.Statement &&
                     node.ChildIndex.HasValue &&
                     node.ListOperator.HasValue,
-                ShellSyntaxKind.Group =>
+                "Group" =>
                     node.Region == CommandAncestryRegion.GroupBody &&
                     node.ChildIndex is null,
-                ShellSyntaxKind.ForEach =>
+                "ForEach" =>
                     (node.Region is CommandAncestryRegion.Iterator or
                         CommandAncestryRegion.LoopBody) &&
                     node.ChildIndex is null,
-                ShellSyntaxKind.ConditionLoop =>
-                    (node.Region is CommandAncestryRegion.Condition or
-                        CommandAncestryRegion.LoopBody) &&
-                    node.ChildIndex is null,
-                ShellSyntaxKind.Conditional =>
-                    node.Region == CommandAncestryRegion.Branch &&
-                    node.ChildIndex.HasValue,
-                ShellSyntaxKind.ConditionalBranch =>
-                    (node.Region is CommandAncestryRegion.Condition or
-                        CommandAncestryRegion.Branch) &&
-                    node.ChildIndex is null,
-                ShellSyntaxKind.CommandSubstitution =>
+                "CommandSubstitution" =>
                     node.Region == CommandAncestryRegion.Substitution,
-                ShellSyntaxKind.ExecutionRegion =>
-                    node.Kind == ShellSyntaxKind.Block &&
+                "ExecutionRegion" =>
+                    node.Kind == "Block" &&
                     node.Region == CommandAncestryRegion.ExecutionRegion,
                 _ => false,
             };
             var executionRegionPlacementIsValid =
-                node.Kind != ShellSyntaxKind.ExecutionRegion ||
+                node.Kind != "ExecutionRegion" ||
                 (node.ExecutionOrigin == ExecutionRegionOrigin.CommandArgument) ==
-                (parent.Kind == ShellSyntaxKind.SimpleCommand);
+                (parent.Kind == "SimpleCommand");
             var executionRegionCoordinateIsValid =
-                node.Kind != ShellSyntaxKind.ExecutionRegion ||
+                node.Kind != "ExecutionRegion" ||
                 node.ExecutionOrigin != ExecutionRegionOrigin.CommandArgument ||
                 IsValidExpectedHostCoordinate(
                     node,
@@ -317,7 +307,7 @@ internal static class AstAssert
             if (!relationshipIsValid ||
                 !executionRegionPlacementIsValid ||
                 !executionRegionCoordinateIsValid ||
-                parent.Kind != ShellSyntaxKind.CommandList && node.ListOperator.HasValue)
+                parent.Kind != "CommandList" && node.ListOperator.HasValue)
             {
                 throw new XunitException(
                     prefix + $"syntax[{index}] has an invalid parent relationship");
@@ -425,8 +415,8 @@ internal static class AstAssert
             {
                 var expectedFrame = expectedFrames[frameIndex];
                 var actualFrame = observed.Ancestry[frameIndex];
-                if (expectedFrame.AncestorKind == ShellSyntaxKind.Unknown ||
-                    actualFrame.AncestorKind == ShellSyntaxKind.Unknown ||
+                if (expectedFrame.AncestorKind == "Unknown" ||
+                    SyntaxKind(actualFrame.Ancestor) == "Unknown" ||
                     expectedFrame.Region == CommandAncestryRegion.Unknown ||
                     actualFrame.Region == CommandAncestryRegion.Unknown)
                 {
@@ -434,41 +424,44 @@ internal static class AstAssert
                         prefix + $"commands[{index}].ancestry[{frameIndex}] contains an unknown enum");
                 }
 
-                if (expectedFrame.AncestorKind != actualFrame.AncestorKind ||
+                if (expectedFrame.AncestorKind != SyntaxKind(actualFrame.Ancestor) ||
                     expectedFrame.Region != actualFrame.Region ||
                     expectedFrame.ChildIndex != actualFrame.ChildIndex ||
-                    expectedFrame.SourceStart != actualFrame.SourceStart ||
-                    expectedFrame.SourceLength != actualFrame.SourceLength)
+                    expectedFrame.SourceStart != actualFrame.Ancestor.SourceStart ||
+                    expectedFrame.SourceLength != actualFrame.Ancestor.SourceLength)
                 {
                     throw new XunitException(
                         prefix + $"commands[{index}].ancestry[{frameIndex}] differs");
                 }
             }
 
-            if (wanted.EffectiveArguments is not null)
+            if (wanted.Arguments is not null)
             {
-                if (wanted.EffectiveArguments.Count != observed.EffectiveArguments.Count)
+                if (wanted.Arguments.Count != observed.Arguments.Count)
                 {
                     throw new XunitException(
-                        prefix + $"commands[{index}].effectiveArguments.count differs");
+                        prefix + $"commands[{index}].arguments.count differs");
                 }
 
-                for (var effectiveIndex = 0;
-                     effectiveIndex < wanted.EffectiveArguments.Count;
-                     effectiveIndex++)
+                for (var argumentIndex = 0;
+                     argumentIndex < wanted.Arguments.Count;
+                     argumentIndex++)
                 {
-                    var expectedEffective = wanted.EffectiveArguments[effectiveIndex];
-                    var actualEffective = observed.EffectiveArguments[effectiveIndex];
-                    if (expectedEffective.ClauseElementIndex != actualEffective.ClauseElementIndex)
+                    var expectedArgument = wanted.Arguments[argumentIndex];
+                    var actualArgument = observed.Arguments[argumentIndex];
+                    if (expectedArgument.ClauseArgumentIndex !=
+                            FindArgumentIndex(observed.Clause, actualArgument.Argument) ||
+                        expectedArgument.ClauseElementIndex !=
+                            FindElementIndex(observed.Clause, actualArgument.Element))
                     {
                         throw new XunitException(
-                            prefix + $"commands[{index}].effectiveArguments[{effectiveIndex}].clauseElementIndex differs");
+                            prefix + $"commands[{index}].arguments[{argumentIndex}] coordinate differs");
                     }
 
                     AssertValueDomainEqual(
-                        expectedEffective.Value,
-                        actualEffective.Value,
-                        prefix + $"commands[{index}].effectiveArguments[{effectiveIndex}].value");
+                        expectedArgument.Value,
+                        actualArgument.Value,
+                        prefix + $"commands[{index}].arguments[{argumentIndex}].value");
                 }
             }
 
@@ -505,32 +498,34 @@ internal static class AstAssert
         {
             var wanted = expected[index];
             var observed = actual[index];
-            if (wanted.RedirectIndex != observed.RedirectIndex ||
-                wanted.SourceKind != observed.Source.Kind ||
-                wanted.SourceDescriptor != observed.Source.Descriptor ||
-                wanted.Operation != observed.Operation ||
-                wanted.TargetDescriptor != observed.TargetDescriptor ||
-                wanted.IsPathRelevant != observed.IsPathRelevant ||
+            if (wanted.RedirectIndex != index ||
+                wanted.Kind != observed.GetType().Name ||
+                wanted.SourceKind != observed.Source.GetType().Name ||
+                wanted.SourceDescriptor !=
+                    (observed.Source as RedirectSource.Descriptor)?.Value ||
+                wanted.FileMode != (observed as FileRedirectAnalysis)?.Mode ||
+                wanted.TargetDescriptor != GetTargetDescriptor(observed) ||
                 wanted.IsComplete != observed.IsComplete)
             {
                 throw new XunitException(
                     $"{path}[{index}] differs: expected index={wanted.RedirectIndex}, "
                     + $"source={wanted.SourceKind}/{wanted.SourceDescriptor}, "
-                    + $"operation={wanted.Operation}, targetDescriptor={wanted.TargetDescriptor}, "
-                    + $"pathRelevant={wanted.IsPathRelevant}, complete={wanted.IsComplete}; "
-                    + $"actual index={observed.RedirectIndex}, "
-                    + $"source={observed.Source.Kind}/{observed.Source.Descriptor}, "
-                    + $"operation={observed.Operation}, targetDescriptor={observed.TargetDescriptor}, "
-                    + $"pathRelevant={observed.IsPathRelevant}, complete={observed.IsComplete}");
+                    + $"kind={wanted.Kind}, mode={wanted.FileMode}, "
+                    + $"targetDescriptor={wanted.TargetDescriptor}, complete={wanted.IsComplete}; "
+                    + $"actual source={observed.Source.GetType().Name}, "
+                    + $"kind={observed.GetType().Name}, complete={observed.IsComplete}");
             }
 
-            AssertValueDomainEqual(
-                wanted.Target,
-                observed.Target,
-                $"{path}[{index}].target");
+            if (wanted.Value is not null)
+            {
+                AssertValueDomainEqual(
+                    wanted.Value,
+                    GetRedirectValue(observed),
+                    $"{path}[{index}].value");
+            }
             AssertHereDocumentEqual(
                 wanted.HereDocument,
-                observed.HereDocument,
+                (observed as HereDocumentRedirectAnalysis)?.Document,
                 $"{path}[{index}].hereDocument");
         }
     }
@@ -592,18 +587,55 @@ internal static class AstAssert
         string path)
     {
         var expectedValues = expected.Values ?? new List<string>();
-        if (expected.Kind != actual.Kind ||
-            !expectedValues.SequenceEqual(actual.Values) ||
-            expected.Pattern != actual.Pattern ||
-            expected.CoveringDirectory != actual.CoveringDirectory)
+        var actualKind = ValueDomainKind(actual);
+        var actualValues = ValueDomainValues(actual);
+        var actualPattern = (actual as ShellValueDomain.PathPattern)?.Pattern;
+        var actualCoveringDirectory =
+            (actual as ShellValueDomain.PathPattern)?.CoveringDirectory;
+        if (expected.Kind != actualKind ||
+            !expectedValues.SequenceEqual(actualValues) ||
+            expected.Pattern != actualPattern ||
+            expected.CoveringDirectory != actualCoveringDirectory)
         {
             throw new XunitException(
                 $"{path}: expected={expected.Kind}[{string.Join(",", expectedValues)}] "
                 + $"pattern={expected.Pattern}, covering={expected.CoveringDirectory}; "
-                + $"actual={actual.Kind}[{string.Join(",", actual.Values)}] "
-                + $"pattern={actual.Pattern}, covering={actual.CoveringDirectory}");
+                + $"actual={actualKind}[{string.Join(",", actualValues)}] "
+                + $"pattern={actualPattern}, covering={actualCoveringDirectory}");
         }
     }
+
+    private static string ValueDomainKind(ShellValueDomain domain) => domain switch
+    {
+        ShellValueDomain.Unknown => "Unknown",
+        ShellValueDomain.Exact => "Exact",
+        ShellValueDomain.FiniteSet => "FiniteSet",
+        ShellValueDomain.PathPattern => "Pattern",
+        _ => "Unknown",
+    };
+
+    private static IReadOnlyList<string> ValueDomainValues(ShellValueDomain domain) =>
+        domain switch
+        {
+            ShellValueDomain.Exact exact => new[] { exact.Value },
+            ShellValueDomain.FiniteSet finiteSet => finiteSet.Values,
+            _ => Array.Empty<string>(),
+        };
+
+    private static int? GetTargetDescriptor(RedirectAnalysis analysis) => analysis switch
+    {
+        DescriptorDuplicateRedirectAnalysis duplicate => duplicate.TargetDescriptor,
+        DescriptorMoveRedirectAnalysis move => move.TargetDescriptor,
+        _ => null,
+    };
+
+    private static ShellValueDomain GetRedirectValue(RedirectAnalysis analysis) =>
+        analysis switch
+        {
+            FileRedirectAnalysis file => file.Target,
+            HereStringRedirectAnalysis hereString => hereString.Data,
+            _ => new ShellValueDomain.Unknown(),
+        };
 
     private static void AppendSyntax(
         ShellSyntaxNode node,
@@ -615,7 +647,7 @@ internal static class AstAssert
         List<ActualSyntaxNode> nodes,
         bool isRootBlock = false)
     {
-        if (node.Kind == ShellSyntaxKind.Unknown)
+        if (SyntaxKind(node) == "Unknown")
         {
             throw new XunitException("Cannot flatten an unknown syntax node into corpus expectations");
         }
@@ -626,7 +658,7 @@ internal static class AstAssert
         int? clauseIndex = clause is null ? null : FindClauseIndex(clauses, clause);
         var currentIndex = nodes.Count;
         nodes.Add(new ActualSyntaxNode(
-            node.Kind,
+            SyntaxKind(node),
             parentIndex,
             region,
             childIndex,
@@ -635,15 +667,15 @@ internal static class AstAssert
             clauseIndex,
             (node as GroupSyntax)?.GroupKind,
             listOperator,
-            forEachNode?.Binding.Name,
-            forEachNode?.Binding.Source.Raw,
-            forEachNode?.Binding.Source.SourceStart,
-            forEachNode?.Binding.Source.SourceLength,
+            forEachNode?.BindingName,
+            forEachNode?.BindingSource.Raw,
+            forEachNode?.BindingSource.SourceStart,
+            forEachNode?.BindingSource.SourceLength,
             forEachNode?.Iterable.Raw,
             forEachNode?.Iterable.SourceStart,
             forEachNode?.Iterable.SourceLength,
             executionRegion?.Origin,
-            executionRegion?.HostClauseElementIndex,
+            FindElementIndex(clauses, executionRegion?.HostArgument),
             executionRegion?.Phase,
             executionRegion?.Timing,
             executionRegion?.Cardinality,
@@ -750,68 +782,6 @@ internal static class AstAssert
                     clauses,
                     nodes);
                 break;
-            case ConditionLoopSyntax loop:
-                AppendSyntax(
-                    loop.Condition,
-                    currentIndex,
-                    CommandAncestryRegion.Condition,
-                    childIndex: null,
-                    listOperator: null,
-                    clauses,
-                    nodes);
-                AppendSyntax(
-                    loop.Body,
-                    currentIndex,
-                    CommandAncestryRegion.LoopBody,
-                    childIndex: null,
-                    listOperator: null,
-                    clauses,
-                    nodes);
-                break;
-            case ConditionalSyntax conditional:
-                for (var index = 0; index < conditional.Branches.Count; index++)
-                {
-                    AppendSyntax(
-                        conditional.Branches[index],
-                        currentIndex,
-                        CommandAncestryRegion.Branch,
-                        index,
-                        listOperator: null,
-                        clauses,
-                        nodes);
-                }
-
-                if (conditional.Else is not null)
-                {
-                    AppendSyntax(
-                        conditional.Else,
-                        currentIndex,
-                        CommandAncestryRegion.Branch,
-                        conditional.Branches.Count,
-                        listOperator: null,
-                        clauses,
-                        nodes);
-                }
-
-                break;
-            case ConditionalBranchSyntax branch:
-                AppendSyntax(
-                    branch.Condition,
-                    currentIndex,
-                    CommandAncestryRegion.Condition,
-                    childIndex: null,
-                    listOperator: null,
-                    clauses,
-                    nodes);
-                AppendSyntax(
-                    branch.Body,
-                    currentIndex,
-                    CommandAncestryRegion.Branch,
-                    childIndex: null,
-                    listOperator: null,
-                    clauses,
-                    nodes);
-                break;
             case CommandSubstitutionSyntax substitution:
                 AppendSyntax(
                     substitution.Body,
@@ -851,6 +821,66 @@ internal static class AstAssert
         return -1;
     }
 
+    private static int FindArgumentIndex(Clause clause, Arg argument)
+    {
+        for (var index = 0; index < clause.Args.Count; index++)
+        {
+            if (ReferenceEquals(clause.Args[index], argument))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int FindElementIndex(Clause clause, ClauseElement element)
+    {
+        for (var index = 0; index < clause.Elements.Count; index++)
+        {
+            if (ReferenceEquals(clause.Elements[index], element))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static int? FindElementIndex(
+        IReadOnlyList<Clause> clauses,
+        ClauseElement? element)
+    {
+        if (element is null)
+        {
+            return null;
+        }
+
+        for (var clauseIndex = 0; clauseIndex < clauses.Count; clauseIndex++)
+        {
+            var index = FindElementIndex(clauses[clauseIndex], element);
+            if (index >= 0)
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
+
+    private static string SyntaxKind(ShellSyntaxNode node) => node switch
+    {
+        ShellBlockSyntax => "Block",
+        SimpleCommandSyntax => "SimpleCommand",
+        PipelineSyntax => "Pipeline",
+        CommandListSyntax => "CommandList",
+        GroupSyntax => "Group",
+        ForEachSyntax => "ForEach",
+        CommandSubstitutionSyntax => "CommandSubstitution",
+        ExecutionRegionSyntax => "ExecutionRegion",
+        _ => "Unknown",
+    };
+
     private static string Summarize(ExpectedSyntaxNode node) =>
         $"{{kind={node.Kind}, parent={node.ParentIndex}, region={node.Region}, "
         + $"child={node.ChildIndex}, span={node.SourceStart}:{node.SourceLength}, "
@@ -870,7 +900,7 @@ internal static class AstAssert
         + $"hostElement={node.HostClauseElementIndex}}}";
 
     private sealed record ActualSyntaxNode(
-        ShellSyntaxKind Kind,
+        string Kind,
         int? ParentIndex,
         CommandAncestryRegion Region,
         int? ChildIndex,

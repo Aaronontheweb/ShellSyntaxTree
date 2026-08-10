@@ -23,11 +23,11 @@ internal enum PwshIterationCardinality
 
 internal sealed record PwshForEachAnalysisPlan(
     string BindingName,
-    IReadOnlyList<ShellValueDomain> OrderedCandidates,
+    IReadOnlyList<ShellValueDomainFacts> OrderedCandidates,
     int? AuthoredVisitCount,
     PwshIterationCardinality Cardinality,
     bool RequiresFixedPoint,
-    ShellValueDomain Summary);
+    ShellValueDomainFacts Summary);
 
 internal static class PwshForEachValueAnalysis
 {
@@ -112,21 +112,21 @@ internal static class PwshForEachValueAnalysis
         {
             return new PwshForEachAnalysisPlan(
                 bindingName,
-                Array.Empty<ShellValueDomain>(),
+                Array.Empty<ShellValueDomainFacts>(),
                 AuthoredVisitCount: 0,
                 PwshIterationCardinality.Never,
                 RequiresFixedPoint: false,
-                ShellValueDomain.Unknown);
+                ShellValueDomainFacts.Unknown);
         }
 
         return isLiteralExpression
             ? new PwshForEachAnalysisPlan(
                 bindingName,
-                new[] { ShellValueDomain.Unknown },
+                new[] { ShellValueDomainFacts.Unknown },
                 AuthoredVisitCount: 1,
                 PwshIterationCardinality.OneOrMore,
                 RequiresFixedPoint: false,
-                ShellValueDomain.Unknown)
+                ShellValueDomainFacts.Unknown)
             : UnknownPlan(bindingName, PwshIterationCardinality.ZeroOrMore);
     }
 
@@ -135,25 +135,25 @@ internal static class PwshForEachValueAnalysis
         PwshIterationCardinality cardinality) =>
         new(
             bindingName,
-            Array.Empty<ShellValueDomain>(),
+            Array.Empty<ShellValueDomainFacts>(),
             AuthoredVisitCount: null,
             cardinality,
             RequiresFixedPoint: true,
-            ShellValueDomain.Unknown);
+            ShellValueDomainFacts.Unknown);
 
     private static bool TryCaptureLiteralArray(
         string raw,
-        out IReadOnlyList<ShellValueDomain> orderedCandidates,
+        out IReadOnlyList<ShellValueDomainFacts> orderedCandidates,
         out int authoredVisitCount,
         out PwshIterationCardinality cardinality,
         out bool requiresFixedPoint,
-        out ShellValueDomain summary)
+        out ShellValueDomainFacts summary)
     {
-        orderedCandidates = Array.Empty<ShellValueDomain>();
+        orderedCandidates = Array.Empty<ShellValueDomainFacts>();
         authoredVisitCount = 0;
         cardinality = PwshIterationCardinality.Never;
         requiresFixedPoint = false;
-        summary = ShellValueDomain.Unknown;
+        summary = ShellValueDomainFacts.Unknown;
         var index = 2;
         var end = raw.Length - 1;
         SkipWhitespace(raw, ref index, end);
@@ -163,7 +163,7 @@ internal static class PwshForEachValueAnalysis
         }
 
         var values = new List<string>();
-        var ordered = new List<ShellValueDomain>();
+        var ordered = new List<ShellValueDomainFacts>();
         var distinct = new HashSet<string>(StringComparer.Ordinal);
         var allStrings = true;
         var summaryExceeded = false;
@@ -183,7 +183,7 @@ internal static class PwshForEachValueAnalysis
                 allStrings = false;
                 if (count <= ShellAnalysisLimits.MaxValueCandidates)
                 {
-                    ordered.Add(ShellValueDomain.Unknown);
+                    ordered.Add(ShellValueDomainFacts.Unknown);
                 }
             }
             else
@@ -226,7 +226,7 @@ internal static class PwshForEachValueAnalysis
         authoredVisitCount = count;
         requiresFixedPoint = count > ShellAnalysisLimits.MaxValueCandidates;
         orderedCandidates = requiresFixedPoint
-            ? Array.Empty<ShellValueDomain>()
+            ? Array.Empty<ShellValueDomainFacts>()
             : ordered.ToArray();
         if (allStrings && !summaryExceeded)
         {
@@ -322,18 +322,18 @@ internal static class PwshForEachValueAnalysis
         return true;
     }
 
-    private static ShellValueDomain Exact(string value) => new()
+    private static ShellValueDomainFacts Exact(string value) => new()
     {
         Kind = ShellValueDomainKind.Exact,
         Values = new[] { value },
     };
 
-    private static ShellValueDomain CreateFiniteDomain(IReadOnlyList<string> values) =>
+    private static ShellValueDomainFacts CreateFiniteDomain(IReadOnlyList<string> values) =>
         values.Count switch
         {
-            0 => ShellValueDomain.Unknown,
+            0 => ShellValueDomainFacts.Unknown,
             1 => Exact(values[0]),
-            _ => new ShellValueDomain
+            _ => new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.FiniteSet,
                 Values = Copy(values),
@@ -365,7 +365,7 @@ internal static class PwshPersistentStateMutation
     internal static bool TryGetEffect(
         Clause clause,
         PwshDialect dialect,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         bool providerLocationUnknown,
         out bool unknownCwd)
     {
@@ -416,7 +416,7 @@ internal static class PwshPersistentStateMutation
     internal static bool MayEscapeChildScope(
         Clause clause,
         PwshDialect dialect,
-        IReadOnlyList<EffectiveArgument> effectiveArguments)
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments)
     {
         var verb = GetCanonicalVerb(clause, dialect);
         if (verb is null)
@@ -503,7 +503,7 @@ internal static class PwshPersistentStateMutation
     internal static bool MayEscapeChildRunspaceProcess(
         Clause clause,
         PwshDialect dialect,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         bool providerLocationUnknown)
     {
         var verb = GetCanonicalVerb(clause, dialect);
@@ -540,7 +540,7 @@ internal static class PwshPersistentStateMutation
     internal static bool MayMutateAutomaticHome(
         Clause clause,
         PwshDialect dialect,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         bool providerLocationUnknown)
     {
         var verb = GetCanonicalVerb(clause, dialect);
@@ -587,7 +587,7 @@ internal static class PwshPersistentStateMutation
     private static bool VariableCommandMayTargetAutomaticHome(
         string verb,
         Clause clause,
-        IReadOnlyList<EffectiveArgument> effectiveArguments)
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments)
     {
         if (!TryGetAliasMutationNames(
                 verb,
@@ -654,7 +654,7 @@ internal static class PwshPersistentStateMutation
     internal static bool TryGetCommandResolutionMutation(
         Clause clause,
         PwshDialect dialect,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         bool providerLocationUnknown,
         out bool invalidatesAll,
         out IReadOnlyList<string> commandNames)
@@ -748,7 +748,7 @@ internal static class PwshPersistentStateMutation
     private static bool TryGetAliasMutationNames(
         string verb,
         Clause clause,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         out IReadOnlyList<string> commandNames)
     {
         var names = new List<string>();
@@ -832,7 +832,7 @@ internal static class PwshPersistentStateMutation
         ClauseElement element,
         int elementIndex,
         int separator,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         List<string> names)
     {
         if (element.Kind is not (ArgKind.DynamicSkip or ArgKind.EnvVar))
@@ -869,7 +869,7 @@ internal static class PwshPersistentStateMutation
     private static bool TryGetProviderMutationNames(
         string verb,
         Clause clause,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         out bool invalidatesAll,
         out IReadOnlyList<string> commandNames)
     {
@@ -954,7 +954,7 @@ internal static class PwshPersistentStateMutation
     private static bool TryAddProviderCommandNames(
         ClauseElement element,
         int elementIndex,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         List<string> names,
         out bool selectedCommandProvider)
     {
@@ -988,7 +988,7 @@ internal static class PwshPersistentStateMutation
     private static bool TryAddCommandNames(
         ClauseElement element,
         int elementIndex,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         List<string> names)
     {
         if (!TryGetExactElementValues(
@@ -1014,7 +1014,7 @@ internal static class PwshPersistentStateMutation
     private static bool TryGetExactElementValues(
         ClauseElement element,
         int elementIndex,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         out IReadOnlyList<string> values)
     {
         foreach (var effective in effectiveArguments)
@@ -1254,7 +1254,7 @@ internal static class PwshPersistentStateMutation
 
     private static bool DynamicArgumentMayEscapeChildScope(
         int elementIndex,
-        IReadOnlyList<EffectiveArgument> effectiveArguments)
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments)
     {
         foreach (var effective in effectiveArguments)
         {
@@ -1477,13 +1477,13 @@ internal static class PwshPersistentStateMutation
         IsProviderStateMutation(
             verb,
             clause,
-            Array.Empty<EffectiveArgument>(),
+            Array.Empty<EffectiveArgumentFacts>(),
             failOnUnproved: false);
 
     private static bool IsProviderStateMutation(
         string verb,
         Clause clause,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         bool failOnUnproved,
         bool providerLocationUnknown = false)
     {
@@ -1513,7 +1513,7 @@ internal static class PwshPersistentStateMutation
     private static bool HasMutableOrUnprovedProviderTarget(
         string verb,
         Clause clause,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         bool failOnUnproved,
         StateProviderSelection selection = StateProviderSelection.AnyMutable,
         bool providerLocationUnknown = false)
@@ -1587,7 +1587,7 @@ internal static class PwshPersistentStateMutation
     private static bool IsMutableOrUnprovedProviderTarget(
         ClauseElement element,
         int elementIndex,
-        IReadOnlyList<EffectiveArgument> effectiveArguments,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments,
         bool failOnUnproved,
         StateProviderSelection selection,
         bool providerLocationUnknown)
@@ -1645,7 +1645,7 @@ internal static class PwshPersistentStateMutation
     private static bool TargetDependsOnProviderLocation(
         ClauseElement element,
         int elementIndex,
-        IReadOnlyList<EffectiveArgument> effectiveArguments)
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments)
     {
         if (IsProviderLocationIndependent(element.Value) ||
             IsProviderLocationIndependent(element.Raw) ||
@@ -3013,8 +3013,8 @@ internal sealed class PwshForEachValueAnalyzer
         SimpleCommandSyntax simple,
         AnalysisContext input,
         CommandOccurrenceFacts source,
-        IReadOnlyList<EffectiveArgument> effective,
-        IReadOnlyList<RedirectAnalysis> redirects)
+        IReadOnlyList<EffectiveArgumentFacts> effective,
+        IReadOnlyList<RedirectAnalysisFacts> redirects)
     {
         var current = new CommandOccurrenceFacts
         {
@@ -3051,7 +3051,7 @@ internal sealed class PwshForEachValueAnalyzer
         };
     }
 
-    private IReadOnlyList<RedirectAnalysis> AnalyzeRedirects(
+    private IReadOnlyList<RedirectAnalysisFacts> AnalyzeRedirects(
         CommandOccurrenceFacts source,
         AnalysisContext input)
     {
@@ -3061,7 +3061,7 @@ internal sealed class PwshForEachValueAnalyzer
             return source.Redirects;
         }
 
-        var rewritten = new RedirectAnalysis[source.Redirects.Count];
+        var rewritten = new RedirectAnalysisFacts[source.Redirects.Count];
         for (var index = 0; index < rewritten.Length; index++)
         {
             rewritten[index] = source.Redirects[index];
@@ -3082,7 +3082,7 @@ internal sealed class PwshForEachValueAnalyzer
             rewritten[provenance.RedirectIndex] =
                 rewritten[provenance.RedirectIndex] with
                 {
-                    Target = ShellValueDomain.Unknown,
+                    Target = ShellValueDomainFacts.Unknown,
                 };
             if (!TryGetRedirectEvaluationContext(
                     provenance.InvocationScopeDepth,
@@ -3146,7 +3146,7 @@ internal sealed class PwshForEachValueAnalyzer
                 {
                     Target = resolvedAll
                         ? CreateDomain(values)
-                        : ShellValueDomain.Unknown,
+                        : ShellValueDomainFacts.Unknown,
                 };
         }
 
@@ -3181,16 +3181,16 @@ internal sealed class PwshForEachValueAnalyzer
         value[0] == '~' &&
         (value.Length == 1 || value[1] is '/' or '\\');
 
-    private static IReadOnlyList<RedirectAnalysis> JoinRedirects(
-        IReadOnlyList<RedirectAnalysis> left,
-        IReadOnlyList<RedirectAnalysis> right)
+    private static IReadOnlyList<RedirectAnalysisFacts> JoinRedirects(
+        IReadOnlyList<RedirectAnalysisFacts> left,
+        IReadOnlyList<RedirectAnalysisFacts> right)
     {
         if (left.Count != right.Count)
         {
-            return Array.Empty<RedirectAnalysis>();
+            return Array.Empty<RedirectAnalysisFacts>();
         }
 
-        var joined = new RedirectAnalysis[left.Count];
+        var joined = new RedirectAnalysisFacts[left.Count];
         for (var index = 0; index < joined.Length; index++)
         {
             var leftFact = left[index];
@@ -3202,7 +3202,7 @@ internal sealed class PwshForEachValueAnalyzer
                 leftFact.IsPathRelevant != rightFact.IsPathRelevant ||
                 leftFact.HereDocument != rightFact.HereDocument)
             {
-                joined[index] = new RedirectAnalysis
+                joined[index] = new RedirectAnalysisFacts
                 {
                     RedirectIndex = leftFact.RedirectIndex,
                 };
@@ -3219,22 +3219,22 @@ internal sealed class PwshForEachValueAnalyzer
         return joined;
     }
 
-    private static ShellValueDomain CreateDomain(IReadOnlyList<string> values) =>
+    private static ShellValueDomainFacts CreateDomain(IReadOnlyList<string> values) =>
         values.Count switch
         {
-            1 => new ShellValueDomain
+            1 => new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Exact,
                 Values = new[] { values[0] },
             },
             _ when values.Count > 1 &&
                 values.Count <= ShellAnalysisLimits.MaxValueCandidates =>
-                new ShellValueDomain
+                new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.FiniteSet,
                 Values = values,
             },
-            _ => ShellValueDomain.Unknown,
+            _ => ShellValueDomainFacts.Unknown,
         };
 
     private PwshFlowResult AnalyzeList(CommandListSyntax list, AnalysisContext input)
@@ -3412,7 +3412,7 @@ internal sealed class PwshForEachValueAnalyzer
         return PwshPersistentStateMutation.TryGetEffect(
             simple.Clause,
             _options.Dialect,
-            Array.Empty<EffectiveArgument>(),
+            Array.Empty<EffectiveArgumentFacts>(),
             providerLocationUnknown: false,
             out _);
     }
@@ -3869,14 +3869,14 @@ internal sealed class PwshForEachValueAnalyzer
         SimpleCommandSyntax simple,
         int elementIndex,
         AnalysisContext input,
-        out ShellValueDomain domain)
+        out ShellValueDomainFacts domain)
     {
         if (TryGetElementValue(simple, elementIndex, 0, out var value))
         {
             return input.TryEvaluateValue(value, out domain);
         }
 
-        domain = ShellValueDomain.Unknown;
+        domain = ShellValueDomainFacts.Unknown;
         return false;
     }
 
@@ -3920,7 +3920,7 @@ internal sealed class PwshForEachValueAnalyzer
             ? new CommandOccurrenceFacts
             {
                 EffectiveArguments = source.EffectiveArguments,
-                WorkingDirectory = ShellValueDomain.Unknown,
+                WorkingDirectory = ShellValueDomainFacts.Unknown,
                 Redirects = RewriteRedirectsForUnknownState(source),
                 RedirectTargetProvenance = source.RedirectTargetProvenance,
                 CwdPathDependencies = source.CwdPathDependencies,
@@ -4048,8 +4048,8 @@ internal sealed class PwshForEachValueAnalyzer
         };
     }
 
-    private static IReadOnlyList<RedirectAnalysis> RewriteRedirectFacts(
-        IReadOnlyList<RedirectAnalysis> source,
+    private static IReadOnlyList<RedirectAnalysisFacts> RewriteRedirectFacts(
+        IReadOnlyList<RedirectAnalysisFacts> source,
         IReadOnlyList<RedirectTargetProvenance> provenance,
         Clause clause)
     {
@@ -4058,7 +4058,7 @@ internal sealed class PwshForEachValueAnalyzer
             return source;
         }
 
-        var rewritten = new RedirectAnalysis[source.Count];
+        var rewritten = new RedirectAnalysisFacts[source.Count];
         for (var index = 0; index < rewritten.Length; index++)
         {
             var fact = source[index];
@@ -4079,8 +4079,8 @@ internal sealed class PwshForEachValueAnalyzer
                 Target = hasProvenance
                     ? fact.Target
                     : compatibility.IsDynamicSkip
-                        ? ShellValueDomain.Unknown
-                        : new ShellValueDomain
+                        ? ShellValueDomainFacts.Unknown
+                        : new ShellValueDomainFacts
                         {
                             Kind = ShellValueDomainKind.Exact,
                             Values = new[] { compatibility.Target },
@@ -4654,15 +4654,15 @@ internal sealed class PwshForEachValueAnalyzer
         {
             case SimpleCommandSyntax simple:
                 var source = _factsFactory(simple);
-                var effective = new List<EffectiveArgument>();
+                var effective = new List<EffectiveArgumentFacts>();
                 foreach (var provenance in source.ValueProvenance)
                 {
                     if (ReferencesBinding(provenance.Value, bindingName))
                     {
-                        effective.Add(new EffectiveArgument
+                        effective.Add(new EffectiveArgumentFacts
                         {
                             ClauseElementIndex = provenance.ClauseElementIndex,
-                            Value = ShellValueDomain.Unknown,
+                            Value = ShellValueDomainFacts.Unknown,
                         });
                     }
                 }
@@ -4670,7 +4670,7 @@ internal sealed class PwshForEachValueAnalyzer
                 _facts[simple.Clause] = new CommandOccurrenceFacts
                 {
                     EffectiveArguments = effective.ToArray(),
-                    WorkingDirectory = ShellValueDomain.Unknown,
+                    WorkingDirectory = ShellValueDomainFacts.Unknown,
                     Redirects = RewriteRedirectsForUnknownState(source),
                     RedirectTargetProvenance = source.RedirectTargetProvenance,
                     CwdPathDependencies = source.CwdPathDependencies,
@@ -4721,7 +4721,7 @@ internal sealed class PwshForEachValueAnalyzer
         }
     }
 
-    private IReadOnlyList<RedirectAnalysis> RewriteRedirectsForUnknownState(
+    private IReadOnlyList<RedirectAnalysisFacts> RewriteRedirectsForUnknownState(
         CommandOccurrenceFacts source)
     {
         if (source.Redirects.Count == 0)
@@ -4729,7 +4729,7 @@ internal sealed class PwshForEachValueAnalyzer
             return source.Redirects;
         }
 
-        var redirects = new RedirectAnalysis[source.Redirects.Count];
+        var redirects = new RedirectAnalysisFacts[source.Redirects.Count];
         for (var index = 0; index < redirects.Length; index++)
         {
             var fact = source.Redirects[index];
@@ -4740,7 +4740,7 @@ internal sealed class PwshForEachValueAnalyzer
                     out var value))
             {
                 redirects[index] = fact.IsPathRelevant
-                    ? fact with { Target = ShellValueDomain.Unknown }
+                    ? fact with { Target = ShellValueDomainFacts.Unknown }
                     : fact;
                 continue;
             }
@@ -4754,12 +4754,12 @@ internal sealed class PwshForEachValueAnalyzer
             redirects[index] = fact with
             {
                 Target = resolved.Resolved is not null && resolved.IsPath
-                    ? new ShellValueDomain
+                    ? new ShellValueDomainFacts
                     {
                         Kind = ShellValueDomainKind.Exact,
                         Values = new[] { resolved.Resolved },
                     }
-                    : ShellValueDomain.Unknown,
+                    : ShellValueDomainFacts.Unknown,
             };
         }
 
@@ -4802,11 +4802,11 @@ internal sealed class PwshForEachValueAnalyzer
         return false;
     }
 
-    private static IReadOnlyList<EffectiveArgument> JoinEffectiveArguments(
-        IReadOnlyList<EffectiveArgument> left,
-        IReadOnlyList<EffectiveArgument> right)
+    private static IReadOnlyList<EffectiveArgumentFacts> JoinEffectiveArguments(
+        IReadOnlyList<EffectiveArgumentFacts> left,
+        IReadOnlyList<EffectiveArgumentFacts> right)
     {
-        var joined = new Dictionary<int, ShellValueDomain>();
+        var joined = new Dictionary<int, ShellValueDomainFacts>();
         foreach (var argument in left)
         {
             joined[argument.ClauseElementIndex] = argument.Value;
@@ -4823,10 +4823,10 @@ internal sealed class PwshForEachValueAnalyzer
 
         var indices = new List<int>(joined.Keys);
         indices.Sort();
-        var result = new EffectiveArgument[indices.Count];
+        var result = new EffectiveArgumentFacts[indices.Count];
         for (var index = 0; index < indices.Count; index++)
         {
-            result[index] = new EffectiveArgument
+            result[index] = new EffectiveArgumentFacts
             {
                 ClauseElementIndex = indices[index],
                 Value = joined[indices[index]],
@@ -4836,25 +4836,25 @@ internal sealed class PwshForEachValueAnalyzer
         return result;
     }
 
-    private static ShellValueDomain JoinWorkingDirectories(
-        ShellValueDomain left,
-        ShellValueDomain right) =>
+    private static ShellValueDomainFacts JoinWorkingDirectories(
+        ShellValueDomainFacts left,
+        ShellValueDomainFacts right) =>
         left.Kind == ShellValueDomainKind.Exact &&
         right.Kind == ShellValueDomainKind.Exact &&
         left.Values.Count == 1 &&
         right.Values.Count == 1 &&
         string.Equals(left.Values[0], right.Values[0], StringComparison.Ordinal)
             ? left
-            : ShellValueDomain.Unknown;
+            : ShellValueDomainFacts.Unknown;
 
-    private static ShellValueDomain JoinDomains(
-        ShellValueDomain left,
-        ShellValueDomain right)
+    private static ShellValueDomainFacts JoinDomains(
+        ShellValueDomainFacts left,
+        ShellValueDomainFacts right)
     {
         if (left.Kind is not (ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet) ||
             right.Kind is not (ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
         {
-            return ShellValueDomain.Unknown;
+            return ShellValueDomainFacts.Unknown;
         }
 
         var values = new List<string>();
@@ -4873,7 +4873,7 @@ internal sealed class PwshForEachValueAnalyzer
             {
                 if (values.Count == ShellAnalysisLimits.MaxValueCandidates)
                 {
-                    return ShellValueDomain.Unknown;
+                    return ShellValueDomainFacts.Unknown;
                 }
 
                 values.Add(value);
@@ -4882,29 +4882,29 @@ internal sealed class PwshForEachValueAnalyzer
 
         return values.Count switch
         {
-            1 => new ShellValueDomain
+            1 => new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Exact,
                 Values = values.ToArray(),
             },
-            > 1 => new ShellValueDomain
+            > 1 => new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.FiniteSet,
                 Values = values.ToArray(),
             },
-            _ => ShellValueDomain.Unknown,
+            _ => ShellValueDomainFacts.Unknown,
         };
     }
 
     private static string NormalizePath(string path) => path.Replace('\\', '/');
 
-    private IReadOnlyList<EffectiveArgument> CreateEffectiveArguments(
+    private IReadOnlyList<EffectiveArgumentFacts> CreateEffectiveArguments(
         IReadOnlyList<ShellValueElementProvenance> provenance,
         Clause clause,
         AnalysisContext context,
         bool includeUnresolved)
     {
-        var effective = new List<EffectiveArgument>();
+        var effective = new List<EffectiveArgumentFacts>();
         foreach (var value in provenance)
         {
             if (value.ClauseElementIndex >= 0 &&
@@ -4917,7 +4917,7 @@ internal sealed class PwshForEachValueAnalyzer
 
             if (context.TryAnalyzeEffectiveValue(value.Value, out var domain))
             {
-                effective.Add(new EffectiveArgument
+                effective.Add(new EffectiveArgumentFacts
                 {
                     ClauseElementIndex = value.ClauseElementIndex,
                     Value = domain,
@@ -4935,7 +4935,7 @@ internal sealed class PwshForEachValueAnalyzer
                         out domain) ||
                     IsPolicySensitiveValue(clause, value))
                 {
-                    effective.Add(new EffectiveArgument
+                    effective.Add(new EffectiveArgumentFacts
                     {
                         ClauseElementIndex = value.ClauseElementIndex,
                         Value = domain,
@@ -4943,19 +4943,19 @@ internal sealed class PwshForEachValueAnalyzer
                 }
                 else if (includeUnresolved && ContainsExpansion(value.Value))
                 {
-                    effective.Add(new EffectiveArgument
+                    effective.Add(new EffectiveArgumentFacts
                     {
                         ClauseElementIndex = value.ClauseElementIndex,
-                        Value = ShellValueDomain.Unknown,
+                        Value = ShellValueDomainFacts.Unknown,
                     });
                 }
             }
             else if (includeUnresolved && ContainsExpansion(value.Value))
             {
-                effective.Add(new EffectiveArgument
+                effective.Add(new EffectiveArgumentFacts
                 {
                     ClauseElementIndex = value.ClauseElementIndex,
-                    Value = ShellValueDomain.Unknown,
+                    Value = ShellValueDomainFacts.Unknown,
                 });
             }
         }
@@ -5121,7 +5121,7 @@ internal sealed class PwshForEachValueAnalyzer
         ShellValue value,
         bool? usesNativeBinding,
         AnalysisContext context,
-        out ShellValueDomain domain)
+        out ShellValueDomainFacts domain)
     {
         var homeDirectory = PwshResolver.GetHomeDirectory(_options);
         var composed = new StringBuilder(value.Decoded.Length);
@@ -5139,7 +5139,7 @@ internal sealed class PwshForEachValueAnalyzer
             if (fragment.Kind != ShellValueFragmentKind.Expansion ||
                 fragment.Expansion is not ShellExpansionReference expansion)
             {
-                domain = ShellValueDomain.Unknown;
+                domain = ShellValueDomainFacts.Unknown;
                 return false;
             }
 
@@ -5160,7 +5160,7 @@ internal sealed class PwshForEachValueAnalyzer
 
                     if (usesNativeBinding is null)
                     {
-                        domain = ShellValueDomain.Unknown;
+                        domain = ShellValueDomainFacts.Unknown;
                         return false;
                     }
 
@@ -5172,7 +5172,7 @@ internal sealed class PwshForEachValueAnalyzer
 
                     if (!context.ConfiguredHomeAvailable || homeDirectory.Length == 0)
                     {
-                        domain = ShellValueDomain.Unknown;
+                        domain = ShellValueDomainFacts.Unknown;
                         return false;
                     }
 
@@ -5192,13 +5192,13 @@ internal sealed class PwshForEachValueAnalyzer
                 {
                     if (usesNativeBinding is null)
                     {
-                        domain = ShellValueDomain.Unknown;
+                        domain = ShellValueDomainFacts.Unknown;
                         return false;
                     }
 
                     if (usesNativeBinding == true)
                     {
-                        domain = ShellValueDomain.Unknown;
+                        domain = ShellValueDomainFacts.Unknown;
                         return false;
                     }
                 }
@@ -5218,14 +5218,14 @@ internal sealed class PwshForEachValueAnalyzer
                 (fragment.AllowedTransforms & ShellLexicalTransform.Variable) == 0 ||
                 homeDirectory.Length == 0)
             {
-                domain = ShellValueDomain.Unknown;
+                domain = ShellValueDomainFacts.Unknown;
                 return false;
             }
 
             composed.Append(homeDirectory);
         }
 
-        domain = new ShellValueDomain
+        domain = new ShellValueDomainFacts
         {
             Kind = ShellValueDomainKind.Exact,
             Values = new[] { composed.ToString() },
@@ -5297,7 +5297,7 @@ internal sealed class PwshForEachValueAnalyzer
 
     private sealed class BindingFrame
     {
-        internal BindingFrame(string name, ShellValueDomain domain)
+        internal BindingFrame(string name, ShellValueDomainFacts domain)
         {
             Name = name;
             Domain = domain;
@@ -5305,7 +5305,7 @@ internal sealed class PwshForEachValueAnalyzer
 
         internal string Name { get; }
 
-        internal ShellValueDomain Domain { get; }
+        internal ShellValueDomainFacts Domain { get; }
     }
 
     private readonly struct AnalysisContext
@@ -5424,7 +5424,7 @@ internal sealed class PwshForEachValueAnalyzer
             {
                 unknown[index] = new BindingFrame(
                     _bindings[index].Name,
-                    ShellValueDomain.Unknown);
+                    ShellValueDomainFacts.Unknown);
             }
 
             return new AnalysisContext(
@@ -5640,7 +5640,7 @@ internal sealed class PwshForEachValueAnalyzer
 
         internal AnalysisContext WithBinding(
             string name,
-            ShellValueDomain domain,
+            ShellValueDomainFacts domain,
             bool canPromote)
         {
             var bindings = new List<BindingFrame>(_bindings.Count + 1);
@@ -5654,7 +5654,7 @@ internal sealed class PwshForEachValueAnalyzer
 
             bindings.Add(new BindingFrame(
                 name,
-                canPromote ? domain : ShellValueDomain.Unknown));
+                canPromote ? domain : ShellValueDomainFacts.Unknown));
             return new AnalysisContext(
                 WorkingDirectory,
                 CanPromote,
@@ -5669,10 +5669,10 @@ internal sealed class PwshForEachValueAnalyzer
                 bindings);
         }
 
-        internal ShellValueDomain ToWorkingDirectoryDomain() =>
+        internal ShellValueDomainFacts ToWorkingDirectoryDomain() =>
             WorkingDirectory is null
-                ? ShellValueDomain.Unknown
-                : new ShellValueDomain
+                ? ShellValueDomainFacts.Unknown
+                : new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.Exact,
                     Values = new[] { WorkingDirectory },
@@ -5680,7 +5680,7 @@ internal sealed class PwshForEachValueAnalyzer
 
         internal bool TryEvaluateValue(
             ShellValue value,
-            out ShellValueDomain domain)
+            out ShellValueDomainFacts domain)
         {
             var literal = true;
             foreach (var fragment in value.Fragments)
@@ -5694,7 +5694,7 @@ internal sealed class PwshForEachValueAnalyzer
 
             if (literal)
             {
-                domain = new ShellValueDomain
+                domain = new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.Exact,
                     Values = new[] { value.Decoded },
@@ -5707,7 +5707,7 @@ internal sealed class PwshForEachValueAnalyzer
 
         internal bool TryAnalyzeEffectiveValue(
             ShellValue value,
-            out ShellValueDomain domain)
+            out ShellValueDomainFacts domain)
         {
             var referenced = new List<BindingFrame>();
             var unresolved = false;
@@ -5740,13 +5740,13 @@ internal sealed class PwshForEachValueAnalyzer
 
             if (referenced.Count == 0)
             {
-                domain = ShellValueDomain.Unknown;
+                domain = ShellValueDomainFacts.Unknown;
                 return false;
             }
 
             if (unresolved)
             {
-                domain = ShellValueDomain.Unknown;
+                domain = ShellValueDomainFacts.Unknown;
                 return true;
             }
 
@@ -5755,7 +5755,7 @@ internal sealed class PwshForEachValueAnalyzer
                 if (binding.Domain.Kind is not (
                         ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet))
                 {
-                    domain = ShellValueDomain.Unknown;
+                    domain = ShellValueDomainFacts.Unknown;
                     return true;
                 }
             }
@@ -5771,17 +5771,17 @@ internal sealed class PwshForEachValueAnalyzer
                     candidates,
                     distinct))
             {
-                domain = ShellValueDomain.Unknown;
+                domain = ShellValueDomainFacts.Unknown;
                 return true;
             }
 
             domain = candidates.Count == 1
-                ? new ShellValueDomain
+                ? new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.Exact,
                     Values = new[] { candidates[0] },
                 }
-                : new ShellValueDomain
+                : new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.FiniteSet,
                     Values = candidates.ToArray(),
@@ -5963,7 +5963,7 @@ internal sealed class PwshForEachValueAnalyzer
                 bindings.Add(new BindingFrame(
                     name,
                     leftBinding is null || rightBinding is null
-                        ? ShellValueDomain.Unknown
+                        ? ShellValueDomainFacts.Unknown
                         : JoinDomains(leftBinding.Domain, rightBinding.Domain)));
             }
 
@@ -6068,8 +6068,8 @@ internal sealed class PwshForEachValueAnalyzer
         }
 
         private static bool DomainEquals(
-            ShellValueDomain left,
-            ShellValueDomain right)
+            ShellValueDomainFacts left,
+            ShellValueDomainFacts right)
         {
             if (left.Kind != right.Kind || left.Values.Count != right.Values.Count)
             {

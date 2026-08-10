@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash for-in body pipeline ancestry",
-  "input": "for f in a b; do find \"$f\" | xargs rm --; done",
+  "input": "for f in a b; do find \u0022$f\u0022 | xargs rm --; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -159,8 +159,9 @@
             "sourceLength": 23
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "FiniteSet",
@@ -175,7 +176,9 @@
         ],
         "workingDirectory": {
           "kind": "Exact",
-          "values": ["/work"],
+          "values": [
+            "/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         }
@@ -214,10 +217,25 @@
             "sourceLength": 23
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Exact",
-          "values": ["/work"],
+          "values": [
+            "/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         }

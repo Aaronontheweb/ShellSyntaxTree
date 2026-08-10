@@ -18,23 +18,23 @@ namespace ShellSyntaxTree.Internal.Bash.Parsing;
 /// </summary>
 internal static class BashRedirectAnalysis
 {
-    internal static IReadOnlyList<RedirectAnalysis> Analyze(Clause clause)
+    internal static IReadOnlyList<RedirectAnalysisFacts> Analyze(Clause clause)
         => AnalyzeCore(clause, source: null, sourceTokens: null);
 
-    internal static IReadOnlyList<RedirectAnalysis> Analyze(
+    internal static IReadOnlyList<RedirectAnalysisFacts> Analyze(
         Clause clause,
         string source,
         IReadOnlyList<BashToken> sourceTokens)
         => AnalyzeCore(clause, source, sourceTokens);
 
-    private static IReadOnlyList<RedirectAnalysis> AnalyzeCore(
+    private static IReadOnlyList<RedirectAnalysisFacts> AnalyzeCore(
         Clause clause,
         string? source,
         IReadOnlyList<BashToken>? sourceTokens)
     {
         if (clause.Redirects.Count == 0)
         {
-            return Array.Empty<RedirectAnalysis>();
+            return Array.Empty<RedirectAnalysisFacts>();
         }
 
         var elements = new List<ClauseElement>(clause.Redirects.Count);
@@ -46,7 +46,7 @@ internal static class BashRedirectAnalysis
             }
         }
 
-        var result = new RedirectAnalysis[clause.Redirects.Count];
+        var result = new RedirectAnalysisFacts[clause.Redirects.Count];
         for (var index = 0; index < result.Length; index++)
         {
             result[index] = index < elements.Count
@@ -62,7 +62,7 @@ internal static class BashRedirectAnalysis
         return result;
     }
 
-    private static RedirectAnalysis Analyze(
+    private static RedirectAnalysisFacts Analyze(
         int redirectIndex,
         Redirect compatibility,
         ClauseElement element,
@@ -114,45 +114,41 @@ internal static class BashRedirectAnalysis
 
         if (operation == RedirectOperation.Unknown)
         {
-            return new RedirectAnalysis
-            {
-                RedirectIndex = redirectIndex,
-                Source = redirectSource,
-            };
+            return Incomplete(redirectIndex);
         }
 
         var isComplete = !compatibility.IsDynamicSkip;
-        return new RedirectAnalysis
+        return new RedirectAnalysisFacts
         {
             RedirectIndex = redirectIndex,
             Source = redirectSource,
             Operation = operation,
             Target = isComplete
-                ? new ShellValueDomain
+                ? new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.Exact,
                     Values = new[] { compatibility.Target },
                 }
-                : ShellValueDomain.Unknown,
+                : ShellValueDomainFacts.Unknown,
             IsPathRelevant = true,
             IsComplete = isComplete,
         };
     }
 
-    private static RedirectAnalysis AnalyzeHereString(
+    private static RedirectAnalysisFacts AnalyzeHereString(
         int redirectIndex,
         Redirect compatibility,
         ClauseElement element,
-        RedirectSource source)
+        RedirectSourceFacts source)
     {
         var target = compatibility.IsDynamicSkip
-            ? ShellValueDomain.Unknown
-            : new ShellValueDomain
+            ? ShellValueDomainFacts.Unknown
+            : new ShellValueDomainFacts
             {
                 Kind = ShellValueDomainKind.Exact,
                 Values = new[] { (element.Resolved ?? element.Value) + "\n" },
             };
-        return new RedirectAnalysis
+        return new RedirectAnalysisFacts
         {
             RedirectIndex = redirectIndex,
             Source = source,
@@ -191,12 +187,12 @@ internal static class BashRedirectAnalysis
         return changed ? new ShellValue(value.Decoded, fragments) : value;
     }
 
-    private static RedirectAnalysis AnalyzeHereDocument(
+    private static RedirectAnalysisFacts AnalyzeHereDocument(
         int redirectIndex,
         string? source,
         IReadOnlyList<BashToken>? sourceTokens,
         ClauseElement element,
-        RedirectSource redirectSource,
+        RedirectSourceFacts redirectSource,
         bool stripLeadingTabs)
     {
         if (source is null || sourceTokens is null ||
@@ -246,7 +242,7 @@ internal static class BashRedirectAnalysis
                 StripLeadingTabs = stripLeadingTabs,
                 IsComplete = true,
             };
-            return new RedirectAnalysis
+            return new RedirectAnalysisFacts
             {
                 RedirectIndex = redirectIndex,
                 Source = redirectSource,
@@ -259,9 +255,9 @@ internal static class BashRedirectAnalysis
         return Incomplete(redirectIndex);
     }
 
-    private static RedirectAnalysis AnalyzeDescriptorTarget(
+    private static RedirectAnalysisFacts AnalyzeDescriptorTarget(
         int redirectIndex,
-        RedirectSource source,
+        RedirectSourceFacts source,
         string authoredTarget,
         string decodedTarget)
     {
@@ -269,7 +265,7 @@ internal static class BashRedirectAnalysis
         {
             if (string.Equals(authoredTarget, "&-", StringComparison.Ordinal))
             {
-                return new RedirectAnalysis
+                return new RedirectAnalysisFacts
                 {
                     RedirectIndex = redirectIndex,
                     Source = source,
@@ -292,7 +288,7 @@ internal static class BashRedirectAnalysis
                     out var descriptor) &&
                 descriptor >= 0)
             {
-                return new RedirectAnalysis
+                return new RedirectAnalysisFacts
                 {
                     RedirectIndex = redirectIndex,
                     Source = source,
@@ -305,21 +301,18 @@ internal static class BashRedirectAnalysis
             }
         }
 
-        return new RedirectAnalysis
-        {
-            RedirectIndex = redirectIndex,
-            Source = source,
-            Operation = RedirectOperation.DescriptorDuplicate,
-        };
+        // A computed target does not fit any closed descriptor alternative:
+        // duplicate and move records require a proved target descriptor.
+        return Incomplete(redirectIndex);
     }
 
     private static bool TryReadOperator(
         string raw,
-        out RedirectSource source,
+        out RedirectSourceFacts source,
         out RedirectOperation operation,
         out int length)
     {
-        source = new RedirectSource { Kind = RedirectSourceKind.Default };
+        source = new RedirectSourceFacts { Kind = RedirectSourceKind.Default };
         operation = RedirectOperation.Unknown;
         length = 0;
 
@@ -366,7 +359,7 @@ internal static class BashRedirectAnalysis
                     out var descriptor) &&
                 descriptor >= 0)
             {
-                source = new RedirectSource
+                source = new RedirectSourceFacts
                 {
                     Kind = RedirectSourceKind.Descriptor,
                     Descriptor = descriptor,
@@ -374,7 +367,7 @@ internal static class BashRedirectAnalysis
             }
             else
             {
-                source = new RedirectSource();
+                source = new RedirectSourceFacts();
                 if (raw.AsSpan(operatorStart).StartsWith("<<<", StringComparison.Ordinal))
                 {
                     operation = RedirectOperation.HereString;
@@ -437,7 +430,7 @@ internal static class BashRedirectAnalysis
             return true;
         }
 
-        source = new RedirectSource();
+        source = new RedirectSourceFacts();
         return false;
     }
 
@@ -460,7 +453,7 @@ internal static class BashRedirectAnalysis
         return true;
     }
 
-    private static RedirectAnalysis Incomplete(int redirectIndex) => new()
+    private static RedirectAnalysisFacts Incomplete(int redirectIndex) => new()
     {
         RedirectIndex = redirectIndex,
     };

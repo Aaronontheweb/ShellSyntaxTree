@@ -5,147 +5,279 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using ShellSyntaxTree.Internal;
 
 namespace ShellSyntaxTree;
 
 /// <summary>One authored simple command that may execute.</summary>
 public sealed record CommandOccurrence
 {
+    private IReadOnlyList<CommandAncestryFrame> _ancestry =
+        Array.Empty<CommandAncestryFrame>();
+    private IReadOnlyList<AnalyzedArgument> _arguments = Array.Empty<AnalyzedArgument>();
+    private IReadOnlyList<RedirectAnalysis> _redirects = Array.Empty<RedirectAnalysis>();
+
+    internal CommandOccurrence()
+    {
+    }
+
     /// <summary>Gets the shared compatibility leaf.</summary>
-    public Clause Clause { get; init; } = new();
+    public Clause Clause { get; internal init; } = new();
 
     /// <summary>Gets the nearest structural execution role.</summary>
-    public CommandOccurrenceRole ImmediateRole { get; init; }
+    public CommandOccurrenceRole ImmediateRole { get; internal init; }
 
     /// <summary>Gets ancestry ordered from outermost to innermost.</summary>
-    public IReadOnlyList<CommandAncestryFrame> Ancestry { get; init; } =
-        Array.Empty<CommandAncestryFrame>();
+    public IReadOnlyList<CommandAncestryFrame> Ancestry
+    {
+        get => _ancestry;
+        internal init => _ancestry = PublicCollection.Copy(value);
+    }
 
-    /// <summary>Gets bounded effective values at authored argument coordinates.</summary>
-    public IReadOnlyList<EffectiveArgument> EffectiveArguments { get; init; } =
-        Array.Empty<EffectiveArgument>();
+    /// <summary>Gets one analyzed value for every authored, non-cwd argument.</summary>
+    public IReadOnlyList<AnalyzedArgument> Arguments
+    {
+        get => _arguments;
+        internal init => _arguments = PublicCollection.Copy(value);
+    }
+
+    internal IReadOnlyList<EffectiveArgument> EffectiveArguments
+    {
+        get
+        {
+            var values = new List<EffectiveArgument>();
+            for (var index = 0; index < _arguments.Count; index++)
+            {
+                if (!_arguments[index].HasEffectiveValue)
+                {
+                    continue;
+                }
+
+                values.Add(new EffectiveArgument
+                {
+                    ClauseElementIndex = FindElementIndex(_arguments[index].Element),
+                    Value = _arguments[index].Value,
+                });
+            }
+
+            return values.ToArray();
+        }
+    }
 
     /// <summary>Gets the effective working-directory proof.</summary>
-    public ShellValueDomain WorkingDirectory { get; init; } = ShellValueDomain.Unknown;
+    public ShellValueDomain WorkingDirectory { get; internal init; } =
+        new ShellValueDomain.Unknown();
 
     /// <summary>Gets explicit redirect analysis in compatibility redirect order.</summary>
-    public IReadOnlyList<RedirectAnalysis> Redirects { get; init; } =
-        Array.Empty<RedirectAnalysis>();
+    public IReadOnlyList<RedirectAnalysis> Redirects
+    {
+        get => _redirects;
+        internal init => _redirects = PublicCollection.Copy(value);
+    }
 
-    /// <summary>
-    /// Gets whether command identity, ancestry, and parser-owned shell analysis
-    /// are structurally complete.
-    /// </summary>
-    public bool IsComplete { get; init; }
+    /// <summary>Gets whether parser-owned shell analysis is structurally complete.</summary>
+    public bool IsComplete { get; internal init; }
+
+    private int FindElementIndex(ClauseElement element)
+    {
+        for (var index = 0; index < Clause.Elements.Count; index++)
+        {
+            if (ReferenceEquals(Clause.Elements[index], element))
+            {
+                return index;
+            }
+        }
+
+        return -1;
+    }
 }
 
 /// <summary>Identifies the nearest structural role of a command occurrence.</summary>
 public enum CommandOccurrenceRole
 {
-    /// <summary>The role is unknown.</summary>
     Unknown,
-    /// <summary>An ordinary command.</summary>
     Ordinary,
-    /// <summary>A pipeline stage.</summary>
     PipelineStage,
-    /// <summary>A condition command.</summary>
-    Condition,
-    /// <summary>An iterator-producing command.</summary>
     Iterator,
-    /// <summary>A loop-body command.</summary>
     LoopBody,
-    /// <summary>A conditional-branch command.</summary>
-    Branch,
-    /// <summary>A substitution command.</summary>
     Substitution,
-    /// <summary>A command inside an execution-bearing region.</summary>
     ExecutionRegion,
 }
 
 /// <summary>One compositional structural ancestor of a command occurrence.</summary>
 public sealed record CommandAncestryFrame
 {
-    /// <summary>Gets the ancestor's syntax kind.</summary>
-    public ShellSyntaxKind AncestorKind { get; init; }
+    internal CommandAncestryFrame()
+    {
+    }
+
+    /// <summary>Gets the actual ancestor node.</summary>
+    public ShellSyntaxNode Ancestor { get; internal init; } = null!;
 
     /// <summary>Gets the occurrence's region within the ancestor.</summary>
-    public CommandAncestryRegion Region { get; init; }
+    public CommandAncestryRegion Region { get; internal init; }
 
     /// <summary>Gets the child index for repeated regions, when applicable.</summary>
-    public int? ChildIndex { get; init; }
+    public int? ChildIndex { get; internal init; }
 
-    /// <summary>Gets the ancestor source start, when exact.</summary>
-    public int? SourceStart { get; init; }
+    internal ShellSyntaxKind AncestorKind => Ancestor.Kind;
 
-    /// <summary>Gets the ancestor source length, when exact.</summary>
-    public int? SourceLength { get; init; }
+    internal int? SourceStart => Ancestor.SourceStart;
+
+    internal int? SourceLength => Ancestor.SourceLength;
 }
 
 /// <summary>Identifies an occurrence's region within a structural ancestor.</summary>
 public enum CommandAncestryRegion
 {
-    /// <summary>The region is unknown.</summary>
     Unknown,
-    /// <summary>The root region.</summary>
     Root,
-    /// <summary>An ordinary statement region.</summary>
     Statement,
-    /// <summary>A pipeline-stage region.</summary>
     PipelineStage,
-    /// <summary>A group body.</summary>
     GroupBody,
-    /// <summary>An iterator expression.</summary>
     Iterator,
-    /// <summary>A loop body.</summary>
     LoopBody,
-    /// <summary>A condition region.</summary>
-    Condition,
-    /// <summary>A conditional branch.</summary>
-    Branch,
-    /// <summary>A command substitution.</summary>
     Substitution,
-    /// <summary>An execution-bearing region.</summary>
     ExecutionRegion,
 }
 
-/// <summary>A bounded effective value at one authored clause-element coordinate.</summary>
-public sealed record EffectiveArgument
+/// <summary>One parser-owned join between a compatibility argument and its source.</summary>
+public sealed record AnalyzedArgument
 {
-    /// <summary>Gets the index into <see cref="Clause.Elements"/>.</summary>
-    public int ClauseElementIndex { get; init; } = -1;
+    internal AnalyzedArgument()
+    {
+    }
 
-    /// <summary>Gets the effective value proof.</summary>
-    public ShellValueDomain Value { get; init; } = ShellValueDomain.Unknown;
+    /// <summary>Gets the compatibility argument.</summary>
+    public Arg Argument { get; internal init; } = null!;
+
+    /// <summary>Gets the authored element that produced the argument.</summary>
+    public ClauseElement Element { get; internal init; } = null!;
+
+    /// <summary>Gets the effective shell-value proof.</summary>
+    public ShellValueDomain Value { get; internal init; } = null!;
+
+    internal bool HasEffectiveValue { get; init; }
+}
+
+internal sealed record EffectiveArgument
+{
+    internal int ClauseElementIndex { get; init; } = -1;
+
+    internal ShellValueDomain Value { get; init; } = null!;
 }
 
 /// <summary>A bounded, non-executing proof for a shell value.</summary>
-public sealed record ShellValueDomain
+public abstract record ShellValueDomain
 {
-    /// <summary>Gets the shared empty unknown-domain value.</summary>
-    public static ShellValueDomain Unknown { get; } = new();
+    private protected ShellValueDomain()
+    {
+    }
 
-    /// <summary>Gets the proof kind.</summary>
-    public ShellValueDomainKind Kind { get; init; }
+    private protected abstract object LibraryOwnership { get; }
 
-    /// <summary>Gets exact or finite values.</summary>
-    public IReadOnlyList<string> Values { get; init; } = Array.Empty<string>();
+    internal abstract ShellValueDomainKind InternalKind { get; }
 
-    /// <summary>Gets a bounded symbolic pattern.</summary>
-    public string? Pattern { get; init; }
+    internal ShellValueDomainKind Kind => InternalKind;
 
-    /// <summary>Gets the pattern's conservative covering directory.</summary>
-    public string? CoveringDirectory { get; init; }
+    internal virtual IReadOnlyList<string> InternalValues => Array.Empty<string>();
+
+    internal IReadOnlyList<string> Values => InternalValues;
+
+    internal virtual string? InternalPattern => null;
+
+    internal string? Pattern => InternalPattern;
+
+    internal virtual string? InternalCoveringDirectory => null;
+
+    internal string? CoveringDirectory => InternalCoveringDirectory;
+
+    /// <summary>No bounded value is proved.</summary>
+    public sealed record Unknown : ShellValueDomain
+    {
+        internal Unknown()
+        {
+        }
+
+        private protected override object LibraryOwnership => this;
+
+        internal override ShellValueDomainKind InternalKind => ShellValueDomainKind.Unknown;
+    }
+
+    /// <summary>Exactly one value is proved.</summary>
+    public sealed record Exact : ShellValueDomain
+    {
+        internal Exact(string value) => Value = value;
+
+        private protected override object LibraryOwnership => this;
+
+        internal override ShellValueDomainKind InternalKind => ShellValueDomainKind.Exact;
+
+        internal override IReadOnlyList<string> InternalValues => new[] { Value };
+
+        /// <summary>Gets the proved value.</summary>
+        public string Value { get; }
+    }
+
+    /// <summary>Two through 32 distinct values are proved.</summary>
+    public sealed record FiniteSet : ShellValueDomain
+    {
+        internal FiniteSet(IEnumerable<string> values) =>
+            Values = PublicCollection.Copy(values);
+
+        private protected override object LibraryOwnership => this;
+
+        internal override ShellValueDomainKind InternalKind =>
+            ShellValueDomainKind.FiniteSet;
+
+        internal override IReadOnlyList<string> InternalValues => Values;
+
+        /// <summary>Gets the proved finite values.</summary>
+        public new IReadOnlyList<string> Values { get; }
+    }
+
+    /// <summary>A bounded path pattern and its conservative covering directory.</summary>
+    public sealed record PathPattern : ShellValueDomain
+    {
+        internal PathPattern(string pattern, string coveringDirectory)
+        {
+            Pattern = pattern;
+            CoveringDirectory = coveringDirectory;
+        }
+
+        private protected override object LibraryOwnership => this;
+
+        internal override ShellValueDomainKind InternalKind => ShellValueDomainKind.Pattern;
+
+        internal override string InternalPattern => Pattern;
+
+        internal override string InternalCoveringDirectory => CoveringDirectory;
+
+        /// <summary>Gets the symbolic path pattern.</summary>
+        public new string Pattern { get; }
+
+        /// <summary>Gets the conservative covering directory.</summary>
+        public new string CoveringDirectory { get; }
+    }
 }
 
-/// <summary>Identifies the strength and shape of a shell-value proof.</summary>
-public enum ShellValueDomainKind
+internal enum ShellValueDomainKind
 {
-    /// <summary>No bounded value is proved.</summary>
     Unknown,
-    /// <summary>Exactly one value is proved.</summary>
     Exact,
-    /// <summary>Two through 32 distinct values are proved.</summary>
     FiniteSet,
-    /// <summary>A pattern and conservative covering directory are proved.</summary>
     Pattern,
+}
+
+internal static class ShellValueDomains
+{
+    internal static ShellValueDomain Unknown { get; } = new ShellValueDomain.Unknown();
+
+    internal static ShellValueDomain Exact(string value) => new ShellValueDomain.Exact(value);
+
+    internal static ShellValueDomain FiniteSet(IEnumerable<string> values) =>
+        new ShellValueDomain.FiniteSet(values);
+
+    internal static ShellValueDomain Pattern(string pattern, string coveringDirectory) =>
+        new ShellValueDomain.PathPattern(pattern, coveringDirectory);
 }

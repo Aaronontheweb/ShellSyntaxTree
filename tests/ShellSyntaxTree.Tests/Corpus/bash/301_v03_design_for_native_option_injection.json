@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Loop option injection",
-  "input": "for f in -rf /tmp/x; do rm \"$f\"; done",
+  "input": "for f in -rf /tmp/x; do rm \u0022$f\u0022; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -32,7 +32,7 @@
             "isPath": false
           },
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "value": "$f",
             "role": "Argument",
             "sourceStart": 27,
@@ -137,8 +137,9 @@
             "sourceLength": 10
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "FiniteSet",
@@ -158,8 +159,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       }
     ]
   },

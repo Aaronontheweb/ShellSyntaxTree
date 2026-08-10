@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Unknown stdin data does not make an otherwise complete redirect structurally incomplete",
-  "input": "cat <<< \"$value\"",
+  "input": "cat \u003C\u003C\u003C \u0022$value\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -13,7 +13,7 @@
         "redirects": [
           {
             "direction": "In",
-            "target": "\"$value\"",
+            "target": "\u0022$value\u0022",
             "isDynamicSkip": true
           }
         ],
@@ -30,7 +30,7 @@
             "isPath": false
           },
           {
-            "raw": "<<< \"$value\"",
+            "raw": "\u003C\u003C\u003C \u0022$value\u0022",
             "value": "$value",
             "role": "Redirect",
             "sourceStart": 4,
@@ -81,7 +81,7 @@
             "sourceLength": 16
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -93,18 +93,16 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "HereStringRedirectAnalysis",
             "sourceKind": "Default",
             "sourceDescriptor": null,
-            "operation": "HereString",
-            "targetDescriptor": null,
-            "target": {
+            "isComplete": true,
+            "value": {
               "kind": "Unknown",
               "values": [],
               "pattern": null,
               "coveringDirectory": null
-            },
-            "isPathRelevant": false,
-            "isComplete": true
+            }
           }
         ]
       }

@@ -1,15 +1,20 @@
 {
   "name": "v0.3 Bash overflow source descriptor fails closed",
-  "input": "command 999999999999999999999> out.log",
+  "input": "command 999999999999999999999\u003E out.log",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["command"],
+        "verb": [
+          "command"
+        ],
         "args": [],
         "redirects": [
-          { "direction": "Out", "target": "/work/out.log", "isDynamicSkip": false }
+          {
+            "direction": "Out",
+            "target": "/work/out.log"
+          }
         ]
       }
     ],
@@ -19,15 +24,29 @@
         "immediateRole": "Ordinary",
         "isComplete": false,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 38 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 38
+          }
         ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "UnresolvedRedirectAnalysis",
             "sourceKind": "Unknown",
-            "operation": "Unknown",
-            "target": { "kind": "Unknown" },
-            "isPathRelevant": false,
+            "sourceDescriptor": null,
             "isComplete": false
           }
         ]

@@ -91,6 +91,7 @@ public class CorpusRunnerTests
                             new ExecutionRegionSyntax
                             {
                                 Origin = ExecutionRegionOrigin.CommandArgument,
+                                HostArgument = hostClause.Elements[1],
                                 HostClauseElementIndex = 1,
                                 Phase = ExecutionRegionPhase.Process,
                                 Timing = ExecutionRegionTiming.Synchronous,
@@ -129,10 +130,10 @@ public class CorpusRunnerTests
             },
             Syntax = new List<ExpectedSyntaxNode>
             {
-                new() { Kind = ShellSyntaxKind.Block },
+                new() { Kind = "Block" },
                 new()
                 {
-                    Kind = ShellSyntaxKind.SimpleCommand,
+                    Kind = "SimpleCommand",
                     ParentIndex = 0,
                     Region = CommandAncestryRegion.Root,
                     ChildIndex = 0,
@@ -140,7 +141,7 @@ public class CorpusRunnerTests
                 },
                 new()
                 {
-                    Kind = ShellSyntaxKind.ExecutionRegion,
+                    Kind = "ExecutionRegion",
                     ParentIndex = 1,
                     Region = CommandAncestryRegion.ExecutionRegion,
                     ChildIndex = 0,
@@ -152,14 +153,14 @@ public class CorpusRunnerTests
                 },
                 new()
                 {
-                    Kind = ShellSyntaxKind.Block,
+                    Kind = "Block",
                     ParentIndex = 2,
                     Region = CommandAncestryRegion.ExecutionRegion,
                     ChildIndex = 0,
                 },
                 new()
                 {
-                    Kind = ShellSyntaxKind.SimpleCommand,
+                    Kind = "SimpleCommand",
                     ParentIndex = 3,
                     Region = CommandAncestryRegion.Statement,
                     ChildIndex = 0,
@@ -210,10 +211,10 @@ public class CorpusRunnerTests
         {
             var syntax = new List<ExpectedSyntaxNode>
             {
-                new() { Kind = ShellSyntaxKind.Block },
+                new() { Kind = "Block" },
                 new()
                 {
-                    Kind = ShellSyntaxKind.SimpleCommand,
+                    Kind = "SimpleCommand",
                     ParentIndex = 0,
                     Region = CommandAncestryRegion.Root,
                     ChildIndex = 0,
@@ -224,7 +225,7 @@ public class CorpusRunnerTests
             {
                 syntax.Add(new ExpectedSyntaxNode
                 {
-                    Kind = ShellSyntaxKind.ExecutionRegion,
+                    Kind = "ExecutionRegion",
                     ParentIndex = 1,
                     Region = CommandAncestryRegion.ExecutionRegion,
                     ChildIndex = index,
@@ -999,7 +1000,7 @@ public sealed record ExpectedParsedCommand
 
 public sealed record ExpectedSyntaxNode
 {
-    public ShellSyntaxKind Kind { get; init; }
+    public string Kind { get; init; } = "";
 
     public int? ParentIndex { get; init; }
 
@@ -1052,7 +1053,7 @@ public sealed record ExpectedCommandOccurrence
 
     public List<ExpectedCommandAncestryFrame>? Ancestry { get; init; }
 
-    public List<ExpectedEffectiveArgument>? EffectiveArguments { get; init; }
+    public List<ExpectedAnalyzedArgument>? Arguments { get; init; }
 
     public ExpectedValueDomain? WorkingDirectory { get; init; }
 
@@ -1063,19 +1064,19 @@ public sealed record ExpectedRedirectAnalysis
 {
     public int RedirectIndex { get; init; } = -1;
 
-    public RedirectSourceKind SourceKind { get; init; }
+    public string Kind { get; init; } = "";
+
+    public string SourceKind { get; init; } = "";
 
     public int? SourceDescriptor { get; init; }
 
-    public RedirectOperation Operation { get; init; }
+    public FileRedirectMode? FileMode { get; init; }
 
     public int? TargetDescriptor { get; init; }
 
-    public ExpectedValueDomain Target { get; init; } = new();
+    public ExpectedValueDomain? Value { get; init; }
 
     public ExpectedHereDocumentAnalysis? HereDocument { get; init; }
-
-    public bool IsPathRelevant { get; init; }
 
     public bool IsComplete { get; init; }
 }
@@ -1102,8 +1103,10 @@ public sealed record ExpectedSourceFragment
     public int? SourceLength { get; init; }
 }
 
-public sealed record ExpectedEffectiveArgument
+public sealed record ExpectedAnalyzedArgument
 {
+    public int ClauseArgumentIndex { get; init; } = -1;
+
     public int ClauseElementIndex { get; init; } = -1;
 
     public ExpectedValueDomain Value { get; init; } = new();
@@ -1111,7 +1114,7 @@ public sealed record ExpectedEffectiveArgument
 
 public sealed record ExpectedValueDomain
 {
-    public ShellValueDomainKind Kind { get; init; }
+    public string Kind { get; init; } = "";
 
     public List<string>? Values { get; init; }
 
@@ -1122,7 +1125,7 @@ public sealed record ExpectedValueDomain
 
 public sealed record ExpectedCommandAncestryFrame
 {
-    public ShellSyntaxKind AncestorKind { get; init; }
+    public string AncestorKind { get; init; } = "";
 
     public CommandAncestryRegion Region { get; init; }
 

@@ -56,7 +56,7 @@
             "sourceLength": 20
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -68,20 +68,19 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "FileRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 6,
-            "operation": "FileOutput",
-            "targetDescriptor": null,
-            "target": {
+            "isComplete": true,
+            "fileMode": "Output",
+            "value": {
               "kind": "Exact",
               "values": [
                 "C:/work/info.txt"
               ],
               "pattern": null,
               "coveringDirectory": null
-            },
-            "isPathRelevant": true,
-            "isComplete": true
+            }
           }
         ]
       }

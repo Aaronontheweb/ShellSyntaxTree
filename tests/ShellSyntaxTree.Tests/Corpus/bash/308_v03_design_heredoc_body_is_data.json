@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Literal heredoc body is data",
-  "input": "cat > output.txt <<'EOF'\nhello\nEOF\n",
+  "input": "cat \u003E output.txt \u003C\u003C\u0027EOF\u0027\nhello\nEOF\n",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -18,7 +18,7 @@
           },
           {
             "direction": "In",
-            "target": "<<EOF>",
+            "target": "\u003C\u003CEOF\u003E",
             "isDynamicSkip": false
           }
         ],
@@ -35,7 +35,7 @@
             "isPath": false
           },
           {
-            "raw": "> output.txt",
+            "raw": "\u003E output.txt",
             "value": "output.txt",
             "role": "Redirect",
             "sourceStart": 4,
@@ -47,7 +47,7 @@
             "resolved": "/work/output.txt"
           },
           {
-            "raw": "<<'EOF'",
+            "raw": "\u003C\u003C\u0027EOF\u0027",
             "value": "EOF",
             "role": "Redirect",
             "sourceStart": 17,
@@ -98,7 +98,7 @@
             "sourceLength": 35
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -110,51 +110,42 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "FileRedirectAnalysis",
             "sourceKind": "Default",
             "sourceDescriptor": null,
-            "operation": "FileOutput",
-            "targetDescriptor": null,
-            "target": {
+            "isComplete": true,
+            "fileMode": "Output",
+            "value": {
               "kind": "Exact",
               "values": [
                 "/work/output.txt"
               ],
               "pattern": null,
               "coveringDirectory": null
-            },
-            "isPathRelevant": true,
-            "isComplete": true
+            }
           },
-        {
-          "redirectIndex": 1,
-          "sourceKind": "Default",
-          "sourceDescriptor": null,
-          "operation": "HereDocument",
-          "targetDescriptor": null,
-          "target": {
-            "kind": "Unknown",
-            "values": [],
-            "pattern": null,
-            "coveringDirectory": null
-          },
-          "hereDocument": {
-            "delimiter": {
-              "raw": "'EOF'",
-              "sourceStart": 19,
-              "sourceLength": 5
-            },
-            "body": {
-              "raw": "hello\n",
-              "sourceStart": 25,
-              "sourceLength": 6
-            },
-            "expansionMode": "Literal",
-            "stripLeadingTabs": false,
-            "isComplete": true
-          },
-          "isPathRelevant": false,
-          "isComplete": true
-        }
+          {
+            "redirectIndex": 1,
+            "kind": "HereDocumentRedirectAnalysis",
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "isComplete": true,
+            "hereDocument": {
+              "delimiter": {
+                "raw": "\u0027EOF\u0027",
+                "sourceStart": 19,
+                "sourceLength": 5
+              },
+              "body": {
+                "raw": "hello\n",
+                "sourceStart": 25,
+                "sourceLength": 6
+              },
+              "expansionMode": "Literal",
+              "stripLeadingTabs": false,
+              "isComplete": true
+            }
+          }
         ]
       }
     ]

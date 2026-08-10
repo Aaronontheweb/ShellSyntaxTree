@@ -459,7 +459,7 @@ public class PwshExecutionRegionStructuralTests
     [InlineData(" -UseNewRunspace", ShellValueDomainKind.Exact, true)]
     public void Parallel_pooled_rebinding_can_escape_on_a_later_activation(
         string runspaceOption,
-        ShellValueDomainKind expectedCwdKind,
+        object expectedCwdKind,
         bool expectedComplete)
     {
         var result = ParseIsolated(
@@ -471,7 +471,9 @@ public class PwshExecutionRegionStructuralTests
         var continuation = result.Commands.Last();
         Assert.Equal("Get-Item", continuation.Clause.Verb.Tokens[0]);
         Assert.Equal(expectedComplete, continuation.IsComplete);
-        Assert.Equal(expectedCwdKind, continuation.WorkingDirectory.Kind);
+        Assert.Equal(
+            (ShellValueDomainKind)expectedCwdKind,
+            continuation.WorkingDirectory.Kind);
     }
 
     [Theory]

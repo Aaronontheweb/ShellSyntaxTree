@@ -1,15 +1,21 @@
 {
   "name": "v0.3 Bash continued multi-digit source move",
-  "input": "command 1\\\n0>&2-",
+  "input": "command 1\\\n0\u003E\u00262-",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["command"],
+        "verb": [
+          "command"
+        ],
         "args": [],
         "redirects": [
-          { "direction": "Out", "target": "&2-", "isDynamicSkip": true }
+          {
+            "direction": "Out",
+            "target": "\u00262-",
+            "isDynamicSkip": true
+          }
         ]
       }
     ],
@@ -19,18 +25,31 @@
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 16 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 16
+          }
         ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "DescriptorMoveRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 10,
-            "operation": "DescriptorMove",
-            "targetDescriptor": 2,
-            "target": { "kind": "Unknown" },
-            "isPathRelevant": false,
-            "isComplete": true
+            "isComplete": true,
+            "targetDescriptor": 2
           }
         ]
       }

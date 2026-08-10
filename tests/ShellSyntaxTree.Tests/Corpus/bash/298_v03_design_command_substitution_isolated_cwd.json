@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Substitution cwd isolation",
-  "input": "printf '%s' \"$(cd /tmp && pwd)\"; cat relative.txt",
+  "input": "printf \u0027%s\u0027 \u0022$(cd /tmp \u0026\u0026 pwd)\u0022; cat relative.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -82,14 +82,14 @@
         ],
         "args": [
           {
-            "raw": "'%s'",
+            "raw": "\u0027%s\u0027",
             "kind": "Literal",
             "isPath": false,
             "resolved": "__NULL__",
             "isFlag": false
           },
           {
-            "raw": "\"$(cd /tmp && pwd)\"",
+            "raw": "\u0022$(cd /tmp \u0026\u0026 pwd)\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -110,7 +110,7 @@
             "isPath": false
           },
           {
-            "raw": "'%s'",
+            "raw": "\u0027%s\u0027",
             "value": "%s",
             "role": "Argument",
             "sourceStart": 7,
@@ -121,8 +121,8 @@
             "isPath": false
           },
           {
-            "raw": "\"$(cd /tmp && pwd)\"",
-            "value": "$(cd /tmp && pwd)",
+            "raw": "\u0022$(cd /tmp \u0026\u0026 pwd)\u0022",
+            "value": "$(cd /tmp \u0026\u0026 pwd)",
             "role": "Argument",
             "sourceStart": 12,
             "sourceLength": 19,
@@ -318,7 +318,20 @@
             "sourceLength": 14
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "/tmp"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -326,8 +339,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       },
       {
         "clauseIndex": 1,
@@ -370,7 +382,7 @@
             "sourceLength": 14
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -378,8 +390,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       },
       {
         "clauseIndex": 2,
@@ -401,8 +412,21 @@
             "sourceLength": 49
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "%s"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
             "clauseElementIndex": 2,
             "value": {
               "kind": "Unknown",
@@ -419,8 +443,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       },
       {
         "clauseIndex": 3,
@@ -442,7 +465,20 @@
             "sourceLength": 49
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "relative.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -450,8 +486,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       }
     ]
   },

@@ -57,7 +57,7 @@
             "sourceLength": 13
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -69,18 +69,11 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "DescriptorDuplicateRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 3,
-            "operation": "DescriptorDuplicate",
-            "targetDescriptor": 1,
-            "target": {
-              "kind": "Unknown",
-              "values": [],
-              "pattern": null,
-              "coveringDirectory": null
-            },
-            "isPathRelevant": false,
-            "isComplete": true
+            "isComplete": true,
+            "targetDescriptor": 1
           }
         ]
       }

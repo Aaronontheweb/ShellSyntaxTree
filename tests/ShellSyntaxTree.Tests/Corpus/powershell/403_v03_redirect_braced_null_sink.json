@@ -57,7 +57,7 @@
             "sourceLength": 18
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -69,17 +69,9 @@
         "redirects": [
           {
             "redirectIndex": 0,
-            "sourceKind": "Default",
+            "kind": "UnresolvedRedirectAnalysis",
+            "sourceKind": "Unknown",
             "sourceDescriptor": null,
-            "operation": "Unknown",
-            "targetDescriptor": null,
-            "target": {
-              "kind": "Unknown",
-              "values": [],
-              "pattern": null,
-              "coveringDirectory": null
-            },
-            "isPathRelevant": false,
             "isComplete": false
           }
         ]

@@ -81,13 +81,18 @@ zero-native-deps .NET parser sized to what security gates actually need.
   the dialect-matched live oracle matrix (`pwsh` for PowerShell 7 and
   `powershell.exe` for Windows PowerShell 5.1 on Windows CI).
 
-### v0.3 (contract design)
+### v0.3 (implementation and downstream acceptance)
 
 - Add a closed, strongly typed syntax-node hierarchy while retaining existing
   `Clause` leaves.
 - Add a library-owned command-occurrence projection for security consumers so
   every potentially executable iterator, substitution, execution-region, and
   body command in the supported grammar is evaluated exactly once.
+- Return one parser-owned analyzed argument for every authored non-cwd
+  compatibility argument. Closed value and redirect record families use
+  runtime type as their discriminant; ancestry and execution-region facts
+  reference the actual parser-owned source objects. Compatibility is required
+  against stable v0.2, not experimental v0.3 alpha surfaces.
 - Add typed PowerShell execution regions for direct call/dot-source blocks,
   synchronous callbacks, jobs/parallel runspaces, and initialization. Public
   origin/phase/timing/cardinality facts remain separate from
@@ -114,9 +119,10 @@ zero-native-deps .NET parser sized to what security gates actually need.
   Existing conservative recognition may remain; unproved receivers still
   expose completely delimited bodies as incomplete regions and therefore
   remain fail closed.
-- Treat `openspec/changes/v0-3-structured-shell-analysis/` and its paired design
-  corpus as the review authority until the accepted contract is synchronized
-  into `SPEC.md` and `SPEC.POWERSHELL.md` with the production API change.
+- Treat `SPEC.md` and `SPEC.POWERSHELL.md` as the canonical synchronized
+  contract. The accepted OpenSpec change and paired design corpus retain the
+  design rationale and verification checklist until downstream acceptance and
+  archival.
 
 ### v0.2 explicit non-goals
 

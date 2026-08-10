@@ -56,7 +56,7 @@
             "sourceLength": 19
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -68,20 +68,19 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "FileRedirectAnalysis",
             "sourceKind": "Default",
             "sourceDescriptor": null,
-            "operation": "FileAppend",
-            "targetDescriptor": null,
-            "target": {
+            "isComplete": true,
+            "fileMode": "Append",
+            "value": {
               "kind": "Exact",
               "values": [
                 "C:/work/log.txt"
               ],
               "pattern": null,
               "coveringDirectory": null
-            },
-            "isPathRelevant": true,
-            "isComplete": true
+            }
           }
         ]
       }

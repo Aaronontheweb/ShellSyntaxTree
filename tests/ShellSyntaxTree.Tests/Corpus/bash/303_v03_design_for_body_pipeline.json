@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Loop body pipeline",
-  "input": "for f in a b; do printf '%s\\n' \"$f\" | sort; done",
+  "input": "for f in a b; do printf \u0027%s\\n\u0027 \u0022$f\u0022 | sort; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,14 +11,14 @@
         ],
         "args": [
           {
-            "raw": "'%s\\n'",
+            "raw": "\u0027%s\\n\u0027",
             "kind": "Literal",
             "isPath": true,
             "resolved": "/work/%s/n",
             "isFlag": false
           },
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "kind": "EnvVar",
             "isPath": false,
             "resolved": "__NULL__",
@@ -39,7 +39,7 @@
             "isPath": false
           },
           {
-            "raw": "'%s\\n'",
+            "raw": "\u0027%s\\n\u0027",
             "value": "%s\\n",
             "role": "Argument",
             "sourceStart": 24,
@@ -51,7 +51,7 @@
             "resolved": "/work/%s/n"
           },
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "value": "$f",
             "role": "Argument",
             "sourceStart": 31,
@@ -206,8 +206,21 @@
             "sourceLength": 25
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "%s\\n"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
             "clauseElementIndex": 2,
             "value": {
               "kind": "FiniteSet",
@@ -227,8 +240,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       },
       {
         "clauseIndex": 1,
@@ -264,7 +276,7 @@
             "sourceLength": 25
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -272,8 +284,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       }
     ]
   },

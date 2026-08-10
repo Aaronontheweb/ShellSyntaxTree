@@ -1,6 +1,6 @@
 {
   "name": "Unquoted wildcard redirect fails closed",
-  "input": "echo ok > *.txt",
+  "input": "echo ok \u003E *.txt",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -42,7 +42,7 @@
             "isPath": false
           },
           {
-            "raw": "> *.txt",
+            "raw": "\u003E *.txt",
             "value": "*.txt",
             "role": "Redirect",
             "sourceStart": 8,
@@ -93,7 +93,7 @@
             "sourceLength": 15
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -105,18 +105,17 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "FileRedirectAnalysis",
             "sourceKind": "Default",
             "sourceDescriptor": null,
-            "operation": "FileOutput",
-            "targetDescriptor": null,
-            "target": {
+            "isComplete": false,
+            "fileMode": "Output",
+            "value": {
               "kind": "Unknown",
               "values": [],
               "pattern": null,
               "coveringDirectory": null
-            },
-            "isPathRelevant": true,
-            "isComplete": false
+            }
           }
         ]
       }

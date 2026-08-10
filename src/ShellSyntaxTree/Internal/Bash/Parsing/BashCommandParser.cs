@@ -501,11 +501,16 @@ internal static partial class BashCommandParser
         Clause Clause,
         IReadOnlyList<RedirectTargetProvenance> Provenance);
 
+    private readonly record struct RedirectAnalysisSet(
+        Clause Clause,
+        IReadOnlyList<RedirectAnalysisFacts> Redirects);
+
     private readonly record struct BashParseResult(
         ParsedCommand Command,
         IReadOnlyList<CwdPathDependencySet> CwdPathDependencySets,
         IReadOnlyList<ShellValueProvenanceSet> ValueProvenanceSets,
         IReadOnlyList<RedirectTargetProvenanceSet> RedirectTargetProvenanceSets,
+        IReadOnlyList<RedirectAnalysisSet> RedirectAnalysisSets,
         IReadOnlyList<BashForInAnalysisPlanReference> ForInPlans);
 
     private static ClauseResult ParseClauseSegment(

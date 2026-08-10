@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash for-in option-shaped candidates",
-  "input": "for f in -rf safe; do rm \"$f\" target; done",
+  "input": "for f in -rf safe; do rm \u0022$f\u0022 target; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -120,8 +120,9 @@
             "sourceLength": 17
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "FiniteSet",
@@ -132,11 +133,25 @@
               "pattern": null,
               "coveringDirectory": null
             }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "target"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
           }
         ],
         "workingDirectory": {
           "kind": "Exact",
-          "values": ["/work"],
+          "values": [
+            "/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         }

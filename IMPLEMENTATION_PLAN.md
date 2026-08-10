@@ -17,7 +17,7 @@ priorities.
 > below). What remains is the downstream Netclaw integration, which needs
 > actions outside this repository.
 
-- [ ] **v0.3 prerelease consumer-API correction.** Preserve the stable v0.2
+- [x] **v0.3 prerelease consumer-API correction.** Preserve the stable v0.2
       API and the `Syntax` / `Commands` / `Clauses` ingestion lanes, but replace
       the alpha-only sparse coordinate and public property-bag model before
       stable v0.3. Return one parser-owned analyzed argument per authored
@@ -25,7 +25,10 @@ priorities.
       reference actual ancestor nodes, and remove public syntax vocabulary
       that stable v0.3 never emits. Update the OpenSpec and source mocks first;
       then update implementation, snapshots, corpus DTOs, consumer guide,
-      README, and Netclaw together. No compatibility shim for 0.3 alphas.
+      README, and Netclaw together. No compatibility shim for 0.3 alphas. The
+      library, specifications, snapshots, corpus DTOs, generated expectations,
+      README, consumer guide, and prerelease migration notes are synchronized;
+      Netclaw migration remains the next downstream item.
 
 - [x] **v0.3 host-selected grammar and PowerShell dialect — library slice.** The executor
       selects one top-level parser; Bash never cross-parses `pwsh` payloads and
@@ -37,7 +40,7 @@ priorities.
       PowerShell 7.6.4 oracle on Ubuntu and Windows, plus native Windows
       PowerShell 5.1 discovery and its dialect-routed oracle on Windows.
 
-- [ ] **v0.3 native-Windows Netclaw integration.** Pass the exact selected
+- [x] **v0.3 native-Windows Netclaw integration.** Pass the exact selected
       shell through Netclaw's executor, approval policy, and model context;
       prefer a compatible `pwsh.exe`, fall back to `powershell.exe`, and
       reparse and reauthorize if executable selection changes.
@@ -157,9 +160,9 @@ priorities.
 
 ### 16. Netclaw v0.2.0 integration — SPEC.PWSH §17 #9
 
-- [ ] Netclaw consumes the v0.2.0 package; absorbs the `Clause` rename
+- [x] Netclaw consumes the v0.2.0 package; absorbs the `Clause` rename
       *(separate repository — cannot be done here)*
-- [ ] ≥1 Netclaw integration test exercises a real PowerShell corpus entry
+- [x] ≥1 Netclaw integration test exercises a real PowerShell corpus entry
       through the live matcher and gets the expected gate decision
 
 ### 17. v0.3 structured shell analysis contract — issue #72
@@ -489,7 +492,7 @@ priorities.
       effects, publishes synchronous/once only for one proved target, and
       publishes concurrent timing for multiple targets or enabled asynchronous
       switches while keeping dynamic cardinality fail closed.
-- [ ] Deliver typed PowerShell script-block execution regions before calling
+- [x] Deliver typed PowerShell script-block execution regions before calling
       tasks 7.5-7.7 complete. The corrected contract adds an execution-region
       syntax node with independent origin, phase, timing, and cardinality rather than a
       false shared/isolated scope flag. The inert additive public API skeleton,
@@ -615,7 +618,7 @@ priorities.
       independence, semantic phase order, child process/runspace boundaries,
       boundaries and the fact that the in-process `Invoke-Command` parameter
       set does not support `-AsJob`.
-- [ ] Complete the stable-v0.3 Bash `for ... in` and PowerShell `foreach`
+- [x] Complete the stable-v0.3 Bash `for ... in` and PowerShell `foreach`
       vertical slices without gating release on a shared-analysis refactor.
 - [x] Publish `0.3.0-alpha` for the Netclaw migration gate. The bare SemVer tag
       published the NuGet package, symbol package, and GitHub prerelease from
@@ -695,7 +698,7 @@ priorities.
       and reserved-form boundaries, including unmodeled `time`, negation,
       coprocess, and current-shell brace-group syntax, which fail closed rather
       than flattening nested execution into apparent ordinary verb chains.
-- [ ] Promote the Bash command-resolution mutation cases into Netclaw's strict
+- [x] Promote the Bash command-resolution mutation cases into Netclaw's strict
       allow/prompt/deny matrix before the downstream approval-fatigue gate.
 - [x] Add the separately tested Bash `<<<` here-string redirect slice with
       bounded operand analysis and trailing-newline semantics. Default and

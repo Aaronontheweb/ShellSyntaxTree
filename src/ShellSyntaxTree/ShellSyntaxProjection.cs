@@ -16,13 +16,13 @@ namespace ShellSyntaxTree;
 /// </summary>
 internal sealed class CommandOccurrenceFacts
 {
-    internal IReadOnlyList<EffectiveArgument> EffectiveArguments { get; init; } =
-        Array.Empty<EffectiveArgument>();
+    internal IReadOnlyList<EffectiveArgumentFacts> EffectiveArguments { get; init; } =
+        Array.Empty<EffectiveArgumentFacts>();
 
-    internal ShellValueDomain WorkingDirectory { get; init; } = ShellValueDomain.Unknown;
+    internal ShellValueDomainFacts WorkingDirectory { get; init; } = ShellValueDomainFacts.Unknown;
 
-    internal IReadOnlyList<RedirectAnalysis> Redirects { get; init; } =
-        Array.Empty<RedirectAnalysis>();
+    internal IReadOnlyList<RedirectAnalysisFacts> Redirects { get; init; } =
+        Array.Empty<RedirectAnalysisFacts>();
 
     internal IReadOnlyList<RedirectTargetProvenance> RedirectTargetProvenance { get; init; } =
         Array.Empty<RedirectTargetProvenance>();
@@ -36,6 +36,26 @@ internal sealed class CommandOccurrenceFacts
     internal bool HasCompleteValueProvenance { get; init; }
 
     internal bool IsComplete { get; init; }
+}
+
+internal sealed record EffectiveArgumentFacts
+{
+    internal int ClauseElementIndex { get; init; } = -1;
+
+    internal ShellValueDomainFacts Value { get; init; } = ShellValueDomainFacts.Unknown;
+}
+
+internal sealed record ShellValueDomainFacts
+{
+    internal static ShellValueDomainFacts Unknown { get; } = new();
+
+    internal ShellValueDomainKind Kind { get; init; }
+
+    internal IReadOnlyList<string> Values { get; init; } = Array.Empty<string>();
+
+    internal string? Pattern { get; init; }
+
+    internal string? CoveringDirectory { get; init; }
 }
 
 /// <summary>
@@ -187,11 +207,6 @@ internal static class ShellSyntaxProjection
                         role,
                         nextDepth),
                 ForEachSyntax forEach => TryVisitForEach(forEach, nextDepth),
-                ConditionLoopSyntax loop =>
-                    loop.LoopKind is ConditionLoopKind.While or ConditionLoopKind.Until &&
-                    TryVisitConditionLoop(loop, nextDepth),
-                ConditionalSyntax conditional => TryVisitConditional(conditional, role, nextDepth),
-                ConditionalBranchSyntax branch => TryVisitConditionalBranch(branch, nextDepth),
                 CommandSubstitutionSyntax substitution =>
                     TryVisitCommandSubstitution(
                         substitution,
@@ -279,7 +294,7 @@ internal static class ShellSyntaxProjection
             if (!TryCopyFacts(
                     simple.Clause,
                     facts,
-                    out var effectiveArguments,
+                    out var arguments,
                     out var workingDirectory,
                     out var redirects))
             {
@@ -291,7 +306,7 @@ internal static class ShellSyntaxProjection
                 Clause = simple.Clause,
                 ImmediateRole = role,
                 Ancestry = _ancestry.ToArray(),
-                EffectiveArguments = effectiveArguments,
+                Arguments = arguments,
                 WorkingDirectory = workingDirectory,
                 Redirects = redirects,
                 IsComplete = facts.IsComplete && _structuralContextIsComplete &&
@@ -443,92 +458,6 @@ internal static class ShellSyntaxProjection
                        structuralDepth);
         }
 
-        private bool TryVisitConditionLoop(
-            ConditionLoopSyntax loop,
-            int structuralDepth)
-        {
-            if (loop.Condition is null || loop.Body is null)
-            {
-                return false;
-            }
-
-            return TryVisitChild(
-                       loop,
-                       loop.Condition,
-                       CommandAncestryRegion.Condition,
-                       childIndex: null,
-                       CommandOccurrenceRole.Condition,
-                       structuralDepth) &&
-                   TryVisitChild(
-                       loop,
-                       loop.Body,
-                       CommandAncestryRegion.LoopBody,
-                       childIndex: null,
-                       CommandOccurrenceRole.LoopBody,
-                       structuralDepth);
-        }
-
-        private bool TryVisitConditional(
-            ConditionalSyntax conditional,
-            CommandOccurrenceRole role,
-            int structuralDepth)
-        {
-            if (conditional.Branches is null || conditional.Branches.Count == 0)
-            {
-                return false;
-            }
-
-            for (var index = 0; index < conditional.Branches.Count; index++)
-            {
-                var branch = conditional.Branches[index];
-                if (branch is null ||
-                    !TryVisitChild(
-                        conditional,
-                        branch,
-                        CommandAncestryRegion.Branch,
-                        index,
-                        role,
-                        structuralDepth))
-                {
-                    return false;
-                }
-            }
-
-            return conditional.Else is null ||
-                   TryVisitChild(
-                       conditional,
-                       conditional.Else,
-                       CommandAncestryRegion.Branch,
-                       conditional.Branches.Count,
-                       CommandOccurrenceRole.Branch,
-                       structuralDepth);
-        }
-
-        private bool TryVisitConditionalBranch(
-            ConditionalBranchSyntax branch,
-            int structuralDepth)
-        {
-            if (branch.Condition is null || branch.Body is null)
-            {
-                return false;
-            }
-
-            return TryVisitChild(
-                       branch,
-                       branch.Condition,
-                       CommandAncestryRegion.Condition,
-                       childIndex: null,
-                       CommandOccurrenceRole.Condition,
-                       structuralDepth) &&
-                   TryVisitChild(
-                       branch,
-                       branch.Body,
-                       CommandAncestryRegion.Branch,
-                       childIndex: null,
-                       CommandOccurrenceRole.Branch,
-                       structuralDepth);
-        }
-
         private bool TryVisitChild(
             ShellSyntaxNode ancestor,
             ShellSyntaxNode child,
@@ -539,11 +468,9 @@ internal static class ShellSyntaxProjection
         {
             _ancestry.Add(new CommandAncestryFrame
             {
-                AncestorKind = ancestor.Kind,
+                Ancestor = ancestor,
                 Region = region,
                 ChildIndex = childIndex,
-                SourceStart = ancestor.SourceStart,
-                SourceLength = ancestor.SourceLength,
             });
             var succeeded = TryVisit(
                 child,
@@ -558,8 +485,6 @@ internal static class ShellSyntaxProjection
 
         private static bool CountsTowardStructuralDepth(ShellSyntaxNode node) =>
             node is ForEachSyntax or
-                ConditionLoopSyntax or
-                ConditionalSyntax or
                 GroupSyntax or
                 CommandSubstitutionSyntax or
                 ExecutionRegionSyntax;
@@ -574,11 +499,15 @@ internal static class ShellSyntaxProjection
                 var region = executionRegions[index];
                 if (region is null ||
                     !IsValidExecutionRegion(region, isAttachedToSimple: true) ||
+                    region.HostArgument is null ||
                     region.HostClauseElementIndex >= clause.Elements.Count ||
                     !hostCoordinates.Add(region.HostClauseElementIndex!.Value) ||
-                    clause.Elements[region.HostClauseElementIndex.Value].Role !=
+                    !ReferenceEquals(
+                        region.HostArgument,
+                        clause.Elements[region.HostClauseElementIndex.Value]) ||
+                    region.HostArgument.Role !=
                         ClauseElementRole.Argument ||
-                    clause.Elements[region.HostClauseElementIndex.Value].Kind !=
+                    region.HostArgument.Kind !=
                         ArgKind.DynamicSkip)
                 {
                     return false;
@@ -601,9 +530,13 @@ internal static class ShellSyntaxProjection
             executionRegion.Origin switch
             {
                 ExecutionRegionOrigin.DirectCall or ExecutionRegionOrigin.DotSource =>
-                    !isAttachedToSimple && executionRegion.HostClauseElementIndex is null,
+                    !isAttachedToSimple &&
+                    executionRegion.HostArgument is null &&
+                    executionRegion.HostClauseElementIndex is null,
                 ExecutionRegionOrigin.CommandArgument =>
-                    isAttachedToSimple && executionRegion.HostClauseElementIndex >= 0,
+                    isAttachedToSimple &&
+                    executionRegion.HostArgument is not null &&
+                    executionRegion.HostClauseElementIndex >= 0,
                 _ => false,
             };
 
@@ -630,12 +563,12 @@ internal static class ShellSyntaxProjection
         private static bool TryCopyFacts(
             Clause clause,
             CommandOccurrenceFacts facts,
-            out IReadOnlyList<EffectiveArgument> effectiveArguments,
+            out IReadOnlyList<AnalyzedArgument> arguments,
             out ShellValueDomain workingDirectory,
             out IReadOnlyList<RedirectAnalysis> redirects)
         {
-            effectiveArguments = Array.Empty<EffectiveArgument>();
-            workingDirectory = ShellValueDomain.Unknown;
+            arguments = Array.Empty<AnalyzedArgument>();
+            workingDirectory = new ShellValueDomain.Unknown();
             redirects = Array.Empty<RedirectAnalysis>();
             if (facts is null ||
                 facts.EffectiveArguments is null ||
@@ -654,10 +587,12 @@ internal static class ShellSyntaxProjection
                 return false;
             }
 
-            effectiveArguments = Copy(facts.EffectiveArguments);
-            workingDirectory = facts.WorkingDirectory;
-            redirects = Copy(facts.Redirects);
-            return true;
+            workingDirectory = ToPublicDomain(facts.WorkingDirectory);
+            return TryCreateAnalyzedArguments(
+                    clause,
+                    facts.EffectiveArguments,
+                    out arguments) &&
+                TryCreateRedirectAnalyses(clause, facts.Redirects, out redirects);
         }
 
         private static bool IsValidClauseShape(Clause clause) =>
@@ -672,9 +607,267 @@ internal static class ShellSyntaxProjection
             !ContainsNull(clause.Redirects) &&
             !ContainsNull(clause.Elements);
 
+        private static bool TryCreateAnalyzedArguments(
+            Clause clause,
+            IReadOnlyList<EffectiveArgumentFacts> effective,
+            out IReadOnlyList<AnalyzedArgument> arguments)
+        {
+            arguments = Array.Empty<AnalyzedArgument>();
+            var authoredArguments = new List<Arg>();
+            for (var index = 0; index < clause.Args.Count; index++)
+            {
+                if (!clause.Args[index].IsCwdAttribution)
+                {
+                    authoredArguments.Add(clause.Args[index]);
+                }
+            }
+
+            var elementIndices = new List<int>();
+            for (var index = 0; index < clause.Elements.Count; index++)
+            {
+                if (clause.Elements[index].Role == ClauseElementRole.Argument)
+                {
+                    elementIndices.Add(index);
+                }
+            }
+
+            if (authoredArguments.Count == 0)
+            {
+                return elementIndices.Count == 0;
+            }
+
+            var domains = new Dictionary<int, ShellValueDomainFacts>();
+            for (var index = 0; index < effective.Count; index++)
+            {
+                domains.Add(effective[index].ClauseElementIndex, effective[index].Value);
+            }
+
+            var projected = new List<AnalyzedArgument>(authoredArguments.Count);
+            var argumentIndex = 0;
+            for (var elementOffset = 0; elementOffset < elementIndices.Count; elementOffset++)
+            {
+                if (argumentIndex >= authoredArguments.Count)
+                {
+                    return false;
+                }
+
+                var elementIndex = elementIndices[elementOffset];
+                var element = clause.Elements[elementIndex];
+                var remainingArguments = authoredArguments.Count - argumentIndex;
+                var remainingElements = elementIndices.Count - elementOffset;
+                var count = remainingArguments > remainingElements &&
+                            argumentIndex + 1 < authoredArguments.Count &&
+                            IsInlineArgumentPair(
+                                element,
+                                authoredArguments[argumentIndex],
+                                authoredArguments[argumentIndex + 1])
+                    ? 2
+                    : 1;
+
+                var effectiveOffset = count == 1 ||
+                                      !authoredArguments[argumentIndex].IsFlag
+                    ? 0
+                    : 1;
+                for (var offset = 0; offset < count; offset++)
+                {
+                    var argument = authoredArguments[argumentIndex + offset];
+                    var hasEffectiveValue = domains.TryGetValue(
+                                                elementIndex,
+                                                out var domain) &&
+                                            offset == effectiveOffset;
+                    var value = hasEffectiveValue
+                        ? ToPublicDomain(domain!)
+                        : DefaultArgumentDomain(argument, element, count == 1);
+                    projected.Add(new AnalyzedArgument
+                    {
+                        Argument = argument,
+                        Element = element,
+                        Value = value,
+                        HasEffectiveValue = hasEffectiveValue,
+                    });
+                }
+
+                argumentIndex += count;
+            }
+
+            if (argumentIndex != authoredArguments.Count)
+            {
+                return false;
+            }
+
+            arguments = projected;
+            return true;
+        }
+
+        private static bool IsInlineArgumentPair(
+            ClauseElement element,
+            Arg first,
+            Arg second) =>
+            IsInlineArgumentPair(element.Value, first.Raw, second.Raw) ||
+            IsInlineArgumentPair(element.Raw, first.Raw, second.Raw);
+
+        private static bool IsInlineArgumentPair(
+            string combined,
+            string first,
+            string second) =>
+            string.Equals(combined, first + "=" + second, StringComparison.Ordinal) ||
+            string.Equals(combined, first + ":" + second, StringComparison.Ordinal);
+
+        private static ShellValueDomain DefaultArgumentDomain(
+            Arg argument,
+            ClauseElement element,
+            bool isOnlyArgumentForElement) =>
+            argument.Kind is ArgKind.DynamicSkip or ArgKind.EnvVar or ArgKind.Glob
+                ? new ShellValueDomain.Unknown()
+                : new ShellValueDomain.Exact(
+                    isOnlyArgumentForElement ? element.Value : argument.Raw);
+
+        private static bool TryCreateRedirectAnalyses(
+            Clause clause,
+            IReadOnlyList<RedirectAnalysisFacts> facts,
+            out IReadOnlyList<RedirectAnalysis> redirects)
+        {
+            redirects = Array.Empty<RedirectAnalysis>();
+            if (facts.Count != clause.Redirects.Count)
+            {
+                return false;
+            }
+
+            var projected = new RedirectAnalysis[facts.Count];
+            for (var index = 0; index < facts.Count; index++)
+            {
+                var fact = facts[index];
+                if (fact.RedirectIndex < 0 ||
+                    fact.RedirectIndex >= projected.Length ||
+                    projected[fact.RedirectIndex] is not null ||
+                    !TryCreateRedirectAnalysis(
+                        clause.Redirects[fact.RedirectIndex],
+                        fact,
+                        out projected[fact.RedirectIndex]))
+                {
+                    return false;
+                }
+            }
+
+            redirects = projected;
+            return true;
+        }
+
+        private static bool TryCreateRedirectAnalysis(
+            Redirect authored,
+            RedirectAnalysisFacts fact,
+            out RedirectAnalysis analysis)
+        {
+            var source = ToPublicSource(fact.Source);
+            analysis = source is RedirectSource.Unknown
+                ? new UnresolvedRedirectAnalysis()
+                : fact.Operation switch
+            {
+                RedirectOperation.FileInput => new FileRedirectAnalysis(FileRedirectMode.Input)
+                {
+                    Target = ToPublicDomain(fact.Target),
+                },
+                RedirectOperation.FileOutput => new FileRedirectAnalysis(FileRedirectMode.Output)
+                {
+                    Target = ToPublicDomain(fact.Target),
+                },
+                RedirectOperation.FileAppend => new FileRedirectAnalysis(FileRedirectMode.Append)
+                {
+                    Target = ToPublicDomain(fact.Target),
+                },
+                RedirectOperation.CombinedOutput =>
+                    new FileRedirectAnalysis(FileRedirectMode.CombinedOutput)
+                    {
+                        Target = ToPublicDomain(fact.Target),
+                    },
+                RedirectOperation.CombinedOutputAppend =>
+                    new FileRedirectAnalysis(FileRedirectMode.CombinedOutputAppend)
+                    {
+                        Target = ToPublicDomain(fact.Target),
+                    },
+                RedirectOperation.DescriptorDuplicate when fact.TargetDescriptor.HasValue =>
+                    new DescriptorDuplicateRedirectAnalysis
+                    {
+                        TargetDescriptor = fact.TargetDescriptor.Value,
+                    },
+                RedirectOperation.DescriptorMove when fact.TargetDescriptor.HasValue =>
+                    new DescriptorMoveRedirectAnalysis
+                    {
+                        TargetDescriptor = fact.TargetDescriptor.Value,
+                    },
+                RedirectOperation.DescriptorClose => new DescriptorCloseRedirectAnalysis(),
+                RedirectOperation.HereDocument when fact.HereDocument is not null =>
+                    new HereDocumentRedirectAnalysis { Document = fact.HereDocument },
+                RedirectOperation.HereString => new HereStringRedirectAnalysis
+                {
+                    Data = ToPublicDomain(fact.Target),
+                },
+                _ => new UnresolvedRedirectAnalysis(),
+            };
+            analysis = analysis with
+            {
+                RedirectIndex = fact.RedirectIndex,
+                Authored = authored,
+                Source = source,
+                IsComplete = fact.IsComplete,
+            };
+            return IsValidSourceOperationPair(analysis);
+        }
+
+        private static RedirectSource ToPublicSource(RedirectSourceFacts source) =>
+            source.Kind switch
+            {
+                RedirectSourceKind.Default => new RedirectSource.Default(),
+                RedirectSourceKind.Descriptor when source.Descriptor.HasValue =>
+                    new RedirectSource.Descriptor(source.Descriptor.Value),
+                RedirectSourceKind.PowerShellAllStreams =>
+                    new RedirectSource.PowerShellAllStreams(),
+                _ => new RedirectSource.Unknown(),
+            };
+
+        private static bool IsValidSourceOperationPair(RedirectAnalysis analysis) =>
+            (analysis.Source, analysis) switch
+            {
+                (RedirectSource.Unknown, UnresolvedRedirectAnalysis) =>
+                    !analysis.IsComplete,
+                (RedirectSource.Default, FileRedirectAnalysis) => true,
+                (RedirectSource.Default, DescriptorDuplicateRedirectAnalysis) => true,
+                (RedirectSource.Default, DescriptorMoveRedirectAnalysis) => true,
+                (RedirectSource.Default, DescriptorCloseRedirectAnalysis) => true,
+                (RedirectSource.Default, HereDocumentRedirectAnalysis) => true,
+                (RedirectSource.Default, HereStringRedirectAnalysis) => true,
+                (RedirectSource.Descriptor, FileRedirectAnalysis
+                    { Mode: FileRedirectMode.Input or
+                            FileRedirectMode.Output or
+                            FileRedirectMode.Append }) => true,
+                (RedirectSource.Descriptor, DescriptorDuplicateRedirectAnalysis) => true,
+                (RedirectSource.Descriptor, DescriptorMoveRedirectAnalysis) => true,
+                (RedirectSource.Descriptor, DescriptorCloseRedirectAnalysis) => true,
+                (RedirectSource.Descriptor, HereDocumentRedirectAnalysis) => true,
+                (RedirectSource.Descriptor, HereStringRedirectAnalysis) => true,
+                (RedirectSource.PowerShellAllStreams,
+                    FileRedirectAnalysis
+                    { Mode: FileRedirectMode.Output or FileRedirectMode.Append }) => true,
+                (RedirectSource.PowerShellAllStreams,
+                    DescriptorDuplicateRedirectAnalysis { TargetDescriptor: 1 }) => true,
+                (RedirectSource.PowerShellAllStreams, _) => false,
+                _ => false,
+            };
+
+        private static ShellValueDomain ToPublicDomain(ShellValueDomainFacts domain) =>
+            domain.Kind switch
+            {
+                ShellValueDomainKind.Exact => new ShellValueDomain.Exact(domain.Values[0]),
+                ShellValueDomainKind.FiniteSet => new ShellValueDomain.FiniteSet(domain.Values),
+                ShellValueDomainKind.Pattern => new ShellValueDomain.PathPattern(
+                    domain.Pattern!,
+                    domain.CoveringDirectory!),
+                _ => new ShellValueDomain.Unknown(),
+            };
+
         private static bool AreValidEffectiveArguments(
             Clause clause,
-            IReadOnlyList<EffectiveArgument> arguments)
+            IReadOnlyList<EffectiveArgumentFacts> arguments)
         {
             var coordinates = new HashSet<int>();
             for (var index = 0; index < arguments.Count; index++)
@@ -696,7 +889,7 @@ internal static class ShellSyntaxProjection
 
         private static bool AreValidRedirects(
             Clause clause,
-            IReadOnlyList<RedirectAnalysis> redirects,
+            IReadOnlyList<RedirectAnalysisFacts> redirects,
             bool occurrenceIsComplete)
         {
             if (occurrenceIsComplete && redirects.Count != clause.Redirects.Count)
@@ -721,7 +914,7 @@ internal static class ShellSyntaxProjection
             return true;
         }
 
-        private static bool IsValidRedirect(RedirectAnalysis redirect)
+        private static bool IsValidRedirect(RedirectAnalysisFacts redirect)
         {
             if (redirect.Source is null ||
                 redirect.Target is null ||
@@ -777,7 +970,7 @@ internal static class ShellSyntaxProjection
             };
         }
 
-        private static bool IsValidRedirectSource(RedirectSource source) =>
+        private static bool IsValidRedirectSource(RedirectSourceFacts source) =>
             source.Kind switch
             {
                 RedirectSourceKind.Unknown => source.Descriptor is null,
@@ -811,7 +1004,7 @@ internal static class ShellSyntaxProjection
             sourceStart.HasValue == sourceLength.HasValue &&
             (!sourceStart.HasValue || sourceStart >= 0 && sourceLength >= 0);
 
-        private static bool IsValidValueDomain(ShellValueDomain domain)
+        private static bool IsValidValueDomain(ShellValueDomainFacts domain)
         {
             if (domain.Values is null || ContainsNull(domain.Values))
             {
@@ -854,17 +1047,6 @@ internal static class ShellSyntaxProjection
             }
 
             return true;
-        }
-
-        private static T[] Copy<T>(IReadOnlyList<T> items)
-        {
-            var copy = new T[items.Count];
-            for (var index = 0; index < items.Count; index++)
-            {
-                copy[index] = items[index];
-            }
-
-            return copy;
         }
 
         private static bool ContainsNull<T>(IReadOnlyList<T> items)

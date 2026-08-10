@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash for-in dynamic glob root",
-  "input": "for f in \"$DIR\"/*.txt; do rm -- \"$f\"; done",
+  "input": "for f in \u0022$DIR\u0022/*.txt; do rm -- \u0022$f\u0022; done",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -18,7 +18,7 @@
             "isFlag": true
           },
           {
-            "raw": "\"$f\"",
+            "raw": "\u0022$f\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -54,7 +54,7 @@
         "bindingRaw": "f",
         "bindingSourceStart": 4,
         "bindingSourceLength": 1,
-        "iterableRaw": "\"$DIR\"/*.txt",
+        "iterableRaw": "\u0022$DIR\u0022/*.txt",
         "iterableSourceStart": 9,
         "iterableSourceLength": 12
       },
@@ -120,8 +120,21 @@
             "sourceLength": 13
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
             "clauseElementIndex": 2,
             "value": {
               "kind": "Unknown",
@@ -133,7 +146,9 @@
         ],
         "workingDirectory": {
           "kind": "Exact",
-          "values": ["/work"],
+          "values": [
+            "/work"
+          ],
           "pattern": null,
           "coveringDirectory": null
         }

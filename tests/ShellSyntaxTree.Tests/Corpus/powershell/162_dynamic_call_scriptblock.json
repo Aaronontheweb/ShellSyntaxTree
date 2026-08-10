@@ -92,7 +92,7 @@
             "sourceLength": 10
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [

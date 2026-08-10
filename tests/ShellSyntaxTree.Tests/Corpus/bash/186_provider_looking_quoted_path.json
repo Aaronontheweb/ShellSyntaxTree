@@ -1,6 +1,6 @@
 {
   "name": "Bash provider-looking quoted path remains literal",
-  "input": "cat \"filesystem::/safe\"",
+  "input": "cat \u0022filesystem::/safe\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"filesystem::/safe\"",
+            "raw": "\u0022filesystem::/safe\u0022",
             "kind": "Literal",
             "isPath": true,
             "resolved": "/work/filesystem::/safe",
@@ -32,7 +32,7 @@
             "isPath": false
           },
           {
-            "raw": "\"filesystem::/safe\"",
+            "raw": "\u0022filesystem::/safe\u0022",
             "value": "filesystem::/safe",
             "role": "Argument",
             "sourceStart": 4,
@@ -84,8 +84,9 @@
             "sourceLength": 23
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Exact",

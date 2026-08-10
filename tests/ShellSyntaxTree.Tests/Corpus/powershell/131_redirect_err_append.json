@@ -56,7 +56,7 @@
             "sourceLength": 23
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -68,20 +68,19 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "FileRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 2,
-            "operation": "FileAppend",
-            "targetDescriptor": null,
-            "target": {
+            "isComplete": true,
+            "fileMode": "Append",
+            "value": {
               "kind": "Exact",
               "values": [
                 "C:/work/err.txt"
               ],
               "pattern": null,
               "coveringDirectory": null
-            },
-            "isPathRelevant": true,
-            "isComplete": true
+            }
           }
         ]
       }

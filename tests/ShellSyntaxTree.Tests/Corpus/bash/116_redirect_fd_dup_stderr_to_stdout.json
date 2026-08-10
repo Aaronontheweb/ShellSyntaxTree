@@ -1,18 +1,22 @@
 {
-  "name": "Redirect fd-dup: cmd 2>&1",
-  "input": "cmd 2>&1",
+  "name": "Redirect fd-dup: cmd 2\u003E\u00261",
+  "input": "cmd 2\u003E\u00261",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": ["cmd"],
+        "verb": [
+          "cmd"
+        ],
         "args": [],
         "redirects": [
-          { "direction": "ErrOut", "target": "&1", "isDynamicSkip": true }
-        ],
-        "isSubshell": false,
-        "isCommandStringWrapped": false
+          {
+            "direction": "ErrOut",
+            "target": "\u00261",
+            "isDynamicSkip": true
+          }
+        ]
       }
     ],
     "commands": [
@@ -21,18 +25,31 @@
         "immediateRole": "Ordinary",
         "isComplete": true,
         "ancestry": [
-          { "ancestorKind": "Block", "region": "Root", "childIndex": 0, "sourceStart": 0, "sourceLength": 8 }
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 8
+          }
         ],
+        "arguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "DescriptorDuplicateRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 2,
-            "operation": "DescriptorDuplicate",
-            "targetDescriptor": 1,
-            "target": { "kind": "Unknown" },
-            "isPathRelevant": false,
-            "isComplete": true
+            "isComplete": true,
+            "targetDescriptor": 1
           }
         ]
       }

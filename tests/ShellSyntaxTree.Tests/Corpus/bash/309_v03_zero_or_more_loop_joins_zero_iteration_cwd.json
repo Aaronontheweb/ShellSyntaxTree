@@ -1,14 +1,12 @@
 {
-  "name": "v0.3 Bash design promotion: A proved empty loop has no state transition",
-  "input": "for f in; do cd /tmp; done; pwd",
+  "name": "v0.3 Bash: A zero-or-more loop joins the zero-iteration cwd path",
+  "input": "for f in /tmp/*.txt; do cd /tmp; done; pwd",
   "expected": {
     "isUnparseable": false,
     "clauses": [
       {
         "operator": "None",
-        "verb": [
-          "cd"
-        ],
+        "verb": ["cd"],
         "args": [
           {
             "raw": "/tmp",
@@ -32,7 +30,7 @@
             "raw": "cd",
             "value": "cd",
             "role": "Verb",
-            "sourceStart": 13,
+            "sourceStart": 24,
             "sourceLength": 2,
             "precedingVerbElementCount": 0,
             "kind": "Literal",
@@ -43,7 +41,7 @@
             "raw": "/tmp",
             "value": "/tmp",
             "role": "Argument",
-            "sourceStart": 16,
+            "sourceStart": 27,
             "sourceLength": 4,
             "precedingVerbElementCount": 1,
             "kind": "Literal",
@@ -55,17 +53,24 @@
       },
       {
         "operator": "Sequence",
-        "verb": [
-          "pwd"
+        "verb": ["pwd"],
+        "args": [
+          {
+            "raw": "\u003Cdynamic-cwd\u003E",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false,
+            "isCwdAttribution": true
+          }
         ],
-        "args": [],
         "redirects": [],
         "elements": [
           {
             "raw": "pwd",
             "value": "pwd",
             "role": "Verb",
-            "sourceStart": 28,
+            "sourceStart": 39,
             "sourceLength": 3,
             "precedingVerbElementCount": 0,
             "kind": "Literal",
@@ -82,7 +87,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 31,
+        "sourceLength": 42,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -93,7 +98,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 31,
+        "sourceLength": 42,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -104,7 +109,7 @@
         "region": "Statement",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 26,
+        "sourceLength": 37,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": "None",
@@ -112,17 +117,17 @@
         "bindingRaw": "f",
         "bindingSourceStart": 4,
         "bindingSourceLength": 1,
-        "iterableRaw": "",
-        "iterableSourceStart": 8,
-        "iterableSourceLength": 0
+        "iterableRaw": "/tmp/*.txt",
+        "iterableSourceStart": 9,
+        "iterableSourceLength": 10
       },
       {
         "kind": "Block",
         "parentIndex": 2,
         "region": "Iterator",
         "childIndex": null,
-        "sourceStart": 8,
-        "sourceLength": 0,
+        "sourceStart": 9,
+        "sourceLength": 10,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -132,7 +137,7 @@
         "parentIndex": 2,
         "region": "LoopBody",
         "childIndex": null,
-        "sourceStart": 12,
+        "sourceStart": 23,
         "sourceLength": 10,
         "clauseIndex": null,
         "groupKind": null,
@@ -143,7 +148,7 @@
         "parentIndex": 4,
         "region": "Statement",
         "childIndex": 0,
-        "sourceStart": 13,
+        "sourceStart": 24,
         "sourceLength": 7,
         "clauseIndex": 0,
         "groupKind": null,
@@ -154,7 +159,7 @@
         "parentIndex": 1,
         "region": "Statement",
         "childIndex": 1,
-        "sourceStart": 28,
+        "sourceStart": 39,
         "sourceLength": 3,
         "clauseIndex": 1,
         "groupKind": null,
@@ -172,27 +177,27 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 31
+            "sourceLength": 42
           },
           {
             "ancestorKind": "CommandList",
             "region": "Statement",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 31
+            "sourceLength": 42
           },
           {
             "ancestorKind": "ForEach",
             "region": "LoopBody",
             "childIndex": null,
             "sourceStart": 0,
-            "sourceLength": 26
+            "sourceLength": 37
           },
           {
             "ancestorKind": "Block",
             "region": "Statement",
             "childIndex": 0,
-            "sourceStart": 12,
+            "sourceStart": 23,
             "sourceLength": 10
           }
         ],
@@ -202,9 +207,7 @@
             "clauseElementIndex": 1,
             "value": {
               "kind": "Exact",
-              "values": [
-                "/tmp"
-              ],
+              "values": ["/tmp"],
               "pattern": null,
               "coveringDirectory": null
             }
@@ -227,27 +230,25 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 31
+            "sourceLength": 42
           },
           {
             "ancestorKind": "CommandList",
             "region": "Statement",
             "childIndex": 1,
             "sourceStart": 0,
-            "sourceLength": 31
+            "sourceLength": 42
           }
         ],
         "arguments": [],
         "workingDirectory": {
-          "kind": "Exact",
-          "values": [
-            "/work"
-          ],
+          "kind": "Unknown",
+          "values": [],
           "pattern": null,
           "coveringDirectory": null
         }
       }
     ]
   },
-  "notes": "Promotes stable design case bash-for-empty-iterable-preserves-cwd into the executable corpus with complete compatibility, syntax, occurrence, value, and completeness assertions."
+  "notes": "Pins the zero-iteration path for an unmatched static pattern: the loop body may change cwd, but the post-loop cwd must join with the incoming state and remain unknown."
 }

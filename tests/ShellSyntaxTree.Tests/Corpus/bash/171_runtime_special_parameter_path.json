@@ -1,6 +1,6 @@
 {
   "name": "Runtime special parameter path fails closed",
-  "input": "cat \"$?\"",
+  "input": "cat \u0022$?\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"$?\"",
+            "raw": "\u0022$?\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -32,7 +32,7 @@
             "isPath": false
           },
           {
-            "raw": "\"$?\"",
+            "raw": "\u0022$?\u0022",
             "value": "$?",
             "role": "Argument",
             "sourceStart": 4,
@@ -83,8 +83,9 @@
             "sourceLength": 8
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Unknown",

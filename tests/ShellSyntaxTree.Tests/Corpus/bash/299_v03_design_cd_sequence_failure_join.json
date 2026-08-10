@@ -52,7 +52,7 @@
         ],
         "args": [
           {
-            "raw": "<dynamic-cwd>",
+            "raw": "\u003Cdynamic-cwd\u003E",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -143,7 +143,20 @@
             "sourceLength": 14
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "/maybe"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -151,8 +164,7 @@
           ],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       },
       {
         "clauseIndex": 1,
@@ -174,14 +186,13 @@
             "sourceLength": 14
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Unknown",
           "values": [],
           "pattern": null,
           "coveringDirectory": null
-        },
-        "redirects": []
+        }
       }
     ]
   },

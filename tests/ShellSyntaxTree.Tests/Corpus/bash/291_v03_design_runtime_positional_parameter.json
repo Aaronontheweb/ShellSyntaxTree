@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Runtime positional parameters cannot become literal paths",
-  "input": "cat \"$1\"",
+  "input": "cat \u0022$1\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"$1\"",
+            "raw": "\u0022$1\u0022",
             "kind": "DynamicSkip",
             "isPath": false,
             "resolved": "__NULL__",
@@ -32,7 +32,7 @@
             "isPath": false
           },
           {
-            "raw": "\"$1\"",
+            "raw": "\u0022$1\u0022",
             "value": "$1",
             "role": "Argument",
             "sourceStart": 4,
@@ -83,8 +83,9 @@
             "sourceLength": 8
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Unknown",

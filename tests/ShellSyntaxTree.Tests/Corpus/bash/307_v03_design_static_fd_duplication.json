@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Static descriptor duplication",
-  "input": "dotnet test 2>&1",
+  "input": "dotnet test 2\u003E\u00261",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -14,7 +14,7 @@
         "redirects": [
           {
             "direction": "ErrOut",
-            "target": "&1",
+            "target": "\u00261",
             "isDynamicSkip": true
           }
         ],
@@ -42,8 +42,8 @@
             "isPath": false
           },
           {
-            "raw": "2>&1",
-            "value": "&1",
+            "raw": "2\u003E\u00261",
+            "value": "\u00261",
             "role": "Redirect",
             "sourceStart": 12,
             "sourceLength": 4,
@@ -93,7 +93,7 @@
             "sourceLength": 16
           }
         ],
-        "effectiveArguments": [],
+        "arguments": [],
         "workingDirectory": {
           "kind": "Exact",
           "values": [
@@ -105,18 +105,11 @@
         "redirects": [
           {
             "redirectIndex": 0,
+            "kind": "DescriptorDuplicateRedirectAnalysis",
             "sourceKind": "Descriptor",
             "sourceDescriptor": 2,
-            "operation": "DescriptorDuplicate",
-            "targetDescriptor": 1,
-            "target": {
-              "kind": "Unknown",
-              "values": [],
-              "pattern": null,
-              "coveringDirectory": null
-            },
-            "isPathRelevant": false,
-            "isComplete": true
+            "isComplete": true,
+            "targetDescriptor": 1
           }
         ]
       }

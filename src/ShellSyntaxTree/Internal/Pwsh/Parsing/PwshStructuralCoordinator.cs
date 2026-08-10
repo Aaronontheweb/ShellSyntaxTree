@@ -753,6 +753,7 @@ internal static partial class PwshCommandParser
                 parsed.Add(new ExecutionRegionSyntax
                 {
                     Origin = ExecutionRegionOrigin.CommandArgument,
+                    HostArgument = clause.Elements[blockBinding.HostClauseElementIndex],
                     HostClauseElementIndex = blockBinding.HostClauseElementIndex,
                     Phase = blockBinding.Phase,
                     Timing = blockBinding.Timing,
@@ -2266,6 +2267,27 @@ internal static partial class PwshCommandParser
                     }
                 }
 
+                var attachedExecutionRegions = new List<ExecutionRegionSyntax>(
+                    executionRegions.Count);
+                foreach (var executionRegion in executionRegions)
+                {
+                    var hostIndex = executionRegion.HostClauseElementIndex;
+                    if (executionRegion.Origin == ExecutionRegionOrigin.CommandArgument &&
+                        (hostIndex is null ||
+                         hostIndex < 0 ||
+                         hostIndex >= elements.Count))
+                    {
+                        return false;
+                    }
+
+                    attachedExecutionRegions.Add(executionRegion with
+                    {
+                        HostArgument = hostIndex.HasValue
+                            ? elements[hostIndex.Value]
+                            : null,
+                    });
+                }
+
                 clone = new SimpleCommandSyntax
                 {
                     Clause = simple.Clause with
@@ -2277,7 +2299,7 @@ internal static partial class PwshCommandParser
                         IsCommandStringWrapped = true,
                     },
                     Substitutions = substitutions,
-                    ExecutionRegions = executionRegions,
+                    ExecutionRegions = attachedExecutionRegions,
                 };
                 return true;
             case PipelineSyntax pipeline:
@@ -2412,6 +2434,7 @@ internal static partial class PwshCommandParser
                 clone = new ExecutionRegionSyntax
                 {
                     Origin = executionRegion.Origin,
+                    HostArgument = executionRegion.HostArgument,
                     HostClauseElementIndex = executionRegion.HostClauseElementIndex,
                     Phase = executionRegion.Phase,
                     Timing = executionRegion.Timing,
@@ -2479,7 +2502,7 @@ internal static partial class PwshCommandParser
     }
 
     private static bool AreRedirectsComplete(
-        IReadOnlyList<RedirectAnalysis> redirects)
+        IReadOnlyList<RedirectAnalysisFacts> redirects)
     {
         foreach (var redirect in redirects)
         {

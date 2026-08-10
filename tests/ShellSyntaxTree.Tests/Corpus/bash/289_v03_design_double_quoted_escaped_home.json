@@ -1,6 +1,6 @@
 {
   "name": "v0.3 Bash design promotion: Escape provenance survives within one double-quoted token",
-  "input": "cat \"\\$HOME.txt\"",
+  "input": "cat \u0022\\$HOME.txt\u0022",
   "expected": {
     "isUnparseable": false,
     "clauses": [
@@ -11,7 +11,7 @@
         ],
         "args": [
           {
-            "raw": "\"\\$HOME.txt\"",
+            "raw": "\u0022\\$HOME.txt\u0022",
             "kind": "Literal",
             "isPath": true,
             "resolved": "/work/$HOME.txt",
@@ -32,7 +32,7 @@
             "isPath": false
           },
           {
-            "raw": "\"\\$HOME.txt\"",
+            "raw": "\u0022\\$HOME.txt\u0022",
             "value": "$HOME.txt",
             "role": "Argument",
             "sourceStart": 4,
@@ -84,8 +84,9 @@
             "sourceLength": 16
           }
         ],
-        "effectiveArguments": [
+        "arguments": [
           {
+            "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
               "kind": "Exact",
