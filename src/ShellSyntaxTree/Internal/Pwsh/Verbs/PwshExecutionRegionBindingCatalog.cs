@@ -15,6 +15,7 @@ internal enum PwshExecutionRegionBindingStatus
     NotApplicable,
     ProvedData,
     ProvedExecution,
+    InvalidParameterSet,
     Ambiguous,
 }
 
@@ -366,10 +367,21 @@ internal static class PwshExecutionRegionBindingCatalog
         if (arguments.HasAmbiguousScriptBlockBinding
             || arguments.HasDuplicateParameter
             || arguments.HasInvalidScalarScriptBlockArray
-            || HasReceiverValidationConflict(receiver, arguments)
-            || compatibleSets.Count == 0)
+            || HasReceiverValidationConflict(receiver, arguments))
         {
             return Ambiguous(canonicalName, receiver, scriptBlocks);
+        }
+
+        if (compatibleSets.Count == 0)
+        {
+            var result = Ambiguous(canonicalName, receiver, scriptBlocks);
+            return receiver == PwshExecutionRegionReceiver.InvokeCommand &&
+                arguments.HasNamed("AsJob")
+                    ? result with
+                    {
+                        Status = PwshExecutionRegionBindingStatus.InvalidParameterSet,
+                    }
+                    : result;
         }
 
         var bindings = new List<PwshExecutionRegionBinding>();

@@ -3,7 +3,7 @@
   "input": "foreach ($x in $(Set-Item \u0027Microsoft.PowerShell.Core\\Alias::wipe\u0027 Remove-Item; wipe victim)) { }",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "PowerShell foreach state mutation or dynamic invocation is not supported in this structural slice"
+    "unparseableReasonContains": "PowerShell foreach state mutation is not supported in this structural slice"
   },
   "notes": "Provider-qualified iterator mutation cannot publish a later alias invocation as complete.",
   "oracleExpectation": "OutOfScope"

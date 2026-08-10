@@ -112,8 +112,19 @@ public class PwshExecutionRegionStructuralTests
         Assert.True(continuation.IsComplete);
     }
 
+    [Fact]
+    public void Invalid_local_invoke_command_as_job_fails_atomically()
+    {
+        var result = ParseIsolatedRaw(
+            "Invoke-Command -ScriptBlock { Get-Date } -AsJob");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.NotEmpty(result.Syntax.Statements);
+    }
+
     [Theory]
-    [InlineData("Invoke-Command -AsJob -ScriptBlock { Get-Date }")]
     [InlineData("Invoke-Command -NoNewScope:$scope -ScriptBlock { Get-Date }")]
     public void Unproved_invoke_command_shapes_remain_unknown(string source)
     {

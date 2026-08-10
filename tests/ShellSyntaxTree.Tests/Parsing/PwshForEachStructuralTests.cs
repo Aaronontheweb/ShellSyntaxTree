@@ -171,7 +171,6 @@ public class PwshForEachStructuralTests
     [InlineData("foreach ($x in) { Write-Output $x }")]
     [InlineData("foreach ($x in 1) Write-Output $x")]
     [InlineData("foreach ($x in 1) { Write-Output $x")]
-    [InlineData("foreach ($x in 1) { & $command $x }")]
     public void Dynamic_or_malformed_foreach_fails_atomically(string source)
     {
         var result = Parse(source);
@@ -1003,6 +1002,43 @@ public class PwshForEachStructuralTests
         Assert.Empty(result.Commands);
         Assert.Empty(result.Clauses);
         Assert.Contains("state mutation", result.UnparseableReason!);
+    }
+
+    [Fact]
+    public void Dynamic_command_identity_in_bounded_foreach_is_visible_and_invalidates_state()
+    {
+        var result = ParseIsolated(
+            "foreach ($f in @('a', 'b')) { & $exe $f }; Get-Item child.txt");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        var dynamic = result.Commands[0];
+        Assert.Equal("$exe", CommandVerb(dynamic));
+        Assert.False(dynamic.IsComplete);
+        AssertDomain(
+            Assert.Single(dynamic.EffectiveArguments).Value,
+            ShellValueDomainKind.FiniteSet,
+            "a",
+            "b");
+        var continuation = result.Commands[1];
+        Assert.False(continuation.IsComplete);
+        Assert.Equal(ShellValueDomainKind.Unknown, continuation.WorkingDirectory.Kind);
+    }
+
+    [Fact]
+    public void Dynamic_command_before_bounded_foreach_prevents_binding_promotion()
+    {
+        var result = ParseIsolated(
+            "& $exe preflight; " +
+            "foreach ($f in @('a', 'b')) { Write-Output $f }");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var body = result.Commands.Last();
+        Assert.Equal("Write-Output", CommandVerb(body));
+        Assert.False(body.IsComplete);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(body.EffectiveArguments).Value.Kind);
     }
 
     [Fact]

@@ -115,7 +115,7 @@ internal static partial class PwshCommandParser
             if (ContainsUnsupportedForEachStateTransfer(iteratorCommands) ||
                 ContainsUnsupportedForEachStateTransfer(body))
             {
-                error = "PowerShell foreach state mutation or dynamic invocation is not supported in this structural slice";
+                error = "PowerShell foreach state mutation is not supported in this structural slice";
                 return false;
             }
 
@@ -416,11 +416,6 @@ internal static partial class PwshCommandParser
         {
             foreach (var clause in EnumerateClauses(node))
             {
-                if (clause.Verb.IsDynamic)
-                {
-                    return true;
-                }
-
                 var verb = clause.Verb.CanonicalVerb ??
                     (clause.Verb.Tokens.Count == 0 ? null : clause.Verb.Tokens[0]);
                 if (verb is not null &&

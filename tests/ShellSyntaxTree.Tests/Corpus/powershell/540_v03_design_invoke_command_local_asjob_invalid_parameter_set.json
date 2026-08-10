@@ -1,0 +1,11 @@
+{
+  "name": "V03 design invoke command local asjob invalid parameter set",
+  "input": "Invoke-Command -ScriptBlock { Get-Date } -AsJob",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "PowerShell structural syntax exceeded limits or contained invalid parser-owned facts"
+  },
+  "notes": "Promotes stable fail-closed design case pwsh-invoke-command-local-asjob-invalid-parameter-set.",
+  "oracleExpectation": "OutOfScope"
+}

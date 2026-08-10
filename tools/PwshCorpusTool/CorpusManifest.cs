@@ -1524,5 +1524,11 @@ internal static class CorpusManifest
             "ForEach-Object -RemainingScripts { Write-Output first }, " +
             "{ Write-Output second } -Process { Write-Output third }",
             "Pins authored ordering and exact-once ownership for the stable RemainingScripts binding."),
+        VIE("v03_design_foreach_dynamic_command_identity",
+            "foreach ($f in @('a', 'b')) { & $exe $f }",
+            "Promotes stable design case pwsh-foreach-dynamic-command-identity."),
+        OosI("v03_design_invoke_command_local_asjob_invalid_parameter_set",
+            "Invoke-Command -ScriptBlock { Get-Date } -AsJob",
+            "Promotes stable fail-closed design case pwsh-invoke-command-local-asjob-invalid-parameter-set."),
     };
 }

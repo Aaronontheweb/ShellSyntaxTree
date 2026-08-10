@@ -3,7 +3,7 @@
   "input": "foreach ($x in 1) { Set-Item \u0027Alias:wipe\u0027 Remove-Item }; wipe file.txt",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "PowerShell foreach state mutation or dynamic invocation is not supported in this structural slice"
+    "unparseableReasonContains": "PowerShell foreach state mutation is not supported in this structural slice"
   },
   "notes": "Quoted provider paths use decoded provenance and cannot bypass mutation gating.",
   "oracleExpectation": "OutOfScope"

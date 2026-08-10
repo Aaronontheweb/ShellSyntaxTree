@@ -9,13 +9,13 @@
 - [x] 1.7 Synchronize PowerShell grammar and analysis deltas into `SPEC.POWERSHELL.md`.
 - [x] 1.8 Update `PROJECT_CONTEXT.md` and `IMPLEMENTATION_PLAN.md` with the accepted v0.3 scope and delivery slices.
 - [x] 1.9 Add a paired Bash and PowerShell design corpus that records current behavior, desired structure, command occurrences, bounded values, redirect facts, compatibility projections, and security invariants.
-- [ ] 1.10 Promote every design case for a stable-v0.3 construct into the
+- [x] 1.10 Promote every design case for a stable-v0.3 construct into the
   executable corpus as its production parser slice lands. Retain future-scope
   design cases as non-gating evidence rather than release work.
-  - PowerShell now has exact generated expectations for 84 of 90 design cases.
-    Four future-scope cases remain non-gating. The stable bounded-loop dynamic
-    invocation and invalid local `Invoke-Command -AsJob` cases remain pending
-    production corrections and are not marked as promoted.
+  - Bash has exact executable expectations for 46 of 49 design cases; its
+    condition-loop, branch, and process-substitution cases remain future scope.
+    PowerShell has exact generated expectations for 86 of 90 design cases; its
+    condition-loop, branch, and deferred-action cases remain future scope.
 - [x] 1.11 Correct the PowerShell script-block boundary and lock the additive
   execution-region node, origin/phase/timing/cardinality facts, authored-versus-semantic
   ordering, command projection, and independent shell-state analysis contract
@@ -185,8 +185,10 @@
     occurrences until tasks 7.3 and 7.4 added binding and runspace analysis.
     Alpha.3 still leaves default-mode occurrences incomplete for ambient
     resolution; task 7.2c corrects that behavior. Explicit iterator/body state
-    mutation and dynamic invocation remain strict, and isolated child-host
-    loops do not taint their outer continuation.
+    mutation remains strict. Dynamic command identities are visible and
+    incomplete, preserve bounded loop-variable values for that occurrence,
+    and invalidate following state proofs. Isolated child-host loops do not
+    taint their outer continuation.
 - [x] 7.2a Add the explicit `PwshInitialStateMode` contract and safe default
   before value analysis. Lock the constrained noninteractive no-profile host
   and module baseline, current-runspace sharing, child-host noninheritance,
@@ -271,13 +273,17 @@
   - [x] 7.5g Retain explicit atomic-failure behavior for direct-block arguments
     and leading `param(...)` declarations. Declaration and argument-binding
     grammar is not required for stable v0.3.
-- [ ] 7.6 Add adversarial cases for object-valued iterables, mutation, dynamic invocation, splatting, and cap overflow.
+- [x] 7.6 Add adversarial cases for object-valued iterables, mutation, dynamic invocation, splatting, and cap overflow.
+  - Direct and generated corpus cases pin unknown pipeline-object values,
+    provider and variable mutation, incomplete dynamic identities, opaque
+    splats, the 32-candidate boundary, and overflow-to-Unknown behavior.
 - [ ] 7.7 Add PowerShell corpus entries, live `pwsh` oracle coverage, and Netclaw integration cases.
   - `PwshCorpusTool` now supports case-specific `PwshInitialStateMode`; keep
-    promoting the two remaining stable cases into its generated manifest after
-    their production corrections, then complete the Netclaw PowerShell policy
-    matrix. Exact generated cases now cover `Measure-Command`, `Trace-Command`,
-    and `ForEach-Object -RemainingScripts` directly.
+    the generated 540-case manifest and live-oracle matrix aligned, then
+    complete the Netclaw PowerShell policy matrix. Exact generated cases now
+    cover the final stable dynamic-loop and invalid local `Invoke-Command
+    -AsJob` cases, plus `Measure-Command`, `Trace-Command`, and
+    `ForEach-Object -RemainingScripts` directly.
 - [x] 7.8 Implement the additive `PwshDialect` API, PowerShell 7 compatibility
   default, unknown-value safe-fail, Windows PowerShell 5.1 pipeline-chain
   rejection, dialect-specific alias and execution-region metadata, and static

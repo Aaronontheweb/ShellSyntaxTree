@@ -2271,6 +2271,12 @@ internal sealed class PwshForEachValueAnalyzer
             simple.Clause,
             receiverIdentityProven,
             _options.Dialect);
+        if (binding.Status == PwshExecutionRegionBindingStatus.InvalidParameterSet)
+        {
+            _isComplete = false;
+            return new PwshFlowResult(null, null);
+        }
+
         if (binding.Status == PwshExecutionRegionBindingStatus.ProvedData)
         {
             RecordExecutionRegions(
@@ -3645,7 +3651,10 @@ internal sealed class PwshForEachValueAnalyzer
 
             var body = AnalyzeBlock(
                 forEach.Body,
-                iterationInput.WithBinding(plan.BindingName, candidate));
+                iterationInput.WithBinding(
+                    plan.BindingName,
+                    candidate,
+                    loopInput.CanPromote));
             if (body.JoinedState is not AnalysisContext bodyExit)
             {
                 return new PwshFlowResult(null, null);
@@ -3679,7 +3688,10 @@ internal sealed class PwshForEachValueAnalyzer
 
             var body = AnalyzeBlock(
                 forEach.Body,
-                head.WithBinding(plan.BindingName, plan.Summary));
+                head.WithBinding(
+                    plan.BindingName,
+                    plan.Summary,
+                    loopInput.CanPromote));
             if (body.JoinedState is not AnalysisContext bodyExit)
             {
                 return new PwshFlowResult(null, null);
@@ -3706,7 +3718,10 @@ internal sealed class PwshForEachValueAnalyzer
         var widened = AnalysisContext.Widen(wideningBase, nextHead);
         var widenedBody = AnalyzeBlock(
             forEach.Body,
-            widened.WithBinding(plan.BindingName, plan.Summary));
+            widened.WithBinding(
+                plan.BindingName,
+                plan.Summary,
+                loopInput.CanPromote));
         exits = AnalysisContext.JoinNullable(exits, widenedBody.JoinedState);
         return exits is AnalysisContext widenedExit
             ? PwshFlowResult.Both(widenedExit)
@@ -5625,7 +5640,8 @@ internal sealed class PwshForEachValueAnalyzer
 
         internal AnalysisContext WithBinding(
             string name,
-            ShellValueDomain domain)
+            ShellValueDomain domain,
+            bool canPromote)
         {
             var bindings = new List<BindingFrame>(_bindings.Count + 1);
             foreach (var binding in _bindings)
@@ -5638,7 +5654,7 @@ internal sealed class PwshForEachValueAnalyzer
 
             bindings.Add(new BindingFrame(
                 name,
-                CanPromote ? domain : ShellValueDomain.Unknown));
+                canPromote ? domain : ShellValueDomain.Unknown));
             return new AnalysisContext(
                 WorkingDirectory,
                 CanPromote,

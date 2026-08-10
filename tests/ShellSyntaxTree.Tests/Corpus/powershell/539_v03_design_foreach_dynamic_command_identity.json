@@ -1,0 +1,164 @@
+{
+  "name": "V03 design foreach dynamic command identity",
+  "input": "foreach ($f in @(\u0027a\u0027, \u0027b\u0027)) { \u0026 $exe $f }",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "$exe"
+        ],
+        "isDynamic": true,
+        "args": [
+          {
+            "raw": "$f",
+            "kind": "EnvVar",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "$exe",
+            "value": "$exe",
+            "role": "Verb",
+            "sourceStart": 32,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 0,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "$f",
+            "value": "$f",
+            "role": "Argument",
+            "sourceStart": 37,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "EnvVar",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 41,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ForEach",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 41,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "bindingName": "f",
+        "bindingRaw": "$f",
+        "bindingSourceStart": 9,
+        "bindingSourceLength": 2,
+        "iterableRaw": "@(\u0027a\u0027, \u0027b\u0027)",
+        "iterableSourceStart": 15,
+        "iterableSourceLength": 11
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "Iterator",
+        "childIndex": null,
+        "sourceStart": 15,
+        "sourceLength": 11,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 1,
+        "region": "LoopBody",
+        "childIndex": null,
+        "sourceStart": 29,
+        "sourceLength": 11,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 3,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 30,
+        "sourceLength": 9,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": false,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 41
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 41
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 29,
+            "sourceLength": 11
+          }
+        ],
+        "effectiveArguments": [
+          {
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "FiniteSet",
+              "values": [
+                "a",
+                "b"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "Promotes stable design case pwsh-foreach-dynamic-command-identity."
+}
