@@ -861,6 +861,114 @@ make the bytes it prints a statically known `rm` operand. A path-sensitive
 policy therefore evaluates `find` and still prompts or denies `rm`. It does not
 walk `Syntax` afterward and authorize `find` a second time.
 
+### PowerShell command-owned execution regions
+
+PowerShell passes script blocks as values, and only some receiving commands are
+known to execute them. ShellSyntaxTree therefore preserves two related facts:
+
+- the host command keeps the authored script-block argument as `DynamicSkip`;
+- every authored simple command inside a completely delimited executable body
+  is projected into `Commands`, and its ancestry references an
+  `ExecutionRegionSyntax` whose `HostArgument` is the exact `ClauseElement`
+  that produced that host argument.
+
+For example:
+
+```powershell
+Get-ChildItem | ForEach-Object { Remove-Item .\victim.txt }
+```
+
+has this policy-relevant projection:
+
+| Occurrence | Relevant output | Consumer consequence |
+|---|---|---|
+| `Get-ChildItem` | complete pipeline stage | Authorize independently. |
+| `ForEach-Object` | complete host; the script-block argument remains `DynamicSkip` | Authorize the host command independently. Do not approve the body through this grant. |
+| `Remove-Item` | complete `ExecutionRegion` occurrence; ancestry contains a command-argument region with `Process`, `Synchronous`, and `OncePerInputObject`; `HostArgument` references the host's exact script-block element | Authorize the body command independently. The proved region accounts for that exact opaque host argument only. |
+
+A security consumer may stop treating the host's `DynamicSkip` as unexplained
+only when a complete body occurrence proves all of the following about the
+same object:
+
+- its ancestry frame is `CommandAncestryRegion.ExecutionRegion`;
+- the frame's `Ancestor` is an `ExecutionRegionSyntax` with
+  `Origin = CommandArgument`;
+- `HostArgument` is non-null and reference-equal to the host
+  `AnalyzedArgument.Element`; and
+- `Phase`, `Timing`, and `Cardinality` are defined, non-`Unknown` values.
+
+This is an accounting exception for one parser-owned argument, not an allow
+decision. The consumer still evaluates every projected occurrence and combines
+their decisions with `Deny > Prompt > Allow`. Consequently a stored grant for
+`ForEach-Object` does not cover `Remove-Item`, and a grant for `Remove-Item`
+does not cover `ForEach-Object`.
+
+The following application-owned helper illustrates the correlation. Building
+the set by walking complete body occurrences also means an empty region cannot
+account for its opaque host argument:
+
+```csharp
+static IReadOnlyList<ClauseElement> FindAccountedRegionArguments(
+    ParsedCommand parsed)
+{
+    var accounted = new List<ClauseElement>();
+
+    foreach (var occurrence in parsed.Commands)
+    {
+        if (!occurrence.IsComplete)
+        {
+            continue;
+        }
+
+        foreach (var frame in occurrence.Ancestry)
+        {
+            if (frame.Region == CommandAncestryRegion.ExecutionRegion
+                && frame.Ancestor is ExecutionRegionSyntax region
+                && IsKnownCommandArgumentRegion(region))
+            {
+                if (!accounted.Any(element =>
+                        ReferenceEquals(element, region.HostArgument)))
+                {
+                    accounted.Add(region.HostArgument!);
+                }
+            }
+        }
+    }
+
+    return accounted;
+}
+
+static bool IsKnownCommandArgumentRegion(ExecutionRegionSyntax region) =>
+    region.Origin == ExecutionRegionOrigin.CommandArgument
+    && region.HostArgument is not null
+    && Enum.IsDefined(typeof(ExecutionRegionPhase), region.Phase)
+    && region.Phase != ExecutionRegionPhase.Unknown
+    && Enum.IsDefined(typeof(ExecutionRegionTiming), region.Timing)
+    && region.Timing != ExecutionRegionTiming.Unknown
+    && Enum.IsDefined(
+        typeof(ExecutionRegionCardinality),
+        region.Cardinality)
+    && region.Cardinality != ExecutionRegionCardinality.Unknown;
+
+static bool IsAccountedRegionArgument(
+    AnalyzedArgument argument,
+    IReadOnlyList<ClauseElement> accounted) =>
+    argument.Argument.Kind == ArgKind.DynamicSkip
+    && accounted.Any(element => ReferenceEquals(element, argument.Element));
+```
+
+Use reference identity deliberately. Matching the raw script-block text or a
+list position could associate the wrong region when the same text occurs more
+than once. Direct `& { ... }` and `. { ... }` regions have `HostArgument =
+null`; they expose their body occurrences without inventing a host command or
+an argument to suppress.
+
+Unknown and incomplete shapes remain strict. `Invoke-Custom { Remove-Item
+.\victim.txt }` exposes the possible body so it cannot be hidden, but its
+region metadata is `Unknown` and its occurrences are incomplete. An empty
+`ForEach-Object { }` projects no body occurrence. Neither case accounts for the
+host `DynamicSkip`; both prompt or deny rather than reusing a durable approval.
+
 Quoting also determines the scope of host-wrapper substitutions. In
 `pwsh -Command "Write-Output $(Get-Date)"`, the parent evaluates `Get-Date`, so
 the result contains that parent-scope occurrence plus an incomplete outer

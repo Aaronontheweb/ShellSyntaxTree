@@ -14,8 +14,8 @@ priorities.
 
 > **Spec:** `SPEC.POWERSHELL.md` (v0.2.0). The PowerShell parser is
 > implemented — phases 1–14 of `SPEC.POWERSHELL.md` §16 are complete (see
-> below). What remains is the downstream Netclaw integration, which needs
-> actions outside this repository.
+> below). The downstream Netclaw integration and cross-platform acceptance
+> gates are complete. The stable package publication remains.
 
 - [x] **v0.3 prerelease consumer-API correction.** Preserve the stable v0.2
       API and the `Syntax` / `Commands` / `Clauses` ingestion lanes, but replace
@@ -28,7 +28,7 @@ priorities.
       README, and Netclaw together. No compatibility shim for 0.3 alphas. The
       library, specifications, snapshots, corpus DTOs, generated expectations,
       README, consumer guide, and prerelease migration notes are synchronized;
-      Netclaw migration remains the next downstream item.
+      Netclaw PRs #1855 and #1857 complete migration and downstream acceptance.
 
 - [x] **v0.3 host-selected grammar and PowerShell dialect — library slice.** The executor
       selects one top-level parser; Bash never cross-parses `pwsh` payloads and
@@ -45,16 +45,16 @@ priorities.
       prefer a compatible `pwsh.exe`, fall back to `powershell.exe`, and
       reparse and reauthorize if executable selection changes.
 
-- [ ] **v0.3 authored-command approval correction.** Treat PowerShell and Bash
+- [x] **v0.3 authored-command approval correction.** Treat PowerShell and Bash
       approval completeness consistently: prove every authored executable
       region, but do not require proof of ambient aliases, functions, modules,
       profiles, executable lookup, or inherited environment state. Preserve the
       existing `PwshInitialStateMode` API. Default-mode PowerShell occurrence
       completeness now follows that authored boundary while loop-dependent
       effective values remain Unknown unless fresh-process state is proved.
-      Next expand the executable corpus and prove the Netclaw approval matrix.
-      Explicit
-      source mutation, computed identity, hidden execution, unknown receiver
+      The 2,870-case ShellSyntaxTree suite and Netclaw's 240-row catalog prove
+      the executable corpus and approval matrix. Explicit source mutation,
+      computed identity, hidden execution, unknown receiver
       semantics, unsupported constructs, and policy-sensitive unknown values,
       paths, cwd, or redirects remain strict.
 
@@ -137,9 +137,13 @@ priorities.
       worked public use cases, and immutable permalinks to Netclaw's production
       integration. Added compact input-to-result-to-policy examples for command
       occurrences, attached arguments, bounded and zero-or-more loops, cwd
-      propagation, file and descriptor redirects, substitutions, and safe-fail
-      results. Linked it from the README and aligned stale PowerShell
-      prerelease/status wording in the public project docs.
+      propagation, file and descriptor redirects, substitutions, PowerShell
+      command-owned execution regions, and safe-fail results. The execution-
+      region example pins exact `HostArgument` identity, known metadata,
+      nonempty complete body evidence, independent host/body authorization, and
+      strict unknown or incomplete fallbacks. Linked it from the README and
+      aligned stale PowerShell prerelease/status wording in the public project
+      docs.
 - [x] **Issue #52 — hyphenated PowerShell parameters/native options.**
       Preserve internal hyphens, apply bash-compatible native
       `--flag=value` splitting and path classification, keep colon binding
@@ -392,8 +396,9 @@ priorities.
       values, indirect and parameter-operator rejection, and every candidate
       and transition cap. All unmodeled mutations, dynamic dispatch, control
       transfers, and occurrence-specific redirect values remain fail closed.
-      Next add the Netclaw approval matrix before calling the Bash consumer
-      integration complete.
+      Netclaw PR
+      [#1857](https://github.com/netclaw-dev/netclaw/pull/1857) completes the
+      consumer gate with 199 Bash approval rows on the alpha.6 package.
 - [x] Deliver occurrence-level Bash explicit redirect facts for ordinary file
       input/output/append, static descriptor duplicate/close/move, computed
       descriptor targets, and combined `&>` / `&>>` output. Static descriptor
@@ -407,8 +412,9 @@ priorities.
       they join multi-digit sources. Exact file targets now complete their
       containing occurrence, while cwd or value uncertainty still downgrades
       the redirect and occurrence after abstract-state joins. Direct lexer and
-      parser tests plus executable corpus cases pin the boundary. Next prove
-      the paired Netclaw redirect matrix.
+      parser tests plus executable corpus cases pin the boundary. Netclaw PR
+      #1857 pins the paired allow, prompt, stored-grant, and fail-closed
+      redirect dispositions.
 - [x] Migrate Netclaw's Bash approval path to `0.3.0-alpha`. Netclaw PR
       [#1835](https://github.com/netclaw-dev/netclaw/pull/1835) enumerates every
       `CommandOccurrence`, consumes complete ancestry, cwd, compatibility
@@ -420,8 +426,7 @@ priorities.
       and dynamic or unresolved compatibility arguments remain fail closed.
       Cross-platform test fixtures canonicalize platform temporary roots while
       production symlink checks remain unchanged.
-      Bounded Bash loop approval cases and the separate PowerShell consumer
-      migration remain the next downstream gates.
+      Netclaw PR #1857 adds the bounded Bash loop and PowerShell consumer gates.
 - [x] Deliver occurrence-level PowerShell explicit redirect facts while
       preserving the v0.2 compatibility projection. File output and append
       retain default, numbered, or all-streams sources; the native-only merge
@@ -445,13 +450,19 @@ priorities.
       child command's independent completeness. A fourth review extended that
       ownership through nested quoted and encoded child hosts: the outer
       redirect now uses the outermost authoring invocation rather than the
-      nearest decoded child. Next prove the paired Netclaw redirect matrix.
-- [ ] Complete PowerShell `foreach` integration and add the
+      nearest decoded child. Netclaw PR #1857 pins the paired PowerShell
+      redirect matrix.
+- [x] Complete PowerShell `foreach` integration and add the
       Netclaw approval-matrix cases. The structural slice now preserves literal
       scalar/array and executable iterator forms, recursively parses bodies,
       projects iterator and loop-body ancestry, survives decoded wrappers, and
       fails closed on dynamic iterables, iterator/body state or
       command-resolution mutation, malformed boundaries, and depth overflow.
+      Netclaw PR #1857 adds 36 PowerShell 7 and five Windows PowerShell 5.1
+      approval rows. All 21 refreshed GitHub check runs passed; rebased local
+      acceptance separately passed the Release build, focused security and
+      approval-matrix tests, the full solution suite, headers, and strict
+      OpenSpec validation.
       The authored-command correction makes default-mode loop-body and
       current-scope post-loop static occurrences complete without weakening
       explicit mutation or dynamic execution checks. Isolated child-host loops
@@ -660,10 +671,17 @@ priorities.
       were published by successful [tag workflow run 31357832880](https://github.com/Aaronontheweb/ShellSyntaxTree/actions/runs/31357832880)
       after Linux and native Windows validation passed. Use this package for
       Netclaw's native-Windows integration gate.
-- [ ] Publish `0.3.0-alpha.6` with the corrected stable-v0.3 consumer API.
-      Use the package to remove Netclaw's alpha.5 coordinate and property-bag
-      validation, then rerun its Linux and native-Windows approval matrices
-      before promoting stable v0.3.
+- [x] Published `0.3.0-alpha.6` with the reviewed corrected consumer API from
+      merge `e422aa2a`. The
+      [NuGet package](https://www.nuget.org/packages/ShellSyntaxTree/0.3.0-alpha.6)
+      and [GitHub prerelease](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0-alpha.6)
+      were published by successful [tag workflow run 31421653771](https://github.com/Aaronontheweb/ShellSyntaxTree/actions/runs/31421653771)
+      after the Release build, 2,870 tests, package creation, header check,
+      strict OpenSpec validation, public-API comparison, and two adversarial
+      reviews passed. Netclaw PR #1855 consumes this package through the closed
+      joined-argument, value-domain, redirect-source, and redirect-analysis
+      alternatives. Netclaw PR #1857 closes the downstream acceptance gate with
+      240 catalog rows and green cross-platform CI.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
