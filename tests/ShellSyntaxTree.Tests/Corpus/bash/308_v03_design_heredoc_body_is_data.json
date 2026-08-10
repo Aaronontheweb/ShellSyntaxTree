@@ -1,0 +1,163 @@
+{
+  "name": "v0.3 Bash design promotion: Literal heredoc body is data",
+  "input": "cat > output.txt <<'EOF'\nhello\nEOF\n",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cat"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "Out",
+            "target": "/work/output.txt",
+            "isDynamicSkip": false
+          },
+          {
+            "direction": "In",
+            "target": "<<EOF>",
+            "isDynamicSkip": false
+          }
+        ],
+        "elements": [
+          {
+            "raw": "cat",
+            "value": "cat",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "> output.txt",
+            "value": "output.txt",
+            "role": "Redirect",
+            "sourceStart": 4,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/output.txt"
+          },
+          {
+            "raw": "<<'EOF'",
+            "value": "EOF",
+            "role": "Redirect",
+            "sourceStart": 17,
+            "sourceLength": 7,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 35,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 34,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 35
+          }
+        ],
+        "effectiveArguments": [],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "redirects": [
+          {
+            "redirectIndex": 0,
+            "sourceKind": "Default",
+            "sourceDescriptor": null,
+            "operation": "FileOutput",
+            "targetDescriptor": null,
+            "target": {
+              "kind": "Exact",
+              "values": [
+                "/work/output.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "isPathRelevant": true,
+            "isComplete": true
+          },
+        {
+          "redirectIndex": 1,
+          "sourceKind": "Default",
+          "sourceDescriptor": null,
+          "operation": "HereDocument",
+          "targetDescriptor": null,
+          "target": {
+            "kind": "Unknown",
+            "values": [],
+            "pattern": null,
+            "coveringDirectory": null
+          },
+          "hereDocument": {
+            "delimiter": {
+              "raw": "'EOF'",
+              "sourceStart": 19,
+              "sourceLength": 5
+            },
+            "body": {
+              "raw": "hello\n",
+              "sourceStart": 25,
+              "sourceLength": 6
+            },
+            "expansionMode": "Literal",
+            "stripLeadingTabs": false,
+            "isComplete": true
+          },
+          "isPathRelevant": false,
+          "isComplete": true
+        }
+        ]
+      }
+    ]
+  },
+  "notes": "Promotes stable design case bash-heredoc-body-is-data into the executable corpus with exact compatibility, syntax, occurrence, value, redirect, and completeness assertions."
+}

@@ -287,12 +287,16 @@ priorities.
       The PowerShell manifest owns all 491 entries and round-trips them exactly,
       including case-specific isolated-state inputs. Explicit false/null
       assertions remain opt-in and generator-preserved.
-- [x] Promote the remaining 21 stable Bash design cases into the executable
-      corpus with complete compatibility, syntax, occurrence, value, ancestry,
+- [x] Promote every landed stable Bash design case into the executable corpus
+      with complete compatibility, syntax, occurrence, value, ancestry,
       redirect, and completeness assertions. Nine compatibility-only entries
-      now carry the v0.3 projections and entries 281-292 cover the inputs that
-      had no exact executable-corpus case. The three Bash future-scope design
-      cases remain non-gating. Promotion also reconciled the unquoted wildcard
+      carry the v0.3 projections, entries 281-292 cover the first inputs that
+      had no exact executable-corpus case, and entries 294-308 close the
+      remaining exact-input gap for substitutions, cwd joins, bounded loops,
+      descriptor duplication, and literal heredoc data. Empty occurrence-level
+      redirect projections are explicit in the new cases. The three Bash
+      future-scope design cases remain non-gating.
+      Promotion also reconciled the unquoted wildcard
       redirect story with the fail-closed completeness contract, publishes
       sparse exact/unknown effective-value overlays, and pins quoted, escaped,
       and continued tilde-prefix behavior against Bash. The PowerShell promotion

@@ -741,6 +741,7 @@
     {
       "id": "bash-static-fd-duplication",
       "concern": "Static descriptor operation is not dynamic input",
+      "compatibilityProjectionLanded": true,
       "input": "dotnet test 2>&1",
       "current": { "isUnparseable": false },
       "desired": {
@@ -853,6 +854,7 @@
     {
       "id": "bash-heredoc-body-is-data",
       "concern": "Literal heredoc data does not create hidden commands or unnecessary approval scope",
+      "compatibilityProjectionLanded": true,
       "input": "cat > output.txt <<'EOF'\nhello\nEOF\n",
       "current": { "isUnparseable": false },
       "desired": {
