@@ -620,11 +620,15 @@ priorities.
       and [GitHub prerelease](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0-alpha.4)
       preserve strict unknown and source-mutated policy facts while default-mode
       static PowerShell commands no longer require ambient resolution proof.
-- [ ] Publish `0.3.0-alpha.5` with the reviewed host-selected PowerShell dialect
-      contract, explicit PowerShell 7.6 and Windows PowerShell 5.1 behavior,
-      same-language child-host selection, cross-language non-delegation, and
-      live dual-dialect Windows oracle proof. Use this package for Netclaw's
-      native-Windows integration gate.
+- [x] Published `0.3.0-alpha.5` with the reviewed host-selected PowerShell
+      dialect contract, explicit PowerShell 7.6 and Windows PowerShell 5.1
+      behavior, same-language child-host selection, cross-language
+      non-delegation, and live dual-dialect Windows oracle proof. The
+      [NuGet package](https://www.nuget.org/packages/ShellSyntaxTree/0.3.0-alpha.5)
+      and [GitHub prerelease](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0-alpha.5)
+      were published by successful [tag workflow run 31357832880](https://github.com/Aaronontheweb/ShellSyntaxTree/actions/runs/31357832880)
+      after Linux and native Windows validation passed. Use this package for
+      Netclaw's native-Windows integration gate.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
