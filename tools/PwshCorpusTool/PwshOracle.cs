@@ -82,12 +82,9 @@ $counts = foreach ($s in @($inputs)) {
             File.WriteAllText(scriptPath, OracleScript);
             File.WriteAllText(inputPath, JsonSerializer.Serialize(inputs));
 
-            var executionPolicy = dialect == PwshDialect.WindowsPowerShell51
-                ? "-ExecutionPolicy Bypass "
-                : string.Empty;
             if (!TryRunPowerShell(
                     Executable(dialect),
-                    $"-NoProfile -NoLogo -NonInteractive {executionPolicy}" +
+                    "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass " +
                     $"-File \"{scriptPath}\" \"{inputPath}\"",
                     120000,
                     out stdout,
