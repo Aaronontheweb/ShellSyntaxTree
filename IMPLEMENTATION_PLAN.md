@@ -682,11 +682,18 @@ priorities.
       joined-argument, value-domain, redirect-source, and redirect-analysis
       alternatives. Netclaw PR #1857 closes the downstream acceptance gate with
       240 catalog rows and green cross-platform CI.
-- [ ] Publish `0.3.0` stable from the reviewed release metadata after the
-      release PR passes Linux and Windows CI. Derive the bare SemVer tag from
-      the merged MSBuild `Version`, observe the tag-driven NuGet workflow, and
-      verify the package, symbols package, and non-prerelease GitHub release
-      before completing OpenSpec task 11.9.
+- [x] Published `0.3.0` stable from the reviewed release metadata in
+      [PR #149](https://github.com/Aaronontheweb/ShellSyntaxTree/pull/149),
+      merge `217c007a`, after Linux and native Windows CI passed. The bare
+      `0.3.0` tag was derived from the merged MSBuild `Version`; successful
+      [tag workflow run 31444933607](https://github.com/Aaronontheweb/ShellSyntaxTree/actions/runs/31444933607)
+      published the package and symbols package. The
+      [NuGet package](https://www.nuget.org/packages/ShellSyntaxTree/0.3.0)
+      resolves as version `0.3.0` for both target frameworks, and the
+      [GitHub release](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.0)
+      is a non-draft, non-prerelease release with both `.nupkg` and `.snupkg`
+      assets. Netclaw PRs #1855 and #1857 had already completed the downstream
+      migration and cross-platform acceptance gates.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
