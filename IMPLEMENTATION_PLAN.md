@@ -22,9 +22,17 @@ priorities.
       `AuthoredPathShape`, and `PublishAuthoredSourceFacts` names. Confirm that
       Netclaw may use the pre-field-splitting word fact for approval matching
       while effective facts retain runtime meaning.
-- [ ] **Implement and release v0.3.1.** Follow the OpenSpec task order. Run the
-      API, unit, corpus, PII, native-oracle, package, header, downstream
-      Netclaw, and adversarial gates before publication.
+- [x] **Implemented and released v0.3.1.**
+      [PR #153](https://github.com/Aaronontheweb/ShellSyntaxTree/pull/153)
+      merged as `a414cdda` after Linux and Windows CI passed. The bare `0.3.1`
+      tag completed
+      [workflow run 31530682715](https://github.com/Aaronontheweb/ShellSyntaxTree/actions/runs/31530682715).
+      The workflow published the package and symbols package. The public
+      [NuGet index](https://www.nuget.org/packages/ShellSyntaxTree/0.3.1)
+      lists version `0.3.1`. The non-draft, non-prerelease
+      [GitHub release](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.1)
+      contains both assets. API, unit, corpus, PII, native-oracle, package,
+      header, and adversarial checks passed before publication.
 
 ## Completed v0.3.0 host integration and release acceptance
 
