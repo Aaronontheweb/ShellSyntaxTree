@@ -408,7 +408,15 @@
   - The `0.3.0-alpha` release notes document the explicit redirect model. The
     workaround was removed only in the reviewed Netclaw migration after the
     prerelease package was published.
-- [ ] 11.9 Promote stable 0.3.0 only after Linux and Windows CI, package publication, and downstream acceptance succeed.
+- [x] 11.9 Promote stable 0.3.0 only after Linux and Windows CI, package publication, and downstream acceptance succeed.
+  - ShellSyntaxTree PR #149 merged as `217c007a` after its Linux and native
+    Windows checks passed. The bare `0.3.0` tag, derived from the merged MSBuild
+    `Version`, completed tag workflow run 31444933607. The public NuGet package
+    resolves as stable version `0.3.0` with `net8.0` and `netstandard2.0`
+    targets, and the non-draft, non-prerelease GitHub release contains both the
+    package and symbols package. Netclaw PRs #1855 and #1857 had already passed
+    the migration, 240-row approval catalog, and cross-platform downstream
+    acceptance gates.
 
 ## Post-v0.3 Backlog (Non-Gating)
 
