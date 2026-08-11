@@ -33,6 +33,12 @@ priorities.
       [GitHub release](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.1)
       contains both assets. API, unit, corpus, PII, native-oracle, package,
       header, and adversarial checks passed before publication.
+- [ ] **Complete the post-publication Netclaw 0.3.1 gate.** Upgrade the
+      structured approval-policy branch to the public package. Pin D02, D10,
+      D14, dynamic identity, redirect, native PowerShell, and compatibility
+      outcomes in the downstream matrix. This gate was not run before the
+      package was published; it remains required before the Netclaw policy
+      implementation can merge.
 
 ## Completed v0.3.0 host integration and release acceptance
 
