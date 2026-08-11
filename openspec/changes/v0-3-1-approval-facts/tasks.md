@@ -76,5 +76,9 @@
 - [x] 7.3 Run Release pack and inspect the 0.3.1 package metadata.
 - [x] 7.4 Obtain adversarial review of API truthfulness, Bash semantics,
   sanitization, and consumer misuse boundaries.
-- [ ] 7.5 Push the SemVer tag, verify publish workflow success, and verify the
+- [x] 7.5 Push the SemVer tag, verify publish workflow success, and verify the
   package appears on nuget.org before marking release complete.
+  - PR #153 merged as `a414cdda` after Linux and Windows CI passed. Bare tag
+    `0.3.1` completed workflow run 31530682715. The public NuGet index lists
+    `0.3.1`. The non-draft, non-prerelease GitHub release contains
+    `ShellSyntaxTree.0.3.1.nupkg` and `ShellSyntaxTree.0.3.1.snupkg`.
