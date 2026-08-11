@@ -74,7 +74,7 @@
 - [x] 7.2 Run tool restore, Release build, full tests, header verification, and
   public API approval.
 - [x] 7.3 Run Release pack and inspect the 0.3.1 package metadata.
-- [ ] 7.4 Obtain adversarial review of API truthfulness, Bash semantics,
+- [x] 7.4 Obtain adversarial review of API truthfulness, Bash semantics,
   sanitization, and consumer misuse boundaries.
 - [ ] 7.5 Push the SemVer tag, verify publish workflow success, and verify the
   package appears on nuget.org before marking release complete.
