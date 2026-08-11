@@ -1,0 +1,154 @@
+{
+  "name": "OpenSSL subject Distinguished Name remains non-path data",
+  "input": "openssl req -subj \"/O=Example/CN=host.invalid\"",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "openssl",
+          "req"
+        ],
+        "args": [
+          {
+            "raw": "-subj",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\"/O=Example/CN=host.invalid\"",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "openssl",
+            "value": "openssl",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 7,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "req",
+            "value": "req",
+            "role": "Verb",
+            "sourceStart": 8,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-subj",
+            "value": "-subj",
+            "role": "Argument",
+            "sourceStart": 12,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "\"/O=Example/CN=host.invalid\"",
+            "value": "/O=Example/CN=host.invalid",
+            "role": "Argument",
+            "sourceStart": 18,
+            "sourceLength": 28,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 46,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 46,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 46
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-subj"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 3,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "/O=Example/CN=host.invalid"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "OpenSSL req -subj consumes Distinguished Name data. A leading slash is DN syntax, not filesystem evidence."
+}

@@ -186,6 +186,39 @@ public class PwshCommandParserTests
         Assert.False(clause.Args[1].IsPath);
     }
 
+    [Theory]
+    [InlineData("req")]
+    [InlineData("x509")]
+    [InlineData("ca")]
+    public void Openssl_subj_is_non_path_data_across_native_subcommands(string subcommand)
+    {
+        var clause = Assert.Single(Parse($"openssl {subcommand} -subj \"/O=Example/CN=host.invalid\"").Clauses);
+
+        var subject = Assert.Single(clause.Args, arg => arg.Raw == "\"/O=Example/CN=host.invalid\"");
+        Assert.False(subject.IsPath);
+        Assert.Null(subject.Resolved);
+    }
+
+    [Fact]
+    public void Openssl_x509_serial_does_not_consume_the_following_native_path()
+    {
+        var clause = Assert.Single(Parse("openssl x509 -serial C:/work/certificate.pem").Clauses);
+
+        var certificate = Assert.Single(clause.Args, arg => arg.Raw == "C:/work/certificate.pem");
+        Assert.True(certificate.IsPath);
+        Assert.Equal("C:/work/certificate.pem", certificate.Resolved);
+    }
+
+    [Fact]
+    public void Openssl_ca_key_does_not_claim_universal_native_path_semantics()
+    {
+        var clause = Assert.Single(Parse("openssl ca -key secret-value").Clauses);
+
+        var password = Assert.Single(clause.Args, arg => arg.Raw == "secret-value");
+        Assert.False(password.IsPath);
+        Assert.Null(password.Resolved);
+    }
+
     // ---------------------------------------------------------------- pipelines
 
     [Fact]

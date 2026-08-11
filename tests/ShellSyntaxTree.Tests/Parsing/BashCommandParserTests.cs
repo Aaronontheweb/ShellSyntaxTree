@@ -1324,6 +1324,69 @@ public class BashCommandParserTests
     }
 
     [Fact]
+    public void Openssl_req_subj_dn_value_is_not_a_path_keyout_and_out_values_are()
+    {
+        // Repro for the trust-zone flag-value false positive: -subj carries
+        // an X.509 Distinguished Name, not a filesystem path, even though a
+        // DN often starts with '/' and looks path-shaped. -keyout and -out
+        // are the genuine path operands and must stay IsPath=true.
+        var result = Parse(
+            "openssl req -x509 -newkey rsa:2048 -keyout /app/ssl/server.key "
+            + "-out /app/ssl/server.crt -days 365 -nodes "
+            + "-subj \"/O=DevOps Team/CN=host.local\"");
+        var clause = Assert.Single(result.Clauses);
+        Assert.Equal(new[] { "openssl", "req" }, clause.Verb.Tokens);
+
+        var args = clause.Args;
+        var keyoutValue = args[args.ToList().FindIndex(a => a.Raw == "-keyout") + 1];
+        var outValue = args[args.ToList().FindIndex(a => a.Raw == "-out") + 1];
+        var subjValue = args[args.ToList().FindIndex(a => a.Raw == "-subj") + 1];
+
+        Assert.True(keyoutValue.IsPath);
+        Assert.Equal("/app/ssl/server.key", keyoutValue.Resolved);
+        Assert.True(outValue.IsPath);
+        Assert.Equal("/app/ssl/server.crt", outValue.Resolved);
+        Assert.False(subjValue.IsPath);
+    }
+
+    [Theory]
+    [InlineData("req")]
+    [InlineData("x509")]
+    [InlineData("ca")]
+    public void Openssl_subj_is_non_path_data_across_documented_subcommands(
+        string subcommand)
+    {
+        var result = Parse($"openssl {subcommand} -subj '/O=Example/CN=host.invalid'");
+
+        var clause = Assert.Single(result.Clauses);
+        var value = Assert.Single(clause.Args, arg => !arg.IsFlag);
+        Assert.False(value.IsPath);
+        Assert.Null(value.Resolved);
+    }
+
+    [Fact]
+    public void Openssl_x509_serial_does_not_consume_the_following_path()
+    {
+        var result = Parse("openssl x509 -serial /tmp/certificate.pem");
+
+        var clause = Assert.Single(result.Clauses);
+        var certificate = Assert.Single(clause.Args, arg => arg.Raw == "/tmp/certificate.pem");
+        Assert.True(certificate.IsPath);
+        Assert.Equal("/tmp/certificate.pem", certificate.Resolved);
+    }
+
+    [Fact]
+    public void Openssl_ca_key_does_not_claim_universal_path_semantics()
+    {
+        var result = Parse("openssl ca -key secret-value");
+
+        var clause = Assert.Single(result.Clauses);
+        var key = Assert.Single(clause.Args, arg => arg.Raw == "secret-value");
+        Assert.False(key.IsPath);
+        Assert.Null(key.Resolved);
+    }
+
+    [Fact]
     public void Docker_volume_value_is_not_a_path_per_locked_interpretation_8()
     {
         var result = Parse("docker run -v /host:/container nginx");
