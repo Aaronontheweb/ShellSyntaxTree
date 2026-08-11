@@ -415,32 +415,21 @@ internal sealed class BashLoopBindingContext
 
     private static bool DomainEquals(
         ShellValueDomainFacts left,
-        ShellValueDomainFacts right)
-    {
-        if (left.Kind != right.Kind ||
-            !string.Equals(left.Pattern, right.Pattern, StringComparison.Ordinal) ||
-            !string.Equals(
-                left.CoveringDirectory,
-                right.CoveringDirectory,
-                StringComparison.Ordinal) ||
-            left.Values.Count != right.Values.Count)
-        {
-            return false;
-        }
-
-        for (var index = 0; index < left.Values.Count; index++)
-        {
-            if (!string.Equals(left.Values[index], right.Values[index], StringComparison.Ordinal))
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
+        ShellValueDomainFacts right) => ShellValueDomainFacts.AreEqual(left, right);
 
     internal bool TryAnalyzeEffectiveValue(
         ShellValue value,
+        out ShellValueDomainFacts domain) =>
+        TryAnalyzeValue(value, ignoreFieldSplitting: false, out domain);
+
+    internal bool TryAnalyzeAuthoredValue(
+        ShellValue value,
+        out ShellValueDomainFacts domain) =>
+        TryAnalyzeValue(value, ignoreFieldSplitting: true, out domain);
+
+    private bool TryAnalyzeValue(
+        ShellValue value,
+        bool ignoreFieldSplitting,
         out ShellValueDomainFacts domain)
     {
         var referenced = new List<BindingFrame>();
@@ -462,6 +451,7 @@ internal sealed class BashLoopBindingContext
                 }
 
                 if (fragment.Cardinality != ShellValueCardinality.ExactlyOne ||
+                    !ignoreFieldSplitting &&
                     (fragment.AllowedTransforms & ShellLexicalTransform.FieldSplit) != 0)
                 {
                     dependentButUnsupported = true;

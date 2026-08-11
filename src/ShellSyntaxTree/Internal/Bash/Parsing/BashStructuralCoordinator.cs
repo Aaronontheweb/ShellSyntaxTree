@@ -570,6 +570,7 @@ internal static partial class BashCommandParser
                     HomeDirectory = _options.HomeDirectory,
                     WorkingDirectory = _attribution.ResolvedCwd,
                     InitialStateMode = _options.InitialStateMode,
+                    PublishAuthoredSourceFacts = _options.PublishAuthoredSourceFacts,
                 };
             }
             else if (_attribution.IsDynamic)
@@ -629,7 +630,8 @@ internal static partial class BashCommandParser
 
             if (ContainsNamedParameterExpansion(segmentTokens) &&
                 (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive ||
-                 _hasUnmodeledVariableStateMutation))
+                 _hasUnmodeledVariableStateMutation) &&
+                !CanPublishActiveLoopBindingFacts(segmentTokens))
             {
                 error = "Bash named parameter expansion requires proved variable-attribute state";
                 return false;
@@ -729,7 +731,8 @@ internal static partial class BashCommandParser
             }
 
             var bindingToken = _tokens[_position++];
-            if (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive)
+            if (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive &&
+                !_options.PublishAuthoredSourceFacts)
             {
                 error = "Bash for-in requires a proved isolated non-interactive initial state";
                 return false;
@@ -1037,6 +1040,7 @@ internal static partial class BashCommandParser
                     HomeDirectory = _options.HomeDirectory,
                     WorkingDirectory = _attribution.ResolvedCwd,
                     InitialStateMode = _options.InitialStateMode,
+                    PublishAuthoredSourceFacts = _options.PublishAuthoredSourceFacts,
                 }
                 : _options;
 
@@ -1716,6 +1720,47 @@ internal static partial class BashCommandParser
             }
 
             return false;
+        }
+
+        private bool CanPublishActiveLoopBindingFacts(IReadOnlyList<BashToken> tokens)
+        {
+            if (!_options.PublishAuthoredSourceFacts ||
+                _hasUnmodeledVariableStateMutation ||
+                _activeLoopBindings.Count == 0)
+            {
+                return false;
+            }
+
+            var sawBinding = false;
+            foreach (var token in tokens)
+            {
+                foreach (var value in new[] { token.ResolverValue, token.HeredocBodyValue })
+                {
+                    if (value is null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var fragment in value.Fragments)
+                    {
+                        if (fragment.Kind != ShellValueFragmentKind.Expansion ||
+                            fragment.Expansion is not
+                            { Kind: ShellExpansionKind.Variable, Name: { } name })
+                        {
+                            continue;
+                        }
+
+                        if (!_activeLoopBindings.Contains(name))
+                        {
+                            return false;
+                        }
+
+                        sawBinding = true;
+                    }
+                }
+            }
+
+            return sawBinding;
         }
 
         private static bool IsPotentialVariableStateMutation(Clause clause)

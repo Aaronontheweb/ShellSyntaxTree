@@ -119,7 +119,11 @@ public class V03PublicApiSnapshotTests
             typeof(AnalyzedArgument),
             (nameof(AnalyzedArgument.Argument), typeof(Arg)),
             (nameof(AnalyzedArgument.Element), typeof(ClauseElement)),
-            (nameof(AnalyzedArgument.Value), typeof(ShellValueDomain)));
+            (nameof(AnalyzedArgument.Value), typeof(ShellValueDomain)),
+            (nameof(AnalyzedArgument.AuthoredValue), typeof(ShellValueDomain)),
+            (nameof(AnalyzedArgument.AuthoredPathShape), typeof(ShellPathShape)));
+
+        AssertEnum<ShellPathShape>("Unknown", "Posix", "Windows");
 
         AssertEnum<CommandOccurrenceRole>(
             "Unknown", "Ordinary", "PipelineStage", "Iterator", "LoopBody",
@@ -145,6 +149,14 @@ public class V03PublicApiSnapshotTests
             typeof(ShellValueDomain.PathPattern),
             (nameof(ShellValueDomain.PathPattern.Pattern), typeof(string), false),
             (nameof(ShellValueDomain.PathPattern.CoveringDirectory), typeof(string), false));
+        AssertResultRecordAccessors(
+            typeof(ShellValueDomain.IntegerRange),
+            (nameof(ShellValueDomain.IntegerRange.MinimumInclusive), typeof(long), false),
+            (nameof(ShellValueDomain.IntegerRange.MaximumInclusive), typeof(long), false));
+        AssertResultRecordAccessors(
+            typeof(ShellValueDomain.Concatenation),
+            (nameof(ShellValueDomain.Concatenation.Parts),
+                typeof(IReadOnlyList<ShellValueDomain>), false));
     }
 
     [Fact]
@@ -260,6 +272,16 @@ public class V03PublicApiSnapshotTests
         values[0] = "changed";
         Assert.Equal(new[] { "a", "b" }, finite.Values);
 
+        var part = new ShellValueDomain.IntegerRange(0, 255);
+        var parts = new ShellValueDomain[]
+        {
+            new ShellValueDomain.Exact("status="),
+            part,
+        };
+        var concatenation = new ShellValueDomain.Concatenation(parts);
+        parts[1] = new ShellValueDomain.Exact("changed");
+        Assert.Same(part, concatenation.Parts[1]);
+
         var readOnlyLists = new object[]
         {
             block.Statements,
@@ -272,6 +294,7 @@ public class V03PublicApiSnapshotTests
             occurrence.Redirects,
             parsed.Commands,
             finite.Values,
+            concatenation.Parts,
         };
         Assert.All(readOnlyLists, collection => Assert.False(collection.GetType().IsArray));
     }
@@ -341,6 +364,7 @@ public class V03PublicApiSnapshotTests
             typeof(ExecutionRegionCardinality),
             typeof(FileRedirectMode),
             typeof(HereDocumentExpansionMode),
+            typeof(ShellPathShape),
         };
 
         Assert.All(enums, type => Assert.False(Enum.IsDefined(type, 999)));

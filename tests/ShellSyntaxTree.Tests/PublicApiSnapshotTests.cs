@@ -209,12 +209,15 @@ public class PublicApiSnapshotTests
         AssertInitProperty(t, "HomeDirectory", typeof(string), nullable: true);
         AssertInitProperty(t, "WorkingDirectory", typeof(string), nullable: true);
         AssertInitProperty(t, "InitialStateMode", typeof(BashInitialStateMode));
+        AssertInitProperty(t, "PublishAuthoredSourceFacts", typeof(bool));
 
         var declaredProps = DeclaredInstanceProps(t)
             .Where(p => p.Name != "EqualityContract")
             .Select(p => p.Name)
             .ToArray();
-        Assert.Equal(new[] { "InitialStateMode" }, declaredProps);
+        Assert.Equal(
+            new[] { "InitialStateMode", "PublishAuthoredSourceFacts" },
+            declaredProps);
     }
 
     [Fact]
@@ -633,6 +636,7 @@ public class PublicApiSnapshotTests
             nameof(ShellBlockSyntax),
             nameof(ShellGroupKind),
             nameof(ShellParserOptions),
+            nameof(ShellPathShape),
             nameof(ShellSourceFragment),
             nameof(ShellSyntaxNode),
             nameof(ShellValueDomain),

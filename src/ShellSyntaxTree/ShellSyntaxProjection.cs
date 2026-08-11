@@ -19,6 +19,11 @@ internal sealed class CommandOccurrenceFacts
     internal IReadOnlyList<EffectiveArgumentFacts> EffectiveArguments { get; init; } =
         Array.Empty<EffectiveArgumentFacts>();
 
+    internal IReadOnlyList<EffectiveArgumentFacts> AuthoredArguments { get; init; } =
+        Array.Empty<EffectiveArgumentFacts>();
+
+    internal bool PublishAuthoredPathShape { get; init; }
+
     internal ShellValueDomainFacts WorkingDirectory { get; init; } = ShellValueDomainFacts.Unknown;
 
     internal IReadOnlyList<RedirectAnalysisFacts> Redirects { get; init; } =
@@ -36,6 +41,156 @@ internal sealed class CommandOccurrenceFacts
     internal bool HasCompleteValueProvenance { get; init; }
 
     internal bool IsComplete { get; init; }
+}
+
+internal static class ShellPathShapeClassifier
+{
+    internal static ShellPathShape Classify(ShellValueDomain domain) => domain switch
+    {
+        ShellValueDomain.Exact exact => ClassifyWord(exact.Value),
+        ShellValueDomain.FiniteSet finite => ClassifyWords(finite.Values),
+        ShellValueDomain.Concatenation concatenation => ClassifyConcatenation(
+            concatenation.Parts),
+        _ => ShellPathShape.Unknown,
+    };
+
+    private static ShellPathShape ClassifyWords(IReadOnlyList<string> words)
+    {
+        var shape = ShellPathShape.Unknown;
+        for (var index = 0; index < words.Count; index++)
+        {
+            var candidate = ClassifyWord(words[index]);
+            if (candidate == ShellPathShape.Unknown)
+            {
+                return ShellPathShape.Unknown;
+            }
+
+            if (shape != ShellPathShape.Unknown && shape != candidate)
+            {
+                return ShellPathShape.Unknown;
+            }
+
+            shape = candidate;
+        }
+
+        return shape;
+    }
+
+    private static ShellPathShape ClassifyConcatenation(
+        IReadOnlyList<ShellValueDomain> parts)
+    {
+        var prefix = parts.Count == 0 ? null : parts[0] as ShellValueDomain.Exact;
+        if (prefix is null)
+        {
+            return ShellPathShape.Unknown;
+        }
+
+        var shape = ClassifyWordPrefix(prefix.Value);
+        if (shape != ShellPathShape.Posix)
+        {
+            return shape;
+        }
+
+        for (var index = 1; index < parts.Count; index++)
+        {
+            if (CanContainBackslash(parts[index]))
+            {
+                return ShellPathShape.Unknown;
+            }
+        }
+
+        return ShellPathShape.Posix;
+    }
+
+    private static bool CanContainBackslash(ShellValueDomain domain) => domain switch
+    {
+        ShellValueDomain.Exact exact => exact.Value.IndexOf('\\') >= 0,
+        ShellValueDomain.FiniteSet finite => AnyContainsBackslash(finite.Values),
+        ShellValueDomain.IntegerRange => false,
+        _ => true,
+    };
+
+    private static bool AnyContainsBackslash(IReadOnlyList<string> values)
+    {
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (values[index].IndexOf('\\') >= 0)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static ShellPathShape ClassifyWordPrefix(string value)
+    {
+        var shape = ClassifyWord(value);
+        if (shape != ShellPathShape.Unknown)
+        {
+            return shape;
+        }
+
+        return value.EndsWith("/", StringComparison.Ordinal)
+            ? ShellPathShape.Posix
+            : value.EndsWith("\\", StringComparison.Ordinal)
+                ? ShellPathShape.Windows
+                : ShellPathShape.Unknown;
+    }
+
+    private static ShellPathShape ClassifyWord(string value)
+    {
+        if (LooksLikeUri(value))
+        {
+            return ShellPathShape.Unknown;
+        }
+
+        if (LooksLikeWindowsPath(value))
+        {
+            return ShellPathShape.Windows;
+        }
+
+        return value.StartsWith("/", StringComparison.Ordinal) ||
+               value.StartsWith("./", StringComparison.Ordinal) ||
+               value.StartsWith("../", StringComparison.Ordinal) ||
+               value.StartsWith("~/", StringComparison.Ordinal) ||
+               value.IndexOf('/') >= 0
+            ? ShellPathShape.Posix
+            : ShellPathShape.Unknown;
+    }
+
+    private static bool LooksLikeUri(string value)
+    {
+        var separator = value.IndexOf("://", StringComparison.Ordinal);
+        if (separator <= 0 || !IsAsciiLetter(value[0]))
+        {
+            return false;
+        }
+
+        for (var index = 1; index < separator; index++)
+        {
+            var character = value[index];
+            if (!IsAsciiLetter(character) &&
+                !char.IsDigit(character) &&
+                character is not '+' and not '-' and not '.')
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool LooksLikeWindowsPath(string value) =>
+        value.IndexOf('\\') >= 0 ||
+        value.StartsWith("//", StringComparison.Ordinal) ||
+        value.Length >= 3 &&
+        IsAsciiLetter(value[0]) &&
+        value[1] == ':' &&
+        (value[2] == '/' || value[2] == '\\');
+
+    private static bool IsAsciiLetter(char value) =>
+        value is >= 'A' and <= 'Z' or >= 'a' and <= 'z';
 }
 
 internal sealed record EffectiveArgumentFacts
@@ -56,6 +211,172 @@ internal sealed record ShellValueDomainFacts
     internal string? Pattern { get; init; }
 
     internal string? CoveringDirectory { get; init; }
+
+    internal long MinimumInclusive { get; init; }
+
+    internal long MaximumInclusive { get; init; }
+
+    internal IReadOnlyList<ShellValueDomainFacts> Parts { get; init; } =
+        Array.Empty<ShellValueDomainFacts>();
+
+    internal static ShellValueDomainFacts IntegerRange(
+        long minimumInclusive,
+        long maximumInclusive) => minimumInclusive <= maximumInclusive
+        ? new ShellValueDomainFacts
+        {
+            Kind = ShellValueDomainKind.IntegerRange,
+            MinimumInclusive = minimumInclusive,
+            MaximumInclusive = maximumInclusive,
+        }
+        : Unknown;
+
+    internal static ShellValueDomainFacts Concatenate(
+        IReadOnlyList<ShellValueDomainFacts> source)
+    {
+        var normalized = new List<ShellValueDomainFacts>(source.Count);
+        for (var index = 0; index < source.Count; index++)
+        {
+            var part = source[index];
+            if (!IsAllowedConcatenationPart(part))
+            {
+                return Unknown;
+            }
+
+            if (part.Kind == ShellValueDomainKind.Exact)
+            {
+                var value = part.Values[0];
+                if (value.Length == 0)
+                {
+                    continue;
+                }
+
+                if (normalized.Count > 0 &&
+                    normalized[normalized.Count - 1].Kind == ShellValueDomainKind.Exact)
+                {
+                    var previous = normalized[normalized.Count - 1].Values[0];
+                    normalized[normalized.Count - 1] = new ShellValueDomainFacts
+                    {
+                        Kind = ShellValueDomainKind.Exact,
+                        Values = new[] { previous + value },
+                    };
+                    continue;
+                }
+            }
+
+            normalized.Add(part);
+            if (normalized.Count > 16)
+            {
+                return Unknown;
+            }
+        }
+
+        if (normalized.Count == 0)
+        {
+            return new ShellValueDomainFacts
+            {
+                Kind = ShellValueDomainKind.Exact,
+                Values = new[] { string.Empty },
+            };
+        }
+
+        if (normalized.Count == 1)
+        {
+            return normalized[0];
+        }
+
+        return new ShellValueDomainFacts
+        {
+            Kind = ShellValueDomainKind.Concatenation,
+            Parts = normalized.ToArray(),
+        };
+    }
+
+    private static bool IsAllowedConcatenationPart(ShellValueDomainFacts part)
+    {
+        if (part.Values is null || part.Parts is null)
+        {
+            return false;
+        }
+
+        return part.Kind switch
+        {
+            ShellValueDomainKind.Exact =>
+                part.Values.Count == 1 &&
+                part.Values[0] is not null &&
+                part.Pattern is null &&
+                part.CoveringDirectory is null &&
+                part.Parts.Count == 0 &&
+                part.MinimumInclusive == 0 &&
+                part.MaximumInclusive == 0,
+            ShellValueDomainKind.FiniteSet =>
+                part.Values.Count >= 2 &&
+                part.Values.Count <= ShellAnalysisLimits.MaxValueCandidates &&
+                HasDistinctNonNullValues(part.Values) &&
+                part.Pattern is null &&
+                part.CoveringDirectory is null &&
+                part.Parts.Count == 0 &&
+                part.MinimumInclusive == 0 &&
+                part.MaximumInclusive == 0,
+            ShellValueDomainKind.IntegerRange =>
+                part.Values.Count == 0 &&
+                part.Pattern is null &&
+                part.CoveringDirectory is null &&
+                part.Parts.Count == 0 &&
+                part.MinimumInclusive <= part.MaximumInclusive,
+            _ => false,
+        };
+    }
+
+    private static bool HasDistinctNonNullValues(IReadOnlyList<string> values)
+    {
+        var distinct = new HashSet<string>(StringComparer.Ordinal);
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (values[index] is null || !distinct.Add(values[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    internal static bool AreEqual(
+        ShellValueDomainFacts left,
+        ShellValueDomainFacts right)
+    {
+        if (left.Kind != right.Kind ||
+            left.MinimumInclusive != right.MinimumInclusive ||
+            left.MaximumInclusive != right.MaximumInclusive ||
+            !string.Equals(left.Pattern, right.Pattern, StringComparison.Ordinal) ||
+            !string.Equals(
+                left.CoveringDirectory,
+                right.CoveringDirectory,
+                StringComparison.Ordinal) ||
+            left.Values.Count != right.Values.Count ||
+            left.Parts.Count != right.Parts.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Values.Count; index++)
+        {
+            if (!string.Equals(left.Values[index], right.Values[index], StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        for (var index = 0; index < left.Parts.Count; index++)
+        {
+            if (!AreEqual(left.Parts[index], right.Parts[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 }
 
 /// <summary>
@@ -572,14 +893,17 @@ internal static class ShellSyntaxProjection
             redirects = Array.Empty<RedirectAnalysis>();
             if (facts is null ||
                 facts.EffectiveArguments is null ||
+                facts.AuthoredArguments is null ||
                 facts.WorkingDirectory is null ||
                 facts.Redirects is null ||
                 ContainsNull(facts.EffectiveArguments) ||
+                ContainsNull(facts.AuthoredArguments) ||
                 ContainsNull(facts.Redirects) ||
                 !IsValidValueDomain(facts.WorkingDirectory) ||
                 facts.WorkingDirectory.Kind is not (
                     ShellValueDomainKind.Unknown or ShellValueDomainKind.Exact) ||
                 !AreValidEffectiveArguments(clause, facts.EffectiveArguments) ||
+                !AreValidEffectiveArguments(clause, facts.AuthoredArguments) ||
                 !AreValidRedirects(clause, facts.Redirects, facts.IsComplete) ||
                 facts.IsComplete &&
                 (clause.Verb.IsDynamic || clause.Verb.Tokens.Count == 0))
@@ -591,6 +915,8 @@ internal static class ShellSyntaxProjection
             return TryCreateAnalyzedArguments(
                     clause,
                     facts.EffectiveArguments,
+                    facts.AuthoredArguments,
+                    facts.PublishAuthoredPathShape,
                     out arguments) &&
                 TryCreateRedirectAnalyses(clause, facts.Redirects, out redirects);
         }
@@ -610,6 +936,8 @@ internal static class ShellSyntaxProjection
         private static bool TryCreateAnalyzedArguments(
             Clause clause,
             IReadOnlyList<EffectiveArgumentFacts> effective,
+            IReadOnlyList<EffectiveArgumentFacts> authored,
+            bool publishAuthoredPathShape,
             out IReadOnlyList<AnalyzedArgument> arguments)
         {
             arguments = Array.Empty<AnalyzedArgument>();
@@ -640,6 +968,12 @@ internal static class ShellSyntaxProjection
             for (var index = 0; index < effective.Count; index++)
             {
                 domains.Add(effective[index].ClauseElementIndex, effective[index].Value);
+            }
+
+            var authoredDomains = new Dictionary<int, ShellValueDomainFacts>();
+            for (var index = 0; index < authored.Count; index++)
+            {
+                authoredDomains.Add(authored[index].ClauseElementIndex, authored[index].Value);
             }
 
             var projected = new List<AnalyzedArgument>(authoredArguments.Count);
@@ -678,11 +1012,22 @@ internal static class ShellSyntaxProjection
                     var value = hasEffectiveValue
                         ? ToPublicDomain(domain!)
                         : DefaultArgumentDomain(argument, element, count == 1);
+                    var hasAuthoredValue = authoredDomains.TryGetValue(
+                                               elementIndex,
+                                               out var authoredDomain) &&
+                                           offset == effectiveOffset;
+                    var authoredValue = hasAuthoredValue
+                        ? ToPublicDomain(authoredDomain!)
+                        : value;
                     projected.Add(new AnalyzedArgument
                     {
                         Argument = argument,
                         Element = element,
                         Value = value,
+                        AuthoredValue = authoredValue,
+                        AuthoredPathShape = publishAuthoredPathShape
+                            ? ShellPathShapeClassifier.Classify(authoredValue)
+                            : ShellPathShape.Unknown,
                         HasEffectiveValue = hasEffectiveValue,
                     });
                 }
@@ -862,8 +1207,25 @@ internal static class ShellSyntaxProjection
                 ShellValueDomainKind.Pattern => new ShellValueDomain.PathPattern(
                     domain.Pattern!,
                     domain.CoveringDirectory!),
+                ShellValueDomainKind.IntegerRange => new ShellValueDomain.IntegerRange(
+                    domain.MinimumInclusive,
+                    domain.MaximumInclusive),
+                ShellValueDomainKind.Concatenation => new ShellValueDomain.Concatenation(
+                    ToPublicDomains(domain.Parts)),
                 _ => new ShellValueDomain.Unknown(),
             };
+
+        private static IReadOnlyList<ShellValueDomain> ToPublicDomains(
+            IReadOnlyList<ShellValueDomainFacts> domains)
+        {
+            var projected = new ShellValueDomain[domains.Count];
+            for (var index = 0; index < domains.Count; index++)
+            {
+                projected[index] = ToPublicDomain(domains[index]);
+            }
+
+            return projected;
+        }
 
         private static bool AreValidEffectiveArguments(
             Clause clause,
@@ -1006,7 +1368,10 @@ internal static class ShellSyntaxProjection
 
         private static bool IsValidValueDomain(ShellValueDomainFacts domain)
         {
-            if (domain.Values is null || ContainsNull(domain.Values))
+            if (domain.Values is null ||
+                domain.Parts is null ||
+                ContainsNull(domain.Values) ||
+                ContainsNull(domain.Parts))
             {
                 return false;
             }
@@ -1016,23 +1381,81 @@ internal static class ShellSyntaxProjection
                 ShellValueDomainKind.Unknown =>
                     domain.Values.Count == 0 &&
                     domain.Pattern is null &&
-                    domain.CoveringDirectory is null,
+                    domain.CoveringDirectory is null &&
+                    domain.Parts.Count == 0 &&
+                    domain.MinimumInclusive == 0 &&
+                    domain.MaximumInclusive == 0,
                 ShellValueDomainKind.Exact =>
                     domain.Values.Count == 1 &&
                     domain.Pattern is null &&
-                    domain.CoveringDirectory is null,
+                    domain.CoveringDirectory is null &&
+                    domain.Parts.Count == 0 &&
+                    domain.MinimumInclusive == 0 &&
+                    domain.MaximumInclusive == 0,
                 ShellValueDomainKind.FiniteSet =>
                     domain.Values.Count >= 2 &&
                     domain.Values.Count <= ShellAnalysisLimits.MaxValueCandidates &&
                     AreDistinct(domain.Values) &&
                     domain.Pattern is null &&
-                    domain.CoveringDirectory is null,
+                    domain.CoveringDirectory is null &&
+                    domain.Parts.Count == 0 &&
+                    domain.MinimumInclusive == 0 &&
+                    domain.MaximumInclusive == 0,
                 ShellValueDomainKind.Pattern =>
                     domain.Values.Count == 0 &&
                     !string.IsNullOrEmpty(domain.Pattern) &&
-                    !string.IsNullOrEmpty(domain.CoveringDirectory),
+                    !string.IsNullOrEmpty(domain.CoveringDirectory) &&
+                    domain.Parts.Count == 0 &&
+                    domain.MinimumInclusive == 0 &&
+                    domain.MaximumInclusive == 0,
+                ShellValueDomainKind.IntegerRange =>
+                    domain.Values.Count == 0 &&
+                    domain.Pattern is null &&
+                    domain.CoveringDirectory is null &&
+                    domain.Parts.Count == 0 &&
+                    domain.MinimumInclusive <= domain.MaximumInclusive,
+                ShellValueDomainKind.Concatenation =>
+                    domain.Values.Count == 0 &&
+                    domain.Pattern is null &&
+                    domain.CoveringDirectory is null &&
+                    domain.Parts.Count is >= 2 and <= 16 &&
+                    domain.MinimumInclusive == 0 &&
+                    domain.MaximumInclusive == 0 &&
+                    AreValidConcatenationParts(domain.Parts),
                 _ => false,
             };
+        }
+
+        private static bool AreValidConcatenationParts(
+            IReadOnlyList<ShellValueDomainFacts> parts)
+        {
+            var hasNonExactPart = false;
+            for (var index = 0; index < parts.Count; index++)
+            {
+                if (!IsValidValueDomain(parts[index]) ||
+                    parts[index].Kind is not (
+                        ShellValueDomainKind.Exact or
+                        ShellValueDomainKind.FiniteSet or
+                        ShellValueDomainKind.IntegerRange))
+                {
+                    return false;
+                }
+
+                if (parts[index].Kind == ShellValueDomainKind.Exact)
+                {
+                    if (parts[index].Values[0].Length == 0 ||
+                        index > 0 && parts[index - 1].Kind == ShellValueDomainKind.Exact)
+                    {
+                        return false;
+                    }
+                }
+                else
+                {
+                    hasNonExactPart = true;
+                }
+            }
+
+            return hasNonExactPart;
         }
 
         private static bool AreDistinct(IReadOnlyList<string> values)

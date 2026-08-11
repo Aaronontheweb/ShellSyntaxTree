@@ -109,6 +109,9 @@ static string Describe(ShellValueDomain value) => value switch
     ShellValueDomain.Exact exact => exact.Value,
     ShellValueDomain.FiniteSet finite => string.Join(" | ", finite.Values),
     ShellValueDomain.PathPattern pattern => pattern.Pattern,
+    ShellValueDomain.IntegerRange range =>
+        $"{range.MinimumInclusive}..{range.MaximumInclusive}",
+    ShellValueDomain.Concatenation => "bounded concatenation",
     ShellValueDomain.Unknown => "unknown",
     _ => "unknown",
 };

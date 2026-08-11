@@ -27,6 +27,8 @@ internal sealed class BashAbstractStateAnalyzer
         new(ClauseReferenceComparer.Instance);
     private readonly Dictionary<Clause, Dictionary<int, ShellValueDomainFacts>>
         _effectiveArguments = new(ClauseReferenceComparer.Instance);
+    private readonly Dictionary<Clause, Dictionary<int, ShellValueDomainFacts>>
+        _authoredArguments = new(ClauseReferenceComparer.Instance);
     private readonly Dictionary<Clause, HashSet<int>> _cwdResolutionSanitization =
         new(ClauseReferenceComparer.Instance);
     private readonly List<BashForInAnalysisPlanReference> _rewrittenForInPlans = new();
@@ -468,6 +470,20 @@ internal sealed class BashAbstractStateAnalyzer
         var evaluator = input.Bindings;
         foreach (var provenance in sourceFacts.ValueProvenance)
         {
+            var dependsOnTrackedBinding =
+                input.Bindings.ReferencesTrackedBinding(provenance.Value);
+            if (PublishesAuthoredFactsOnly && dependsOnTrackedBinding)
+            {
+                var authoredValue = NormalizeAuthoredParserKnownFragments(provenance.Value);
+                evaluator.TryAnalyzeAuthoredValue(authoredValue, out var authoredDomain);
+                AccumulateArgumentDomain(
+                    _authoredArguments,
+                    simple.Clause,
+                    provenance.ClauseElementIndex,
+                    authoredDomain);
+                continue;
+            }
+
             var hasStateDependentValue = evaluator.TryAnalyzeEffectiveValue(
                 provenance.Value,
                 out var domain);
@@ -490,15 +506,70 @@ internal sealed class BashAbstractStateAnalyzer
             }
 
             accumulated ??= GetEffectiveArguments(simple.Clause);
-            if (accumulated.TryGetValue(provenance.ClauseElementIndex, out var prior))
+            AccumulateArgumentDomain(
+                accumulated,
+                provenance.ClauseElementIndex,
+                domain);
+        }
+    }
+
+    private ShellValue NormalizeAuthoredParserKnownFragments(ShellValue value)
+    {
+        var homeDirectory = BashResolver.GetHomeDirectory(_options);
+        var builder = new ShellValueBuilder();
+        for (var index = 0; index < value.Fragments.Count; index++)
+        {
+            var fragment = value.Fragments[index];
+            if (fragment.Kind == ShellValueFragmentKind.Expansion &&
+                fragment.Expansion is { Kind: ShellExpansionKind.Tilde })
             {
-                accumulated[provenance.ClauseElementIndex] =
-                    BashLoopBindingContext.JoinDomains(prior, domain);
+                var kind = BashResolver.ClassifyTildeExpansion(value, index);
+                if (kind == BashTildeExpansionKind.Home && homeDirectory.Length > 0)
+                {
+                    builder.AppendLiteral(homeDirectory, null, null);
+                    continue;
+                }
+
+                if (kind == BashTildeExpansionKind.Literal)
+                {
+                    builder.AppendLiteral(fragment.Value, null, null);
+                    continue;
+                }
             }
-            else
-            {
-                accumulated.Add(provenance.ClauseElementIndex, domain);
-            }
+
+            builder.Append(fragment);
+        }
+
+        return builder.Build();
+    }
+
+    private static void AccumulateArgumentDomain(
+        Dictionary<Clause, Dictionary<int, ShellValueDomainFacts>> arguments,
+        Clause clause,
+        int elementIndex,
+        ShellValueDomainFacts domain)
+    {
+        if (!arguments.TryGetValue(clause, out var accumulated))
+        {
+            accumulated = new Dictionary<int, ShellValueDomainFacts>();
+            arguments.Add(clause, accumulated);
+        }
+
+        AccumulateArgumentDomain(accumulated, elementIndex, domain);
+    }
+
+    private static void AccumulateArgumentDomain(
+        IDictionary<int, ShellValueDomainFacts> accumulated,
+        int elementIndex,
+        ShellValueDomainFacts domain)
+    {
+        if (accumulated.TryGetValue(elementIndex, out var prior))
+        {
+            accumulated[elementIndex] = BashLoopBindingContext.JoinDomains(prior, domain);
+        }
+        else
+        {
+            accumulated.Add(elementIndex, domain);
         }
     }
 
@@ -551,7 +622,8 @@ internal sealed class BashAbstractStateAnalyzer
         out ShellValueDomainFacts domain)
     {
         var homeDirectory = BashResolver.GetHomeDirectory(_options);
-        var composed = new StringBuilder(value.Decoded.Length);
+        var literal = new StringBuilder(value.Decoded.Length);
+        var parts = new List<ShellValueDomainFacts>();
         for (var fragmentIndex = 0;
              fragmentIndex < value.Fragments.Count;
              fragmentIndex++)
@@ -559,7 +631,7 @@ internal sealed class BashAbstractStateAnalyzer
             var fragment = value.Fragments[fragmentIndex];
             if (fragment.Kind == ShellValueFragmentKind.Literal)
             {
-                composed.Append(fragment.Value);
+                literal.Append(fragment.Value);
                 continue;
             }
 
@@ -573,7 +645,7 @@ internal sealed class BashAbstractStateAnalyzer
             if (expansion.Kind == ShellExpansionKind.Glob &&
                 (fragment.AllowedTransforms & ShellLexicalTransform.Glob) == 0)
             {
-                composed.Append(fragment.Value);
+                literal.Append(fragment.Value);
                 continue;
             }
 
@@ -582,7 +654,7 @@ internal sealed class BashAbstractStateAnalyzer
                 var tildeKind = BashResolver.ClassifyTildeExpansion(value, fragmentIndex);
                 if (tildeKind == BashTildeExpansionKind.Literal)
                 {
-                    composed.Append(fragment.Value);
+                    literal.Append(fragment.Value);
                     continue;
                 }
 
@@ -593,7 +665,14 @@ internal sealed class BashAbstractStateAnalyzer
                     return false;
                 }
 
-                composed.Append(homeDirectory);
+                literal.Append(homeDirectory);
+                continue;
+            }
+
+            if (IsQuotedExitStatus(fragment, expansion))
+            {
+                FlushLiteralPart(literal, parts);
+                parts.Add(ShellValueDomainFacts.IntegerRange(0, 255));
                 continue;
             }
 
@@ -609,15 +688,38 @@ internal sealed class BashAbstractStateAnalyzer
                 return false;
             }
 
-            composed.Append(homeDirectory);
+            literal.Append(homeDirectory);
         }
 
-        domain = new ShellValueDomainFacts
+        FlushLiteralPart(literal, parts);
+        domain = ShellValueDomainFacts.Concatenate(parts);
+        return true;
+    }
+
+    private static bool IsQuotedExitStatus(
+        ShellValueFragment fragment,
+        ShellExpansionReference expansion) =>
+        expansion.Kind == ShellExpansionKind.SpecialParameter &&
+        string.Equals(expansion.Name, "?", StringComparison.Ordinal) &&
+        fragment.Cardinality == ShellValueCardinality.ExactlyOne &&
+        (fragment.AllowedTransforms & ShellLexicalTransform.Variable) != 0 &&
+        (fragment.AllowedTransforms & ShellLexicalTransform.FieldSplit) == 0;
+
+    private static void FlushLiteralPart(
+        StringBuilder literal,
+        ICollection<ShellValueDomainFacts> parts)
+    {
+        if (literal.Length == 0)
+        {
+            return;
+        }
+
+        parts.Add(new ShellValueDomainFacts
         {
             Kind = ShellValueDomainKind.Exact,
-            Values = new[] { composed.ToString() },
-        };
-        return true;
+            Values = new[] { literal.ToString() },
+        });
+        literal.Clear();
     }
 
     private static bool ContainsFieldSplitOrGlobCharacter(string value)
@@ -789,6 +891,20 @@ internal sealed class BashAbstractStateAnalyzer
         {
             _isComplete = false;
             return new BashFlowResult(null, null);
+        }
+
+        if (PublishesAuthoredFactsOnly)
+        {
+            foreach (var argumentValue in argumentValues)
+            {
+                if (!input.Bindings.ReferencesTrackedBinding(argumentValue))
+                {
+                    continue;
+                }
+
+                RecordCwdResolutionSanitization(simple.Clause, argumentElementIndices);
+                return BashFlowResult.Both(input.WithUnknownCwd());
+            }
         }
 
         foreach (var argumentValue in argumentValues)
@@ -1378,10 +1494,13 @@ internal sealed class BashAbstractStateAnalyzer
             sourceFacts.Redirects,
             sourceFacts.RedirectTargetProvenance,
             input.Bindings,
-            clause);
+            clause,
+            allowBindingValues: !PublishesAuthoredFactsOnly);
         facts.Add(clause, new CommandOccurrenceFacts
         {
             EffectiveArguments = CreateEffectiveArguments(simple.Clause),
+            AuthoredArguments = CreateAuthoredArguments(simple.Clause),
+            PublishAuthoredPathShape = true,
             WorkingDirectory = input.ToDomain(),
             Redirects = redirects,
             RedirectTargetProvenance = sourceFacts.RedirectTargetProvenance,
@@ -1397,8 +1516,16 @@ internal sealed class BashAbstractStateAnalyzer
     }
 
     private IReadOnlyList<EffectiveArgumentFacts> CreateEffectiveArguments(Clause clause)
+        => CreateArguments(_effectiveArguments, clause);
+
+    private IReadOnlyList<EffectiveArgumentFacts> CreateAuthoredArguments(Clause clause)
+        => CreateArguments(_authoredArguments, clause);
+
+    private static IReadOnlyList<EffectiveArgumentFacts> CreateArguments(
+        IReadOnlyDictionary<Clause, Dictionary<int, ShellValueDomainFacts>> source,
+        Clause clause)
     {
-        if (!_effectiveArguments.TryGetValue(clause, out var accumulated) ||
+        if (!source.TryGetValue(clause, out var accumulated) ||
             accumulated.Count == 0)
         {
             return Array.Empty<EffectiveArgumentFacts>();
@@ -1609,7 +1736,8 @@ internal sealed class BashAbstractStateAnalyzer
         IReadOnlyList<RedirectAnalysisFacts> source,
         IReadOnlyList<RedirectTargetProvenance> provenance,
         BashLoopBindingContext bindings,
-        Clause clause)
+        Clause clause,
+        bool allowBindingValues)
     {
         if (source.Count == 0)
         {
@@ -1627,7 +1755,8 @@ internal sealed class BashAbstractStateAnalyzer
                     Target = RewriteHereStringTarget(
                         fact,
                         provenance,
-                        bindings),
+                        bindings,
+                        allowBindingValues),
                 };
                 continue;
             }
@@ -1660,13 +1789,18 @@ internal sealed class BashAbstractStateAnalyzer
     private static ShellValueDomainFacts RewriteHereStringTarget(
         RedirectAnalysisFacts fact,
         IReadOnlyList<RedirectTargetProvenance> provenance,
-        BashLoopBindingContext bindings)
+        BashLoopBindingContext bindings,
+        bool allowBindingValues)
     {
         foreach (var candidate in provenance)
         {
             if (candidate.RedirectIndex != fact.RedirectIndex)
             {
                 continue;
+            }
+            if (!allowBindingValues && bindings.ReferencesTrackedBinding(candidate.Value))
+            {
+                return ShellValueDomainFacts.Unknown;
             }
 
             if (!bindings.TryAnalyzeEffectiveValue(candidate.Value, out var domain))
@@ -1900,7 +2034,13 @@ internal sealed class BashAbstractStateAnalyzer
     {
         HomeDirectory = _options.HomeDirectory,
         WorkingDirectory = state.WorkingDirectory ?? _options.WorkingDirectory,
+        InitialStateMode = _options.InitialStateMode,
+        PublishAuthoredSourceFacts = _options.PublishAuthoredSourceFacts,
     };
+
+    private bool PublishesAuthoredFactsOnly =>
+        _options.PublishAuthoredSourceFacts &&
+        _options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive;
 
     private static Arg CreateAttribution(BashAbstractState state) =>
         state.WorkingDirectory is null

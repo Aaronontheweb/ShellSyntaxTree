@@ -136,6 +136,7 @@ public enum BashInitialStateMode
 public sealed record BashParserOptions : ShellParserOptions
 {
     public BashInitialStateMode InitialStateMode { get; init; }
+    public bool PublishAuthoredSourceFacts { get; init; }
 }
 
 /// <summary>Compatibility option for PowerShell initial host-state analysis.</summary>
@@ -219,6 +220,7 @@ public sealed record CommandOccurrence { ... }
 public sealed record CommandAncestryFrame { ... }
 public sealed record AnalyzedArgument { ... }
 public abstract record ShellValueDomain { ... }
+public enum ShellPathShape { ... }
 public abstract record RedirectAnalysis { ... }
 public sealed record HereDocumentAnalysis { ... }
 public abstract record RedirectSource { ... }
@@ -631,6 +633,15 @@ public sealed record AnalyzedArgument
     public Arg Argument { get; internal init; } = null!;
     public ClauseElement Element { get; internal init; } = null!;
     public ShellValueDomain Value { get; internal init; } = null!;
+    public ShellValueDomain AuthoredValue { get; internal init; } = null!;
+    public ShellPathShape AuthoredPathShape { get; internal init; }
+}
+
+public enum ShellPathShape
+{
+    Unknown,
+    Posix,
+    Windows,
 }
 
 public abstract record ShellValueDomain
@@ -643,6 +654,15 @@ public abstract record ShellValueDomain
     public sealed record FiniteSet : ShellValueDomain
     {
         public IReadOnlyList<string> Values { get; }
+    }
+    public sealed record IntegerRange : ShellValueDomain
+    {
+        public long MinimumInclusive { get; }
+        public long MaximumInclusive { get; }
+    }
+    public sealed record Concatenation : ShellValueDomain
+    {
+        public IReadOnlyList<ShellValueDomain> Parts { get; }
     }
     public sealed record PathPattern : ShellValueDomain
     {
@@ -741,7 +761,15 @@ The parser emits only these value-domain combinations:
 - `Unknown`: no payload;
 - `Exact`: exactly one non-null value;
 - `FiniteSet`: 2–32 distinct non-null values;
-- `PathPattern`: a non-empty pattern and non-empty covering directory.
+- `PathPattern`: a non-empty pattern and non-empty covering directory;
+- `IntegerRange`: inclusive signed 64-bit bounds with minimum no greater than
+  maximum, representing canonical signed ASCII decimal without a plus sign or
+  leading zeros; and
+- `Concatenation`: two through 16 normalized `Exact`, `FiniteSet`, or
+  `IntegerRange` parts. Empty exact parts are removed, adjacent exact parts are
+  merged, an all-exact result collapses to `Exact`, and one remaining
+  non-exact part is returned directly. Unknown, pattern, nested concatenation,
+  and over-cap inputs produce `Unknown`; the parser never truncates.
 
 The parser does not execute commands, inspect runtime variables, enumerate the
 filesystem, or truncate an over-limit set and call it complete. A result with
@@ -753,6 +781,44 @@ regions; blocks, lists, pipelines, and
 simple-command leaves do not independently increment it. Exceeding 16
 structural containers or 5 decoded-command wrapper recursions makes the entire
 result unparseable.
+
+`AnalyzedArgument.Value` retains the effective shell-value proof under the
+selected initial-state contract. `AuthoredValue` separately describes the
+bounded authored shell word before field splitting, pathname expansion,
+ambient variable attributes, and ambient `IFS` can transform it. It applies
+quote removal and bounded source bindings but is not an argv-count or runtime-
+value claim. Where the distinction does not matter, `AuthoredValue` equals
+`Value`.
+
+Double-quoted Bash `$?` is one field and publishes `IntegerRange(0, 255)`.
+Literal prefixes or suffixes produce a normalized `Concatenation`; repeated
+status positions are independent upper bounds. Unquoted status remains
+`Unknown` because ambient `IFS` can split it. Status in command identity or
+redirect-target position remains strict, and single-quoted `$?` is exact
+literal text.
+
+`BashParserOptions.PublishAuthoredSourceFacts` defaults to `false`. The default
+retains v0.3.0 static-loop admission exactly: under `Unknown` initial state the
+parse is unparseable and publishes empty `Commands` and `Clauses`. When true,
+a supported static loop that fails only the ambient attribute or field-
+splitting proof may publish a structurally complete authored occurrence with
+effective `Value=Unknown` and a finite `AuthoredValue`. Explicit attribute
+mutation, hidden execution, dynamic identity, command substitution, runtime
+iteration, redirects, and unsupported control flow remain strict. The
+`IsolatedNonInteractive` mode retains its existing effective proof and does not
+require the option.
+
+`AuthoredPathShape` is lexical evidence only. URI-shaped words matching
+`^[A-Za-z][A-Za-z0-9+.-]*://` are `Unknown`; otherwise drive, UNC, or
+backslash-bearing forms are `Windows`; otherwise absolute, `./`, `../`,
+eligible or literal tilde-prefix, or slash-bearing forms are `Posix`; all other
+forms are `Unknown`. Windows classification takes precedence for `C:/...`.
+A bounded domain publishes a known shape only when every represented word has
+the same known shape. Mixed, partially unknown, or unprovable symbolic domains
+are `Unknown`. This fact does not claim filesystem operand semantics or grant
+authority: repository slugs, container images, API routes, and other data can
+be path-shaped. PowerShell 0.3.1 sets `AuthoredValue=Value` and
+`AuthoredPathShape=Unknown` for exact compatibility.
 
 #### Bash bounded loop state
 
