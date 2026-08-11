@@ -101,7 +101,7 @@ public class PiiAuditTests
     public void Corpus_contains_no_pii_per_spec_section_14()
     {
         var hits = new List<string>();
-        var roots = new[] { "Corpus", "DesignCorpus" };
+        var roots = new[] { "Corpus", "DesignCorpus", "Evidence" };
         foreach (var relativeRoot in roots)
         {
             var root = Path.Combine(AppContext.BaseDirectory, relativeRoot);
@@ -199,6 +199,7 @@ public class PiiAuditTests
     {
         if (fieldPath == "input") return true;
         if (fieldPath == "notes") return true;
+        if (fieldPath.EndsWith(".command", StringComparison.Ordinal)) return true;
         if (fieldPath.EndsWith(".raw", StringComparison.Ordinal)) return true;
         return false;
     }

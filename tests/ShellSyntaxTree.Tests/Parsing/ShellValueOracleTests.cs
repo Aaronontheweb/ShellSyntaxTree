@@ -13,6 +13,70 @@ namespace ShellSyntaxTree.Tests.Parsing;
 public class ShellValueOracleTests
 {
     [Fact]
+    public void Bash_quoted_exit_status_is_one_field_and_single_quotes_are_literal()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "false; set -- \"left=$?\" '$?'; " +
+            "printf '<%s>\\n' \"$#\" \"$1\" \"$2\"");
+
+        Assert.Equal(new[] { "<2>", "<left=1>", "<$?>" }, Lines(output));
+    }
+
+    [Fact]
+    public void Bash_unquoted_status_observes_ifs_while_repeated_quoted_status_does_not()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var unquoted = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "IFS=1; false; set -- $?; printf '<%s>\\n' \"$#\" \"${1-unset}\"");
+        var quoted = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "false; set -- \"left=$?;right=$?\"; printf '<%s>\\n' \"$#\" \"$1\"");
+
+        Assert.Equal(new[] { "<1>", "<>" }, Lines(unquoted));
+        Assert.Equal(new[] { "<1>", "<left=1;right=1>" }, Lines(quoted));
+    }
+
+    [Fact]
+    public void Bash_tilde_expands_only_at_an_eligible_unquoted_prefix()
+    {
+        if (!IsNativeBashAvailable())
+        {
+            return;
+        }
+
+        var output = Run(
+            "bash",
+            "--noprofile",
+            "--norc",
+            "-c",
+            "HOME=/home/user; printf '<%s>\\n' ~/\"repo/A.cs\" \"~/repo/A.cs\"");
+
+        Assert.Equal(
+            new[] { "</home/user/repo/A.cs>", "<~/repo/A.cs>" },
+            Lines(output));
+    }
+
+    [Fact]
     public void Bash_descriptor_duplicate_routes_stderr_to_stdout()
     {
         if (!IsNativeBashAvailable())

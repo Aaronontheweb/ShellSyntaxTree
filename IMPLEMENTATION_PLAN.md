@@ -17,7 +17,7 @@ priorities.
       and define bounded concatenation, separate effective and authored-source
       word facts, lexical path shape, consumer, corpus, and adversarial
       contracts under `openspec/changes/v0-3-1-approval-facts/`.
-- [ ] **Approve the v0.3.1 public contract.** Confirm the additive
+- [x] **Approve the v0.3.1 public contract.** Confirm the additive
       `IntegerRange`, `Concatenation`, `AuthoredValue`, `ShellPathShape`,
       `AuthoredPathShape`, and `PublishAuthoredSourceFacts` names. Confirm that
       Netclaw may use the pre-field-splitting word fact for approval matching

@@ -1,5 +1,45 @@
 #### Unreleased ####
 
+#### 0.3.1 2026-08-11 ####
+
+This additive release supplies bounded shell facts needed to reduce approval
+fatigue without moving product policy into ShellSyntaxTree. Existing parser
+options preserve every 0.3.0 default.
+
+## Added
+
+- Add library-owned `ShellValueDomain.IntegerRange` and `Concatenation`
+  alternatives. Double-quoted Bash `$?` is `IntegerRange(0, 255)` and quoted
+  literal-plus-status words remain symbolic without enumerating their product.
+- Add `AnalyzedArgument.AuthoredValue` for the bounded pre-field-splitting
+  authored word and `AuthoredPathShape` for lexical POSIX or Windows shape.
+  Path shape is not filesystem operand semantics and never grants authority.
+- Add default-false `BashParserOptions.PublishAuthoredSourceFacts`. Opted-in
+  consumers can inspect finite authored words in supported static loops while
+  effective values, redirects, cwd, dynamic identities, hidden execution, and
+  unsupported regions remain conservative.
+
+## Security and compatibility
+
+- Preserve 0.3.0 behavior when the new option is not selected. Static Bash
+  loops under unknown initial state remain unparseable with empty command and
+  clause projections.
+- Keep unquoted status, positional parameters, redirect targets, computed
+  identities, runtime iterators, explicit attribute mutation, ambient values,
+  and unknown future value alternatives fail closed.
+- Preserve PowerShell behavior exactly: `AuthoredValue` equals the existing
+  effective `Value`, and `AuthoredPathShape` is `Unknown` in 0.3.1.
+
+## Consumer validation
+
+- Add exact sanitized D02, D10, and D14 approval-harvest regressions, native
+  Bash status and tilde oracles, public API and malformed-projector snapshots,
+  PowerShell compatibility coverage, and PII audit coverage for OpenSpec
+  evidence.
+- Expand the consumer guide with input/output examples, an explicit authored-
+  source threat-model boundary, lexical-shape counterexamples, and a recursive
+  fail-closed value-domain switch.
+
 #### 0.3.0 2026-08-11 ####
 
 This stable release promotes the complete v0.3 structured shell-analysis

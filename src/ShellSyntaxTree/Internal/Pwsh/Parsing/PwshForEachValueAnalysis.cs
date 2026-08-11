@@ -6069,26 +6069,7 @@ internal sealed class PwshForEachValueAnalyzer
 
         private static bool DomainEquals(
             ShellValueDomainFacts left,
-            ShellValueDomainFacts right)
-        {
-            if (left.Kind != right.Kind || left.Values.Count != right.Values.Count)
-            {
-                return false;
-            }
-
-            for (var index = 0; index < left.Values.Count; index++)
-            {
-                if (!string.Equals(
-                        left.Values[index],
-                        right.Values[index],
-                        StringComparison.Ordinal))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
+            ShellValueDomainFacts right) => ShellValueDomainFacts.AreEqual(left, right);
 
         private static bool ContainsReference(
             IReadOnlyList<BindingFrame> bindings,

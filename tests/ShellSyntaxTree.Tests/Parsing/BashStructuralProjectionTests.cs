@@ -1587,13 +1587,16 @@ public class BashStructuralProjectionTests
     }
 
     [Fact]
-    public void Runtime_parameter_publishes_unknown_effective_value()
+    public void Quoted_exit_status_publishes_bounded_effective_value()
     {
         var command = Assert.Single(Parse("cat \"$?\"").Commands);
 
         var effective = Assert.Single(command.EffectiveArguments);
         Assert.Equal(1, effective.ClauseElementIndex);
-        Assert.Equal(ShellValueDomainKind.Unknown, effective.Value.Kind);
+        Assert.Equal(ShellValueDomainKind.IntegerRange, effective.Value.Kind);
+        var range = Assert.IsType<ShellValueDomain.IntegerRange>(effective.Value);
+        Assert.Equal(0, range.MinimumInclusive);
+        Assert.Equal(255, range.MaximumInclusive);
         Assert.True(command.IsComplete);
     }
 

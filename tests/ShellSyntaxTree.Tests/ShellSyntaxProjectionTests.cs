@@ -977,7 +977,7 @@ public class ShellSyntaxProjectionTests
     }
 
     [Fact]
-    public void Value_domain_validator_accepts_only_the_four_locked_shapes()
+    public void Value_domain_validator_accepts_only_the_six_locked_shapes()
     {
         var clause = ClauseFor("echo") with
         {
@@ -1008,6 +1008,16 @@ public class ShellSyntaxProjectionTests
                 Pattern = "/work/*.txt",
                 CoveringDirectory = "/work",
             },
+            ShellValueDomainFacts.IntegerRange(0, 255),
+            ShellValueDomainFacts.Concatenate(new[]
+            {
+                new ShellValueDomainFacts
+                {
+                    Kind = ShellValueDomainKind.Exact,
+                    Values = new[] { "status=" },
+                },
+                ShellValueDomainFacts.IntegerRange(0, 255),
+            }),
         };
 
         foreach (var domain in validDomains)
@@ -1040,6 +1050,12 @@ public class ShellSyntaxProjectionTests
             },
             new ShellValueDomainFacts
             {
+                Kind = ShellValueDomainKind.Exact,
+                Values = new[] { "one" },
+                MaximumInclusive = 1,
+            },
+            new ShellValueDomainFacts
+            {
                 Kind = ShellValueDomainKind.FiniteSet,
                 Values = new[] { "one" },
             },
@@ -1057,6 +1073,43 @@ public class ShellSyntaxProjectionTests
             {
                 Kind = ShellValueDomainKind.Pattern,
                 Pattern = "/work/*.txt",
+            },
+            new ShellValueDomainFacts
+            {
+                Kind = ShellValueDomainKind.IntegerRange,
+                MinimumInclusive = 1,
+                MaximumInclusive = 0,
+            },
+            new ShellValueDomainFacts
+            {
+                Kind = ShellValueDomainKind.Concatenation,
+                Parts = new[] { ShellValueDomainFacts.IntegerRange(0, 255) },
+            },
+            new ShellValueDomainFacts
+            {
+                Kind = ShellValueDomainKind.Concatenation,
+                Parts = new[]
+                {
+                    ShellValueDomainFacts.IntegerRange(0, 255),
+                    ShellValueDomainFacts.Unknown,
+                },
+            },
+            new ShellValueDomainFacts
+            {
+                Kind = ShellValueDomainKind.Concatenation,
+                Parts = new[]
+                {
+                    new ShellValueDomainFacts
+                    {
+                        Kind = ShellValueDomainKind.Exact,
+                        Values = new[] { "left" },
+                    },
+                    new ShellValueDomainFacts
+                    {
+                        Kind = ShellValueDomainKind.Exact,
+                        Values = new[] { "right" },
+                    },
+                },
             },
             new ShellValueDomainFacts { Kind = (ShellValueDomainKind)999 },
         };

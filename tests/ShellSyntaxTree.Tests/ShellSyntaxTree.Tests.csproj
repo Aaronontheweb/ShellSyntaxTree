@@ -34,6 +34,10 @@
     <None Update="DesignCorpus\**\*.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="..\..\openspec\changes\v0-3-1-approval-facts\evidence\approval-matrix.json"
+          Link="Evidence\approval-matrix.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

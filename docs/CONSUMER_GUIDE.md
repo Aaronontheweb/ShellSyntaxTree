@@ -448,6 +448,13 @@ foreach (var analyzed in occurrence.Arguments)
                 finite.Values),
         ShellValueDomain.PathPattern pattern =>
             EvaluatePattern(pattern.Pattern, pattern.CoveringDirectory),
+        ShellValueDomain.IntegerRange range =>
+            EvaluateIntegerRange(
+                analyzed.Argument,
+                range.MinimumInclusive,
+                range.MaximumInclusive),
+        ShellValueDomain.Concatenation concatenation =>
+            EvaluateConcatenation(analyzed.Argument, concatenation.Parts),
         ShellValueDomain.Unknown =>
             GateDecision.Prompt("policy-sensitive argument is unknown"),
         _ => GateDecision.Prompt("unrecognized value-domain alternative"),
@@ -463,6 +470,12 @@ foreach (var analyzed in occurrence.Arguments)
 - `PathPattern` is a Bash path-shaped glob plus a conservative
   `CoveringDirectory`. Accept it only when policy understands both the pattern
   and the full covering scope without enumerating the filesystem.
+- `IntegerRange` is an inclusive canonical-decimal range. It is bounded data,
+  not permission to treat every integer as an option, path, or executable.
+- `Concatenation` is a two-through-16-part symbolic string language whose
+  parts are `Exact`, `FiniteSet`, or `IntegerRange`. Evaluate the complete
+  receiver-owned argument role; do not enumerate an unbounded Cartesian
+  product or discard literal prefixes and suffixes.
 - `Unknown` is not an empty string or wildcard grant. Prompt or deny whenever
   the value can affect identity, option binding, a path, or another
   policy-sensitive position.
@@ -470,6 +483,26 @@ foreach (var analyzed in occurrence.Arguments)
 Use runtime type patterns rather than a parallel kind enum. Keep a default
 prompt-or-deny branch so a future library-owned alternative cannot be treated
 as safe accidentally.
+
+For example:
+
+```bash
+echo "---EXIT $?---"
+```
+
+produces one argument with this value:
+
+```text
+Concatenation([
+  Exact("---EXIT "),
+  IntegerRange(0, 255),
+  Exact("---")
+])
+```
+
+This proves bounded shell data. It does not prove that an arbitrary receiver
+interprets the value safely. A consumer that only understands exact and finite
+values must take its default prompt-or-deny branch for both new alternatives.
 
 `WorkingDirectory` uses the same domain type, but stable v0.3 publishes only
 `Exact` or `Unknown`. `Exact` means all modeled reachable states agree. A
@@ -528,6 +561,70 @@ The isolated modes are executor assertions, not parser optimizations. With
 the safe default initial-state modes, these ambient-variable-dependent proofs
 remain unknown or make the construct unparseable as specified earlier. A
 consumer must not select an isolated mode merely to obtain a finite set.
+
+### Opt-in authored-source loop facts
+
+Some approval products intentionally authorize the command text the agent
+authored without claiming to reconstruct every ambient Bash attribute or
+`IFS` value. Those consumers can request a separate pre-field-splitting word
+projection:
+
+```csharp
+var parser = new BashParser(new BashParserOptions
+{
+    WorkingDirectory = workingDirectory,
+    PublishAuthoredSourceFacts = true,
+});
+```
+
+Given:
+
+```bash
+for f in src/A.cs src/B.cs; do cat /work/$f; done
+```
+
+the loop-body argument is:
+
+```text
+Value:             Unknown
+AuthoredValue:     FiniteSet("/work/src/A.cs", "/work/src/B.cs")
+AuthoredPathShape: Posix
+```
+
+`AuthoredValue` is the word proved from submitted source before ambient
+attributes, ambient `IFS`, field splitting, and pathname expansion. It is not
+an argv prediction. Enabling the option admits only supported static loops
+that fail on that ambient boundary; computed identities, substitutions,
+explicit source attribute mutation, redirects, and unsupported control flow
+stay strict. With the default `false`, the same loop retains the 0.3.0 result:
+`IsUnparseable=true` with empty `Commands` and `Clauses`.
+
+Choose the projection explicitly per policy-sensitive argument:
+
+```csharp
+var domain = productPolicyAcceptsPreFieldSplittingWords
+    ? analyzed.AuthoredValue
+    : analyzed.Value;
+
+var decision = EvaluateDomain(domain); // recursive and fail closed
+```
+
+`AuthoredPathShape` is lexical evidence only:
+
+| Authored word | Shape |
+|---|---|
+| `/work/src/A.cs` | `Posix` |
+| `C:/work/src/A.cs` | `Windows` |
+| `example/project` | `Posix` |
+| `https://example.invalid/api/v1` | `Unknown` |
+| `bare-name` | `Unknown` |
+
+A repository slug, container image, API route, or other slash-bearing data can
+be path-shaped. Shape may trigger more conservative path review; it never says
+the executable treats the argument as a filesystem operand and never grants
+filesystem authority. PowerShell 0.3.1 sets `AuthoredValue=Value` and
+`AuthoredPathShape=Unknown`, so the shared ingestion surface remains uniform
+without inventing new PowerShell semantics.
 
 Loops also affect later state even when their body facts are static. With an
 incoming cwd of `/work`:

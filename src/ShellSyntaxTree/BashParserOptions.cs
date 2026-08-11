@@ -33,4 +33,10 @@ public sealed record BashParserOptions : ShellParserOptions
     /// fails bounded loop-variable analysis closed.
     /// </summary>
     public BashInitialStateMode InitialStateMode { get; init; }
+
+    /// <summary>
+    /// Gets whether bounded facts proved from authored source may be published
+    /// separately from effective runtime-value facts. The default is false.
+    /// </summary>
+    public bool PublishAuthoredSourceFacts { get; init; }
 }

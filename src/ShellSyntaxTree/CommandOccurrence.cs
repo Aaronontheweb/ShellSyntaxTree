@@ -157,7 +157,29 @@ public sealed record AnalyzedArgument
     /// <summary>Gets the effective shell-value proof.</summary>
     public ShellValueDomain Value { get; internal init; } = null!;
 
+    /// <summary>
+    /// Gets the bounded authored word before field splitting and pathname
+    /// expansion. This is not an effective argv-value claim.
+    /// </summary>
+    public ShellValueDomain AuthoredValue { get; internal init; } = null!;
+
+    /// <summary>Gets the authored word's uniform lexical path shape.</summary>
+    public ShellPathShape AuthoredPathShape { get; internal init; }
+
     internal bool HasEffectiveValue { get; init; }
+}
+
+/// <summary>Describes a shell word's lexical path shape.</summary>
+public enum ShellPathShape
+{
+    /// <summary>No uniform lexical path shape is proved.</summary>
+    Unknown,
+
+    /// <summary>A POSIX path-shaped word is proved.</summary>
+    Posix,
+
+    /// <summary>A Windows path-shaped word is proved.</summary>
+    Windows,
 }
 
 internal sealed record EffectiveArgument
@@ -236,6 +258,47 @@ public abstract record ShellValueDomain
         public new IReadOnlyList<string> Values { get; }
     }
 
+    /// <summary>An inclusive range of canonical signed decimal integers.</summary>
+    public sealed record IntegerRange : ShellValueDomain
+    {
+        internal IntegerRange(long minimumInclusive, long maximumInclusive)
+        {
+            if (minimumInclusive > maximumInclusive)
+            {
+                throw new ArgumentOutOfRangeException(nameof(minimumInclusive));
+            }
+
+            MinimumInclusive = minimumInclusive;
+            MaximumInclusive = maximumInclusive;
+        }
+
+        private protected override object LibraryOwnership => this;
+
+        internal override ShellValueDomainKind InternalKind =>
+            ShellValueDomainKind.IntegerRange;
+
+        /// <summary>Gets the inclusive lower bound.</summary>
+        public long MinimumInclusive { get; }
+
+        /// <summary>Gets the inclusive upper bound.</summary>
+        public long MaximumInclusive { get; }
+    }
+
+    /// <summary>A bounded concatenation of independently proved parts.</summary>
+    public sealed record Concatenation : ShellValueDomain
+    {
+        internal Concatenation(IReadOnlyList<ShellValueDomain> parts) =>
+            Parts = PublicCollection.Copy(parts);
+
+        private protected override object LibraryOwnership => this;
+
+        internal override ShellValueDomainKind InternalKind =>
+            ShellValueDomainKind.Concatenation;
+
+        /// <summary>Gets the two through 16 normalized parts.</summary>
+        public IReadOnlyList<ShellValueDomain> Parts { get; }
+    }
+
     /// <summary>A bounded path pattern and its conservative covering directory.</summary>
     public sealed record PathPattern : ShellValueDomain
     {
@@ -267,6 +330,8 @@ internal enum ShellValueDomainKind
     Exact,
     FiniteSet,
     Pattern,
+    IntegerRange,
+    Concatenation,
 }
 
 internal static class ShellValueDomains
@@ -280,4 +345,10 @@ internal static class ShellValueDomains
 
     internal static ShellValueDomain Pattern(string pattern, string coveringDirectory) =>
         new ShellValueDomain.PathPattern(pattern, coveringDirectory);
+
+    internal static ShellValueDomain IntegerRange(long minimumInclusive, long maximumInclusive) =>
+        new ShellValueDomain.IntegerRange(minimumInclusive, maximumInclusive);
+
+    internal static ShellValueDomain Concatenation(IReadOnlyList<ShellValueDomain> parts) =>
+        new ShellValueDomain.Concatenation(parts);
 }
