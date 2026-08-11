@@ -10,7 +10,23 @@ priorities.
 
 ---
 
-## NOW (0.3.0 host integration and release acceptance)
+## NOW (0.3.1 bounded approval facts)
+
+- [x] **Create the v0.3.1 approval-fact OpenSpec.** Harvest and sanitize the
+      Netclaw v0.26.0-beta.3 approval window. Classify all 18 distinct prompts
+      and define bounded concatenation, separate effective and authored-source
+      word facts, lexical path shape, consumer, corpus, and adversarial
+      contracts under `openspec/changes/v0-3-1-approval-facts/`.
+- [ ] **Approve the v0.3.1 public contract.** Confirm the additive
+      `IntegerRange`, `Concatenation`, `AuthoredValue`, `ShellPathShape`,
+      `AuthoredPathShape`, and `PublishAuthoredSourceFacts` names. Confirm that
+      Netclaw may use the pre-field-splitting word fact for approval matching
+      while effective facts retain runtime meaning.
+- [ ] **Implement and release v0.3.1.** Follow the OpenSpec task order. Run the
+      API, unit, corpus, PII, native-oracle, package, header, downstream
+      Netclaw, and adversarial gates before publication.
+
+## Completed v0.3.0 host integration and release acceptance
 
 > **Spec:** `SPEC.POWERSHELL.md` (v0.2.0). The PowerShell parser is
 > implemented — phases 1–14 of `SPEC.POWERSHELL.md` §16 are complete (see
