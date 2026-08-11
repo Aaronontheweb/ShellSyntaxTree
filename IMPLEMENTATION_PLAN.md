@@ -682,6 +682,11 @@ priorities.
       joined-argument, value-domain, redirect-source, and redirect-analysis
       alternatives. Netclaw PR #1857 closes the downstream acceptance gate with
       240 catalog rows and green cross-platform CI.
+- [ ] Publish `0.3.0` stable from the reviewed release metadata after the
+      release PR passes Linux and Windows CI. Derive the bare SemVer tag from
+      the merged MSBuild `Version`, observe the tag-driven NuGet workflow, and
+      verify the package, symbols package, and non-prerelease GitHub release
+      before completing OpenSpec task 11.9.
 - [x] Replace the pre-alpha consumer preview with the v0.3 occurrence-based
       authorization loop and separate syntax-display guidance. Document exact,
       finite, pattern, unknown, joined-cwd, redirect, incomplete-result,
