@@ -171,7 +171,7 @@ internal static class ShellPathShapeClassifier
         {
             var character = value[index];
             if (!IsAsciiLetter(character) &&
-                !char.IsDigit(character) &&
+                !IsAsciiDigit(character) &&
                 character is not '+' and not '-' and not '.')
             {
                 return false;
@@ -184,13 +184,14 @@ internal static class ShellPathShapeClassifier
     private static bool LooksLikeWindowsPath(string value) =>
         value.IndexOf('\\') >= 0 ||
         value.StartsWith("//", StringComparison.Ordinal) ||
-        value.Length >= 3 &&
+        value.Length >= 2 &&
         IsAsciiLetter(value[0]) &&
-        value[1] == ':' &&
-        (value[2] == '/' || value[2] == '\\');
+        value[1] == ':';
 
     private static bool IsAsciiLetter(char value) =>
         value is >= 'A' and <= 'Z' or >= 'a' and <= 'z';
+
+    private static bool IsAsciiDigit(char value) => value is >= '0' and <= '9';
 }
 
 internal sealed record EffectiveArgumentFacts

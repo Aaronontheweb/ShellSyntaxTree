@@ -12,12 +12,12 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 `netstandard2.0` and `net8.0`.
 
 ```bash
-# Current structured-analysis prerelease
-dotnet add package ShellSyntaxTree --version 0.3.0-alpha.1
+# Current package
+dotnet add package ShellSyntaxTree --version 0.3.1
 ```
 
-The latest stable package is `0.2.0`. The `0.3.0-alpha.1` prerelease adds the
-typed syntax tree and command-occurrence authorization API documented below.
+Version `0.3.1` includes the typed syntax tree, command-occurrence API, and
+bounded authored-value analysis documented below.
 
 ## What you get
 

@@ -472,7 +472,7 @@ internal sealed class BashAbstractStateAnalyzer
         {
             var dependsOnTrackedBinding =
                 input.Bindings.ReferencesTrackedBinding(provenance.Value);
-            if (PublishesAuthoredFactsOnly && dependsOnTrackedBinding)
+            if (_options.PublishAuthoredSourceFacts && dependsOnTrackedBinding)
             {
                 var authoredValue = NormalizeAuthoredParserKnownFragments(provenance.Value);
                 evaluator.TryAnalyzeAuthoredValue(authoredValue, out var authoredDomain);
@@ -481,7 +481,10 @@ internal sealed class BashAbstractStateAnalyzer
                     simple.Clause,
                     provenance.ClauseElementIndex,
                     authoredDomain);
-                continue;
+                if (PublishesAuthoredFactsOnly)
+                {
+                    continue;
+                }
             }
 
             var hasStateDependentValue = evaluator.TryAnalyzeEffectiveValue(

@@ -301,9 +301,29 @@ public class BashAuthoredValueTests
         Assert.Equal(argument.Value, argument.AuthoredValue);
     }
 
+    [Fact]
+    public void Isolated_loop_opt_in_keeps_separate_authored_proof()
+    {
+        var parser = new BashParser(new BashParserOptions
+        {
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
+            PublishAuthoredSourceFacts = true,
+        });
+
+        var result = parser.Parse(
+            "for f in src/A.cs src/B.cs; do cat /work/$f; done");
+
+        var argument = Assert.Single(Assert.Single(result.Commands).Arguments);
+        Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
+        AssertFinite(argument.AuthoredValue, "/work/src/A.cs", "/work/src/B.cs");
+        Assert.Equal(ShellPathShape.Posix, argument.AuthoredPathShape);
+    }
+
     [Theory]
     [InlineData("C:/work/file.txt", ShellPathShape.Windows)]
     [InlineData("C:\\work\\file.txt", ShellPathShape.Windows)]
+    [InlineData("C:foo", ShellPathShape.Windows)]
+    [InlineData("C:foo/bar", ShellPathShape.Windows)]
     [InlineData("/work/file.txt", ShellPathShape.Posix)]
     [InlineData("./file.txt", ShellPathShape.Posix)]
     [InlineData("../file.txt", ShellPathShape.Posix)]
