@@ -1,5 +1,63 @@
 #### Unreleased ####
 
+#### 0.3.0 2026-08-11 ####
+
+This stable release promotes the complete v0.3 structured shell-analysis
+contract validated by the `0.3.0-alpha.*` series. It preserves the stable v0.2
+public API and conservative `Clauses` projection while adding a typed,
+occurrence-oriented authorization surface. Unknown, incomplete, dynamic, and
+unsupported execution-bearing forms remain fail closed.
+
+## Added
+
+- Add `ParsedCommand.Syntax` for display and diagnostics and
+  `ParsedCommand.Commands` for authorization. Every supported authored command
+  occurrence carries its structural role and ancestry, completeness,
+  effective arguments, working-directory domain, and explicit redirects.
+- Add closed, parser-owned record families for bounded values, redirect
+  operations and sources, command substitutions, heredocs, here-strings, and
+  PowerShell command-owned execution regions. Unknown runtime alternatives and
+  enum values remain detectable by consumers.
+- Add bounded Bash `for ... in` and PowerShell `foreach` analysis, including
+  occurrence-specific exact, finite, pattern, joined-state, substitution, cwd,
+  and redirect facts under the documented initial-state contracts.
+- Add explicit PowerShell 7 and Windows PowerShell 5.1 dialect selection.
+  Same-language static child hosts use the matching dialect; Bash and
+  PowerShell remain separate top-level grammars and never cross-parse each
+  other's command payloads.
+
+## Security and compatibility
+
+- Preserve the stable v0.2 `ParsedCommand`, `Clause`, `Arg`, and `Redirect`
+  contract and its conservative projection throughout v0.3. The experimental
+  `0.3.0-alpha.*` API is not a compatibility boundary and has no retained
+  aliases or adapters.
+- Keep incomplete executable regions, computed identities, hidden execution,
+  unbounded values, unknown cwd or redirect targets, unsupported syntax, and
+  source-observed state invalidation strict. Consumers can prompt or deny;
+  ShellSyntaxTree never converts uncertainty into authority.
+- Require the component that selects the executor to select the matching
+  parser, PowerShell dialect, and initial-state assertion. A fallback executor
+  must be reparsed and reauthorized before execution.
+- Keep executable-specific normalization and filesystem authority in the
+  consumer. ShellSyntaxTree supplies syntax facts; it does not define a policy
+  engine or a stable serialized wire format.
+
+## Consumer validation
+
+- Expand the consumer guide with input-to-output examples for occurrences,
+  arguments, loops, substitutions, redirects, cwd propagation, PowerShell
+  execution regions, safe-fail handling, and the separation between syntax
+  display and authorization traversal.
+- Validate the release candidate with 2,870 ShellSyntaxTree tests, native Bash
+  and PowerShell oracles, PII-audited corpora, public-API snapshots, package
+  creation, strict OpenSpec validation, and Linux plus Windows CI.
+- Validate the corrected prerelease in Netclaw through 240 approval-catalog
+  rows: 199 Bash, 36 PowerShell 7, and five Windows PowerShell 5.1 cases. The
+  downstream matrix covers ordinary commands, redirects, loops,
+  substitutions, execution regions, stored grants, hard denies, and
+  fail-closed unknown forms.
+
 #### 0.3.0-alpha.6 2026-08-10 ####
 
 ## Changed
