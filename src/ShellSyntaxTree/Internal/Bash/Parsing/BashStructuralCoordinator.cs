@@ -513,9 +513,17 @@ internal static partial class BashCommandParser
                     return false;
                 }
 
-                var innerOptions = _hasUnmodeledVariableStateMutation
-                    ? _options with { InitialStateMode = BashInitialStateMode.Unknown }
-                    : _options;
+                var innerOptions = _options with
+                {
+                    InitialStateMode = _hasUnmodeledVariableStateMutation
+                        ? BashInitialStateMode.Unknown
+                        : _options.InitialStateMode,
+                    // This opt-in describes the source submitted to this parser call.
+                    // A decoded child shell is a separate execution boundary and must
+                    // receive its own caller assertion before it can publish authored-
+                    // only loop facts.
+                    PublishAuthoredSourceFacts = false,
+                };
                 var innerResult = ParseInternal(
                     innerCommand!,
                     innerOptions,

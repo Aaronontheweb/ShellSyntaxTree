@@ -16,6 +16,9 @@ boundary for command identities that remain dynamic.
 
 - Keep named-user tilde, variable-derived identity, unknown home state, and
   other unresolved executable forms unparseable.
+- Keep authored-only loop publication scoped to the source submitted to the
+  parser. Decoded `bash -c` and `sh -c` children require their own proved
+  isolated state instead of inheriting the outer opt-in.
 - Preserve the public API and package layout from 0.3.1.
 
 ## Consumer validation

@@ -320,6 +320,44 @@ public class BashAuthoredValueTests
     }
 
     [Theory]
+    [InlineData("bash")]
+    [InlineData("sh")]
+    public void Authored_source_opt_in_does_not_cross_a_decoded_child_shell(
+        string shell)
+    {
+        var parser = new BashParser(new BashParserOptions
+        {
+            PublishAuthoredSourceFacts = true,
+        });
+
+        var result = parser.Parse(
+            $"{shell} -c 'for f in a b; do show \"$f\"; done'");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("proved isolated", result.UnparseableReason);
+    }
+
+    [Fact]
+    public void Isolated_state_proof_crosses_a_decoded_child_shell_independently()
+    {
+        var parser = new BashParser(new BashParserOptions
+        {
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
+            PublishAuthoredSourceFacts = true,
+        });
+
+        var result = parser.Parse(
+            "bash --noprofile --norc -c 'for f in a b; do show \"$f\"; done'");
+
+        Assert.False(result.IsUnparseable);
+        var argument = Assert.Single(Assert.Single(result.Commands).Arguments);
+        AssertFinite(argument.Value, "a", "b");
+        AssertFinite(argument.AuthoredValue, "a", "b");
+    }
+
+    [Theory]
     [InlineData("C:/work/file.txt", ShellPathShape.Windows)]
     [InlineData("C:\\work\\file.txt", ShellPathShape.Windows)]
     [InlineData("C:foo", ShellPathShape.Windows)]
