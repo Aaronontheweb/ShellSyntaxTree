@@ -33,12 +33,12 @@ priorities.
       [GitHub release](https://github.com/Aaronontheweb/ShellSyntaxTree/releases/tag/0.3.1)
       contains both assets. API, unit, corpus, PII, native-oracle, package,
       header, and adversarial checks passed before publication.
-- [ ] **Complete the post-publication Netclaw 0.3.1 gate.** Upgrade the
-      structured approval-policy branch to the public package. Pin D02, D10,
-      D14, dynamic identity, redirect, native PowerShell, and compatibility
-      outcomes in the downstream matrix. This gate was not run before the
-      package was published; it remains required before the Netclaw policy
-      implementation can merge.
+- [ ] **Complete the post-publication Netclaw 0.3.1 gate.** The structured
+      approval-policy implementation branch now consumes the superseding public
+      0.3.2 package. A clean-cache public restore, Release build, and full
+      runnable downstream suite passed. Binding the D02, D10, and D14 evidence
+      rows to exact executable downstream tests remains required before this
+      gate is complete.
 - [x] **Accept proved Bash tilde command identities.** Treat an eligible
       home-tilde prefix and a quoted or escaped literal tilde as static command
       text. Keep named-user, variable-derived, opaque, and unknown tilde forms
@@ -48,9 +48,13 @@ priorities.
       or `sh -c` children. Direct root and child-shell regressions pin the
       boundary while isolated-state child analysis remains independently
       available.
-- [ ] **Publish v0.3.2.** Package the static tilde command-identity fix, verify
-      the tag-driven NuGet release, and complete the downstream Netclaw clean-
-      restore gate before its approval-policy PR merges.
+- [x] **Publish v0.3.2.** PRs #159 and #160 merged after Linux and Windows CI
+      passed. Bare tag `0.3.2` points at reviewed merge `cb4129cf`; successful
+      workflow run 31651727730 published the package, symbols, and GitHub
+      release. Netclaw's structured approval-policy branch resolved exactly
+      public 0.3.2 from a fresh cache; its Release build and full runnable test
+      suite passed. Exact D02/D10/D14 fixture binding remains tracked by the
+      separate post-publication downstream gate above.
 
 ## Completed v0.3.0 host integration and release acceptance
 
