@@ -10,7 +10,7 @@ priorities.
 
 ---
 
-## NOW (0.3.1 bounded approval facts)
+## NOW (0.3.2 parser fix and downstream acceptance)
 
 - [x] **Create the v0.3.1 approval-fact OpenSpec.** Harvest and sanitize the
       Netclaw v0.26.0-beta.3 approval window. Classify all 18 distinct prompts
@@ -43,6 +43,9 @@ priorities.
       home-tilde prefix and a quoted or escaped literal tilde as static command
       text. Keep named-user, variable-derived, opaque, and unknown tilde forms
       fail closed. Direct parser tests pin both boundaries.
+- [ ] **Publish v0.3.2.** Package the static tilde command-identity fix, verify
+      the tag-driven NuGet release, and complete the downstream Netclaw clean-
+      restore gate before its approval-policy PR merges.
 
 ## Completed v0.3.0 host integration and release acceptance
 

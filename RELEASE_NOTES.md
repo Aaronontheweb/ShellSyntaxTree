@@ -1,5 +1,30 @@
 #### Unreleased ####
 
+#### 0.3.2 2026-08-12 ####
+
+This patch release accepts statically proved Bash command identities that use
+the current user's home-tilde prefix. It preserves the existing fail-closed
+boundary for command identities that remain dynamic.
+
+## Fixed
+
+- Parse eligible `~/...` executable paths as static command identities when a
+  home directory is available to the resolver.
+- Preserve quoted or escaped tilde text as literal command identity.
+
+## Security and compatibility
+
+- Keep named-user tilde, variable-derived identity, unknown home state, and
+  other unresolved executable forms unparseable.
+- Preserve the public API and package layout from 0.3.1.
+
+## Consumer validation
+
+- Add direct positive and negative parser cases plus existing structural,
+  native Bash oracle, public API, and full-suite validation.
+- Unblock Netclaw approval analysis for ordinary agent commands that invoke a
+  static executable beneath the current user's home directory.
+
 #### 0.3.1 2026-08-11 ####
 
 This additive release supplies bounded shell facts needed to reduce approval
