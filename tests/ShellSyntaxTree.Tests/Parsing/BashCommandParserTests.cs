@@ -174,6 +174,30 @@ public class BashCommandParserTests
         Assert.Empty(clause.Args);
     }
 
+    [Theory]
+    [InlineData("~/.dotnet/dotnet test")]
+    [InlineData("~/bin/\"tool\" status")]
+    [InlineData("~\\/bin/tool status")]
+    public void Static_tilde_command_identity_is_supported(string source)
+    {
+        var result = Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.NotEmpty(result.Commands);
+    }
+
+    [Theory]
+    [InlineData("~other/bin/tool status")]
+    [InlineData("~/$tool status")]
+    public void Dynamic_tilde_command_identity_stays_unparseable(string source)
+    {
+        var result = Parse(source);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
     [Fact]
     public void Known_file_suffix_wins_over_an_extension_shaped_subcommand()
     {

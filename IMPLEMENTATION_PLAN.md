@@ -39,6 +39,10 @@ priorities.
       outcomes in the downstream matrix. This gate was not run before the
       package was published; it remains required before the Netclaw policy
       implementation can merge.
+- [x] **Accept proved Bash tilde command identities.** Treat an eligible
+      home-tilde prefix and a quoted or escaped literal tilde as static command
+      text. Keep named-user, variable-derived, opaque, and unknown tilde forms
+      fail closed. Direct parser tests pin both boundaries.
 
 ## Completed v0.3.0 host integration and release acceptance
 
