@@ -529,7 +529,7 @@ internal static partial class BashCommandParser
         var firstToken = segment.Tokens[0];
         if ((firstToken.Kind == BashTokenKind.Word
                 || firstToken.Kind == BashTokenKind.QuotedString)
-            && !HasStaticCommandIdentity(firstToken))
+            && !HasStaticCommandIdentity(firstToken, options))
         {
             return ClauseResult.Fail(
                 "dynamic Bash command identity is not supported in v0.2");
@@ -691,20 +691,40 @@ internal static partial class BashCommandParser
         return ClauseResult.Ok(clause, pathResolutions);
     }
 
-    private static bool HasStaticCommandIdentity(BashToken token)
+    private static bool HasStaticCommandIdentity(
+        BashToken token,
+        BashParserOptions options)
     {
         if (token.ResolverValue is null)
         {
             return true;
         }
 
-        foreach (var fragment in token.ResolverValue.Fragments)
+        for (var index = 0; index < token.ResolverValue.Fragments.Count; index++)
         {
-            if (fragment.Kind != ShellValueFragmentKind.Literal
-                || fragment.Cardinality != ShellValueCardinality.ExactlyOne)
+            var fragment = token.ResolverValue.Fragments[index];
+            if (fragment.Kind == ShellValueFragmentKind.Literal
+                && fragment.Cardinality == ShellValueCardinality.ExactlyOne)
             {
-                return false;
+                continue;
             }
+
+            if (fragment.Kind == ShellValueFragmentKind.Expansion
+                && fragment.Cardinality == ShellValueCardinality.ExactlyOne
+                && fragment.Expansion is { Kind: ShellExpansionKind.Tilde })
+            {
+                var tildeKind = BashResolver.ClassifyTildeExpansion(
+                    token.ResolverValue,
+                    index);
+                if (tildeKind == BashTildeExpansionKind.Literal
+                    || tildeKind == BashTildeExpansionKind.Home
+                    && BashResolver.GetHomeDirectory(options).Length > 0)
+                {
+                    continue;
+                }
+            }
+
+            return false;
         }
 
         return true;
