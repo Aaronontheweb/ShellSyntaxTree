@@ -43,6 +43,11 @@ priorities.
       home-tilde prefix and a quoted or escaped literal tilde as static command
       text. Keep named-user, variable-derived, opaque, and unknown tilde forms
       fail closed. Direct parser tests pin both boundaries.
+- [x] **Keep authored-source facts at their parser-call boundary.** Do not
+      carry the optional authored-only loop relaxation into decoded `bash -c`
+      or `sh -c` children. Direct root and child-shell regressions pin the
+      boundary while isolated-state child analysis remains independently
+      available.
 - [ ] **Publish v0.3.2.** Package the static tilde command-identity fix, verify
       the tag-driven NuGet release, and complete the downstream Netclaw clean-
       restore gate before its approval-policy PR merges.

@@ -806,7 +806,10 @@ effective `Value=Unknown` and a finite `AuthoredValue`. Explicit attribute
 mutation, hidden execution, dynamic identity, command substitution, runtime
 iteration, redirects, and unsupported control flow remain strict. The
 `IsolatedNonInteractive` mode retains its existing effective proof and does not
-require the option.
+require the option. The opt-in applies only to the source submitted to that
+`Parse` call. It does not cross into a decoded `bash -c` or `sh -c` child;
+without an independently asserted isolated state, a static loop in that child
+remains unparseable.
 
 `AuthoredPathShape` is lexical evidence only. URI-shaped words matching
 `^[A-Za-z][A-Za-z0-9+.-]*://` are `Unknown`; otherwise drive, UNC, or
