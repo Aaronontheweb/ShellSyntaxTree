@@ -1,5 +1,45 @@
 #### Unreleased ####
 
+#### 0.3.4 2026-08-13 ####
+
+This additive release publishes parser-owned working-directory effects for
+each executable command occurrence. Security consumers can reason about a
+causal directory transition without reconstructing shell builtins or treating
+the syntax fact as authority.
+
+## Added
+
+- Add the closed `ShellWorkingDirectoryEffect` family with `Unknown`,
+  `Unchanged`, and `ChangesOnSuccess(Target)` alternatives.
+- Add `CommandOccurrence.WorkingDirectoryEffect` with a non-null `Unknown`
+  default for compatibility and malformed internal facts.
+- Publish bounded Bash `cd`, `command cd`, and `builtin cd` effects while
+  retaining strict `pushd`, `popd`, hidden execution, and invalid-shape
+  boundaries.
+- Publish selected-dialect native PowerShell `Set-Location` effects from the
+  same parameter-binding pass that computes success and failure flow.
+
+## Security and compatibility
+
+- Keep authorization, path containment, prerequisite coverage, ancestry, and
+  real fallback-directory checks in the consumer.
+- Require normalized absolute local targets. Reject relative, non-normalized,
+  mixed-style, malformed, or unsupported target domains as `Unknown`.
+- Preserve atomic failure for hidden Bash execution and strict PowerShell
+  location-stack, provider, script, dynamic-identity, and unmodeled-region
+  boundaries.
+- Preserve all 0.3.3 public signatures. Both target-framework API comparisons
+  report five additive members and zero breaking changes.
+
+## Consumer validation
+
+- Add input/output examples and default-deny pseudocode to the consumer guide.
+- Add sanitized Bash corpus cases for causal chains, directory-stack
+  invalidation, and finite loop targets.
+- Validate native PowerShell aliases, common parameters, unambiguous aliases
+  and prefixes, dynamic switch values, invalid switch values, and bounded or
+  unknown targets.
+
 #### 0.3.3 2026-08-13 ####
 
 This additive release publishes bounded local-filesystem values for audited
