@@ -981,6 +981,109 @@ public class ShellSyntaxProjectionTests
     }
 
     [Fact]
+    public void Invalid_working_directory_effect_facts_project_as_unknown()
+    {
+        var root = Block(0, Leaf("inspect", 0));
+        var invalidEffects = new ShellWorkingDirectoryEffectFacts?[]
+        {
+            null,
+            new()
+            {
+                Kind = (ShellWorkingDirectoryEffectKind)999,
+            },
+            new()
+            {
+                Kind = ShellWorkingDirectoryEffectKind.Unchanged,
+                Target = new ShellValueDomainFacts
+                {
+                    Kind = ShellValueDomainKind.Exact,
+                    Values = new[] { "/work" },
+                },
+            },
+            new()
+            {
+                Kind = ShellWorkingDirectoryEffectKind.ChangesOnSuccess,
+                Target = new ShellValueDomainFacts
+                {
+                    Kind = ShellValueDomainKind.FiniteSet,
+                    Values = new[] { "/only-one" },
+                },
+            },
+            new()
+            {
+                Kind = ShellWorkingDirectoryEffectKind.ChangesOnSuccess,
+                Target = new ShellValueDomainFacts
+                {
+                    Kind = ShellValueDomainKind.Pattern,
+                    Pattern = "/work/*.txt",
+                    CoveringDirectory = "/work",
+                },
+            },
+            new()
+            {
+                Kind = ShellWorkingDirectoryEffectKind.ChangesOnSuccess,
+                Target = ShellValueDomainFacts.IntegerRange(0, 1),
+            },
+            new()
+            {
+                Kind = ShellWorkingDirectoryEffectKind.ChangesOnSuccess,
+                Target = ShellValueDomainFacts.Concatenate(new[]
+                {
+                    new ShellValueDomainFacts
+                    {
+                        Kind = ShellValueDomainKind.Exact,
+                        Values = new[] { "/work/" },
+                    },
+                    ShellValueDomainFacts.IntegerRange(0, 1),
+                }),
+            },
+            new()
+            {
+                Kind = ShellWorkingDirectoryEffectKind.ChangesOnSuccess,
+                Target = new ShellValueDomainFacts
+                {
+                    Kind = ShellValueDomainKind.Exact,
+                    Values = new[] { "relative" },
+                },
+            },
+            new()
+            {
+                Kind = ShellWorkingDirectoryEffectKind.ChangesOnSuccess,
+                Target = new ShellValueDomainFacts
+                {
+                    Kind = ShellValueDomainKind.Exact,
+                    Values = new[] { "C:/work/../temp" },
+                },
+            },
+            new()
+            {
+                Kind = ShellWorkingDirectoryEffectKind.ChangesOnSuccess,
+                Target = new ShellValueDomainFacts
+                {
+                    Kind = ShellValueDomainKind.FiniteSet,
+                    Values = new[] { "/tmp", "C:/temp" },
+                },
+            },
+        };
+
+        foreach (var effect in invalidEffects)
+        {
+            var succeeded = ShellSyntaxProjection.TryProject(
+                root,
+                _ => new CommandOccurrenceFacts
+                {
+                    WorkingDirectoryEffect = effect!,
+                },
+                ShellProjectionLanguage.PowerShell,
+                out var result);
+
+            Assert.True(succeeded);
+            Assert.IsType<ShellWorkingDirectoryEffect.Unknown>(
+                Assert.Single(result.Commands).WorkingDirectoryEffect);
+        }
+    }
+
+    [Fact]
     public void Unknown_projection_language_keeps_strong_filesystem_facts_disabled()
     {
         var clause = ClauseFor("cat") with

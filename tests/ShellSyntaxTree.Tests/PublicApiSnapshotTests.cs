@@ -640,6 +640,7 @@ public class PublicApiSnapshotTests
             nameof(ShellSourceFragment),
             nameof(ShellSyntaxNode),
             nameof(ShellValueDomain),
+            nameof(ShellWorkingDirectoryEffect),
             nameof(SimpleCommandSyntax),
             nameof(HereDocumentRedirectAnalysis),
             nameof(HereStringRedirectAnalysis),

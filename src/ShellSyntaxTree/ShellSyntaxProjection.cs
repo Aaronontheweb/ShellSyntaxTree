@@ -26,6 +26,9 @@ internal sealed class CommandOccurrenceFacts
 
     internal ShellValueDomainFacts WorkingDirectory { get; init; } = ShellValueDomainFacts.Unknown;
 
+    internal ShellWorkingDirectoryEffectFacts WorkingDirectoryEffect { get; init; } =
+        ShellWorkingDirectoryEffectFacts.Unknown;
+
     internal IReadOnlyList<RedirectAnalysisFacts> Redirects { get; init; } =
         Array.Empty<RedirectAnalysisFacts>();
 
@@ -41,6 +44,110 @@ internal sealed class CommandOccurrenceFacts
     internal bool HasCompleteValueProvenance { get; init; }
 
     internal bool IsComplete { get; init; }
+}
+
+internal enum ShellWorkingDirectoryEffectKind
+{
+    Unknown,
+    Unchanged,
+    ChangesOnSuccess,
+}
+
+internal sealed record ShellWorkingDirectoryEffectFacts
+{
+    internal static ShellWorkingDirectoryEffectFacts Unknown { get; } = new();
+
+    internal static ShellWorkingDirectoryEffectFacts Unchanged { get; } = new()
+    {
+        Kind = ShellWorkingDirectoryEffectKind.Unchanged,
+    };
+
+    internal ShellWorkingDirectoryEffectKind Kind { get; init; }
+
+    internal ShellValueDomainFacts Target { get; init; } = ShellValueDomainFacts.Unknown;
+
+    internal static ShellWorkingDirectoryEffectFacts ChangesOnSuccess(
+        ShellValueDomainFacts target) => IsSupportedTarget(target)
+        ? new ShellWorkingDirectoryEffectFacts
+        {
+            Kind = ShellWorkingDirectoryEffectKind.ChangesOnSuccess,
+            Target = target,
+        }
+        : Unknown;
+
+    internal static ShellWorkingDirectoryEffectFacts Join(
+        ShellWorkingDirectoryEffectFacts left,
+        ShellWorkingDirectoryEffectFacts right)
+    {
+        if (left.Kind == ShellWorkingDirectoryEffectKind.Unknown ||
+            right.Kind == ShellWorkingDirectoryEffectKind.Unknown ||
+            left.Kind != right.Kind)
+        {
+            return Unknown;
+        }
+
+        if (left.Kind == ShellWorkingDirectoryEffectKind.Unchanged)
+        {
+            return Unchanged;
+        }
+
+        return ChangesOnSuccess(JoinTargets(left.Target, right.Target));
+    }
+
+    private static ShellValueDomainFacts JoinTargets(
+        ShellValueDomainFacts left,
+        ShellValueDomainFacts right)
+    {
+        if (!IsSupportedTarget(left) || !IsSupportedTarget(right) ||
+            left.Kind == ShellValueDomainKind.Unknown ||
+            right.Kind == ShellValueDomainKind.Unknown)
+        {
+            return ShellValueDomainFacts.Unknown;
+        }
+
+        if (ShellValueDomainFacts.AreEqual(left, right))
+        {
+            return left;
+        }
+
+        var distinct = new HashSet<string>(StringComparer.Ordinal);
+        AddValues(left, distinct);
+        AddValues(right, distinct);
+        if (distinct.Count > ShellAnalysisLimits.MaxValueCandidates)
+        {
+            return ShellValueDomainFacts.Unknown;
+        }
+
+        var values = new List<string>(distinct);
+        values.Sort(StringComparer.Ordinal);
+        return values.Count == 1
+            ? new ShellValueDomainFacts
+            {
+                Kind = ShellValueDomainKind.Exact,
+                Values = values.ToArray(),
+            }
+            : new ShellValueDomainFacts
+            {
+                Kind = ShellValueDomainKind.FiniteSet,
+                Values = values.ToArray(),
+            };
+    }
+
+    private static void AddValues(
+        ShellValueDomainFacts domain,
+        ISet<string> destination)
+    {
+        for (var index = 0; index < domain.Values.Count; index++)
+        {
+            destination.Add(domain.Values[index]);
+        }
+    }
+
+    private static bool IsSupportedTarget(ShellValueDomainFacts target) =>
+        target is not null &&
+        target.Kind is ShellValueDomainKind.Unknown or
+            ShellValueDomainKind.Exact or
+            ShellValueDomainKind.FiniteSet;
 }
 
 internal static class ShellPathShapeClassifier
@@ -637,6 +744,7 @@ internal static class ShellSyntaxProjection
                     _language,
                     out var arguments,
                     out var workingDirectory,
+                    out var workingDirectoryEffect,
                     out var redirects))
             {
                 return false;
@@ -649,6 +757,7 @@ internal static class ShellSyntaxProjection
                 Ancestry = _ancestry.ToArray(),
                 Arguments = arguments,
                 WorkingDirectory = workingDirectory,
+                WorkingDirectoryEffect = workingDirectoryEffect,
                 Redirects = redirects,
                 IsComplete = facts.IsComplete && _structuralContextIsComplete &&
                     AreExecutionRegionFactsComplete(simple.ExecutionRegions),
@@ -907,10 +1016,12 @@ internal static class ShellSyntaxProjection
             ShellProjectionLanguage language,
             out IReadOnlyList<AnalyzedArgument> arguments,
             out ShellValueDomain workingDirectory,
+            out ShellWorkingDirectoryEffect workingDirectoryEffect,
             out IReadOnlyList<RedirectAnalysis> redirects)
         {
             arguments = Array.Empty<AnalyzedArgument>();
             workingDirectory = new ShellValueDomain.Unknown();
+            workingDirectoryEffect = new ShellWorkingDirectoryEffect.Unknown();
             redirects = Array.Empty<RedirectAnalysis>();
             if (facts is null ||
                 facts.EffectiveArguments is null ||
@@ -934,6 +1045,9 @@ internal static class ShellSyntaxProjection
             }
 
             workingDirectory = ToPublicDomain(facts.WorkingDirectory);
+            workingDirectoryEffect = ToPublicEffect(
+                facts.WorkingDirectoryEffect,
+                language);
             return TryCreateAnalyzedArguments(
                     clause,
                     facts.EffectiveArguments,
@@ -1141,48 +1255,48 @@ internal static class ShellSyntaxProjection
             analysis = source is RedirectSource.Unknown
                 ? new UnresolvedRedirectAnalysis()
                 : fact.Operation switch
-            {
-                RedirectOperation.FileInput => new FileRedirectAnalysis(FileRedirectMode.Input)
                 {
-                    Target = ToPublicDomain(fact.Target),
-                },
-                RedirectOperation.FileOutput => new FileRedirectAnalysis(FileRedirectMode.Output)
-                {
-                    Target = ToPublicDomain(fact.Target),
-                },
-                RedirectOperation.FileAppend => new FileRedirectAnalysis(FileRedirectMode.Append)
-                {
-                    Target = ToPublicDomain(fact.Target),
-                },
-                RedirectOperation.CombinedOutput =>
-                    new FileRedirectAnalysis(FileRedirectMode.CombinedOutput)
+                    RedirectOperation.FileInput => new FileRedirectAnalysis(FileRedirectMode.Input)
                     {
                         Target = ToPublicDomain(fact.Target),
                     },
-                RedirectOperation.CombinedOutputAppend =>
-                    new FileRedirectAnalysis(FileRedirectMode.CombinedOutputAppend)
+                    RedirectOperation.FileOutput => new FileRedirectAnalysis(FileRedirectMode.Output)
                     {
                         Target = ToPublicDomain(fact.Target),
                     },
-                RedirectOperation.DescriptorDuplicate when fact.TargetDescriptor.HasValue =>
-                    new DescriptorDuplicateRedirectAnalysis
+                    RedirectOperation.FileAppend => new FileRedirectAnalysis(FileRedirectMode.Append)
                     {
-                        TargetDescriptor = fact.TargetDescriptor.Value,
+                        Target = ToPublicDomain(fact.Target),
                     },
-                RedirectOperation.DescriptorMove when fact.TargetDescriptor.HasValue =>
-                    new DescriptorMoveRedirectAnalysis
+                    RedirectOperation.CombinedOutput =>
+                        new FileRedirectAnalysis(FileRedirectMode.CombinedOutput)
+                        {
+                            Target = ToPublicDomain(fact.Target),
+                        },
+                    RedirectOperation.CombinedOutputAppend =>
+                        new FileRedirectAnalysis(FileRedirectMode.CombinedOutputAppend)
+                        {
+                            Target = ToPublicDomain(fact.Target),
+                        },
+                    RedirectOperation.DescriptorDuplicate when fact.TargetDescriptor.HasValue =>
+                        new DescriptorDuplicateRedirectAnalysis
+                        {
+                            TargetDescriptor = fact.TargetDescriptor.Value,
+                        },
+                    RedirectOperation.DescriptorMove when fact.TargetDescriptor.HasValue =>
+                        new DescriptorMoveRedirectAnalysis
+                        {
+                            TargetDescriptor = fact.TargetDescriptor.Value,
+                        },
+                    RedirectOperation.DescriptorClose => new DescriptorCloseRedirectAnalysis(),
+                    RedirectOperation.HereDocument when fact.HereDocument is not null =>
+                        new HereDocumentRedirectAnalysis { Document = fact.HereDocument },
+                    RedirectOperation.HereString => new HereStringRedirectAnalysis
                     {
-                        TargetDescriptor = fact.TargetDescriptor.Value,
+                        Data = ToPublicDomain(fact.Target),
                     },
-                RedirectOperation.DescriptorClose => new DescriptorCloseRedirectAnalysis(),
-                RedirectOperation.HereDocument when fact.HereDocument is not null =>
-                    new HereDocumentRedirectAnalysis { Document = fact.HereDocument },
-                RedirectOperation.HereString => new HereStringRedirectAnalysis
-                {
-                    Data = ToPublicDomain(fact.Target),
-                },
-                _ => new UnresolvedRedirectAnalysis(),
-            };
+                    _ => new UnresolvedRedirectAnalysis(),
+                };
             analysis = analysis with
             {
                 RedirectIndex = fact.RedirectIndex,
@@ -1216,9 +1330,11 @@ internal static class ShellSyntaxProjection
                 (RedirectSource.Default, HereDocumentRedirectAnalysis) => true,
                 (RedirectSource.Default, HereStringRedirectAnalysis) => true,
                 (RedirectSource.Descriptor, FileRedirectAnalysis
-                    { Mode: FileRedirectMode.Input or
+                {
+                    Mode: FileRedirectMode.Input or
                             FileRedirectMode.Output or
-                            FileRedirectMode.Append }) => true,
+                            FileRedirectMode.Append
+                }) => true,
                 (RedirectSource.Descriptor, DescriptorDuplicateRedirectAnalysis) => true,
                 (RedirectSource.Descriptor, DescriptorMoveRedirectAnalysis) => true,
                 (RedirectSource.Descriptor, DescriptorCloseRedirectAnalysis) => true,
@@ -1248,6 +1364,26 @@ internal static class ShellSyntaxProjection
                     ToPublicDomains(domain.Parts)),
                 _ => new ShellValueDomain.Unknown(),
             };
+
+        private static ShellWorkingDirectoryEffect ToPublicEffect(
+            ShellWorkingDirectoryEffectFacts? effect,
+            ShellProjectionLanguage language)
+        {
+            if (effect is null || !IsValidWorkingDirectoryEffect(effect, language))
+            {
+                return new ShellWorkingDirectoryEffect.Unknown();
+            }
+
+            return effect.Kind switch
+            {
+                ShellWorkingDirectoryEffectKind.Unchanged =>
+                    new ShellWorkingDirectoryEffect.Unchanged(),
+                ShellWorkingDirectoryEffectKind.ChangesOnSuccess =>
+                    new ShellWorkingDirectoryEffect.ChangesOnSuccess(
+                        ToPublicDomain(effect.Target)),
+                _ => new ShellWorkingDirectoryEffect.Unknown(),
+            };
+        }
 
         private static IReadOnlyList<ShellValueDomain> ToPublicDomains(
             IReadOnlyList<ShellValueDomainFacts> domains)
@@ -1458,6 +1594,132 @@ internal static class ShellSyntaxProjection
                     AreValidConcatenationParts(domain.Parts),
                 _ => false,
             };
+        }
+
+        private static bool IsValidWorkingDirectoryEffect(
+            ShellWorkingDirectoryEffectFacts? effect,
+            ShellProjectionLanguage language)
+        {
+            if (effect is null ||
+                effect.Target is null ||
+                !IsValidValueDomain(effect.Target))
+            {
+                return false;
+            }
+
+            return effect.Kind switch
+            {
+                ShellWorkingDirectoryEffectKind.Unknown =>
+                    effect.Target.Kind == ShellValueDomainKind.Unknown,
+                ShellWorkingDirectoryEffectKind.Unchanged =>
+                    effect.Target.Kind == ShellValueDomainKind.Unknown,
+                ShellWorkingDirectoryEffectKind.ChangesOnSuccess =>
+                    effect.Target.Kind == ShellValueDomainKind.Unknown ||
+                    (effect.Target.Kind is ShellValueDomainKind.Exact or
+                        ShellValueDomainKind.FiniteSet &&
+                     HasValidWorkingDirectoryTargets(effect.Target, language)),
+                _ => false,
+            };
+        }
+
+        private static bool HasValidWorkingDirectoryTargets(
+            ShellValueDomainFacts target,
+            ShellProjectionLanguage language)
+        {
+            if (language == ShellProjectionLanguage.Unknown)
+            {
+                return false;
+            }
+
+            WorkingDirectoryPathStyle? expectedStyle = null;
+            foreach (var value in target.Values)
+            {
+                if (!TryGetNormalizedAbsolutePathStyle(value, out var style) ||
+                    language == ShellProjectionLanguage.Bash &&
+                    style != WorkingDirectoryPathStyle.Posix ||
+                    expectedStyle.HasValue && expectedStyle.Value != style)
+                {
+                    return false;
+                }
+
+                expectedStyle = style;
+            }
+
+            return expectedStyle.HasValue;
+        }
+
+        private static bool TryGetNormalizedAbsolutePathStyle(
+            string value,
+            out WorkingDirectoryPathStyle style)
+        {
+            style = default;
+            if (string.IsNullOrEmpty(value) ||
+                value.IndexOf('\\') >= 0 ||
+                value.IndexOf('\0') >= 0)
+            {
+                return false;
+            }
+
+            var segmentStart = 0;
+            if (value.StartsWith("//", StringComparison.Ordinal))
+            {
+                style = WorkingDirectoryPathStyle.Windows;
+                segmentStart = 2;
+            }
+            else if (value[0] == '/')
+            {
+                style = WorkingDirectoryPathStyle.Posix;
+                segmentStart = 1;
+            }
+            else if (value.Length >= 3 &&
+                     value[0] is >= 'A' and <= 'Z' &&
+                     value[1] == ':' &&
+                     value[2] == '/')
+            {
+                style = WorkingDirectoryPathStyle.Windows;
+                segmentStart = 3;
+            }
+            else
+            {
+                return false;
+            }
+
+            for (var index = segmentStart; index < value.Length; index++)
+            {
+                if (char.IsControl(value[index]))
+                {
+                    return false;
+                }
+
+                if (value[index] != '/')
+                {
+                    continue;
+                }
+
+                if (index == segmentStart ||
+                    index + 1 == value.Length ||
+                    value[index + 1] == '/')
+                {
+                    return false;
+                }
+            }
+
+            var segments = value.Substring(segmentStart).Split('/');
+            foreach (var segment in segments)
+            {
+                if (segment is "." or "..")
+                {
+                    return false;
+                }
+            }
+
+            return segmentStart == value.Length || segments.Length > 0;
+        }
+
+        private enum WorkingDirectoryPathStyle
+        {
+            Posix,
+            Windows,
         }
 
         private static bool AreValidConcatenationParts(

@@ -672,7 +672,10 @@ public class PwshForEachStructuralTests
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         var command = result.Commands.Last();
         Assert.False(command.IsComplete);
-        Assert.Equal(ShellValueDomainKind.Unknown, command.WorkingDirectory.Kind);
+        AssertDomain(
+            command.WorkingDirectory,
+            ShellValueDomainKind.Exact,
+            "C:/target");
         Assert.Equal(
             ShellValueDomainKind.Unknown,
             Assert.Single(command.EffectiveArguments).Value.Kind);

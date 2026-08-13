@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using Xunit;
 using Xunit.Sdk;
 
 namespace ShellSyntaxTree.Tests.Corpus;
@@ -480,6 +481,14 @@ internal static class AstAssert
                     prefix + $"commands[{index}].workingDirectory");
             }
 
+            if (wanted.WorkingDirectoryEffect is not null)
+            {
+                AssertWorkingDirectoryEffectEqual(
+                    wanted.WorkingDirectoryEffect,
+                    observed.WorkingDirectoryEffect,
+                    prefix + $"commands[{index}].workingDirectoryEffect");
+            }
+
             if (wanted.Redirects is not null)
             {
                 AssertRedirectAnalysesEqual(
@@ -487,6 +496,32 @@ internal static class AstAssert
                     observed.Redirects,
                     prefix + $"commands[{index}].redirects");
             }
+        }
+    }
+
+    private static void AssertWorkingDirectoryEffectEqual(
+        ExpectedWorkingDirectoryEffect expected,
+        ShellWorkingDirectoryEffect actual,
+        string path)
+    {
+        switch (expected.Kind)
+        {
+            case ExpectedWorkingDirectoryEffectKind.Unknown:
+                Assert.IsType<ShellWorkingDirectoryEffect.Unknown>(actual);
+                Assert.Null(expected.Target);
+                break;
+            case ExpectedWorkingDirectoryEffectKind.Unchanged:
+                Assert.IsType<ShellWorkingDirectoryEffect.Unchanged>(actual);
+                Assert.Null(expected.Target);
+                break;
+            case ExpectedWorkingDirectoryEffectKind.ChangesOnSuccess:
+                var changed = Assert.IsType<
+                    ShellWorkingDirectoryEffect.ChangesOnSuccess>(actual);
+                Assert.NotNull(expected.Target);
+                AssertValueDomainEqual(expected.Target!, changed.Target, path + ".target");
+                break;
+            default:
+                throw new XunitException($"{path}.kind is unsupported: {expected.Kind}");
         }
     }
 

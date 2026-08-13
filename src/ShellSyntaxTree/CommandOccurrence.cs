@@ -68,6 +68,13 @@ public sealed record CommandOccurrence
     public ShellValueDomain WorkingDirectory { get; internal init; } =
         new ShellValueDomain.Unknown();
 
+    /// <summary>
+    /// Gets the authored command's relational effect on its shell-scope
+    /// working directory. This parser fact does not grant authority.
+    /// </summary>
+    public ShellWorkingDirectoryEffect WorkingDirectoryEffect { get; internal init; } =
+        new ShellWorkingDirectoryEffect.Unknown();
+
     /// <summary>Gets explicit redirect analysis in compatibility redirect order.</summary>
     public IReadOnlyList<RedirectAnalysis> Redirects
     {
@@ -89,6 +96,53 @@ public sealed record CommandOccurrence
         }
 
         return -1;
+    }
+}
+
+/// <summary>
+/// Describes an authored command's modeled effect on its shell-scope working
+/// directory.
+/// </summary>
+public abstract record ShellWorkingDirectoryEffect
+{
+    private protected ShellWorkingDirectoryEffect()
+    {
+    }
+
+    private protected abstract object LibraryOwnership { get; }
+
+    /// <summary>No complete working-directory relation is proved.</summary>
+    public sealed record Unknown : ShellWorkingDirectoryEffect
+    {
+        internal Unknown()
+        {
+        }
+
+        private protected override object LibraryOwnership => this;
+    }
+
+    /// <summary>Every modeled normal exit preserves the incoming directory.</summary>
+    public sealed record Unchanged : ShellWorkingDirectoryEffect
+    {
+        internal Unchanged()
+        {
+        }
+
+        private protected override object LibraryOwnership => this;
+    }
+
+    /// <summary>
+    /// Every modeled failure preserves the incoming directory and every
+    /// modeled success takes <see cref="Target"/>.
+    /// </summary>
+    public sealed record ChangesOnSuccess : ShellWorkingDirectoryEffect
+    {
+        internal ChangesOnSuccess(ShellValueDomain target) => Target = target;
+
+        private protected override object LibraryOwnership => this;
+
+        /// <summary>Gets the modeled directory after successful completion.</summary>
+        public ShellValueDomain Target { get; }
     }
 }
 

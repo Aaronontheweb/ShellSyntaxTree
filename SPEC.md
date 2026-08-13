@@ -591,8 +591,23 @@ public sealed record CommandOccurrence
     public IReadOnlyList<CommandAncestryFrame> Ancestry { get; internal init; } = [];
     public IReadOnlyList<AnalyzedArgument> Arguments { get; internal init; } = [];
     public ShellValueDomain WorkingDirectory { get; internal init; } = null!;
+    public ShellWorkingDirectoryEffect WorkingDirectoryEffect
+        { get; internal init; } = new ShellWorkingDirectoryEffect.Unknown();
     public IReadOnlyList<RedirectAnalysis> Redirects { get; internal init; } = [];
     public bool IsComplete { get; internal init; }
+}
+
+public abstract record ShellWorkingDirectoryEffect
+{
+    private protected ShellWorkingDirectoryEffect() { }
+    private protected abstract object LibraryOwnership { get; }
+
+    public sealed record Unknown : ShellWorkingDirectoryEffect { ... }
+    public sealed record Unchanged : ShellWorkingDirectoryEffect { ... }
+    public sealed record ChangesOnSuccess : ShellWorkingDirectoryEffect
+    {
+        public ShellValueDomain Target { get; }
+    }
 }
 
 public enum CommandOccurrenceRole
@@ -688,6 +703,54 @@ later identities or values remain incomplete.
 not one per predicted runtime iteration. `Ancestry` is ordered outermost to
 innermost, excludes the simple-command leaf, and retains every enclosing
 execution relation. `ImmediateRole` describes the nearest relation.
+
+`WorkingDirectory` is the occurrence's incoming shell-scope directory.
+`WorkingDirectoryEffect` is a separate relational outcome fact:
+
+- `Unchanged` proves that every modeled normal success and failure exit keeps
+  the incoming directory;
+- `ChangesOnSuccess(Target)` proves that failure keeps the incoming directory
+  and success takes `Target`; and
+- `Unknown` means neither relation is completely proved.
+
+The relation is recorded during abstract-state transfer. Equal incoming and
+outgoing domains do not create `Unchanged`, especially when both are unknown.
+The effect is local to the execution scope expressed by `Ancestry`; a mutation
+inside a Bash subshell or decoded child remains precise inside that scope but
+does not claim to change the parent.
+
+`ChangesOnSuccess.Target` is `Unknown`, `Exact`, or `FiniteSet`. Exact and
+finite targets are normalized absolute local directories under the selected
+shell path style. Unknown proves a success-only mutation without a bounded
+destination. Any other domain, malformed set, over-limit join, or missing fact
+makes the whole public effect `Unknown`. A target does not prove existence,
+accessibility, authorization, or runtime success.
+
+Effects join per authored occurrence. Two `Unchanged` visits remain
+`Unchanged`; two success-only changes join their bounded targets. Unknown,
+mixed unchanged/change visits, missing visits, or lost correlation join to
+`Unknown`. Unvisited bodies and default structural facts are `Unknown`, not
+`Unchanged`.
+
+For Bash, complete ordinary commands with no parser-known current-scope cwd
+mutation are `Unchanged`. A modeled `cd`, `command cd`, or `builtin cd` is
+`ChangesOnSuccess`; a statically invalid shape that can only fail without a
+transfer is `Unchanged`. `pushd` and `popd` are `Unknown` until a directory
+stack is modeled. Execution-bearing builtins such as `source`, `.`, and `eval`
+retain atomic parse failure and publish no occurrence.
+
+Bash has no `chdir` builtin. The v0.3 occurrence flow treats `chdir` as an
+ordinary external command and does not change the cwd. The v0.2 compatibility
+`Clauses` leaf retains its locked historical `chdir` attribution only for
+compatibility; v0.3 security consumers use `Commands`.
+
+The effect describes authored shell syntax under the selected grammar, parse
+options, and modeled source state. Ambient aliases, functions, modules,
+profiles, `PATH`, executable behavior, and inherited external state remain
+outside this fact, matching the `IsComplete` boundary. Consumers fail closed
+on unknown or future alternatives and combine the fact with ancestry,
+redirects, substitutions, path policy, all intervening occurrences, and every
+reachable fallback scope. They do not recreate a shell builtin list.
 
 `SimpleCommandSyntax.Substitutions` owns each completely delimited executable
 command substitution evaluated for that command's authored words and redirects,
@@ -900,7 +963,9 @@ final body's exit status; a zero-or-more loop joins its zero path with every
 reachable normal exit. Bounded fixed-point analysis widens differing cwd or
 variable values to `Unknown` rather than selecting one path.
 
-`cd` and `chdir` use the effective argument vector for the current visit.
+`cd` uses the effective argument vector for the current visit. Bash `chdir`
+remains a v0.2 compatibility alias only; v0.3 flow treats it as an ordinary
+external command.
 `pushd` and `popd` may be recognized only with unknown success cwd until the
 directory stack is modeled. Unmodeled execution-bearing or
 attribute-mutating builtins fail the complete parse closed globally, not only
@@ -966,7 +1031,9 @@ no partial command or compatibility projection.
 
 `Set-Location` is modeled from the complete effective argument vector. Its
 success exit takes the proved filesystem target cwd and its failure exit retains
-the incoming cwd. A successful non-filesystem or unproved target also
+the incoming cwd. One selected-dialect parameter-binding pass produces both
+that flow and `WorkingDirectoryEffect`; aliases, common parameters, and
+unambiguous prefixes cannot diverge between them. A successful non-filesystem or unproved target also
 invalidates binding and command-resolution proofs because relative provider
 operations may mutate that state. `&&` consumes only success, `||` only failure, and statement
 sequence consumes their join. The analyzer publishes no finite cwd set, so any

@@ -1,0 +1,128 @@
+{
+  "name": "v0.3 working-directory effect causal chain",
+  "input": "cd /tmp && inspect; head result.log",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/tmp", "kind": "Literal", "isPath": true }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["inspect"],
+        "args": [
+          {
+            "raw": "/tmp",
+            "kind": "Literal",
+            "isPath": true,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["head"],
+        "args": [
+          { "raw": "result.log", "kind": "Literal", "isPath": true },
+          {
+            "raw": "<dynamic-cwd>",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 35
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 35
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": ["/work"]
+        },
+        "workingDirectoryEffect": {
+          "kind": "ChangesOnSuccess",
+          "target": {
+            "kind": "Exact",
+            "values": ["/tmp"]
+          }
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 35
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 35
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": ["/tmp"]
+        },
+        "workingDirectoryEffect": { "kind": "Unchanged" }
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 35
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 2,
+            "sourceStart": 0,
+            "sourceLength": 35
+          }
+        ],
+        "workingDirectory": { "kind": "Unknown" },
+        "workingDirectoryEffect": { "kind": "Unchanged" }
+      }
+    ]
+  },
+  "notes": "Sanitized causal example. Effects describe each authored command; they do not resolve the later failure-path cwd."
+}

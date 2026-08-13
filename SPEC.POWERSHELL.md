@@ -1395,6 +1395,30 @@ v0.3 occurrence analysis is the failure-aware security fact and sanitizes stale
 exact compatibility attribution. This differs from Bash command substitution,
 whose state is isolated from the containing shell.
 
+Each v0.3 command occurrence also publishes the shared
+`ShellWorkingDirectoryEffect` from `SPEC.md`. A complete command with no
+parser-known current-runspace location mutation is `Unchanged`.
+`Set-Location` and selected-dialect aliases `cd`, `chdir`, and `sl` are
+`ChangesOnSuccess` when a success exit is reachable. Their exact or finite
+filesystem target is normalized with the PowerShell resolver; an unproved or
+non-filesystem provider target uses `ChangesOnSuccess(Unknown)`. A statically
+invalid parameter or operand shape whose only exit is unchanged failure is
+`Unchanged`. Flow and effect share one selected-dialect parameter binding;
+common parameters, aliases such as `PSPath`, and their unambiguous prefixes do
+not use a second effect-only scan.
+
+`Push-Location`, `Pop-Location`, scripts, provider ambiguity, invalidated
+identity, and unmodeled current-runspace effects are `Unknown`. A fully decoded
+current-runspace region keeps precise effects on its nested occurrences, but
+its host is `Unknown` if a nested location mutation can persist even when the
+host fails. A proved receiver whose reachable nested occurrences are all
+`Unchanged` may itself remain `Unchanged`.
+
+PowerShell pipeline location transfer retains the locked atomic-failure
+boundary until pipeline state is modeled. Parenthesized groups and `$()` are
+current-runspace scopes, not Bash subshells. Decoded child hosts isolate their
+exit state. Bash never imports PowerShell aliases or location semantics.
+
 `OpaqueRegionScanner` is grammar-agnostic but escapes on backslash; the
 PowerShell script-block, array, and hash paths give it a backtick-escape mode
 so `` { `} } `` scans correctly. The specialized `$()` scanner applies the

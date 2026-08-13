@@ -108,6 +108,8 @@ public class V03PublicApiSnapshotTests
                 typeof(IReadOnlyList<CommandAncestryFrame>)),
             (nameof(CommandOccurrence.Arguments), typeof(IReadOnlyList<AnalyzedArgument>)),
             (nameof(CommandOccurrence.WorkingDirectory), typeof(ShellValueDomain)),
+            (nameof(CommandOccurrence.WorkingDirectoryEffect),
+                typeof(ShellWorkingDirectoryEffect)),
             (nameof(CommandOccurrence.Redirects), typeof(IReadOnlyList<RedirectAnalysis>)),
             (nameof(CommandOccurrence.IsComplete), typeof(bool)));
         AssertResultRecord(
@@ -158,6 +160,18 @@ public class V03PublicApiSnapshotTests
             typeof(ShellValueDomain.Concatenation),
             (nameof(ShellValueDomain.Concatenation.Parts),
                 typeof(IReadOnlyList<ShellValueDomain>), false));
+    }
+
+    [Fact]
+    public void Working_directory_effect_is_a_closed_runtime_discriminated_family()
+    {
+        AssertClosedBase(typeof(ShellWorkingDirectoryEffect));
+        AssertResultRecord(typeof(ShellWorkingDirectoryEffect.Unknown));
+        AssertResultRecord(typeof(ShellWorkingDirectoryEffect.Unchanged));
+        AssertResultRecordAccessors(
+            typeof(ShellWorkingDirectoryEffect.ChangesOnSuccess),
+            (nameof(ShellWorkingDirectoryEffect.ChangesOnSuccess.Target),
+                typeof(ShellValueDomain), false));
     }
 
     [Fact]
@@ -370,6 +384,40 @@ public class V03PublicApiSnapshotTests
         Assert.Contains(
             "\"AuthoredFileSystemValue\"",
             JsonSerializer.Serialize(positive),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Working_directory_effect_is_non_null_and_part_of_record_shape()
+    {
+        var unknown = new CommandOccurrence();
+        var unchanged = unknown with
+        {
+            WorkingDirectoryEffect = new ShellWorkingDirectoryEffect.Unchanged(),
+        };
+        var changed = unknown with
+        {
+            WorkingDirectoryEffect = new ShellWorkingDirectoryEffect.ChangesOnSuccess(
+                new ShellValueDomain.Exact("/work")),
+        };
+        var equivalent = unknown with
+        {
+            WorkingDirectoryEffect = new ShellWorkingDirectoryEffect.ChangesOnSuccess(
+                new ShellValueDomain.Exact("/work")),
+        };
+
+        Assert.IsType<ShellWorkingDirectoryEffect.Unknown>(
+            unknown.WorkingDirectoryEffect);
+        Assert.NotEqual(unknown, unchanged);
+        Assert.Equal(changed, equivalent);
+        Assert.Equal(changed.GetHashCode(), equivalent.GetHashCode());
+        Assert.Contains(
+            "WorkingDirectoryEffect = ChangesOnSuccess",
+            changed.ToString(),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"WorkingDirectoryEffect\"",
+            JsonSerializer.Serialize(changed),
             StringComparison.Ordinal);
     }
 

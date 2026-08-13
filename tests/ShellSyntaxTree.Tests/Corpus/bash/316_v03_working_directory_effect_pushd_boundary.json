@@ -1,0 +1,118 @@
+{
+  "name": "v0.3 working-directory effect stack boundary",
+  "input": "cd /tmp && pushd /other; head file",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "/tmp", "kind": "Literal", "isPath": true }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "AndIf",
+        "verb": ["pushd"],
+        "args": [
+          { "raw": "/other", "kind": "Literal", "isPath": true },
+          {
+            "raw": "/tmp",
+            "kind": "Literal",
+            "isPath": true,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": ["head"],
+        "args": [
+          { "raw": "file", "kind": "Literal", "isPath": true },
+          {
+            "raw": "<dynamic-cwd>",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 34
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 34
+          }
+        ],
+        "workingDirectoryEffect": {
+          "kind": "ChangesOnSuccess",
+          "target": { "kind": "Exact", "values": ["/tmp"] }
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 34
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 34
+          }
+        ],
+        "workingDirectoryEffect": { "kind": "Unknown" }
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 34
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 2,
+            "sourceStart": 0,
+            "sourceLength": 34
+          }
+        ],
+        "workingDirectory": { "kind": "Unknown" },
+        "workingDirectoryEffect": { "kind": "Unchanged" }
+      }
+    ]
+  },
+  "notes": "Sanitized counterexample. The directory-stack mutation prevents a consumer from carrying the earlier cd target to head."
+}
