@@ -92,11 +92,11 @@
 - [x] 7.1 Run `openspec validate v0-3-3-authored-operand-role --strict` and
   synchronize the accepted contract into `SPEC.md` before implementation is
   declared complete.
-- [ ] 7.2 Run the Release build, full unit and corpus suite, header check,
+- [x] 7.2 Run the Release build, full unit and corpus suite, header check,
   Slopwatch, package build, public API diff, and PII audit sequentially.
 - [ ] 7.3 Obtain adversarial reviews of the API contract, audited binders,
   transform proof, Bash and PowerShell behavior, consumer guidance, and final
   frozen diff.
-- [ ] 7.4 Update `IMPLEMENTATION_PLAN.md` and release notes with exact evidence.
+- [x] 7.4 Update `IMPLEMENTATION_PLAN.md` and release notes with exact evidence.
 - [ ] 7.5 Merge only after Linux and native Windows CI pass; tag and publish
   0.3.3 through the release workflow.

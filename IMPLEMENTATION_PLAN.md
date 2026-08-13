@@ -72,7 +72,13 @@ priorities.
       Bash and PowerShell binders, exact transform and resolver boundaries,
       corpus and consumer-guide examples, public 0.3.2 API comparison, native
       Windows coverage, downstream Netclaw D14 acceptance, and tag-driven
-      package publication.
+      package publication. The frozen local implementation passes a zero-warning
+      Release build, all 2,995 unit and corpus tests, the corpus PII audit,
+      header verification, strict OpenSpec validation, Slopwatch, and a 0.3.3
+      package build. Both target-framework API comparisons report exactly the
+      one approved additive property. Adversarial review, native Windows CI,
+      public package publication, and downstream Netclaw acceptance remain
+      required before this item is complete.
 - [x] **Keep OpenSSL subject data out of path classification.** Treat the
       slash-prefixed `-subj` Distinguished Name as non-path data without
       assigning verb-wide arity or path roles to subcommand-specific options.
