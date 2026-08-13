@@ -352,7 +352,7 @@ internal static class CorpusJson
                 var arguments = new JsonArray();
                 foreach (var analyzed in command.Arguments)
                 {
-                    arguments.Add(new JsonObject
+                    var argument = new JsonObject
                     {
                         ["clauseArgumentIndex"] = FindClauseArgumentIndex(
                             command.Clause,
@@ -361,7 +361,14 @@ internal static class CorpusJson
                             command.Clause,
                             analyzed.Element),
                         ["value"] = BuildValueDomain(analyzed.Value),
-                    });
+                    };
+                    if (analyzed.AuthoredFileSystemValue is not ShellValueDomain.Unknown)
+                    {
+                        argument["authoredFileSystemValue"] =
+                            BuildValueDomain(analyzed.AuthoredFileSystemValue);
+                    }
+
+                    arguments.Add(argument);
                 }
 
                 commandJson["arguments"] = arguments;

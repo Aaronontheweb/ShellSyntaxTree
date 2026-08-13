@@ -962,6 +962,10 @@ public class ShellSyntaxProjectionTests
                     },
                 },
             },
+            () => new CommandOccurrenceFacts
+            {
+                ValueProvenance = null!,
+            },
         };
 
         foreach (var createFacts in invalidFacts)
@@ -974,6 +978,32 @@ public class ShellSyntaxProjectionTests
             Assert.Empty(result.Commands);
             Assert.Empty(result.Clauses);
         }
+    }
+
+    [Fact]
+    public void Unknown_projection_language_keeps_strong_filesystem_facts_disabled()
+    {
+        var clause = ClauseFor("cat") with
+        {
+            Args = new[] { new Arg { Raw = "README", Kind = ArgKind.Literal } },
+            Elements = new[]
+            {
+                new ClauseElement { Role = ClauseElementRole.Verb },
+                new ClauseElement { Role = ClauseElementRole.Argument },
+            },
+        };
+        var root = Block(0, Leaf(clause, 0));
+
+        Assert.True(ShellSyntaxProjection.TryProject(root, out var result));
+        Assert.IsType<ShellValueDomain.Unknown>(
+            Assert.Single(Assert.Single(result.Commands).Arguments)
+                .AuthoredFileSystemValue);
+        Assert.False(ShellSyntaxProjection.TryProject(
+            root,
+            _ => new CommandOccurrenceFacts(),
+            (ShellProjectionLanguage)int.MaxValue,
+            out var invalid));
+        Assert.Empty(invalid.Commands);
     }
 
     [Fact]

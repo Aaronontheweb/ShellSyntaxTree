@@ -163,6 +163,13 @@ public sealed record AnalyzedArgument
     /// </summary>
     public ShellValueDomain AuthoredValue { get; internal init; } = null!;
 
+    /// <summary>
+    /// Gets bounded, normalized local-filesystem values proved from this
+    /// authored argument. This parser fact does not grant authority.
+    /// </summary>
+    public ShellValueDomain AuthoredFileSystemValue { get; internal init; } =
+        new ShellValueDomain.Unknown();
+
     /// <summary>Gets the authored word's uniform lexical path shape.</summary>
     public ShellPathShape AuthoredPathShape { get; internal init; }
 

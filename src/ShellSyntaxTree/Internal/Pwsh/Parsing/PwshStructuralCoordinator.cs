@@ -59,6 +59,7 @@ internal static partial class PwshCommandParser
             !ShellSyntaxProjection.TryProject(
                 analyzedSyntax,
                 analyzedFacts,
+                ShellProjectionLanguage.PowerShell,
                 out var projection))
         {
             return StructuralFailure(

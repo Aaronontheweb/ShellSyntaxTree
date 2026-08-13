@@ -55,7 +55,12 @@ priorities.
       public 0.3.2 from a fresh cache; its Release build and full runnable test
       suite passed. Exact D02/D10/D14 fixture binding remains tracked by the
       separate post-publication downstream gate above.
-- [ ] **Approve the v0.3.3 authored-filesystem-value contract.** Review
+- [x] **Approve the v0.3.3 authored-filesystem-value contract.**
+      [PR #163](https://github.com/Aaronontheweb/ShellSyntaxTree/pull/163)
+      merged as `767e15b7` after strict OpenSpec, full unit and corpus, header,
+      Linux CI, Windows CI, and adversarial review passed. The accepted design
+      keeps the public surface to one additive property and requires a separate
+      audited binder plus transform and resolver proof. The contract lives at
       `openspec/changes/v0-3-3-authored-operand-role/` as the bounded D14 fix.
       The public projection must require a separate audited local-path binder,
       transform-safe authored candidates, exact local resolution, and strict

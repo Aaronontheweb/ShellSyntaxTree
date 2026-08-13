@@ -1,6 +1,6 @@
 {
-  "name": "V03 design cmdlet literalpath provider",
-  "input": "Get-Content -LiteralPath \u0022FileSystem::C:\\logs\\x.txt\u0022",
+  "name": "V03 authored filesystem literalpath",
+  "input": "Get-Content -LiteralPath C:\\work\\a.txt",
   "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
   "expected": {
     "isUnparseable": false,
@@ -17,10 +17,10 @@
             "isPath": false
           },
           {
-            "raw": "\u0022FileSystem::C:\\logs\\x.txt\u0022",
+            "raw": "C:\\work\\a.txt",
             "kind": "Literal",
             "isPath": true,
-            "resolved": "C:/logs/x.txt"
+            "resolved": "C:/work/a.txt"
           }
         ],
         "redirects": [],
@@ -48,16 +48,16 @@
             "isPath": false
           },
           {
-            "raw": "\u0022FileSystem::C:\\logs\\x.txt\u0022",
-            "value": "FileSystem::C:\\logs\\x.txt",
+            "raw": "C:\\work\\a.txt",
+            "value": "C:\\work\\a.txt",
             "role": "Argument",
             "sourceStart": 25,
-            "sourceLength": 27,
+            "sourceLength": 13,
             "precedingVerbElementCount": 1,
             "kind": "Literal",
             "isFlag": false,
             "isPath": true,
-            "resolved": "C:/logs/x.txt"
+            "resolved": "C:/work/a.txt"
           }
         ]
       }
@@ -69,7 +69,7 @@
         "region": "Unknown",
         "childIndex": null,
         "sourceStart": 0,
-        "sourceLength": 52,
+        "sourceLength": 38,
         "clauseIndex": null,
         "groupKind": null,
         "listOperator": null
@@ -80,7 +80,7 @@
         "region": "Root",
         "childIndex": 0,
         "sourceStart": 0,
-        "sourceLength": 52,
+        "sourceLength": 38,
         "clauseIndex": 0,
         "groupKind": null,
         "listOperator": null
@@ -97,7 +97,7 @@
             "region": "Root",
             "childIndex": 0,
             "sourceStart": 0,
-            "sourceLength": 52
+            "sourceLength": 38
           }
         ],
         "arguments": [
@@ -119,7 +119,7 @@
             "value": {
               "kind": "Exact",
               "values": [
-                "FileSystem::C:\\logs\\x.txt"
+                "C:\\work\\a.txt"
               ],
               "pattern": null,
               "coveringDirectory": null
@@ -127,7 +127,7 @@
             "authoredFileSystemValue": {
               "kind": "Exact",
               "values": [
-                "C:/logs/x.txt"
+                "C:/work/a.txt"
               ],
               "pattern": null,
               "coveringDirectory": null
@@ -145,5 +145,5 @@
       }
     ]
   },
-  "notes": "Promotes stable design case pwsh-cmdlet-literalpath-provider."
+  "notes": "Pins the v0.3.3 audited authored-filesystem value for an exact cmdlet LiteralPath binding."
 }

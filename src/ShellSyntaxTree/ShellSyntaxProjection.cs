@@ -425,6 +425,13 @@ internal sealed class ShellProjectionResult
     internal IReadOnlyList<Clause> Clauses { get; init; } = Array.Empty<Clause>();
 }
 
+internal enum ShellProjectionLanguage
+{
+    Unknown,
+    Bash,
+    PowerShell,
+}
+
 /// <summary>
 /// Owns executable-command discovery so security consumers never need to
 /// recursively match syntax-node types.
@@ -440,20 +447,29 @@ internal static class ShellSyntaxProjection
         ShellBlockSyntax syntax,
         Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory,
         out ShellProjectionResult result)
+        => TryProject(syntax, factsFactory, ShellProjectionLanguage.Unknown, out result);
+
+    internal static bool TryProject(
+        ShellBlockSyntax syntax,
+        Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory,
+        ShellProjectionLanguage language,
+        out ShellProjectionResult result)
     {
-        if (syntax is null || factsFactory is null)
+        if (syntax is null || factsFactory is null ||
+            !Enum.IsDefined(typeof(ShellProjectionLanguage), language))
         {
             result = ShellProjectionResult.Empty;
             return false;
         }
 
-        var walker = new ProjectionWalker(factsFactory);
+        var walker = new ProjectionWalker(factsFactory, language);
         return walker.TryProject(syntax, out result);
     }
 
     private sealed class ProjectionWalker
     {
         private readonly Func<SimpleCommandSyntax, CommandOccurrenceFacts> _factsFactory;
+        private readonly ShellProjectionLanguage _language;
         private readonly List<CommandAncestryFrame> _ancestry = new();
         private readonly List<CommandOccurrence> _commands = new();
         private readonly List<Clause> _clauses = new();
@@ -464,9 +480,11 @@ internal static class ShellSyntaxProjection
             new(ClauseReferenceComparer.Instance);
 
         internal ProjectionWalker(
-            Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory)
+            Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory,
+            ShellProjectionLanguage language)
         {
             _factsFactory = factsFactory;
+            _language = language;
         }
 
         internal bool TryProject(
@@ -616,6 +634,7 @@ internal static class ShellSyntaxProjection
             if (!TryCopyFacts(
                     simple.Clause,
                     facts,
+                    _language,
                     out var arguments,
                     out var workingDirectory,
                     out var redirects))
@@ -885,6 +904,7 @@ internal static class ShellSyntaxProjection
         private static bool TryCopyFacts(
             Clause clause,
             CommandOccurrenceFacts facts,
+            ShellProjectionLanguage language,
             out IReadOnlyList<AnalyzedArgument> arguments,
             out ShellValueDomain workingDirectory,
             out IReadOnlyList<RedirectAnalysis> redirects)
@@ -897,6 +917,7 @@ internal static class ShellSyntaxProjection
                 facts.AuthoredArguments is null ||
                 facts.WorkingDirectory is null ||
                 facts.Redirects is null ||
+                facts.ValueProvenance is null ||
                 ContainsNull(facts.EffectiveArguments) ||
                 ContainsNull(facts.AuthoredArguments) ||
                 ContainsNull(facts.Redirects) ||
@@ -918,6 +939,9 @@ internal static class ShellSyntaxProjection
                     facts.EffectiveArguments,
                     facts.AuthoredArguments,
                     facts.PublishAuthoredPathShape,
+                    facts.ValueProvenance,
+                    facts.WorkingDirectory,
+                    language,
                     out arguments) &&
                 TryCreateRedirectAnalyses(clause, facts.Redirects, out redirects);
         }
@@ -939,6 +963,9 @@ internal static class ShellSyntaxProjection
             IReadOnlyList<EffectiveArgumentFacts> effective,
             IReadOnlyList<EffectiveArgumentFacts> authored,
             bool publishAuthoredPathShape,
+            IReadOnlyList<ShellValueElementProvenance> provenance,
+            ShellValueDomainFacts workingDirectory,
+            ShellProjectionLanguage language,
             out IReadOnlyList<AnalyzedArgument> arguments)
         {
             arguments = Array.Empty<AnalyzedArgument>();
@@ -1026,6 +1053,7 @@ internal static class ShellSyntaxProjection
                         Element = element,
                         Value = value,
                         AuthoredValue = authoredValue,
+                        AuthoredFileSystemValue = new ShellValueDomain.Unknown(),
                         AuthoredPathShape = publishAuthoredPathShape
                             ? ShellPathShapeClassifier.Classify(authoredValue)
                             : ShellPathShape.Unknown,
@@ -1041,7 +1069,12 @@ internal static class ShellSyntaxProjection
                 return false;
             }
 
-            arguments = projected;
+            arguments = AuthoredFileSystemValueProjection.Apply(
+                language,
+                clause,
+                provenance,
+                workingDirectory,
+                projected);
             return true;
         }
 

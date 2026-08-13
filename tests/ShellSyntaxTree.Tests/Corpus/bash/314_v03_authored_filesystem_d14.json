@@ -1,0 +1,87 @@
+{
+  "name": "v0.3.3 bounded authored filesystem loop",
+  "input": "for f in src/A.cs src/B.cs; do cat /work/$f; done",
+  "bashInitialStateMode": "Unknown",
+  "publishAuthoredSourceFacts": true,
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cat"
+        ],
+        "args": [
+          {
+            "raw": "/work/$f",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 49
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 49
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 30,
+            "sourceLength": 15
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "authoredFileSystemValue": {
+              "kind": "FiniteSet",
+              "values": [
+                "/work/src/A.cs",
+                "/work/src/B.cs"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        }
+      }
+    ]
+  },
+  "notes": "Sanitized D14 evidence: a transform-safe cat loop publishes bounded local paths without changing effective runtime facts."
+}
