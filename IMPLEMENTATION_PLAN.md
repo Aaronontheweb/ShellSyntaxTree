@@ -73,7 +73,7 @@ priorities.
       corpus and consumer-guide examples, public 0.3.2 API comparison, native
       Windows coverage, downstream Netclaw D14 acceptance, and tag-driven
       package publication. The frozen local implementation passes a zero-warning
-      Release build, all 2,995 unit and corpus tests, the corpus PII audit,
+      Release build, all 2,996 unit and corpus tests, the corpus PII audit,
       header verification, strict OpenSpec validation, Slopwatch, and a 0.3.3
       package build. Both target-framework API comparisons report exactly the
       one approved additive property. Adversarial review, native Windows CI,

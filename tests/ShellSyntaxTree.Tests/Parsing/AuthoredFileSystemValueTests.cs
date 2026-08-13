@@ -5,12 +5,48 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Linq;
+using ShellSyntaxTree.Internal.Resolving;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests.Parsing;
 
 public class AuthoredFileSystemValueTests
 {
+    [Fact]
+    public void Audited_commands_opt_into_reusable_binding_categories_through_data()
+    {
+        var operandArguments = Assert.Single(
+            Bash().Parse("example-command README.md").Commands).Arguments;
+        var operandEntry = new AuthoredFileSystemBindingCatalogEntry(
+            ShellProjectionLanguage.Bash,
+            "example-command",
+            StringComparison.Ordinal,
+            AuditedFileSystemBindingCategory.AllNonOptionOperands);
+
+        Assert.Equal(
+            new[] { AuditedFileSystemBindingCategory.AllNonOptionOperands },
+            AuthoredFileSystemBindingCatalog.Bind(operandEntry, operandArguments));
+
+        var parameterArguments = Assert.Single(
+            PowerShell(PwshDialect.PowerShell7)
+                .Parse("Example-Command -Source C:\\work\\a.txt")
+                .Commands).Arguments;
+        var parameterEntry = new AuthoredFileSystemBindingCatalogEntry(
+            ShellProjectionLanguage.PowerShell,
+            "Example-Command",
+            StringComparison.OrdinalIgnoreCase,
+            AuditedFileSystemBindingCategory.ExactNamedParameterValue,
+            "-Source");
+
+        Assert.Equal(
+            new[]
+            {
+                AuditedFileSystemBindingCategory.Unknown,
+                AuditedFileSystemBindingCategory.ExactNamedParameterValue,
+            },
+            AuthoredFileSystemBindingCatalog.Bind(parameterEntry, parameterArguments));
+    }
+
     [Theory]
     [InlineData("cat README.md", "/work/README.md")]
     [InlineData("cat /work/README.md", "/work/README.md")]

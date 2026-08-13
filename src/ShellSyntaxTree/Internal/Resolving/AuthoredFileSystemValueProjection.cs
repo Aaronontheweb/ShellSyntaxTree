@@ -8,11 +8,54 @@ using System.Collections.Generic;
 
 namespace ShellSyntaxTree.Internal.Resolving;
 
-internal enum AuditedFileSystemBinding
+internal enum AuditedFileSystemBindingCategory
 {
     Unknown,
-    BashCatArgument,
-    PowerShellLiteralPath,
+    AllNonOptionOperands,
+    ExactNamedParameterValue,
+}
+
+internal sealed class AuthoredFileSystemBindingCatalogEntry
+{
+    internal AuthoredFileSystemBindingCatalogEntry(
+        ShellProjectionLanguage language,
+        string canonicalVerb,
+        StringComparison verbComparison,
+        AuditedFileSystemBindingCategory category,
+        string? parameterName = null)
+    {
+        if (category == AuditedFileSystemBindingCategory.ExactNamedParameterValue &&
+            string.IsNullOrEmpty(parameterName))
+        {
+            throw new ArgumentException(
+                "An exact named-parameter binding requires a parameter name.",
+                nameof(parameterName));
+        }
+
+        if (category != AuditedFileSystemBindingCategory.ExactNamedParameterValue &&
+            parameterName != null)
+        {
+            throw new ArgumentException(
+                "Only an exact named-parameter binding accepts a parameter name.",
+                nameof(parameterName));
+        }
+
+        Language = language;
+        CanonicalVerb = canonicalVerb;
+        VerbComparison = verbComparison;
+        Category = category;
+        ParameterName = parameterName;
+    }
+
+    internal ShellProjectionLanguage Language { get; }
+
+    internal string CanonicalVerb { get; }
+
+    internal StringComparison VerbComparison { get; }
+
+    internal AuditedFileSystemBindingCategory Category { get; }
+
+    internal string? ParameterName { get; }
 }
 
 /// <summary>
@@ -21,66 +64,105 @@ internal enum AuditedFileSystemBinding
 /// </summary>
 internal static class AuthoredFileSystemBindingCatalog
 {
-    internal static IReadOnlyList<AuditedFileSystemBinding> Bind(
+    private static readonly IReadOnlyList<AuthoredFileSystemBindingCatalogEntry> Entries =
+        new[]
+        {
+            new AuthoredFileSystemBindingCatalogEntry(
+                ShellProjectionLanguage.Bash,
+                "cat",
+                StringComparison.Ordinal,
+                AuditedFileSystemBindingCategory.AllNonOptionOperands),
+            new AuthoredFileSystemBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Get-Content",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedFileSystemBindingCategory.ExactNamedParameterValue,
+                "-LiteralPath"),
+        };
+
+    internal static IReadOnlyList<AuditedFileSystemBindingCategory> Bind(
         ShellProjectionLanguage language,
         Clause clause,
         IReadOnlyList<AnalyzedArgument> arguments)
     {
-        var bindings = new AuditedFileSystemBinding[arguments.Count];
+        var bindings = new AuditedFileSystemBindingCategory[arguments.Count];
         if (clause.Verb.IsDynamic || clause.Verb.Tokens.Count != 1)
         {
             return bindings;
         }
 
-        return language switch
+        var canonicalVerb = language == ShellProjectionLanguage.PowerShell
+            ? clause.Verb.CanonicalVerb ?? clause.Verb.Tokens[0]
+            : clause.Verb.Tokens[0];
+        for (var index = 0; index < Entries.Count; index++)
         {
-            ShellProjectionLanguage.Bash when string.Equals(
-                clause.Verb.Tokens[0], "cat", StringComparison.Ordinal) =>
-                BindBashCat(bindings),
-            ShellProjectionLanguage.PowerShell when string.Equals(
-                clause.Verb.CanonicalVerb ?? clause.Verb.Tokens[0],
-                "Get-Content",
-                StringComparison.OrdinalIgnoreCase) =>
-                BindPowerShellLiteralPath(arguments, bindings),
-            _ => bindings,
-        };
-    }
+            var entry = Entries[index];
+            if (entry.Language != language ||
+                !string.Equals(canonicalVerb, entry.CanonicalVerb, entry.VerbComparison))
+            {
+                continue;
+            }
 
-    private static IReadOnlyList<AuditedFileSystemBinding> BindBashCat(
-        AuditedFileSystemBinding[] bindings)
-    {
-        for (var index = 0; index < bindings.Length; index++)
-        {
-            bindings[index] = AuditedFileSystemBinding.BashCatArgument;
+            return Bind(entry, arguments);
         }
 
         return bindings;
     }
 
-    private static IReadOnlyList<AuditedFileSystemBinding> BindPowerShellLiteralPath(
-        IReadOnlyList<AnalyzedArgument> arguments,
-        AuditedFileSystemBinding[] bindings)
+    internal static IReadOnlyList<AuditedFileSystemBindingCategory> Bind(
+        AuthoredFileSystemBindingCatalogEntry entry,
+        IReadOnlyList<AnalyzedArgument> arguments)
     {
-        var expectsLiteralPath = false;
+        var bindings = new AuditedFileSystemBindingCategory[arguments.Count];
+        return entry.Category switch
+        {
+            AuditedFileSystemBindingCategory.AllNonOptionOperands =>
+                BindAllNonOptionOperands(bindings),
+            AuditedFileSystemBindingCategory.ExactNamedParameterValue =>
+                BindExactNamedParameterValue(
+                    arguments,
+                    bindings,
+                    entry.ParameterName!),
+            _ => bindings,
+        };
+    }
+
+    private static IReadOnlyList<AuditedFileSystemBindingCategory> BindAllNonOptionOperands(
+        AuditedFileSystemBindingCategory[] bindings)
+    {
+        for (var index = 0; index < bindings.Length; index++)
+        {
+            bindings[index] = AuditedFileSystemBindingCategory.AllNonOptionOperands;
+        }
+
+        return bindings;
+    }
+
+    private static IReadOnlyList<AuditedFileSystemBindingCategory> BindExactNamedParameterValue(
+        IReadOnlyList<AnalyzedArgument> arguments,
+        AuditedFileSystemBindingCategory[] bindings,
+        string parameterName)
+    {
+        var expectsValue = false;
         for (var index = 0; index < arguments.Count; index++)
         {
             var argument = arguments[index];
-            if (expectsLiteralPath)
+            if (expectsValue)
             {
                 if (!argument.Argument.IsFlag)
                 {
-                    bindings[index] = AuditedFileSystemBinding.PowerShellLiteralPath;
+                    bindings[index] = AuditedFileSystemBindingCategory.ExactNamedParameterValue;
                 }
 
-                expectsLiteralPath = false;
+                expectsValue = false;
             }
 
             if (argument.Argument.IsFlag && string.Equals(
                     argument.Argument.Raw,
-                    "-LiteralPath",
+                    parameterName,
                     StringComparison.OrdinalIgnoreCase))
             {
-                expectsLiteralPath = true;
+                expectsValue = true;
             }
         }
 
@@ -122,8 +204,8 @@ internal static class AuthoredFileSystemValueProjection
             var candidates = Values(argument.AuthoredValue);
             switch (bindings[index])
             {
-                case AuditedFileSystemBinding.BashCatArgument:
-                    var allCandidatesArePaths = ClassifyBashCatArgument(
+                case AuditedFileSystemBindingCategory.AllNonOptionOperands:
+                    var allCandidatesArePaths = ClassifyNonOptionOperand(
                         candidates,
                         bashOptionsEnded,
                         out var nextStates);
@@ -141,7 +223,7 @@ internal static class AuthoredFileSystemValueProjection
                     }
 
                     break;
-                case AuditedFileSystemBinding.PowerShellLiteralPath:
+                case AuditedFileSystemBindingCategory.ExactNamedParameterValue:
                     if (candidates.Count > 0 &&
                         TryGetProvenance(argument, clause, provenanceByElement, out var pwshValue) &&
                         IsSingleField(pwshValue) &&
@@ -164,11 +246,11 @@ internal static class AuthoredFileSystemValueProjection
     }
 
     private static bool HasAuditedBinding(
-        IReadOnlyList<AuditedFileSystemBinding> bindings)
+        IReadOnlyList<AuditedFileSystemBindingCategory> bindings)
     {
         for (var index = 0; index < bindings.Count; index++)
         {
-            if (bindings[index] != AuditedFileSystemBinding.Unknown)
+            if (bindings[index] != AuditedFileSystemBindingCategory.Unknown)
             {
                 return true;
             }
@@ -220,7 +302,7 @@ internal static class AuthoredFileSystemValueProjection
         _ => Array.Empty<string>(),
     };
 
-    private static bool ClassifyBashCatArgument(
+    private static bool ClassifyNonOptionOperand(
         IReadOnlyList<string> candidates,
         IReadOnlyCollection<bool> currentStates,
         out HashSet<bool> nextStates)
