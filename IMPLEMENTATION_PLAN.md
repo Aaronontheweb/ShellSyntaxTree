@@ -89,11 +89,16 @@ priorities.
       relational fact to `CommandOccurrence` so consumers can distinguish
       proved preservation, success-only transfer, and unknown effects without
       parsing shell builtins. Strict OpenSpec and adversarial review passed.
-- [ ] **Implement and validate v0.3.4 working-directory effects.** Derive the
+- [x] **Implement and validate v0.3.4 working-directory effects.** Derive the
       fact from Bash and native PowerShell success/failure state, correct the
       v0.3 Bash `chdir` flow, add scope/join/corruption/corpus/guide coverage,
-      preserve v0.3.3 compatibility, and publish only after Linux and native
-      Windows CI plus downstream Netclaw causal-directory acceptance pass.
+      and preserve v0.3.3 compatibility. PR #165 merged as `53348698` after
+      Linux and native Windows CI, 3,074 tests, strict OpenSpec, headers,
+      Slopwatch, package validation, API comparison, and adversarial review
+      passed.
+- [ ] **Publish and consume v0.3.4.** Merge the bounded release PR, publish the
+      package through the bare `0.3.4` tag, then upgrade Netclaw and complete
+      its causal-directory acceptance matrix before merging that policy slice.
 
 ## Completed v0.3.0 host integration and release acceptance
 

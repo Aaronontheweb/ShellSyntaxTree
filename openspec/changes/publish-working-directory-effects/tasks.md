@@ -102,7 +102,7 @@
   format checks, Slopwatch, package build, API diff, and PII audit.
 - [x] 7.3 Obtain adversarial reviews of the implementation, Bash/PowerShell
   semantics, public API, consumer guide, corpus, and final frozen diff.
-- [ ] 7.4 Open the bounded ShellSyntaxTree pull request and merge only after
+- [x] 7.4 Open the bounded ShellSyntaxTree pull request and merge only after
   Linux and native Windows checks pass.
 - [ ] 7.5 Publish the next additive v0.x package through the release workflow
   only after the implementation PR is merged and release gates pass.
