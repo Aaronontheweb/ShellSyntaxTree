@@ -159,6 +159,12 @@ internal static class BashPerVerbRules
             [("tar", "--file")] = true,
             [("tar", "-C")] = true,
             [("tar", "--directory")] = true,
+
+            // OpenSSL req, x509, and ca consistently use -subj for X.509
+            // Distinguished Name data. A DN may start with '/', but it is not
+            // a filesystem path. No other OpenSSL option receives a universal
+            // path role here because those semantics are subcommand-specific.
+            [("openssl", "-subj")] = false,
         };
 
     /// <summary>

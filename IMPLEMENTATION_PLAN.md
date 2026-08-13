@@ -68,6 +68,11 @@ priorities.
       corpus and consumer-guide examples, public 0.3.2 API comparison, native
       Windows coverage, downstream Netclaw D14 acceptance, and tag-driven
       package publication.
+- [x] **Keep OpenSSL subject data out of path classification.** Treat the
+      slash-prefixed `-subj` Distinguished Name as non-path data without
+      assigning verb-wide arity or path roles to subcommand-specific options.
+      Direct `req`, `x509`, and `ca` regressions pin the shared subject rule,
+      the valueless `x509 -serial` switch, and the non-path `ca -key` operand.
 
 ## Completed v0.3.0 host integration and release acceptance
 

@@ -120,6 +120,14 @@ internal static class BashVerbs
                 "-f", "--file", "-C", "--directory", "-F",
                 "--info-script", "--new-volume-script",
             },
+            ["openssl"] = new HashSet<string>(StringComparer.Ordinal)
+            {
+                // req, x509, and ca consistently bind -subj to X.509
+                // Distinguished Name data. Other OpenSSL options stay out:
+                // their arity or role can vary by subcommand (-serial is a
+                // valueless x509 switch, while ca -key consumes password data).
+                "-subj",
+            },
         };
 
     /// <summary>

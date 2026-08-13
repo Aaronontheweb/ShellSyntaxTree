@@ -280,6 +280,20 @@ public class BashPerVerbRulesTests
         Assert.True(BashPerVerbRules.ValueOfFlagIsPath("tar", "--directory"));
     }
 
+    [Theory]
+    [InlineData("-subj", true, false)]
+    [InlineData("-serial", false, false)]
+    [InlineData("-key", false, false)]
+    public void Openssl_option_table_contains_only_stable_cross_subcommand_semantics(
+        string flag,
+        bool consumesValue,
+        bool valueIsPath)
+    {
+        Assert.True(BashVerbs.FlagsWithValue.TryGetValue("openssl", out var flags));
+        Assert.Equal(consumesValue, flags.Contains(flag));
+        Assert.Equal(valueIsPath, BashPerVerbRules.ValueOfFlagIsPath("openssl", flag));
+    }
+
     [Fact]
     public void Unknown_verb_or_flag_returns_false()
     {

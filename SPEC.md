@@ -1890,6 +1890,7 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
     ["wget"]  = new HashSet<string>(StringComparer.Ordinal) { "-o", "--output-file", "-O", "--output-document" },
     ["docker"]= new HashSet<string>(StringComparer.Ordinal) { "-v", "--volume", "-f", "--file" },
     ["tar"]   = new HashSet<string>(StringComparer.Ordinal) { "-f", "--file", "-C", "--directory", "-F", "--info-script", "--new-volume-script" },
+    ["openssl"] = new HashSet<string>(StringComparer.Ordinal) { "-subj" },
     // Add as corpus surfaces real cases.
 };
 ```
@@ -1929,6 +1930,13 @@ internal static readonly IReadOnlyDictionary<string, HashSet<string>>
 > generic table preserves the established `docker run` projection; a
 > Docker-aware consumer uses `Clause.Elements` to interpret placement and MUST
 > NOT treat the table as universal Docker semantics.
+
+> **OpenSSL subcommands.** The table includes only `-subj`, whose operand is
+> X.509 Distinguished Name data for the documented `req`, `x509`, and `ca`
+> subcommands. A slash-prefixed DN is therefore non-path data. Other OpenSSL
+> options remain outside this verb-wide heuristic when their arity or role is
+> subcommand-specific: `openssl x509 -serial` is valueless, and `openssl ca
+> -key` consumes private-key password data rather than a filesystem path.
 
 > **Note:** the verb-chain walk consumes flag-with-value pairs
 > transparently. For `git -C /repo log`, the walk consumes `-C /repo`
