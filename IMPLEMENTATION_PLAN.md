@@ -55,7 +55,12 @@ priorities.
       public 0.3.2 from a fresh cache; its Release build and full runnable test
       suite passed. Exact D02/D10/D14 fixture binding remains tracked by the
       separate post-publication downstream gate above.
-- [ ] **Approve the v0.3.3 authored-filesystem-value contract.** Review
+- [x] **Approve the v0.3.3 authored-filesystem-value contract.**
+      [PR #163](https://github.com/Aaronontheweb/ShellSyntaxTree/pull/163)
+      merged as `767e15b7` after strict OpenSpec, full unit and corpus, header,
+      Linux CI, Windows CI, and adversarial review passed. The accepted design
+      keeps the public surface to one additive property and requires a separate
+      audited binder plus transform and resolver proof. The contract lives at
       `openspec/changes/v0-3-3-authored-operand-role/` as the bounded D14 fix.
       The public projection must require a separate audited local-path binder,
       transform-safe authored candidates, exact local resolution, and strict
@@ -67,7 +72,13 @@ priorities.
       Bash and PowerShell binders, exact transform and resolver boundaries,
       corpus and consumer-guide examples, public 0.3.2 API comparison, native
       Windows coverage, downstream Netclaw D14 acceptance, and tag-driven
-      package publication.
+      package publication. The frozen local implementation passes a zero-warning
+      Release build, all 2,996 unit and corpus tests, the corpus PII audit,
+      header verification, strict OpenSpec validation, Slopwatch, and a 0.3.3
+      package build. Both target-framework API comparisons report exactly the
+      one approved additive property. Adversarial review, native Windows CI,
+      public package publication, and downstream Netclaw acceptance remain
+      required before this item is complete.
 - [x] **Keep OpenSSL subject data out of path classification.** Treat the
       slash-prefixed `-subj` Distinguished Name as non-path data without
       assigning verb-wide arity or path roles to subcommand-specific options.

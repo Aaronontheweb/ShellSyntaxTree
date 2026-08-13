@@ -37,6 +37,7 @@ public class CorpusRunnerTests
         if (shell != "bash")
         {
             Assert.Null(entry.BashInitialStateMode);
+            Assert.False(entry.PublishAuthoredSourceFacts);
         }
 
         if (shell != "powershell")
@@ -49,7 +50,8 @@ public class CorpusRunnerTests
             shell,
             entry.BashInitialStateMode,
             entry.PowerShellInitialStateMode,
-            entry.PowerShellDialect).Parse(entry.Input);
+            entry.PowerShellDialect,
+            entry.PublishAuthoredSourceFacts).Parse(entry.Input);
         AstAssert.Equal(entry.Expected!, actual, $"{shell}/{fileName}");
         AssertClauseElementInvariants(actual, $"{shell}/{fileName}");
         AssertAuthoredTokenCoverage(shell, actual, $"{shell}/{fileName}");
@@ -884,7 +886,8 @@ public class CorpusRunnerTests
         string shell,
         BashInitialStateMode? bashInitialStateMode = null,
         PwshInitialStateMode? powerShellInitialStateMode = null,
-        PwshDialect? powerShellDialect = null) => shell switch
+        PwshDialect? powerShellDialect = null,
+        bool publishAuthoredSourceFacts = false) => shell switch
         {
             "bash" => new BashParser(new BashParserOptions
             {
@@ -892,6 +895,7 @@ public class CorpusRunnerTests
                 WorkingDirectory = "/work",
                 InitialStateMode = bashInitialStateMode ??
                     BashInitialStateMode.IsolatedNonInteractive,
+                PublishAuthoredSourceFacts = publishAuthoredSourceFacts,
             }),
             "powershell" => new PwshParser(new PwshParserOptions
             {
@@ -963,6 +967,8 @@ public sealed record CorpusEntry
     public PwshInitialStateMode? PowerShellInitialStateMode { get; init; }
 
     public PwshDialect? PowerShellDialect { get; init; }
+
+    public bool PublishAuthoredSourceFacts { get; init; }
 
     public ExpectedParsedCommand? Expected { get; init; }
 
@@ -1110,6 +1116,8 @@ public sealed record ExpectedAnalyzedArgument
     public int ClauseElementIndex { get; init; } = -1;
 
     public ExpectedValueDomain Value { get; init; } = new();
+
+    public ExpectedValueDomain? AuthoredFileSystemValue { get; init; }
 }
 
 public sealed record ExpectedValueDomain

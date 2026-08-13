@@ -123,6 +123,14 @@
               ],
               "pattern": null,
               "coveringDirectory": null
+            },
+            "authoredFileSystemValue": {
+              "kind": "Exact",
+              "values": [
+                "C:/work/*.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
             }
           }
         ],

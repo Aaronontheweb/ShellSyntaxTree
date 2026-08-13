@@ -634,6 +634,8 @@ public sealed record AnalyzedArgument
     public ClauseElement Element { get; internal init; } = null!;
     public ShellValueDomain Value { get; internal init; } = null!;
     public ShellValueDomain AuthoredValue { get; internal init; } = null!;
+    public ShellValueDomain AuthoredFileSystemValue { get; internal init; } =
+        new ShellValueDomain.Unknown();
     public ShellPathShape AuthoredPathShape { get; internal init; }
 }
 
@@ -822,6 +824,32 @@ are `Unknown`. This fact does not claim filesystem operand semantics or grant
 authority: repository slugs, container images, API routes, and other data can
 be path-shaped. PowerShell 0.3.1 sets `AuthoredValue=Value` and
 `AuthoredPathShape=Unknown` for exact compatibility.
+
+`AnalyzedArgument.AuthoredFileSystemValue` is a stronger, independent parser
+fact. `Unknown` means the parser proves no bounded local-filesystem value. In
+v0.3.3, only `Exact` and `FiniteSet` are positive. Every represented value is
+an absolute path normalized by the existing shell resolver. Publication
+requires an audited local-filesystem binding, one-field authored transform
+semantics, and an exact occurrence working directory. Compatibility
+`Arg.IsPath`, `ClauseElement.IsPath`, `FileVerbs`, lexical path shape, and
+generic positional fallback never create this fact by themselves.
+
+The initial audited catalog contains Bash `cat` file operands and the selected
+PowerShell dialect's exact `Get-Content -LiteralPath` value. Bash option values,
+`-` stream operands, active field splitting or pathname expansion, remote
+endpoints, and unaudited executable positions remain `Unknown`. PowerShell
+filters, rename fragments, non-filesystem or unresolved providers, remote
+native endpoints, and ambiguous parameter bindings remain `Unknown`. The
+catalog is parser-owned data, not an authorization policy or a full executable
+grammar.
+
+A positive authored filesystem value does not prove existence, safety,
+trust-zone membership, or authority. Security consumers still require a
+complete occurrence, explicitly accept the authored-source initial-state
+contract, check every represented path through their own path policy, and
+independently evaluate executable identity, redirects, substitutions,
+ancestry, and all other occurrences. `AuthoredValue`, `AuthoredPathShape`, and
+compatibility `IsPath` are not substitutes for this fact.
 
 #### Bash bounded loop state
 

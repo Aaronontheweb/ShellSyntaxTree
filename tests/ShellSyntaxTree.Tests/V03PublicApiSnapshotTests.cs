@@ -121,6 +121,7 @@ public class V03PublicApiSnapshotTests
             (nameof(AnalyzedArgument.Element), typeof(ClauseElement)),
             (nameof(AnalyzedArgument.Value), typeof(ShellValueDomain)),
             (nameof(AnalyzedArgument.AuthoredValue), typeof(ShellValueDomain)),
+            (nameof(AnalyzedArgument.AuthoredFileSystemValue), typeof(ShellValueDomain)),
             (nameof(AnalyzedArgument.AuthoredPathShape), typeof(ShellPathShape)));
 
         AssertEnum<ShellPathShape>("Unknown", "Posix", "Windows");
@@ -348,6 +349,28 @@ public class V03PublicApiSnapshotTests
 
         Assert.Throws<NotSupportedException>(() =>
             JsonSerializer.Deserialize<ShellValueDomain>(json));
+    }
+
+    [Fact]
+    public void Authored_filesystem_value_is_non_null_and_part_of_record_shape()
+    {
+        var strict = new AnalyzedArgument();
+        var positive = strict with
+        {
+            AuthoredFileSystemValue = new ShellValueDomain.Exact("/work/a.txt"),
+        };
+
+        Assert.IsType<ShellValueDomain.Unknown>(strict.AuthoredFileSystemValue);
+        Assert.NotEqual(strict, positive);
+        Assert.NotEqual(strict.GetHashCode(), positive.GetHashCode());
+        Assert.Contains(
+            "AuthoredFileSystemValue = Exact",
+            positive.ToString(),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"AuthoredFileSystemValue\"",
+            JsonSerializer.Serialize(positive),
+            StringComparison.Ordinal);
     }
 
     [Fact]

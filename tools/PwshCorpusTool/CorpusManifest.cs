@@ -1530,5 +1530,8 @@ internal static class CorpusManifest
         OosI("v03_design_invoke_command_local_asjob_invalid_parameter_set",
             "Invoke-Command -ScriptBlock { Get-Date } -AsJob",
             "Promotes stable fail-closed design case pwsh-invoke-command-local-asjob-invalid-parameter-set."),
+        VIE("v03_authored_filesystem_literalpath",
+            "Get-Content -LiteralPath C:\\work\\a.txt",
+            "Pins the v0.3.3 audited authored-filesystem value for an exact cmdlet LiteralPath binding."),
     };
 }

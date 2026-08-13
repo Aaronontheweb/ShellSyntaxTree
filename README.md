@@ -13,11 +13,12 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 
 ```bash
 # Current package
-dotnet add package ShellSyntaxTree --version 0.3.1
+dotnet add package ShellSyntaxTree --version 0.3.3
 ```
 
-Version `0.3.1` includes the typed syntax tree, command-occurrence API, and
-bounded authored-value analysis documented below.
+Version `0.3.3` includes the typed syntax tree, command-occurrence API,
+bounded authored-value analysis, and audited authored-filesystem projection
+documented below.
 
 ## What you get
 

@@ -1,5 +1,53 @@
 #### Unreleased ####
 
+#### 0.3.3 2026-08-13 ####
+
+This additive release publishes bounded local-filesystem values for audited
+authored arguments. It lets security consumers evaluate static loop operands
+through their own path policy without treating broad compatibility heuristics
+or pre-field-splitting words as filesystem authority.
+
+## Added
+
+- Add `AnalyzedArgument.AuthoredFileSystemValue`. The non-null default is
+  `Unknown`; v0.3.3 publishes only normalized `Exact` and `FiniteSet` domains.
+- Add a separate audited local-filesystem binding catalog. The initial entries
+  cover Bash `cat` operands and the selected PowerShell dialect's exact
+  `Get-Content -LiteralPath` value.
+- Add generated Bash and PowerShell corpus expectations plus consumer-guide
+  input/output examples for bounded loops, inline parameters, filters,
+  rename fragments, remote endpoints, and transform-sensitive words.
+
+## Fixed
+
+- Keep slash-prefixed OpenSSL `-subj` Distinguished Names classified as
+  non-path data in Bash and native PowerShell.
+- Preserve subcommand-specific OpenSSL boundaries: `x509 -serial` remains a
+  valueless switch and `ca -key` gains no universal filesystem role.
+
+## Security and compatibility
+
+- Require an audited parser-owned operand binding, exact one-field transform
+  proof, an exact occurrence working directory, and successful local path
+  resolution before publishing the stronger filesystem value.
+- Do not derive the fact from compatibility `IsPath`, `FileVerbs`, lexical
+  path shape, generic positional fallback, or executable-private policy.
+- Keep active field splitting, pathname expansion, stream sentinels, unknown
+  cwd, remote endpoints, non-filesystem providers, dynamic identity,
+  substitutions, unresolved redirects, incomplete control flow, and
+  over-limit unions strict.
+- Preserve all 0.3.2 public signatures. Both target-framework API comparisons
+  report exactly one additive member: `AuthoredFileSystemValue`.
+
+## Consumer validation
+
+- Require consumers to accept only `Exact` or `FiniteSet`, check every path
+  through their own trust-zone policy, and independently enforce occurrence
+  completeness, identity, redirects, substitutions, ancestry, and every other
+  argument.
+- Update the sanitized D14 approval evidence so downstream Netclaw validation
+  can bind the new parser fact without accepting raw `AuthoredValue` as a path.
+
 #### 0.3.2 2026-08-12 ####
 
 This patch release accepts statically proved Bash command identities that use

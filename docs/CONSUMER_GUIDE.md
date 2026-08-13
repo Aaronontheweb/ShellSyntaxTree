@@ -586,9 +586,10 @@ for f in src/A.cs src/B.cs; do cat /work/$f; done
 the loop-body argument is:
 
 ```text
-Value:             Unknown
-AuthoredValue:     FiniteSet("/work/src/A.cs", "/work/src/B.cs")
-AuthoredPathShape: Posix
+Value:                      Unknown
+AuthoredValue:              FiniteSet("/work/src/A.cs", "/work/src/B.cs")
+AuthoredPathShape:          Posix
+AuthoredFileSystemValue:    FiniteSet("/work/src/A.cs", "/work/src/B.cs")
 ```
 
 `AuthoredValue` is the word proved from submitted source before ambient
@@ -599,17 +600,83 @@ explicit source attribute mutation, redirects, and unsupported control flow
 stay strict. With the default `false`, the same loop retains the 0.3.0 result:
 `IsUnparseable=true` with empty `Commands` and `Clauses`.
 
-Choose the projection explicitly per policy-sensitive argument:
+Do not hand `AuthoredValue` directly to filesystem policy. It is intentionally
+pre-field-splitting and pre-pathname-expansion. For example:
 
-```csharp
-var domain = productPolicyAcceptsPreFieldSplittingWords
-    ? analyzed.AuthoredValue
-    : analyzed.Value;
-
-var decision = EvaluateDomain(domain); // recursive and fail closed
+```bash
+for f in 'src/A.cs /etc/passwd'; do cat /work/$f; done
 ```
 
-`AuthoredPathShape` is lexical evidence only:
+can have one bounded authored word, `/work/src/A.cs /etc/passwd`, while
+ordinary unquoted splitting supplies two runtime arguments, including
+`/etc/passwd`. ShellSyntaxTree therefore publishes:
+
+```text
+AuthoredValue:           Exact("/work/src/A.cs /etc/passwd")
+AuthoredFileSystemValue: Unknown
+```
+
+Use the dedicated filesystem projection. It combines an audited parser-owned
+argument binding, one-field transform provenance, and the existing path
+resolver:
+
+```csharp
+static GateDecision EvaluateAuthoredFileSystemValue(
+    AnalyzedArgument analyzed,
+    Func<string, GateDecision> evaluatePath)
+{
+    return analyzed.AuthoredFileSystemValue switch
+    {
+        ShellValueDomain.Exact exact => evaluatePath(exact.Value),
+        ShellValueDomain.FiniteSet finite => finite.Values
+            .Select(evaluatePath)
+            .Aggregate(GateDecision.Allow(), MostRestrictive),
+        ShellValueDomain.Unknown =>
+            GateDecision.Prompt("local filesystem value is unknown"),
+        _ => GateDecision.Prompt("unsupported filesystem value domain"),
+    };
+}
+```
+
+The positive v0.3.3 alternatives are only `Exact` and `FiniteSet`. Evaluate
+every represented path. Do not accept `IntegerRange`, `Concatenation`,
+`PathPattern`, or a future alternative by default. The property does not prove
+that a path exists, is trusted, or is authorized, and it does not relax
+identity, occurrence completeness, redirects, substitutions, or ancestry.
+
+The initial audited catalog is deliberately small. These examples show why a
+compatibility path bit or slash characters are not enough:
+
+| Input | Relevant `AuthoredFileSystemValue` | Reason |
+|---|---|---|
+| `cat README.md` with cwd `/work` | `Exact("/work/README.md")` | Audited `cat` operand plus exact cwd. |
+| `cat -` | `Unknown` | `-` means standard input, not a local path. |
+| `python -c 'print(1)'` | `Unknown` | Interpreter payload is data. |
+| `head -n 10 README` | `Unknown` for `10` | Numeric count is not a path. |
+| `scp user@example.invalid:/srv/file .` | `Unknown` for the remote endpoint | Remote syntax is not a local filesystem path. |
+| `show /api/v1` | `Unknown` | Path-shaped data has no audited binding. |
+
+PowerShell uses the same public property and the selected dialect's argument
+binding. For example:
+
+```powershell
+Get-Content -LiteralPath:C:\work\a.txt
+```
+
+projects the combined authored element into two analyzed arguments:
+
+```text
+Arguments[0] "-LiteralPath"  -> AuthoredFileSystemValue: Unknown
+Arguments[1] "C:\work\a.txt" -> AuthoredFileSystemValue: Exact("C:/work/a.txt")
+```
+
+The existing resolver normalizes Windows separators to `/`. By contrast,
+`Get-ChildItem C:\work *.cs` keeps the `*.cs` filter unknown, and
+`Rename-Item C:\old new` keeps `new` unknown because it is a name interpreted
+relative to another operand rather than an independently resolved path.
+Non-filesystem providers and native remote endpoints also remain unknown.
+
+`AuthoredPathShape` stays lexical evidence only:
 
 | Authored word | Shape |
 |---|---|
@@ -620,11 +687,9 @@ var decision = EvaluateDomain(domain); // recursive and fail closed
 | `bare-name` | `Unknown` |
 
 A repository slug, container image, API route, or other slash-bearing data can
-be path-shaped. Shape may trigger more conservative path review; it never says
-the executable treats the argument as a filesystem operand and never grants
-filesystem authority. PowerShell 0.3.1 sets `AuthoredValue=Value` and
-`AuthoredPathShape=Unknown`, so the shared ingestion surface remains uniform
-without inventing new PowerShell semantics.
+be path-shaped. Shape may trigger more conservative review; it never says the
+executable treats the argument as a filesystem operand and cannot substitute
+for `AuthoredFileSystemValue`.
 
 Loops also affect later state even when their body facts are static. With an
 incoming cwd of `/work`:

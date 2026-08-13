@@ -47,6 +47,7 @@ internal static partial class BashCommandParser
             !ShellSyntaxProjection.TryProject(
                 analyzedSyntax,
                 analyzedFacts,
+                ShellProjectionLanguage.Bash,
                 out var projection))
         {
             return StructuralFailure(
