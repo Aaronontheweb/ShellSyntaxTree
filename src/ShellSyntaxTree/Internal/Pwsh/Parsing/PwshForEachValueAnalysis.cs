@@ -1932,12 +1932,17 @@ internal sealed class PwshForEachValueAnalyzer
         new(ClauseReferenceComparer.Instance);
     private readonly Dictionary<Clause, IReadOnlyList<ExecutionRegionSyntax>>
         _executionRegions = new(ClauseReferenceComparer.Instance);
+    private readonly Dictionary<Clause, ShellWorkingDirectoryEffectFacts>
+        _workingDirectoryEffects = new(ClauseReferenceComparer.Instance);
+    private readonly Dictionary<Clause, ShellWorkingDirectoryEffectFacts>
+        _executionRegionHostEffects = new(ClauseReferenceComparer.Instance);
     private readonly List<AnalysisContext> _invocationRedirectContexts = new();
     private bool _isComplete = true;
     private int _remainingLoopAnalysisTransitions = MaxLoopAnalysisTransitions;
     private long _executionRegionEffectCount;
     private long _nonRegionStateMutationCount;
     private long _locationStateMutationCount;
+    private long _nonPreservingWorkingDirectoryEffectCount;
     private long _childScopeEscapeRiskCount;
     private long _childRunspaceProcessEscapeRiskCount;
     private bool _pipelineStageMayReceiveInput;
@@ -2041,6 +2046,19 @@ internal sealed class PwshForEachValueAnalyzer
 
     private PwshFlowResult AnalyzeSimple(SimpleCommandSyntax simple, AnalysisContext input)
     {
+        var flow = AnalyzeSimpleCore(simple, input, out var directEffect);
+        RecordWorkingDirectoryEffect(
+            simple.Clause,
+            directEffect ?? ClassifyWorkingDirectoryEffect(simple));
+        return flow;
+    }
+
+    private PwshFlowResult AnalyzeSimpleCore(
+        SimpleCommandSyntax simple,
+        AnalysisContext input,
+        out ShellWorkingDirectoryEffectFacts? directEffect)
+    {
+        directEffect = null;
         var current = input;
         foreach (var substitution in simple.Substitutions)
         {
@@ -2116,6 +2134,7 @@ internal sealed class PwshForEachValueAnalyzer
         var location = AnalyzeSetLocation(simple, current);
         if (location is not null)
         {
+            directEffect = location.Value.Effect;
             _nonRegionStateMutationCount++;
             _locationStateMutationCount++;
             if (PwshPersistentStateMutation.TryGetEffect(
@@ -2123,7 +2142,7 @@ internal sealed class PwshForEachValueAnalyzer
                     _options.Dialect,
                     effective,
                     providerLocationUnknown: current.WorkingDirectory is null,
-                    out var locationEffectUnknownCwd))
+                    out _))
             {
                 var mayEscapeChildRunspaceProcess =
                     PwshPersistentStateMutation.MayEscapeChildRunspaceProcess(
@@ -2144,12 +2163,12 @@ internal sealed class PwshForEachValueAnalyzer
                     _childRunspaceProcessEscapeRiskCount++;
                 }
 
-                var flow = location.Value;
+                var flow = location.Value.Flow;
                 return ApplyExecutionRegionEffect(simple, current, new PwshFlowResult(
                     flow.OnSuccess is AnalysisContext success
                         ? ApplyPersistentStateInvalidation(
                             success,
-                            locationEffectUnknownCwd,
+                            unknownCwd: false,
                             hasCommandResolutionMutation,
                             invalidatesAllCommandNames,
                             mutatedCommandNames,
@@ -2160,7 +2179,7 @@ internal sealed class PwshForEachValueAnalyzer
                     flow.OnFailure is AnalysisContext failure
                         ? ApplyPersistentStateInvalidation(
                             failure,
-                            locationEffectUnknownCwd,
+                            unknownCwd: false,
                             hasCommandResolutionMutation,
                             invalidatesAllCommandNames,
                             mutatedCommandNames,
@@ -2170,7 +2189,7 @@ internal sealed class PwshForEachValueAnalyzer
                         : null));
             }
 
-            return ApplyExecutionRegionEffect(simple, current, location.Value);
+            return ApplyExecutionRegionEffect(simple, current, location.Value.Flow);
         }
 
         if (PwshPersistentStateMutation.TryGetEffect(
@@ -2223,6 +2242,60 @@ internal sealed class PwshForEachValueAnalyzer
                     : current));
     }
 
+    private ShellWorkingDirectoryEffectFacts ClassifyWorkingDirectoryEffect(
+        SimpleCommandSyntax simple)
+    {
+        if (!_facts.TryGetValue(simple.Clause, out var facts) ||
+            !facts.IsComplete)
+        {
+            return ShellWorkingDirectoryEffectFacts.Unknown;
+        }
+
+        if (simple.ExecutionRegions.Count > 0)
+        {
+            return _executionRegionHostEffects.TryGetValue(
+                simple.Clause,
+                out var hostEffect)
+                ? hostEffect
+                : ShellWorkingDirectoryEffectFacts.Unknown;
+        }
+
+        if (PwshPersistentStateMutation.TryGetEffect(
+                simple.Clause,
+                _options.Dialect,
+                facts.EffectiveArguments,
+                providerLocationUnknown:
+                    facts.WorkingDirectory.Kind == ShellValueDomainKind.Unknown,
+                out var unknownCwd) &&
+            unknownCwd)
+        {
+            return ShellWorkingDirectoryEffectFacts.Unknown;
+        }
+
+        return ShellWorkingDirectoryEffectFacts.Unchanged;
+    }
+
+    private void RecordWorkingDirectoryEffect(
+        Clause clause,
+        ShellWorkingDirectoryEffectFacts effect)
+    {
+        if (effect.Kind != ShellWorkingDirectoryEffectKind.Unchanged)
+        {
+            _nonPreservingWorkingDirectoryEffectCount++;
+        }
+
+        _workingDirectoryEffects[clause] = _workingDirectoryEffects.TryGetValue(
+            clause,
+            out var prior)
+            ? ShellWorkingDirectoryEffectFacts.Join(prior, effect)
+            : effect;
+    }
+
+    private ShellWorkingDirectoryEffectFacts GetWorkingDirectoryEffect(Clause clause) =>
+        _workingDirectoryEffects.TryGetValue(clause, out var effect)
+            ? effect
+            : ShellWorkingDirectoryEffectFacts.Unknown;
+
     private static AnalysisContext ApplyPersistentStateInvalidation(
         AnalysisContext input,
         bool unknownCwd,
@@ -2263,6 +2336,45 @@ internal sealed class PwshForEachValueAnalyzer
         {
             return flow;
         }
+
+        var receiverIdentityProven = IsExecutionRegionReceiverIdentityProven(
+            simple.Clause,
+            receiverInput);
+        var binding = PwshExecutionRegionBindingCatalog.Bind(
+            simple.Clause,
+            receiverIdentityProven,
+            _options.Dialect);
+        var before = _nonPreservingWorkingDirectoryEffectCount;
+        var result = ApplyExecutionRegionEffectCore(
+            simple,
+            receiverInput,
+            flow);
+        var supported = binding.Status == PwshExecutionRegionBindingStatus.ProvedData ||
+            IsSupportedExecutionRegionReceiver(binding) &&
+            TryApplyExecutionRegionBindings(simple, binding, out _);
+        var isolated = binding.ParameterSet is
+            PwshExecutionRegionParameterSet.ForEachParallel or
+            PwshExecutionRegionParameterSet.InvokeRemote or
+            PwshExecutionRegionParameterSet.StartJobScriptBlock;
+        _executionRegionHostEffects[simple.Clause] = !supported
+            ? ShellWorkingDirectoryEffectFacts.Unknown
+            : isolated ||
+              _nonPreservingWorkingDirectoryEffectCount == before
+                ? ShellWorkingDirectoryEffectFacts.Unchanged
+                : ShellWorkingDirectoryEffectFacts.Unknown;
+        if (isolated)
+        {
+            _nonPreservingWorkingDirectoryEffectCount = before;
+        }
+
+        return result;
+    }
+
+    private PwshFlowResult ApplyExecutionRegionEffectCore(
+        SimpleCommandSyntax simple,
+        AnalysisContext receiverInput,
+        PwshFlowResult flow)
+    {
 
         var receiverIdentityProven = IsExecutionRegionReceiverIdentityProven(
             simple.Clause,
@@ -3230,10 +3342,10 @@ internal sealed class PwshForEachValueAnalyzer
             _ when values.Count > 1 &&
                 values.Count <= ShellAnalysisLimits.MaxValueCandidates =>
                 new ShellValueDomainFacts
-            {
-                Kind = ShellValueDomainKind.FiniteSet,
-                Values = values,
-            },
+                {
+                    Kind = ShellValueDomainKind.FiniteSet,
+                    Values = values,
+                },
             _ => ShellValueDomainFacts.Unknown,
         };
 
@@ -3740,7 +3852,7 @@ internal sealed class PwshForEachValueAnalyzer
         return true;
     }
 
-    private PwshFlowResult? AnalyzeSetLocation(
+    private PwshSetLocationAnalysis? AnalyzeSetLocation(
         SimpleCommandSyntax simple,
         AnalysisContext input)
     {
@@ -3757,6 +3869,7 @@ internal sealed class PwshForEachValueAnalyzer
         var hasTarget = false;
         var expectsPath = false;
         var literalPath = false;
+        var usesStackName = false;
         for (var elementIndex = 0;
              elementIndex < simple.Clause.Elements.Count;
              elementIndex++)
@@ -3767,34 +3880,101 @@ internal sealed class PwshForEachValueAnalyzer
                 continue;
             }
 
+            if (element.IsFlag && TryAnalyzeSetLocationSwitch(
+                    element,
+                    out var switchStatus))
+            {
+                if (switchStatus == SetLocationSwitchStatus.Invalid)
+                {
+                    return FailedSetLocation(input);
+                }
+
+                if (switchStatus == SetLocationSwitchStatus.MaySucceed)
+                {
+                    continue;
+                }
+
+                continue;
+            }
+
             if (!TryGetElementDomain(simple, elementIndex, input, out var domain) ||
                 domain.Kind != ShellValueDomainKind.Exact ||
                 domain.Values.Count != 1)
             {
-                return new PwshFlowResult(input.Invalidate(unknownCwd: true), input);
+                return new PwshSetLocationAnalysis(
+                    new PwshFlowResult(input.Invalidate(unknownCwd: true), input),
+                    ShellWorkingDirectoryEffectFacts.ChangesOnSuccess(
+                        ShellValueDomainFacts.Unknown));
             }
 
             var value = domain.Values[0];
             if (element.IsFlag)
             {
+                if (expectsPath)
+                {
+                    return FailedSetLocation(input);
+                }
+
                 var colon = value.IndexOf(':');
                 var parameter = colon < 0 ? value : value.Substring(0, colon);
-                if (parameter.Equals("-PassThru", StringComparison.OrdinalIgnoreCase))
+                var parameterRole = PwshSetLocationParameterCatalog.Resolve(
+                    parameter,
+                    _options.Dialect);
+                if (parameterRole == PwshSetLocationParameterRole.Invalid)
                 {
+                    return FailedSetLocation(input);
+                }
+
+                if (parameterRole == PwshSetLocationParameterRole.Switch)
+                {
+                    if (colon >= 0 && !IsValidSwitchValue(value.Substring(colon + 1)))
+                    {
+                        return FailedSetLocation(input);
+                    }
+
                     continue;
                 }
 
-                if (!IsPathParameter(parameter, out var isLiteralPath))
+                if (parameterRole is PwshSetLocationParameterRole.NonPathValue or
+                    PwshSetLocationParameterRole.StackNameValue)
                 {
-                    return new PwshFlowResult(input.Invalidate(unknownCwd: true), input);
+                    if (colon >= 0)
+                    {
+                        if (colon + 1 == value.Length)
+                        {
+                            return FailedSetLocation(input);
+                        }
+                    }
+                    else if (!TrySkipParameterValue(simple, ref elementIndex))
+                    {
+                        return FailedSetLocation(input);
+                    }
+
+                    if (parameterRole == PwshSetLocationParameterRole.StackNameValue)
+                    {
+                        if (usesStackName || hasTarget)
+                        {
+                            return FailedSetLocation(input);
+                        }
+
+                        usesStackName = true;
+                    }
+
+                    continue;
                 }
 
-                literalPath = isLiteralPath;
+                if (usesStackName)
+                {
+                    return FailedSetLocation(input);
+                }
+
+                literalPath = parameterRole ==
+                    PwshSetLocationParameterRole.LiteralPathValue;
                 if (colon >= 0)
                 {
                     if (hasTarget || colon + 1 == value.Length)
                     {
-                        return new PwshFlowResult(null, input);
+                        return FailedSetLocation(input);
                     }
 
                     target = value.Substring(colon + 1);
@@ -3810,7 +3990,7 @@ internal sealed class PwshForEachValueAnalyzer
 
             if (hasTarget)
             {
-                return new PwshFlowResult(null, input);
+                return FailedSetLocation(input);
             }
 
             target = value;
@@ -3820,7 +4000,17 @@ internal sealed class PwshForEachValueAnalyzer
 
         if (expectsPath)
         {
-            return new PwshFlowResult(null, input);
+            return FailedSetLocation(input);
+        }
+
+        if (usesStackName)
+        {
+            return hasTarget
+                ? FailedSetLocation(input)
+                : new PwshSetLocationAnalysis(
+                    new PwshFlowResult(input.Invalidate(unknownCwd: true), input),
+                    ShellWorkingDirectoryEffectFacts.ChangesOnSuccess(
+                        ShellValueDomainFacts.Unknown));
         }
 
         if (!hasTarget)
@@ -3828,12 +4018,16 @@ internal sealed class PwshForEachValueAnalyzer
             var home = string.IsNullOrEmpty(_options.HomeDirectory)
                 ? Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
                 : _options.HomeDirectory!;
-            return new PwshFlowResult(input.WithCwd(NormalizePath(home)), input);
+            var normalizedHome = NormalizePath(home);
+            return ExactSetLocation(input, normalizedHome);
         }
 
         if (target is "-" or "+")
         {
-            return new PwshFlowResult(input.Invalidate(unknownCwd: true), input);
+            return new PwshSetLocationAnalysis(
+                new PwshFlowResult(input.Invalidate(unknownCwd: true), input),
+                ShellWorkingDirectoryEffectFacts.ChangesOnSuccess(
+                    ShellValueDomainFacts.Unknown));
         }
 
         var resolverOptions = new PwshParserOptions
@@ -3852,17 +4046,89 @@ internal sealed class PwshForEachValueAnalyzer
                 ? ShellResolutionConsumer.PowerShellCmdletLiteralPath
                 : ShellResolutionConsumer.PowerShellCmdletPath);
         return resolved.IsPath && resolved.Resolved is not null
-            ? new PwshFlowResult(input.WithCwd(resolved.Resolved), input)
-            : new PwshFlowResult(input.Invalidate(unknownCwd: true), input);
+            ? ExactSetLocation(input, resolved.Resolved)
+            : new PwshSetLocationAnalysis(
+                new PwshFlowResult(input.Invalidate(unknownCwd: true), input),
+                ShellWorkingDirectoryEffectFacts.ChangesOnSuccess(
+                    ShellValueDomainFacts.Unknown));
     }
 
-    private static bool IsPathParameter(string parameter, out bool literalPath)
+    private static PwshSetLocationAnalysis ExactSetLocation(
+        AnalysisContext input,
+        string target) =>
+        new(
+            new PwshFlowResult(input.WithCwd(target), input),
+            ShellWorkingDirectoryEffectFacts.ChangesOnSuccess(
+                new ShellValueDomainFacts
+                {
+                    Kind = ShellValueDomainKind.Exact,
+                    Values = new[] { target },
+                }));
+
+    private static PwshSetLocationAnalysis FailedSetLocation(
+        AnalysisContext input) =>
+        new(
+            new PwshFlowResult(null, input),
+            ShellWorkingDirectoryEffectFacts.Unchanged);
+
+    private static bool IsValidSwitchValue(string value) =>
+        value.Equals("$true", StringComparison.OrdinalIgnoreCase) ||
+        value.Equals("$false", StringComparison.OrdinalIgnoreCase);
+
+    private bool TryAnalyzeSetLocationSwitch(
+        ClauseElement element,
+        out SetLocationSwitchStatus status)
     {
-        literalPath = parameter.Equals("-LiteralPath", StringComparison.OrdinalIgnoreCase) ||
-            parameter.Equals("-LP", StringComparison.OrdinalIgnoreCase);
-        return literalPath ||
-            parameter.Equals("-Path", StringComparison.OrdinalIgnoreCase) ||
-            parameter.Equals("-PSPath", StringComparison.OrdinalIgnoreCase);
+        status = SetLocationSwitchStatus.Invalid;
+        var authored = element.Value;
+        var colon = authored.IndexOf(':');
+        var parameter = colon < 0 ? authored : authored.Substring(0, colon);
+        if (PwshSetLocationParameterCatalog.Resolve(parameter, _options.Dialect) !=
+            PwshSetLocationParameterRole.Switch)
+        {
+            return false;
+        }
+
+        if (colon < 0 || IsValidSwitchValue(authored.Substring(colon + 1)))
+        {
+            status = SetLocationSwitchStatus.Valid;
+            return true;
+        }
+
+        var value = authored.Substring(colon + 1);
+        status = element.Kind is ArgKind.EnvVar or ArgKind.DynamicSkip ||
+                 value.Length > 0 && value[0] is >= '0' and <= '9' ||
+                 value.Length > 1 && value[0] == '.' &&
+                 value[1] is >= '0' and <= '9'
+            ? SetLocationSwitchStatus.MaySucceed
+            : SetLocationSwitchStatus.Invalid;
+        return true;
+    }
+
+    private static bool TrySkipParameterValue(
+        SimpleCommandSyntax simple,
+        ref int elementIndex)
+    {
+        for (var nextIndex = elementIndex + 1;
+             nextIndex < simple.Clause.Elements.Count;
+             nextIndex++)
+        {
+            var next = simple.Clause.Elements[nextIndex];
+            if (next.Role != ClauseElementRole.Argument)
+            {
+                continue;
+            }
+
+            if (next.IsFlag)
+            {
+                return false;
+            }
+
+            elementIndex = nextIndex;
+            return true;
+        }
+
+        return false;
     }
 
     private bool TryGetElementDomain(
@@ -4033,6 +4299,7 @@ internal sealed class PwshForEachValueAnalyzer
         {
             EffectiveArguments = source.EffectiveArguments,
             WorkingDirectory = source.WorkingDirectory,
+            WorkingDirectoryEffect = GetWorkingDirectoryEffect(simple.Clause),
             Redirects = redirects,
             RedirectTargetProvenance = source.RedirectTargetProvenance,
             CwdPathDependencies = source.CwdPathDependencies,
@@ -6107,6 +6374,17 @@ internal sealed class PwshForEachValueAnalyzer
         internal static PwshFlowResult Both(AnalysisContext state) => new(state, state);
 
         internal static PwshFlowResult Success(AnalysisContext state) => new(state, null);
+    }
+
+    private readonly record struct PwshSetLocationAnalysis(
+        PwshFlowResult Flow,
+        ShellWorkingDirectoryEffectFacts Effect);
+
+    private enum SetLocationSwitchStatus
+    {
+        Invalid,
+        Valid,
+        MaySucceed,
     }
 
     private sealed class ClauseReferenceComparer : IEqualityComparer<Clause>

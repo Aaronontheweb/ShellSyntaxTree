@@ -31,6 +31,8 @@ internal sealed class BashAbstractStateAnalyzer
         _authoredArguments = new(ClauseReferenceComparer.Instance);
     private readonly Dictionary<Clause, HashSet<int>> _cwdResolutionSanitization =
         new(ClauseReferenceComparer.Instance);
+    private readonly Dictionary<Clause, ShellWorkingDirectoryEffectFacts>
+        _workingDirectoryEffects = new(ClauseReferenceComparer.Instance);
     private readonly List<BashForInAnalysisPlanReference> _rewrittenForInPlans = new();
     private bool _isComplete = true;
     private int _remainingLoopAnalysisTransitions = MaxLoopAnalysisTransitions;
@@ -155,9 +157,15 @@ internal sealed class BashAbstractStateAnalyzer
 
         if (!TryGetLegacyCwdTransfer(simple.Clause, input, out var success))
         {
+            RecordWorkingDirectoryEffect(
+                simple.Clause,
+                ShellWorkingDirectoryEffectFacts.Unchanged);
             return BashFlowResult.Both(input);
         }
 
+        RecordWorkingDirectoryEffect(
+            simple.Clause,
+            ShellWorkingDirectoryEffectFacts.Unknown);
         return new BashFlowResult(success, input);
     }
 
@@ -879,6 +887,9 @@ internal sealed class BashAbstractStateAnalyzer
             out var argumentElementIndices);
         if (dispatchKind == BashDispatchKind.Query)
         {
+            RecordWorkingDirectoryEffect(
+                simple.Clause,
+                ShellWorkingDirectoryEffectFacts.Unchanged);
             return BashFlowResult.Both(input);
         }
 
@@ -906,6 +917,9 @@ internal sealed class BashAbstractStateAnalyzer
                 }
 
                 RecordCwdResolutionSanitization(simple.Clause, argumentElementIndices);
+                RecordWorkingDirectoryEffect(
+                    simple.Clause,
+                    ShellWorkingDirectoryEffectFacts.Unknown);
                 return BashFlowResult.Both(input.WithUnknownCwd());
             }
         }
@@ -934,11 +948,16 @@ internal sealed class BashAbstractStateAnalyzer
         if (alternativeResult == BashBindingAlternativeResult.Unknown)
         {
             RecordCwdResolutionSanitization(simple.Clause, argumentElementIndices);
+            RecordWorkingDirectoryEffect(
+                simple.Clause,
+                ShellWorkingDirectoryEffectFacts.ChangesOnSuccess(
+                    ShellValueDomainFacts.Unknown));
             return new BashFlowResult(input.WithUnknownCwd(), input);
         }
 
         BashAbstractState? success = null;
         BashAbstractState? failure = null;
+        ShellWorkingDirectoryEffectFacts? effect = null;
         foreach (var bindings in bindingAlternatives)
         {
             BuildEffectiveCwdArguments(
@@ -963,10 +982,44 @@ internal sealed class BashAbstractStateAnalyzer
 
             success = BashAbstractState.JoinNullable(success, visit.OnSuccess);
             failure = BashAbstractState.JoinNullable(failure, visit.OnFailure);
+            var visitEffect = CreateCwdTransferEffect(visit);
+            effect = effect is null
+                ? visitEffect
+                : ShellWorkingDirectoryEffectFacts.Join(effect, visitEffect);
         }
 
+        RecordWorkingDirectoryEffect(
+            simple.Clause,
+            effect ?? ShellWorkingDirectoryEffectFacts.Unknown);
         return new BashFlowResult(success, failure);
     }
+
+    private static ShellWorkingDirectoryEffectFacts CreateCwdTransferEffect(
+        BashFlowResult flow)
+    {
+        if (flow.OnSuccess is not BashAbstractState success)
+        {
+            return ShellWorkingDirectoryEffectFacts.Unchanged;
+        }
+
+        return ShellWorkingDirectoryEffectFacts.ChangesOnSuccess(success.ToDomain());
+    }
+
+    private void RecordWorkingDirectoryEffect(
+        Clause clause,
+        ShellWorkingDirectoryEffectFacts effect)
+    {
+        _workingDirectoryEffects[clause] = _workingDirectoryEffects.TryGetValue(
+            clause,
+            out var prior)
+            ? ShellWorkingDirectoryEffectFacts.Join(prior, effect)
+            : effect;
+    }
+
+    private ShellWorkingDirectoryEffectFacts GetWorkingDirectoryEffect(Clause clause) =>
+        _workingDirectoryEffects.TryGetValue(clause, out var effect)
+            ? effect
+            : ShellWorkingDirectoryEffectFacts.Unknown;
 
     private bool TryGetCwdArgumentValues(
         SimpleCommandSyntax simple,
@@ -1233,7 +1286,7 @@ internal sealed class BashAbstractStateAnalyzer
         if (verb is "command" or "builtin")
         {
             var dispatched = DispatchedVerb(clause);
-            if (dispatched is "cd" or "chdir" or "pushd" or "popd" or
+            if (dispatched is "cd" or "pushd" or "popd" or
                 "eval" or "." or "source" or "trap")
             {
                 success = input.WithUnknownCwd();
@@ -1249,7 +1302,7 @@ internal sealed class BashAbstractStateAnalyzer
             return true;
         }
 
-        if (verb is not ("cd" or "chdir"))
+        if (verb != "cd")
         {
             return false;
         }
@@ -1505,6 +1558,7 @@ internal sealed class BashAbstractStateAnalyzer
             AuthoredArguments = CreateAuthoredArguments(simple.Clause),
             PublishAuthoredPathShape = true,
             WorkingDirectory = input.ToDomain(),
+            WorkingDirectoryEffect = GetWorkingDirectoryEffect(simple.Clause),
             Redirects = redirects,
             RedirectTargetProvenance = sourceFacts.RedirectTargetProvenance,
             CwdPathDependencies = sourceFacts.CwdPathDependencies,

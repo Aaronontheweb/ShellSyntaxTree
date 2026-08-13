@@ -10,7 +10,7 @@ priorities.
 
 ---
 
-## NOW (0.3.3 authored filesystem facts and downstream acceptance)
+## NOW (0.3.4 working-directory effects and downstream acceptance)
 
 - [x] **Create the v0.3.1 approval-fact OpenSpec.** Harvest and sanitize the
       Netclaw v0.26.0-beta.3 approval window. Classify all 18 distinct prompts
@@ -67,7 +67,7 @@ priorities.
       `Unknown` fallback. Compatibility `IsPath`, lexical path shape, broad
       file-verb tables, and bounded pre-splitting words cannot supply the fact
       by themselves.
-- [ ] **Implement, validate, and publish v0.3.3.** Add the single additive
+- [x] **Implement, validate, and publish v0.3.3.** Add the single additive
       `AnalyzedArgument.AuthoredFileSystemValue` property, the smallest audited
       Bash and PowerShell binders, exact transform and resolver boundaries,
       corpus and consumer-guide examples, public 0.3.2 API comparison, native
@@ -76,14 +76,24 @@ priorities.
       Release build, all 2,996 unit and corpus tests, the corpus PII audit,
       header verification, strict OpenSpec validation, Slopwatch, and a 0.3.3
       package build. Both target-framework API comparisons report exactly the
-      one approved additive property. Adversarial review, native Windows CI,
-      public package publication, and downstream Netclaw acceptance remain
-      required before this item is complete.
+      one approved additive property. PR #164 merged as `be47be8f` after Linux
+      and native Windows CI passed. Bare tag `0.3.3` published the package and
+      symbols through the release workflow. Downstream Netclaw acceptance
+      remains part of the separate approval-policy gate.
 - [x] **Keep OpenSSL subject data out of path classification.** Treat the
       slash-prefixed `-subj` Distinguished Name as non-path data without
       assigning verb-wide arity or path roles to subcommand-specific options.
       Direct `req`, `x509`, and `ca` regressions pin the shared subject rule,
       the valueless `x509 -serial` switch, and the non-path `ca -key` operand.
+- [x] **Approve the v0.3.4 working-directory-effect contract.** Add one closed
+      relational fact to `CommandOccurrence` so consumers can distinguish
+      proved preservation, success-only transfer, and unknown effects without
+      parsing shell builtins. Strict OpenSpec and adversarial review passed.
+- [ ] **Implement and validate v0.3.4 working-directory effects.** Derive the
+      fact from Bash and native PowerShell success/failure state, correct the
+      v0.3 Bash `chdir` flow, add scope/join/corruption/corpus/guide coverage,
+      preserve v0.3.3 compatibility, and publish only after Linux and native
+      Windows CI plus downstream Netclaw causal-directory acceptance pass.
 
 ## Completed v0.3.0 host integration and release acceptance
 

@@ -1675,7 +1675,7 @@ internal static partial class BashCommandParser
             if (verb is "unset" or "read" or "readarray" or "mapfile" or
                 "declare" or "typeset" or "local" or "export" or "readonly" or
                 "let" or "eval" or "." or "source" or "getopts" or "set" or
-                "cd" or "chdir" or "pushd" or "popd" or "trap" or
+                "cd" or "pushd" or "popd" or "trap" or
                 "break" or "continue" or "return" or "exit" or "exec")
             {
                 return true;

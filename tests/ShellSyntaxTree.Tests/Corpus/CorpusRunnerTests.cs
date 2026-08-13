@@ -1063,7 +1063,23 @@ public sealed record ExpectedCommandOccurrence
 
     public ExpectedValueDomain? WorkingDirectory { get; init; }
 
+    public ExpectedWorkingDirectoryEffect? WorkingDirectoryEffect { get; init; }
+
     public List<ExpectedRedirectAnalysis>? Redirects { get; init; }
+}
+
+public enum ExpectedWorkingDirectoryEffectKind
+{
+    Unknown,
+    Unchanged,
+    ChangesOnSuccess,
+}
+
+public sealed record ExpectedWorkingDirectoryEffect
+{
+    public ExpectedWorkingDirectoryEffectKind Kind { get; init; }
+
+    public ExpectedValueDomain? Target { get; init; }
 }
 
 public sealed record ExpectedRedirectAnalysis

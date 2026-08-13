@@ -373,6 +373,8 @@ internal static class CorpusJson
 
                 commandJson["arguments"] = arguments;
                 commandJson["workingDirectory"] = BuildValueDomain(command.WorkingDirectory);
+                commandJson["workingDirectoryEffect"] =
+                    BuildWorkingDirectoryEffect(command.WorkingDirectoryEffect);
 
                 if (command.Redirects.Count > 0)
                 {
@@ -428,6 +430,24 @@ internal static class CorpusJson
                 (domain as ShellValueDomain.PathPattern)?.CoveringDirectory,
         };
     }
+
+    private static JsonObject BuildWorkingDirectoryEffect(
+        ShellWorkingDirectoryEffect effect) => effect switch
+        {
+            ShellWorkingDirectoryEffect.Unchanged => new JsonObject
+            {
+                ["kind"] = nameof(ShellWorkingDirectoryEffect.Unchanged),
+            },
+            ShellWorkingDirectoryEffect.ChangesOnSuccess changed => new JsonObject
+            {
+                ["kind"] = nameof(ShellWorkingDirectoryEffect.ChangesOnSuccess),
+                ["target"] = BuildValueDomain(changed.Target),
+            },
+            _ => new JsonObject
+            {
+                ["kind"] = nameof(ShellWorkingDirectoryEffect.Unknown),
+            },
+        };
 
     private static JsonObject BuildRedirectAnalysis(
         RedirectAnalysis analysis,

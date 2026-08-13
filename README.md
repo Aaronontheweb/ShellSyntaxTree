@@ -85,7 +85,8 @@ foreach (var occurrence in parsed.Commands)
     Console.WriteLine(
         $"{occurrence.ImmediateRole} {clause.Verb.Joined} " +
         $"complete={occurrence.IsComplete} " +
-        $"cwd={Describe(occurrence.WorkingDirectory)}");
+        $"cwd={Describe(occurrence.WorkingDirectory)} " +
+        $"cwd-effect={Describe(occurrence.WorkingDirectoryEffect)}");
 
     foreach (var arg in clause.Args.Where(a => a.IsPath))
     {
@@ -114,6 +115,15 @@ static string Describe(ShellValueDomain value) => value switch
         $"{range.MinimumInclusive}..{range.MaximumInclusive}",
     ShellValueDomain.Concatenation => "bounded concatenation",
     ShellValueDomain.Unknown => "unknown",
+    _ => "unknown",
+};
+
+static string Describe(ShellWorkingDirectoryEffect effect) => effect switch
+{
+    ShellWorkingDirectoryEffect.Unchanged => "unchanged",
+    ShellWorkingDirectoryEffect.ChangesOnSuccess changed =>
+        $"changes on success to {Describe(changed.Target)}",
+    ShellWorkingDirectoryEffect.Unknown => "unknown",
     _ => "unknown",
 };
 
@@ -159,9 +169,10 @@ public enum PwshDialect { Unknown, PowerShell7, WindowsPowerShell51 }
 
 public sealed record ParsedCommand { /* Source, Syntax, Commands, Clauses, IsUnparseable, … */ }
 public abstract record ShellSyntaxNode;
-public sealed record CommandOccurrence { /* Clause, role, ancestry, analyzed arguments, cwd, redirects, completeness */ }
+public sealed record CommandOccurrence { /* Clause, role, ancestry, analyzed arguments, cwd, cwd effect, redirects, completeness */ }
 public sealed record AnalyzedArgument  { /* direct Arg + ClauseElement + ShellValueDomain join */ }
 public abstract record ShellValueDomain; // nested Unknown, Exact, FiniteSet, PathPattern
+public abstract record ShellWorkingDirectoryEffect; // nested Unknown, Unchanged, ChangesOnSuccess
 public abstract record RedirectSource;   // nested Unknown, Default, Descriptor, PowerShellAllStreams
 public abstract record RedirectAnalysis; // file, descriptor, heredoc, here-string, or unresolved alternative
 public sealed record Clause        { /* Operator, Verb, Args, Redirects, Elements, IsSubshell, IsCommandStringWrapped */ }

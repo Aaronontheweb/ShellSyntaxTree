@@ -66,7 +66,7 @@ internal static class BashCwdInvocationGrammar
 
         var targetWordIndex = dispatch.TargetWordIndex.Value;
         var target = clause.Elements[words[targetWordIndex]];
-        if (target.Value is not ("cd" or "chdir"))
+        if (target.Value != "cd")
         {
             return BashDispatchKind.None;
         }

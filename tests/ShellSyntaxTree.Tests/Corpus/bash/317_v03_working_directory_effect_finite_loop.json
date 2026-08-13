@@ -1,0 +1,62 @@
+{
+  "name": "v0.3 finite working-directory effect",
+  "input": "for d in /work/a /work/b; do cd \"$d\"; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["cd"],
+        "args": [
+          { "raw": "\"$d\"", "kind": "DynamicSkip", "isPath": false },
+          {
+            "raw": "<dynamic-cwd>",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": []
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "LoopBody",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 42
+          },
+          {
+            "ancestorKind": "ForEach",
+            "region": "LoopBody",
+            "childIndex": null,
+            "sourceStart": 0,
+            "sourceLength": 42
+          },
+          {
+            "ancestorKind": "Block",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 28,
+            "sourceLength": 10
+          }
+        ],
+        "workingDirectory": { "kind": "Unknown" },
+        "workingDirectoryEffect": {
+          "kind": "ChangesOnSuccess",
+          "target": {
+            "kind": "FiniteSet",
+            "values": ["/work/a", "/work/b"]
+          }
+        }
+      }
+    ]
+  },
+  "notes": "Sanitized isolated-state loop. The effect joins repeated exact targets without claiming one final cwd."
+}

@@ -1,5 +1,5 @@
 {
-  "name": "cd-attribution: chdir /target && cmd (chdir also propagates)",
+  "name": "language boundary: Bash chdir does not propagate cwd",
   "input": "chdir /target && cmd",
   "expected": {
     "isUnparseable": false,
@@ -17,14 +17,12 @@
       {
         "operator": "AndIf",
         "verb": ["cmd"],
-        "args": [
-          { "raw": "/target", "kind": "Literal", "isPath": true, "resolved": "/target", "isCwdAttribution": true }
-        ],
+        "args": [],
         "redirects": [],
         "isSubshell": false,
         "isCommandStringWrapped": false
       }
     ]
   },
-  "notes": "Locked interpretation #5: chdir is the other propagating CwdVerb (forward-compat with PowerShell-style invocation)."
+  "notes": "Bash chdir is an ordinary external command. Native PowerShell may canonicalize chdir to Set-Location, but Bash does not inherit that alias."
 }

@@ -830,16 +830,112 @@ aliases.
 
 With an incoming cwd of `/work`, the relevant output is:
 
-| Occurrence | `WorkingDirectory` | Authored path | `Arg.Resolved` |
-|---|---|---|---|
-| `cd /repo` | `Exact("/work")` | `/repo` | `/repo` |
-| `cat file.txt` | `Exact("/repo")` | `file.txt` | `/repo/file.txt` |
+| Occurrence | `WorkingDirectory` | `WorkingDirectoryEffect` | Authored path | `Arg.Resolved` |
+|---|---|---|---|---|
+| `cd /repo` | `Exact("/work")` | `ChangesOnSuccess(Exact("/repo"))` | `/repo` | `/repo` |
+| `cat file.txt` | `Exact("/repo")` | `Unchanged` | `file.txt` | `/repo/file.txt` |
 
 The `cd` row reports the directory in which `cd` itself runs; the `cat` row
 reports the successful `AndIf` continuation state. This is why consumers
 should use the occurrence's `WorkingDirectory` for execution context and the
 argument's `Resolved` value for path-zone policy rather than trying to infer
 either from clause order.
+
+`WorkingDirectoryEffect` is relational. It describes the authored command's
+modeled normal exits relative to its incoming shell scope:
+
+- `Unchanged` means every modeled success and failure preserves the incoming
+  directory;
+- `ChangesOnSuccess(Target)` means modeled failures preserve the incoming
+  directory and modeled successes take `Target`;
+- `Unknown` means the parser cannot publish a complete relation.
+
+The distinction matters when a later statement is reachable through more than
+one exit. Parse this with an incoming cwd of `/work`:
+
+```bash
+cd /tmp && inspect; head result.log
+```
+
+The relevant output is:
+
+| Occurrence | Incoming `WorkingDirectory` | Effect |
+|---|---|---|
+| `cd /tmp` | `Exact("/work")` | `ChangesOnSuccess(Exact("/tmp"))` |
+| `inspect` | `Exact("/tmp")` | `Unchanged` |
+| `head result.log` | `Unknown` | `Unchanged` |
+
+`head` may run after the successful `/tmp` path or after a failed transition.
+The parser therefore does not replace its unknown incoming directory with the
+earlier successful target. The fact that `head` itself is `Unchanged` does not
+make its unknown input safe.
+
+PowerShell uses the same public alternatives. Native PowerShell parses
+`Set-Location C:\repo` as
+`ChangesOnSuccess(Exact("C:/repo"))`. Selected-dialect aliases such as `cd`,
+`chdir`, and `sl` have the same effect. Bash `chdir` remains an ordinary
+command and is `Unchanged`; aliases never cross the language boundary.
+
+### Consuming a directory effect safely
+
+A policy can use the relation to explain or constrain causal intent, but the
+relation grants no authority. A default-deny consumer should apply a shape
+like this:
+
+```csharp
+static CausalDirectoryDecision EvaluateDirectoryEffect(
+    CommandOccurrence transition,
+    IReadOnlyList<CommandOccurrence> prerequisites,
+    string realFallbackDirectory,
+    IPathPolicy paths)
+{
+    if (!transition.IsComplete ||
+        transition.Clause.Verb.IsDynamic ||
+        transition.Redirects.Any(r => !r.IsComplete) ||
+        prerequisites.Any(p => !p.IsComplete))
+    {
+        return CausalDirectoryDecision.Prompt;
+    }
+
+    return transition.WorkingDirectoryEffect switch
+    {
+        ShellWorkingDirectoryEffect.Unchanged =>
+            CausalDirectoryDecision.NoTransition,
+
+        ShellWorkingDirectoryEffect.ChangesOnSuccess changed
+            when HasSupportedCurrentShellScope(transition.Ancestry) &&
+                 AllTargetsPass(changed.Target, paths) &&
+                 paths.Allows(realFallbackDirectory) &&
+                 prerequisites.All(HasIndependentAuthority) =>
+            CausalDirectoryDecision.Bounded,
+
+        ShellWorkingDirectoryEffect.ChangesOnSuccess =>
+            CausalDirectoryDecision.Prompt,
+
+        ShellWorkingDirectoryEffect.Unknown =>
+            CausalDirectoryDecision.Prompt,
+
+        _ => CausalDirectoryDecision.Deny,
+    };
+}
+```
+
+`AllTargetsPass` should accept only the domain alternatives the consumer has
+explicitly implemented. For example, it may enumerate `Exact` and bounded
+`FiniteSet` targets after normalization and symlink checks. It should reject
+`Unknown` and every future domain alternative by default.
+
+The consumer also checks every prerequisite occurrence, authored path,
+redirect, and reachable fallback directory. An effect does not prove that the
+command succeeded, that a later command is reachable only on success, or that
+the target is inside an authorized zone. Ancestry is part of the decision:
+Bash pipeline stages and subshells do not automatically transfer their effect
+to the parent shell, while a PowerShell current-runspace subexpression may.
+
+The fact is limited to authored shell semantics. It does not inspect ambient
+aliases, functions, profiles, provider state, directory stacks, or an external
+executable's private behavior. Those boundaries produce `Unknown`, remain
+outside the parser contract, or require independent executor policy.
 
 The attributed argument is derived context:
 
