@@ -10,7 +10,7 @@ priorities.
 
 ---
 
-## NOW (0.3.2 parser fix and downstream acceptance)
+## NOW (0.3.3 authored filesystem facts and downstream acceptance)
 
 - [x] **Create the v0.3.1 approval-fact OpenSpec.** Harvest and sanitize the
       Netclaw v0.26.0-beta.3 approval window. Classify all 18 distinct prompts
@@ -55,6 +55,19 @@ priorities.
       public 0.3.2 from a fresh cache; its Release build and full runnable test
       suite passed. Exact D02/D10/D14 fixture binding remains tracked by the
       separate post-publication downstream gate above.
+- [ ] **Approve the v0.3.3 authored-filesystem-value contract.** Review
+      `openspec/changes/v0-3-3-authored-operand-role/` as the bounded D14 fix.
+      The public projection must require a separate audited local-path binder,
+      transform-safe authored candidates, exact local resolution, and strict
+      `Unknown` fallback. Compatibility `IsPath`, lexical path shape, broad
+      file-verb tables, and bounded pre-splitting words cannot supply the fact
+      by themselves.
+- [ ] **Implement, validate, and publish v0.3.3.** Add the single additive
+      `AnalyzedArgument.AuthoredFileSystemValue` property, the smallest audited
+      Bash and PowerShell binders, exact transform and resolver boundaries,
+      corpus and consumer-guide examples, public 0.3.2 API comparison, native
+      Windows coverage, downstream Netclaw D14 acceptance, and tag-driven
+      package publication.
 
 ## Completed v0.3.0 host integration and release acceptance
 
