@@ -100,12 +100,18 @@ priorities.
       `0.3.4` completed release workflow run 31728782396 and published the
       package, symbols, and non-prerelease GitHub release. Netclaw consumed the
       exact public package and completed its causal-directory acceptance slice.
-- [ ] **Approve authored non-filesystem value facts for v0.3.5.** Live Netclaw
+- [x] **Approve authored non-filesystem value facts for v0.3.5.** Live Netclaw
       traffic exposed `tr -d '\n'` as a false local-path scope ending in `/n`.
-      The `publish-authored-operand-semantics` OpenSpec proposes one additive
+      The `publish-authored-operand-semantics` OpenSpec defines one additive
       value-domain property, one audited `tr` data binding, a single-token
-      compatibility correction, and a strict consumer boundary. Complete
-      adversarial review before implementation.
+      compatibility correction, and a strict consumer boundary. PR #167 merged
+      the contract after strict OpenSpec plus Linux and Windows CI passed.
+- [ ] **Implement and publish v0.3.5 authored non-filesystem facts.** Add the
+      approved property and generalized audited operand projection. Preserve
+      the existing `cat` and `Get-Content -LiteralPath` facts. Pin direct,
+      corpus, API, PowerShell, redirect, dynamic, and over-limit boundaries.
+      Complete adversarial review, package comparison, native Windows CI,
+      publication, and downstream Netclaw acceptance before completion.
 
 ## Completed v0.3.0 host integration and release acceptance
 

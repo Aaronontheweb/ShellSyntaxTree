@@ -124,6 +124,7 @@ public class V03PublicApiSnapshotTests
             (nameof(AnalyzedArgument.Value), typeof(ShellValueDomain)),
             (nameof(AnalyzedArgument.AuthoredValue), typeof(ShellValueDomain)),
             (nameof(AnalyzedArgument.AuthoredFileSystemValue), typeof(ShellValueDomain)),
+            (nameof(AnalyzedArgument.AuthoredNonFileSystemValue), typeof(ShellValueDomain)),
             (nameof(AnalyzedArgument.AuthoredPathShape), typeof(ShellPathShape)));
 
         AssertEnum<ShellPathShape>("Unknown", "Posix", "Windows");
@@ -383,6 +384,28 @@ public class V03PublicApiSnapshotTests
             StringComparison.Ordinal);
         Assert.Contains(
             "\"AuthoredFileSystemValue\"",
+            JsonSerializer.Serialize(positive),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Authored_non_filesystem_value_is_non_null_and_part_of_record_shape()
+    {
+        var strict = new AnalyzedArgument();
+        var positive = strict with
+        {
+            AuthoredNonFileSystemValue = new ShellValueDomain.Exact("data"),
+        };
+
+        Assert.IsType<ShellValueDomain.Unknown>(strict.AuthoredNonFileSystemValue);
+        Assert.NotEqual(strict, positive);
+        Assert.NotEqual(strict.GetHashCode(), positive.GetHashCode());
+        Assert.Contains(
+            "AuthoredNonFileSystemValue = Exact",
+            positive.ToString(),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "\"AuthoredNonFileSystemValue\"",
             JsonSerializer.Serialize(positive),
             StringComparison.Ordinal);
     }

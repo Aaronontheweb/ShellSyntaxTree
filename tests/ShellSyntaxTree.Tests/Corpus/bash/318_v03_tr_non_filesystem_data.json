@@ -1,0 +1,161 @@
+{
+  "name": "v0.3.5 tr translation data is not a filesystem operand",
+  "input": "tr -d '\\n'",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "tr"
+        ],
+        "args": [
+          {
+            "raw": "-d",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "'\\n'",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "tr",
+            "value": "tr",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-d",
+            "value": "-d",
+            "role": "Argument",
+            "sourceStart": 3,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "'\\n'",
+            "value": "\\n",
+            "role": "Argument",
+            "sourceStart": 6,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 10,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 10,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 10
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-d"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "authoredNonFileSystemValue": {
+              "kind": "Exact",
+              "values": [
+                "-d"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "\\n"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "authoredNonFileSystemValue": {
+              "kind": "Exact",
+              "values": [
+                "\\n"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      }
+    ]
+  },
+  "notes": "Sanitized live-derived fact: the quoted backslash sequence is tr translation data, not a child path scope."
+}

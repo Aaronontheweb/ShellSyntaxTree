@@ -1134,6 +1134,8 @@ public sealed record ExpectedAnalyzedArgument
     public ExpectedValueDomain Value { get; init; } = new();
 
     public ExpectedValueDomain? AuthoredFileSystemValue { get; init; }
+
+    public ExpectedValueDomain? AuthoredNonFileSystemValue { get; init; }
 }
 
 public sealed record ExpectedValueDomain

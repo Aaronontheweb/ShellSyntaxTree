@@ -1,5 +1,30 @@
 #### Unreleased ####
 
+## Added
+
+- Add `AnalyzedArgument.AuthoredNonFileSystemValue`. The non-null default is
+  `Unknown`; positive `Exact` and `FiniteSet` values require an audited operand
+  binding.
+- Add one audited Bash `tr` entry. It proves bounded options and translation
+  sets are non-filesystem data.
+
+## Fixed
+
+- Keep `tr` as a single-token command identity, so `tr abc def` retains both
+  arguments.
+- Stop classifying the quoted `\n` translation set as a compatibility path
+  that resolves to a false `n` child scope.
+
+## Security and compatibility
+
+- Keep `AuthoredPathShape` independent. The exact `\n` word remains
+  Windows-shaped lexical evidence.
+- Let consumers omit only the same argument's broad compatibility path facts
+  after a positive non-filesystem proof.
+- Preserve redirects, substitutions, command effects, completeness, working
+  directories, and every other argument as independent policy inputs.
+- Preserve every 0.3.4 public signature. The new property is additive.
+
 #### 0.3.4 2026-08-13 ####
 
 This additive release publishes parser-owned working-directory effects for
