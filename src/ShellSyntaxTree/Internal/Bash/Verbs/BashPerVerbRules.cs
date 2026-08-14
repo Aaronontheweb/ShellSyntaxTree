@@ -83,7 +83,23 @@ internal static class BashPerVerbRules
     /// <param name="positionalIndex">0-based positional index among non-flag args.</param>
     /// <param name="token">The token text itself (used for the LooksLikePath fallback).</param>
     /// <returns>True when this slot is a path; false otherwise.</returns>
-    internal static bool IsPositionalPathArg(VerbChain verb, int positionalIndex, string token)
+    internal static bool IsPositionalPathArg(
+        VerbChain verb,
+        int positionalIndex,
+        string token) =>
+        IsPositionalPathArg(verb, positionalIndex, token, useBashAuditedSemantics: true);
+
+    internal static bool IsNativePositionalPathArg(
+        VerbChain verb,
+        int positionalIndex,
+        string token) =>
+        IsPositionalPathArg(verb, positionalIndex, token, useBashAuditedSemantics: false);
+
+    private static bool IsPositionalPathArg(
+        VerbChain verb,
+        int positionalIndex,
+        string token,
+        bool useBashAuditedSemantics)
     {
         if (verb is null || verb.Tokens is null || verb.Tokens.Count == 0)
         {
@@ -93,6 +109,14 @@ internal static class BashPerVerbRules
         }
 
         var firstVerb = verb.Tokens[0];
+
+        if (useBashAuditedSemantics &&
+            AuditedOperandBindingCatalog.ClassifiesAllArgumentsAsNonFileSystem(
+                ShellProjectionLanguage.Bash,
+                firstVerb))
+        {
+            return false;
+        }
 
         // Explicit override first (chmod / find / curl / ...).
         if (Overrides.TryGetValue(firstVerb, out var rule))

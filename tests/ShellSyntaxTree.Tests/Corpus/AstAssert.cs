@@ -470,6 +470,14 @@ internal static class AstAssert
                             actualArgument.AuthoredFileSystemValue,
                             prefix + $"commands[{index}].arguments[{argumentIndex}].authoredFileSystemValue");
                     }
+
+                    if (expectedArgument.AuthoredNonFileSystemValue is not null)
+                    {
+                        AssertValueDomainEqual(
+                            expectedArgument.AuthoredNonFileSystemValue,
+                            actualArgument.AuthoredNonFileSystemValue,
+                            prefix + $"commands[{index}].arguments[{argumentIndex}].authoredNonFileSystemValue");
+                    }
                 }
             }
 

@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------
-// <copyright file="AuthoredFileSystemValueProjection.cs" company="Aaron Stannard">
+// <copyright file="AuthoredOperandSemanticsProjection.cs" company="Aaron Stannard">
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
@@ -8,23 +8,37 @@ using System.Collections.Generic;
 
 namespace ShellSyntaxTree.Internal.Resolving;
 
-internal enum AuditedFileSystemBindingCategory
+internal enum AuditedOperandBindingCategory
 {
     Unknown,
     AllNonOptionOperands,
     ExactNamedParameterValue,
+    AllArguments,
 }
 
-internal sealed class AuthoredFileSystemBindingCatalogEntry
+internal enum AuditedOperandSemantic
 {
-    internal AuthoredFileSystemBindingCatalogEntry(
+    Unknown,
+    LocalFileSystem,
+    NonFileSystem,
+}
+
+internal readonly record struct AuditedOperandBinding(
+    AuditedOperandBindingCategory Category,
+    AuditedOperandSemantic Semantic);
+
+internal sealed class AuditedOperandBindingCatalogEntry
+{
+    internal AuditedOperandBindingCatalogEntry(
         ShellProjectionLanguage language,
         string canonicalVerb,
         StringComparison verbComparison,
-        AuditedFileSystemBindingCategory category,
-        string? parameterName = null)
+        AuditedOperandBindingCategory category,
+        AuditedOperandSemantic semantic,
+        string? parameterName = null,
+        bool stopsVerbChain = false)
     {
-        if (category == AuditedFileSystemBindingCategory.ExactNamedParameterValue &&
+        if (category == AuditedOperandBindingCategory.ExactNamedParameterValue &&
             string.IsNullOrEmpty(parameterName))
         {
             throw new ArgumentException(
@@ -32,7 +46,7 @@ internal sealed class AuthoredFileSystemBindingCatalogEntry
                 nameof(parameterName));
         }
 
-        if (category != AuditedFileSystemBindingCategory.ExactNamedParameterValue &&
+        if (category != AuditedOperandBindingCategory.ExactNamedParameterValue &&
             parameterName != null)
         {
             throw new ArgumentException(
@@ -40,11 +54,21 @@ internal sealed class AuthoredFileSystemBindingCatalogEntry
                 nameof(parameterName));
         }
 
+        if (semantic == AuditedOperandSemantic.Unknown ||
+            category == AuditedOperandBindingCategory.Unknown)
+        {
+            throw new ArgumentException(
+                "An audited binding requires a known category and semantic.",
+                nameof(semantic));
+        }
+
         Language = language;
         CanonicalVerb = canonicalVerb;
         VerbComparison = verbComparison;
         Category = category;
+        Semantic = semantic;
         ParameterName = parameterName;
+        StopsVerbChain = stopsVerbChain;
     }
 
     internal ShellProjectionLanguage Language { get; }
@@ -53,39 +77,52 @@ internal sealed class AuthoredFileSystemBindingCatalogEntry
 
     internal StringComparison VerbComparison { get; }
 
-    internal AuditedFileSystemBindingCategory Category { get; }
+    internal AuditedOperandBindingCategory Category { get; }
+
+    internal AuditedOperandSemantic Semantic { get; }
 
     internal string? ParameterName { get; }
+
+    internal bool StopsVerbChain { get; }
 }
 
 /// <summary>
-/// Owns the deliberately small catalog whose entries prove local-filesystem
-/// argument semantics. Compatibility path tables do not feed this catalog.
+/// Owns the deliberately small catalog whose entries prove audited operand
+/// semantics. Compatibility path tables do not feed this catalog.
 /// </summary>
-internal static class AuthoredFileSystemBindingCatalog
+internal static class AuditedOperandBindingCatalog
 {
-    private static readonly IReadOnlyList<AuthoredFileSystemBindingCatalogEntry> Entries =
+    private static readonly IReadOnlyList<AuditedOperandBindingCatalogEntry> Entries =
         new[]
         {
-            new AuthoredFileSystemBindingCatalogEntry(
+            new AuditedOperandBindingCatalogEntry(
                 ShellProjectionLanguage.Bash,
                 "cat",
                 StringComparison.Ordinal,
-                AuditedFileSystemBindingCategory.AllNonOptionOperands),
-            new AuthoredFileSystemBindingCatalogEntry(
+                AuditedOperandBindingCategory.AllNonOptionOperands,
+                AuditedOperandSemantic.LocalFileSystem),
+            new AuditedOperandBindingCatalogEntry(
                 ShellProjectionLanguage.PowerShell,
                 "Get-Content",
                 StringComparison.OrdinalIgnoreCase,
-                AuditedFileSystemBindingCategory.ExactNamedParameterValue,
+                AuditedOperandBindingCategory.ExactNamedParameterValue,
+                AuditedOperandSemantic.LocalFileSystem,
                 "-LiteralPath"),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.Bash,
+                "tr",
+                StringComparison.Ordinal,
+                AuditedOperandBindingCategory.AllArguments,
+                AuditedOperandSemantic.NonFileSystem,
+                stopsVerbChain: true),
         };
 
-    internal static IReadOnlyList<AuditedFileSystemBindingCategory> Bind(
+    internal static IReadOnlyList<AuditedOperandBinding> Bind(
         ShellProjectionLanguage language,
         Clause clause,
         IReadOnlyList<AnalyzedArgument> arguments)
     {
-        var bindings = new AuditedFileSystemBindingCategory[arguments.Count];
+        var bindings = new AuditedOperandBinding[arguments.Count];
         if (clause.Verb.IsDynamic || clause.Verb.Tokens.Count != 1)
         {
             return bindings;
@@ -109,39 +146,62 @@ internal static class AuthoredFileSystemBindingCatalog
         return bindings;
     }
 
-    internal static IReadOnlyList<AuditedFileSystemBindingCategory> Bind(
-        AuthoredFileSystemBindingCatalogEntry entry,
+    internal static IReadOnlyList<AuditedOperandBinding> Bind(
+        AuditedOperandBindingCatalogEntry entry,
         IReadOnlyList<AnalyzedArgument> arguments)
     {
-        var bindings = new AuditedFileSystemBindingCategory[arguments.Count];
+        var bindings = new AuditedOperandBinding[arguments.Count];
         return entry.Category switch
         {
-            AuditedFileSystemBindingCategory.AllNonOptionOperands =>
-                BindAllNonOptionOperands(bindings),
-            AuditedFileSystemBindingCategory.ExactNamedParameterValue =>
+            AuditedOperandBindingCategory.AllNonOptionOperands =>
+                BindAllNonOptionOperands(bindings, entry),
+            AuditedOperandBindingCategory.ExactNamedParameterValue =>
                 BindExactNamedParameterValue(
                     arguments,
                     bindings,
-                    entry.ParameterName!),
+                    entry),
+            AuditedOperandBindingCategory.AllArguments =>
+                BindAllArguments(bindings, entry),
             _ => bindings,
         };
     }
 
-    private static IReadOnlyList<AuditedFileSystemBindingCategory> BindAllNonOptionOperands(
-        AuditedFileSystemBindingCategory[] bindings)
+    internal static bool StopsVerbChain(
+        ShellProjectionLanguage language,
+        string canonicalVerb)
+    {
+        var entry = Find(language, canonicalVerb);
+        return entry is not null && entry.StopsVerbChain;
+    }
+
+    internal static bool ClassifiesAllArgumentsAsNonFileSystem(
+        ShellProjectionLanguage language,
+        string canonicalVerb)
+    {
+        var entry = Find(language, canonicalVerb);
+        return entry is
+        {
+            Category: AuditedOperandBindingCategory.AllArguments,
+            Semantic: AuditedOperandSemantic.NonFileSystem,
+        };
+    }
+
+    private static IReadOnlyList<AuditedOperandBinding> BindAllNonOptionOperands(
+        AuditedOperandBinding[] bindings,
+        AuditedOperandBindingCatalogEntry entry)
     {
         for (var index = 0; index < bindings.Length; index++)
         {
-            bindings[index] = AuditedFileSystemBindingCategory.AllNonOptionOperands;
+            bindings[index] = new AuditedOperandBinding(entry.Category, entry.Semantic);
         }
 
         return bindings;
     }
 
-    private static IReadOnlyList<AuditedFileSystemBindingCategory> BindExactNamedParameterValue(
+    private static IReadOnlyList<AuditedOperandBinding> BindExactNamedParameterValue(
         IReadOnlyList<AnalyzedArgument> arguments,
-        AuditedFileSystemBindingCategory[] bindings,
-        string parameterName)
+        AuditedOperandBinding[] bindings,
+        AuditedOperandBindingCatalogEntry entry)
     {
         var expectsValue = false;
         for (var index = 0; index < arguments.Count; index++)
@@ -151,7 +211,9 @@ internal static class AuthoredFileSystemBindingCatalog
             {
                 if (!argument.Argument.IsFlag)
                 {
-                    bindings[index] = AuditedFileSystemBindingCategory.ExactNamedParameterValue;
+                    bindings[index] = new AuditedOperandBinding(
+                        entry.Category,
+                        entry.Semantic);
                 }
 
                 expectsValue = false;
@@ -159,7 +221,7 @@ internal static class AuthoredFileSystemBindingCatalog
 
             if (argument.Argument.IsFlag && string.Equals(
                     argument.Argument.Raw,
-                    parameterName,
+                    entry.ParameterName!,
                     StringComparison.OrdinalIgnoreCase))
             {
                 expectsValue = true;
@@ -168,13 +230,41 @@ internal static class AuthoredFileSystemBindingCatalog
 
         return bindings;
     }
+
+    private static IReadOnlyList<AuditedOperandBinding> BindAllArguments(
+        AuditedOperandBinding[] bindings,
+        AuditedOperandBindingCatalogEntry entry)
+    {
+        for (var index = 0; index < bindings.Length; index++)
+        {
+            bindings[index] = new AuditedOperandBinding(entry.Category, entry.Semantic);
+        }
+
+        return bindings;
+    }
+
+    private static AuditedOperandBindingCatalogEntry? Find(
+        ShellProjectionLanguage language,
+        string canonicalVerb)
+    {
+        for (var index = 0; index < Entries.Count; index++)
+        {
+            var entry = Entries[index];
+            if (entry.Language == language &&
+                string.Equals(canonicalVerb, entry.CanonicalVerb, entry.VerbComparison))
+            {
+                return entry;
+            }
+        }
+
+        return null;
+    }
 }
 
 /// <summary>
-/// Combines an audited binding, transform provenance, and the existing path
-/// resolver into one fail-closed public value domain.
+/// Combines audited bindings with transform provenance and path resolution.
 /// </summary>
-internal static class AuthoredFileSystemValueProjection
+internal static class AuthoredOperandSemanticsProjection
 {
     internal static IReadOnlyList<AnalyzedArgument> Apply(
         ShellProjectionLanguage language,
@@ -188,7 +278,7 @@ internal static class AuthoredFileSystemValueProjection
             return arguments;
         }
 
-        var bindings = AuthoredFileSystemBindingCatalog.Bind(language, clause, arguments);
+        var bindings = AuditedOperandBindingCatalog.Bind(language, clause, arguments);
         if (!HasAuditedBinding(bindings))
         {
             return arguments;
@@ -200,11 +290,14 @@ internal static class AuthoredFileSystemValueProjection
         for (var index = 0; index < arguments.Count; index++)
         {
             var argument = arguments[index];
-            ShellValueDomain domain = new ShellValueDomain.Unknown();
+            var fileSystemDomain = argument.AuthoredFileSystemValue;
+            var nonFileSystemDomain = argument.AuthoredNonFileSystemValue;
             var candidates = Values(argument.AuthoredValue);
-            switch (bindings[index])
+            var binding = bindings[index];
+            switch (binding.Category, binding.Semantic)
             {
-                case AuditedFileSystemBindingCategory.AllNonOptionOperands:
+                case (AuditedOperandBindingCategory.AllNonOptionOperands,
+                    AuditedOperandSemantic.LocalFileSystem):
                     var allCandidatesArePaths = ClassifyNonOptionOperand(
                         candidates,
                         bashOptionsEnded,
@@ -219,11 +312,12 @@ internal static class AuthoredFileSystemValueProjection
                             workingDirectory,
                             out var bashDomain))
                     {
-                        domain = bashDomain;
+                        fileSystemDomain = bashDomain;
                     }
 
                     break;
-                case AuditedFileSystemBindingCategory.ExactNamedParameterValue:
+                case (AuditedOperandBindingCategory.ExactNamedParameterValue,
+                    AuditedOperandSemantic.LocalFileSystem):
                     if (candidates.Count > 0 &&
                         TryGetProvenance(argument, clause, provenanceByElement, out var pwshValue) &&
                         IsSingleField(pwshValue) &&
@@ -233,24 +327,57 @@ internal static class AuthoredFileSystemValueProjection
                             workingDirectory,
                             out var pwshDomain))
                     {
-                        domain = pwshDomain;
+                        fileSystemDomain = pwshDomain;
+                    }
+
+                    break;
+                case (AuditedOperandBindingCategory.AllArguments,
+                    AuditedOperandSemantic.NonFileSystem):
+                    if (candidates.Count > 0 &&
+                        TryGetProvenance(argument, clause, provenanceByElement, out var dataValue) &&
+                        IsBashTransformSafe(dataValue, candidates))
+                    {
+                        nonFileSystemDomain = argument.AuthoredValue;
                     }
 
                     break;
             }
 
-            projected[index] = argument with { AuthoredFileSystemValue = domain };
+            projected[index] = argument with
+            {
+                AuthoredFileSystemValue = fileSystemDomain,
+                AuthoredNonFileSystemValue = nonFileSystemDomain,
+            };
         }
 
-        return projected;
+        return HasValidDomains(projected) ? projected : Array.Empty<AnalyzedArgument>();
+    }
+
+    internal static bool HasValidDomains(IReadOnlyList<AnalyzedArgument> arguments)
+    {
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            var argument = arguments[index];
+            var hasFileSystemValue = IsPositiveDomain(argument.AuthoredFileSystemValue);
+            var hasNonFileSystemValue = IsPositiveDomain(
+                argument.AuthoredNonFileSystemValue);
+            if (hasFileSystemValue && hasNonFileSystemValue ||
+                !IsAuditedDomain(argument.AuthoredFileSystemValue) ||
+                !IsAuditedDomain(argument.AuthoredNonFileSystemValue))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool HasAuditedBinding(
-        IReadOnlyList<AuditedFileSystemBindingCategory> bindings)
+        IReadOnlyList<AuditedOperandBinding> bindings)
     {
         for (var index = 0; index < bindings.Count; index++)
         {
-            if (bindings[index] != AuditedFileSystemBindingCategory.Unknown)
+            if (bindings[index].Category != AuditedOperandBindingCategory.Unknown)
             {
                 return true;
             }
@@ -258,6 +385,15 @@ internal static class AuthoredFileSystemValueProjection
 
         return false;
     }
+
+    private static bool IsAuditedDomain(ShellValueDomain domain) => domain is
+        ShellValueDomain.Unknown or
+        ShellValueDomain.Exact or
+        ShellValueDomain.FiniteSet;
+
+    private static bool IsPositiveDomain(ShellValueDomain domain) => domain is
+        ShellValueDomain.Exact or
+        ShellValueDomain.FiniteSet;
 
     private static Dictionary<int, ShellValue> IndexProvenance(
         IReadOnlyList<ShellValueElementProvenance> provenance)

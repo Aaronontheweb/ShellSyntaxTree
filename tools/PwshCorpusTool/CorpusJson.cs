@@ -368,6 +368,12 @@ internal static class CorpusJson
                             BuildValueDomain(analyzed.AuthoredFileSystemValue);
                     }
 
+                    if (analyzed.AuthoredNonFileSystemValue is not ShellValueDomain.Unknown)
+                    {
+                        argument["authoredNonFileSystemValue"] =
+                            BuildValueDomain(analyzed.AuthoredNonFileSystemValue);
+                    }
+
                     arguments.Add(argument);
                 }
 

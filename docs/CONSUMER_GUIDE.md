@@ -656,6 +656,50 @@ compatibility path bit or slash characters are not enough:
 | `scp user@example.invalid:/srv/file .` | `Unknown` for the remote endpoint | Remote syntax is not a local filesystem path. |
 | `show /api/v1` | `Unknown` | Path-shaped data has no audited binding. |
 
+An audited non-filesystem value can contradict only broad path heuristics for
+the same argument. It does not erase any other command fact. For example:
+
+```bash
+tr -d '\n'
+```
+
+projects the second argument as:
+
+```text
+AuthoredValue:                 Exact("\n")
+AuthoredPathShape:             Windows
+AuthoredFileSystemValue:       Unknown
+AuthoredNonFileSystemValue:    Exact("\n")
+```
+
+The lexical shape is still truthful. The audited `tr` binding proves that this
+specific value is translation data, so a consumer need not turn that shape or
+the compatibility `IsPath` bit into a local path candidate:
+
+```csharp
+static bool RequiresCompatibilityPathCheck(AnalyzedArgument argument)
+{
+    if (argument.AuthoredFileSystemValue is not ShellValueDomain.Unknown)
+    {
+        return true;
+    }
+
+    return argument.AuthoredNonFileSystemValue switch
+    {
+        ShellValueDomain.Exact => false,
+        ShellValueDomain.FiniteSet => false,
+        ShellValueDomain.Unknown => true,
+        _ => true,
+    };
+}
+```
+
+Fail closed if both authored semantic domains are positive. A positive
+non-filesystem value does not relax output redirects, command substitutions,
+dynamic identity, incomplete occurrences, working-directory policy, command
+effects, or other arguments. Thus `tr -d '\n' > /outside/result` still sends
+the redirect target through path policy.
+
 PowerShell uses the same public property and the selected dialect's argument
 binding. For example:
 

@@ -5350,7 +5350,7 @@ internal sealed class PwshForEachValueAnalyzer
                             PwshVerbs.FileVerbs.Contains(canonicalVerb!),
                         positionalIndex,
                         element.Value)
-                    : BashPerVerbRules.IsPositionalPathArg(
+                    : BashPerVerbRules.IsNativePositionalPathArg(
                         clause.Verb,
                         positionalIndex,
                         element.Value);

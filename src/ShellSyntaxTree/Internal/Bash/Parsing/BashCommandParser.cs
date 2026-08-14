@@ -554,8 +554,12 @@ internal static partial class BashCommandParser
         BashVerbs.FlagsWithValue.TryGetValue(firstVerb ?? string.Empty, out var flagsForVerb);
         var fileVerbCarveout = firstVerb is not null
             && BashVerbs.FileVerbs.Contains(firstVerb);
+        var auditedSingleTokenVerb = firstVerb is not null &&
+            AuditedOperandBindingCatalog.StopsVerbChain(
+                ShellProjectionLanguage.Bash,
+                firstVerb);
 
-        if (firstVerb is not null)
+        if (firstVerb is not null && !auditedSingleTokenVerb)
         {
             for (var i = 1; i < segment.Tokens.Count; i++)
             {

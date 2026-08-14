@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------
-// <copyright file="AuthoredFileSystemValueTests.cs" company="Aaron Stannard">
+// <copyright file="AuthoredOperandSemanticsTests.cs" company="Aaron Stannard">
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
@@ -10,41 +10,242 @@ using Xunit;
 
 namespace ShellSyntaxTree.Tests.Parsing;
 
-public class AuthoredFileSystemValueTests
+public class AuthoredOperandSemanticsTests
 {
     [Fact]
     public void Audited_commands_opt_into_reusable_binding_categories_through_data()
     {
         var operandArguments = Assert.Single(
             Bash().Parse("example-command README.md").Commands).Arguments;
-        var operandEntry = new AuthoredFileSystemBindingCatalogEntry(
+        var operandEntry = new AuditedOperandBindingCatalogEntry(
             ShellProjectionLanguage.Bash,
             "example-command",
             StringComparison.Ordinal,
-            AuditedFileSystemBindingCategory.AllNonOptionOperands);
+            AuditedOperandBindingCategory.AllNonOptionOperands,
+            AuditedOperandSemantic.LocalFileSystem);
 
         Assert.Equal(
-            new[] { AuditedFileSystemBindingCategory.AllNonOptionOperands },
-            AuthoredFileSystemBindingCatalog.Bind(operandEntry, operandArguments));
+            new[]
+            {
+                new AuditedOperandBinding(
+                    AuditedOperandBindingCategory.AllNonOptionOperands,
+                    AuditedOperandSemantic.LocalFileSystem),
+            },
+            AuditedOperandBindingCatalog.Bind(operandEntry, operandArguments));
 
         var parameterArguments = Assert.Single(
             PowerShell(PwshDialect.PowerShell7)
                 .Parse("Example-Command -Source C:\\work\\a.txt")
                 .Commands).Arguments;
-        var parameterEntry = new AuthoredFileSystemBindingCatalogEntry(
+        var parameterEntry = new AuditedOperandBindingCatalogEntry(
             ShellProjectionLanguage.PowerShell,
             "Example-Command",
             StringComparison.OrdinalIgnoreCase,
-            AuditedFileSystemBindingCategory.ExactNamedParameterValue,
+            AuditedOperandBindingCategory.ExactNamedParameterValue,
+            AuditedOperandSemantic.LocalFileSystem,
             "-Source");
 
         Assert.Equal(
             new[]
             {
-                AuditedFileSystemBindingCategory.Unknown,
-                AuditedFileSystemBindingCategory.ExactNamedParameterValue,
+                default,
+                new AuditedOperandBinding(
+                    AuditedOperandBindingCategory.ExactNamedParameterValue,
+                    AuditedOperandSemantic.LocalFileSystem),
             },
-            AuthoredFileSystemBindingCatalog.Bind(parameterEntry, parameterArguments));
+            AuditedOperandBindingCatalog.Bind(parameterEntry, parameterArguments));
+    }
+
+    [Theory]
+    [InlineData("tr abc def", "abc", "def")]
+    [InlineData("tr -d '\\n'", "-d", "\\n")]
+    [InlineData("tr -- -d x", "--", "-d", "x")]
+    public void Audited_bash_tr_arguments_publish_non_filesystem_values(
+        string source,
+        params string[] expected)
+    {
+        var command = Assert.Single(Bash().Parse(source).Commands);
+
+        Assert.Equal(new[] { "tr" }, command.Clause.Verb.Tokens);
+        Assert.Equal(expected.Length, command.Arguments.Count);
+        for (var index = 0; index < expected.Length; index++)
+        {
+            var argument = command.Arguments[index];
+            Assert.Equal(
+                expected[index],
+                Assert.IsType<ShellValueDomain.Exact>(argument.AuthoredValue).Value);
+            Assert.False(argument.Argument.IsPath);
+            Assert.Null(argument.Argument.Resolved);
+            AssertNonFileSystemExact(argument, expected[index]);
+            AssertUnknownFileSystem(argument);
+        }
+    }
+
+    [Fact]
+    public void Path_shaped_tr_data_keeps_lexical_shape_without_path_semantics()
+    {
+        var arguments = Assert.Single(
+            Bash().Parse("tr /etc/passwd 'C:\\temp'").Commands).Arguments;
+
+        Assert.Equal(ShellPathShape.Posix, arguments[0].AuthoredPathShape);
+        Assert.Equal(ShellPathShape.Windows, arguments[1].AuthoredPathShape);
+        Assert.All(arguments, argument =>
+        {
+            Assert.False(argument.Argument.IsPath);
+            Assert.Null(argument.Argument.Resolved);
+            Assert.IsType<ShellValueDomain.Exact>(argument.AuthoredNonFileSystemValue);
+        });
+    }
+
+    [Fact]
+    public void Active_glob_and_dynamic_tr_data_remain_unknown()
+    {
+        var glob = Assert.Single(Bash().Parse("tr *.txt x").Commands).Arguments;
+        var dynamic = Bash().Parse("tr \"$chars\" x");
+
+        AssertUnknownNonFileSystem(glob[0]);
+        AssertNonFileSystemExact(glob[1], "x");
+        Assert.True(dynamic.IsUnparseable);
+        Assert.Empty(dynamic.Commands);
+    }
+
+    [Fact]
+    public void Tr_substitution_and_redirect_remain_independent_facts()
+    {
+        var substitution = Bash().Parse("tr \"$(printf x)\" y");
+        var outer = Assert.Single(
+            substitution.Commands,
+            command => command.Clause.Verb.Joined == "tr");
+        AssertUnknownNonFileSystem(outer.Arguments[0]);
+        AssertNonFileSystemExact(outer.Arguments[1], "y");
+        Assert.Contains(
+            substitution.Commands,
+            command => command.ImmediateRole == CommandOccurrenceRole.Substitution);
+
+        var redirected = Assert.Single(
+            Bash().Parse("tr -d '\\n' > /outside/result").Commands);
+        Assert.All(redirected.Arguments, argument =>
+            Assert.IsType<ShellValueDomain.Exact>(argument.AuthoredNonFileSystemValue));
+        Assert.Equal(
+            "/outside/result",
+            Assert.IsType<ShellValueDomain.Exact>(
+                Assert.IsType<FileRedirectAnalysis>(
+                    Assert.Single(redirected.Redirects)).Target).Value);
+    }
+
+    [Fact]
+    public void Unknown_command_keeps_backslash_argument_on_the_compatibility_path()
+    {
+        var argument = Assert.Single(
+            Assert.Single(Bash().Parse("tool -d '\\n'").Commands).Arguments,
+            candidate => candidate.AuthoredValue is ShellValueDomain.Exact
+            {
+                Value: "\\n",
+            });
+
+        Assert.True(argument.Argument.IsPath);
+        Assert.Equal("/work/n", argument.Argument.Resolved);
+        AssertUnknownNonFileSystem(argument);
+    }
+
+    [Fact]
+    public void Over_limit_tr_join_remains_unknown()
+    {
+        var values = Enumerable.Range(1, ShellAnalysisLimits.MaxValueCandidates + 1)
+            .Select(index => $"v{index:00}");
+        var result = Bash(authoredFacts: true).Parse(
+            $"for f in {string.Join(" ", values)}; do tr \"$f\" x; done");
+
+        var arguments = Assert.Single(result.Commands).Arguments;
+        AssertUnknownNonFileSystem(arguments[0]);
+        AssertNonFileSystemExact(arguments[1], "x");
+    }
+
+    [Fact]
+    public void Finite_tr_loop_publishes_a_non_filesystem_value_set()
+    {
+        var result = Bash(authoredFacts: true).Parse(
+            "for f in a b; do tr \"$f\" x; done");
+
+        var arguments = Assert.Single(result.Commands).Arguments;
+        AssertFinite(arguments[0].AuthoredNonFileSystemValue, "a", "b");
+        AssertUnknownFileSystem(arguments[0]);
+        AssertNonFileSystemExact(arguments[1], "x");
+        AssertUnknownFileSystem(arguments[1]);
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7)]
+    [InlineData(PwshDialect.WindowsPowerShell51)]
+    public void PowerShell_tr_arguments_do_not_gain_bash_semantics(PwshDialect dialect)
+    {
+        var result = PowerShell(dialect).Parse("tr -d '\\n'");
+
+        var arguments = Assert.Single(result.Commands).Arguments;
+        Assert.All(arguments, AssertUnknownNonFileSystem);
+        Assert.True(arguments[^1].Argument.IsPath);
+    }
+
+    [Fact]
+    public void Audited_filesystem_and_non_filesystem_domains_are_mutually_exclusive()
+    {
+        var argument = new AnalyzedArgument
+        {
+            AuthoredFileSystemValue = new ShellValueDomain.Exact("/work/a.txt"),
+            AuthoredNonFileSystemValue = new ShellValueDomain.Exact("data"),
+        };
+
+        Assert.False(AuthoredOperandSemanticsProjection.HasValidDomains([argument]));
+    }
+
+    [Fact]
+    public void Unsupported_authored_operand_domains_fail_closed()
+    {
+        ShellValueDomain[] unsupported =
+        [
+            new ShellValueDomain.IntegerRange(0, 1),
+            new ShellValueDomain.Concatenation(
+            [
+                new ShellValueDomain.Exact("a"),
+                new ShellValueDomain.Exact("b"),
+            ]),
+            new ShellValueDomain.PathPattern("*.txt", "/work"),
+        ];
+
+        foreach (var domain in unsupported)
+        {
+            Assert.False(AuthoredOperandSemanticsProjection.HasValidDomains(
+            [
+                new AnalyzedArgument { AuthoredFileSystemValue = domain },
+            ]));
+            Assert.False(AuthoredOperandSemanticsProjection.HasValidDomains(
+            [
+                new AnalyzedArgument { AuthoredNonFileSystemValue = domain },
+            ]));
+        }
+    }
+
+    [Fact]
+    public void Unsupported_domain_rejects_the_entire_audited_projection()
+    {
+        var command = Assert.Single(Bash().Parse("tr a b").Commands);
+        var corrupted = command.Arguments
+            .Select((argument, index) => index == 0
+                ? argument with
+                {
+                    AuthoredFileSystemValue = new ShellValueDomain.IntegerRange(0, 1),
+                }
+                : argument)
+            .ToArray();
+
+        var projected = AuthoredOperandSemanticsProjection.Apply(
+            ShellProjectionLanguage.Bash,
+            command.Clause,
+            Array.Empty<ShellValueElementProvenance>(),
+            ShellValueDomainFacts.Unknown,
+            corrupted);
+
+        Assert.Empty(projected);
     }
 
     [Theory]
@@ -344,6 +545,20 @@ public class AuthoredFileSystemValueTests
 
     private static void AssertUnknown(AnalyzedArgument argument) =>
         Assert.IsType<ShellValueDomain.Unknown>(argument.AuthoredFileSystemValue);
+
+    private static void AssertUnknownFileSystem(AnalyzedArgument argument) =>
+        Assert.IsType<ShellValueDomain.Unknown>(argument.AuthoredFileSystemValue);
+
+    private static void AssertUnknownNonFileSystem(AnalyzedArgument argument) =>
+        Assert.IsType<ShellValueDomain.Unknown>(argument.AuthoredNonFileSystemValue);
+
+    private static void AssertNonFileSystemExact(
+        AnalyzedArgument argument,
+        string expected) =>
+        Assert.Equal(
+            expected,
+            Assert.IsType<ShellValueDomain.Exact>(
+                argument.AuthoredNonFileSystemValue).Value);
 
     private static void AssertExact(AnalyzedArgument argument, string expected) =>
         Assert.Equal(

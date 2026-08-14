@@ -651,6 +651,8 @@ public sealed record AnalyzedArgument
     public ShellValueDomain AuthoredValue { get; internal init; } = null!;
     public ShellValueDomain AuthoredFileSystemValue { get; internal init; } =
         new ShellValueDomain.Unknown();
+    public ShellValueDomain AuthoredNonFileSystemValue { get; internal init; } =
+        new ShellValueDomain.Unknown();
     public ShellPathShape AuthoredPathShape { get; internal init; }
 }
 
@@ -913,6 +915,27 @@ contract, check every represented path through their own path policy, and
 independently evaluate executable identity, redirects, substitutions,
 ancestry, and all other occurrences. `AuthoredValue`, `AuthoredPathShape`, and
 compatibility `IsPath` are not substitutes for this fact.
+
+`AnalyzedArgument.AuthoredNonFileSystemValue` is a separate positive parser
+fact for bounded authored values that an audited binding proves are not local-
+filesystem operands. `Unknown` combines unaudited semantics and values whose
+non-filesystem role is not proved. In v0.3.5, only `Exact` and `FiniteSet` are
+positive. The fact retains the authored value and does not alter lexical path
+shape. One argument never has positive filesystem and non-filesystem domains.
+
+The initial non-filesystem catalog contains all Bash `tr` arguments. These
+arguments are options or translation data; `tr` reads standard input and writes
+standard output. The same catalog entry keeps `tr` as a single-token command
+identity and classifies its arguments as compatibility non-path data. Active
+field splitting, pathname expansion, command substitution, dynamic identity,
+over-limit joins, and incomplete provenance remain `Unknown` or incomplete.
+
+A positive authored non-filesystem value permits a consumer to omit only the
+same argument's compatibility and lexical local-path interpretations. It does
+not prove that the command is safe or read-only. Redirects, command effects,
+substitutions, ancestry, completeness, working directory, and every other
+argument remain independent. Unknown commands and unknown future domains stay
+strict.
 
 #### Bash bounded loop state
 

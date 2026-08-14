@@ -1168,6 +1168,7 @@ internal static class ShellSyntaxProjection
                         Value = value,
                         AuthoredValue = authoredValue,
                         AuthoredFileSystemValue = new ShellValueDomain.Unknown(),
+                        AuthoredNonFileSystemValue = new ShellValueDomain.Unknown(),
                         AuthoredPathShape = publishAuthoredPathShape
                             ? ShellPathShapeClassifier.Classify(authoredValue)
                             : ShellPathShape.Unknown,
@@ -1183,13 +1184,14 @@ internal static class ShellSyntaxProjection
                 return false;
             }
 
-            arguments = AuthoredFileSystemValueProjection.Apply(
+            arguments = AuthoredOperandSemanticsProjection.Apply(
                 language,
                 clause,
                 provenance,
                 workingDirectory,
                 projected);
-            return true;
+            return arguments.Count == projected.Count &&
+                   AuthoredOperandSemanticsProjection.HasValidDomains(arguments);
         }
 
         private static bool IsInlineArgumentPair(
