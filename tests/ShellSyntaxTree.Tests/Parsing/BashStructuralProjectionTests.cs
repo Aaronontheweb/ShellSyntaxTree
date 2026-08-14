@@ -484,6 +484,13 @@ public class BashStructuralProjectionTests
     [InlineData("bash -c 'echo $HOME'")]
     [InlineData("bash -c \"echo \\$HOME\"")]
     [InlineData("bash -x -c 'echo $HOME'")]
+    [InlineData("bash -lc 'echo $HOME'")]
+    [InlineData("bash -cl 'echo $HOME'")]
+    [InlineData("bash -ce 'echo $HOME'")]
+    [InlineData("bash -ec 'echo $HOME'")]
+    [InlineData("bash -xc 'echo $HOME'")]
+    [InlineData("bash -cc 'echo $HOME'")]
+    [InlineData("sh -xec 'echo $HOME'")]
     public void Outer_literal_command_string_is_recursively_analyzed(string source)
     {
         var result = Parse(source);
@@ -500,10 +507,11 @@ public class BashStructuralProjectionTests
     [InlineData("bash -$opts -c 'echo safe'")]
     [InlineData("bash $opts 'echo hidden'")]
     [InlineData("bash \"-c\" 'echo hidden'")]
-    [InlineData("bash -ce 'echo hidden'")]
-    [InlineData("bash -ec 'echo hidden'")]
-    [InlineData("bash -xc 'echo hidden'")]
     [InlineData("bash -O extglob -c 'echo hidden'")]
+    [InlineData("bash -Oc 'echo hidden'")]
+    [InlineData("bash -co 'echo hidden'")]
+    [InlineData("bash -zc 'echo hidden'")]
+    [InlineData("bash -cfoo 'echo hidden'")]
     public void Noncanonical_command_string_options_remain_outer_and_incomplete(string source)
     {
         var result = Parse(source);

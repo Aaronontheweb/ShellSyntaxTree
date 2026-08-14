@@ -1509,8 +1509,12 @@ command         := clause (compound_op clause)*
 compound_op     := "&&" | "||" | ";" | "|" | NEWLINE
 clause          := subshell | bash_c_wrapper | simple_clause
 subshell        := "(" command ")"
-bash_c_wrapper  := ("bash" | "sh") static_flag* "-c" STATIC_QUOTED_STRING
+bash_c_wrapper  := ("bash" | "sh") static_flag* command_string_option
+                   STATIC_QUOTED_STRING
 static_flag     := exact-one literal Word beginning with "-"
+command_string_option := exact-one literal "-" Word containing at least one
+                         "c" and otherwise only no-operand Bash short options
+                         from "abefhkmnptuvxBCEHPTilrsD"
 STATIC_QUOTED_STRING := QuotedString whose outer-shell provenance is entirely
                         literal and exactly one value
 simple_clause   := verb_chain arg* redirect*
@@ -2275,7 +2279,11 @@ Clause 2: Op=AndIf, Verb=cmd2, Args=[]   // no /b attribution — subshell isola
 `bash -c "inner command"` and `sh -c "inner command"` are common wrappers
 the agent emits. The parser:
 
-1. Recognizes the `bash -c` or `sh -c` prefix.
+1. Recognizes the `bash -c` or `sh -c` prefix. A literal short-option cluster
+   such as `-lc`, `-cl`, or `-xec` also selects command-string mode when every
+   character is a documented no-operand Bash invocation option. Options `-o`
+   and `-O`, unknown letters, dynamic spellings, and attached text remain
+   unsupported.
 2. Parses the quoted argument as a fresh `ParsedCommand`.
 3. Surfaces the inner command's clauses inline in the outer's `Clauses`
    list, each with `IsCommandStringWrapped=true`.
@@ -2292,9 +2300,9 @@ by the recursion. Consumers that care that this came from a wrapper can
 inspect `IsCommandStringWrapped` on the surfaced clauses.
 
 A `bash` or `sh` clause whose authored arguments are dynamic, contain a decoded
-`-c`, or contain a combined short option that may select command-string mode,
-but that does not match the complete static wrapper production, remains visible
-through its v0.2 compatibility leaf, including its direct outer source spans.
+`-c`, or contain an unsupported combined short option that may select
+command-string mode remains visible through its v0.2 compatibility leaf,
+including its direct outer source spans.
 Its v0.3 command occurrence has `IsComplete=false`. Wrapper-control tokens and
 the quoted body must each have literal, exactly-one outer-shell provenance;
 token kind or decoded spelling alone is insufficient. A proved `--` ends this

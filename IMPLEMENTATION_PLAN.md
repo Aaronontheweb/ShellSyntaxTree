@@ -116,6 +116,15 @@ priorities.
 - [ ] **Publish and consume v0.3.5.** Merge the bounded release PR, publish the
       package through the bare `0.3.5` tag, then upgrade Netclaw and complete
       the exact live `tr -d '\n'` policy regression before merging that slice.
+- [x] **Parse static bundled Bash command-string options.** Treat literal
+      no-operand short-option clusters such as `-lc`, `-cl`, and `-xec` as the
+      same parser-owned wrapper boundary as standalone `-c`. Keep operand-
+      bearing, unknown, dynamic, attached-text, and trailing-argument forms
+      fail closed. Direct regressions and the locked grammar pin both sides.
+- [ ] **Publish and consume the bundled-wrapper correction.** Release the
+      reviewed parser correction, upgrade Netclaw, and remove its duplicate
+      recursive Bash-wrapper fallback without changing the public tokenizer
+      compatibility surface.
 
 ## Completed v0.3.0 host integration and release acceptance
 

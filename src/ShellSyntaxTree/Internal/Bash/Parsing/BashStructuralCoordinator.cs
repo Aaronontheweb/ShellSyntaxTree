@@ -1896,8 +1896,7 @@ internal static partial class BashCommandParser
     {
         for (var index = 1; index + 1 < tokens.Count; index++)
         {
-            if (tokens[index].Kind == BashTokenKind.Word &&
-                string.Equals(tokens[index].Value, "-c", StringComparison.Ordinal))
+            if (IsStaticCommandStringOption(tokens[index]))
             {
                 if (index + 2 != tokens.Count ||
                     tokens[index + 1].Kind != BashTokenKind.QuotedString)

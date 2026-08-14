@@ -231,10 +231,11 @@ internal static partial class BashCommandParser
     /// the full clause parser first) so the wrapper is consumed cleanly —
     /// the outer clause never appears in <c>ParsedCommand.Clauses</c>. The
     /// scan looks for an exact literal Word verb of <c>bash</c> or <c>sh</c>,
-    /// followed by exact literal flag tokens, an exact <c>-c</c> Word flag,
-    /// and a quoted body whose outer-shell provenance is entirely literal
-    /// and exactly one value. Decoded spelling alone is insufficient because
-    /// outer expansions could change the command before the inner shell sees it.
+    /// followed by exact literal flag tokens, a supported static command-string
+    /// option, and a quoted body whose outer-shell provenance is entirely
+    /// literal and exactly one value. Decoded spelling alone is insufficient
+    /// because outer expansions could change the command before the inner shell
+    /// sees it.
     /// </remarks>
     private static bool TryDetectBashCWrapper(Segment segment, string source, out string? innerCommand)
     {
@@ -267,7 +268,7 @@ internal static partial class BashCommandParser
                 return false;
             }
 
-            if (string.Equals(t.Value, "-c", StringComparison.Ordinal))
+            if (IsStaticCommandStringOption(t))
             {
                 var next = segment.Tokens[i + 1];
                 if (next.Kind == BashTokenKind.QuotedString &&
@@ -291,6 +292,41 @@ internal static partial class BashCommandParser
         }
 
         return false;
+    }
+
+    private static bool IsStaticCommandStringOption(BashToken token)
+    {
+        if (token.Kind != BashTokenKind.Word || !HasExactLiteralValue(token))
+        {
+            return false;
+        }
+
+        var value = token.Value;
+        if (value.Length < 2 || value[0] != '-' || value[1] == '-')
+        {
+            return false;
+        }
+
+        var containsCommandStringOption = false;
+        for (var index = 1; index < value.Length; index++)
+        {
+            var option = value[index];
+            if (option == 'c')
+            {
+                containsCommandStringOption = true;
+                continue;
+            }
+
+            // Bash documents these invocation and `set` options as
+            // single-character switches with no operand. Excluding `o` and
+            // `O` is load-bearing: both consume a separate option name.
+            if ("abefhkmnptuvxBCEHPTilrsD".IndexOf(option) < 0)
+            {
+                return false;
+            }
+        }
+
+        return containsCommandStringOption;
     }
 
     // ---------------------------------------------------------------- token filtering
