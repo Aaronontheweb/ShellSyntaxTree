@@ -7,7 +7,7 @@
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <VersionPrefix>0.3.4</VersionPrefix>
+    <VersionPrefix>0.3.5</VersionPrefix>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Target framework matrix -->

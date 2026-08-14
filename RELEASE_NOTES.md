@@ -1,4 +1,8 @@
-#### Unreleased ####
+#### 0.3.5 2026-08-14 ####
+
+This additive release distinguishes audited non-filesystem operand data from
+compatibility path heuristics. Security consumers can stop treating bounded
+translation sets as filesystem scope without relaxing independent shell facts.
 
 ## Added
 

@@ -106,12 +106,16 @@ priorities.
       value-domain property, one audited `tr` data binding, a single-token
       compatibility correction, and a strict consumer boundary. PR #167 merged
       the contract after strict OpenSpec plus Linux and Windows CI passed.
-- [ ] **Implement and publish v0.3.5 authored non-filesystem facts.** Add the
+- [x] **Implement and validate v0.3.5 authored non-filesystem facts.** Add the
       approved property and generalized audited operand projection. Preserve
       the existing `cat` and `Get-Content -LiteralPath` facts. Pin direct,
       corpus, API, PowerShell, redirect, dynamic, and over-limit boundaries.
-      Complete adversarial review, package comparison, native Windows CI,
-      publication, and downstream Netclaw acceptance before completion.
+      PR #168 merged as `336807bf` after all 3,090 tests, strict OpenSpec,
+      headers, Slopwatch, package validation, exact 0.3.4 API comparison,
+      adversarial review, and Linux plus native Windows CI passed.
+- [ ] **Publish and consume v0.3.5.** Merge the bounded release PR, publish the
+      package through the bare `0.3.5` tag, then upgrade Netclaw and complete
+      the exact live `tr -d '\n'` policy regression before merging that slice.
 
 ## Completed v0.3.0 host integration and release acceptance
 

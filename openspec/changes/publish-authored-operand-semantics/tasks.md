@@ -49,7 +49,7 @@
   0.3.5 behavior and unchanged public signatures.
 - [x] 5.2 Run Release build, full unit and corpus suite, PII audit, headers,
   Slopwatch, package validation, and 0.3.4 API comparison.
-- [ ] 5.3 Run Linux and native Windows CI plus an independent adversarial
+- [x] 5.3 Run Linux and native Windows CI plus an independent adversarial
   security review before publication.
 - [ ] 5.4 Publish the package, consume the exact public version in Netclaw, and
   run its complete policy and cross-platform gates.
