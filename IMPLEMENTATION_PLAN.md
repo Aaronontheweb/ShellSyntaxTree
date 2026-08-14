@@ -96,9 +96,16 @@ priorities.
       Linux and native Windows CI, 3,074 tests, strict OpenSpec, headers,
       Slopwatch, package validation, API comparison, and adversarial review
       passed.
-- [ ] **Publish and consume v0.3.4.** Merge the bounded release PR, publish the
-      package through the bare `0.3.4` tag, then upgrade Netclaw and complete
-      its causal-directory acceptance matrix before merging that policy slice.
+- [x] **Publish and consume v0.3.4.** PR #166 merged as `59479788`. Bare tag
+      `0.3.4` completed release workflow run 31728782396 and published the
+      package, symbols, and non-prerelease GitHub release. Netclaw consumed the
+      exact public package and completed its causal-directory acceptance slice.
+- [ ] **Approve authored non-filesystem value facts for v0.3.5.** Live Netclaw
+      traffic exposed `tr -d '\n'` as a false local-path scope ending in `/n`.
+      The `publish-authored-operand-semantics` OpenSpec proposes one additive
+      value-domain property, one audited `tr` data binding, a single-token
+      compatibility correction, and a strict consumer boundary. Complete
+      adversarial review before implementation.
 
 ## Completed v0.3.0 host integration and release acceptance
 
