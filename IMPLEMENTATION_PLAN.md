@@ -116,6 +116,11 @@ priorities.
 - [ ] **Publish and consume v0.3.5.** Merge the bounded release PR, publish the
       package through the bare `0.3.5` tag, then upgrade Netclaw and complete
       the exact live `tr -d '\n'` policy regression before merging that slice.
+- [x] **Pin sanitized fresh-session approval facts.** Add identity-free direct
+      regressions for ten representative Netclaw calls. Pin occurrence order,
+      completeness, cwd effects, authored paths, redirects, and verb-element
+      order. Add the recursive-search pipeline to the Bash corpus. The sampled
+      facts are already correct, so no parser or public API change is required.
 
 ## Completed v0.3.0 host integration and release acceptance
 
