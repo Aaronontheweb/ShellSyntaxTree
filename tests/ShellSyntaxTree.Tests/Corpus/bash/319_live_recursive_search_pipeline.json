@@ -1,0 +1,65 @@
+{
+  "name": "Live-derived recursive search pipeline stays statically parsed",
+  "input": "grep -rn \"Mode B\" docs/ *.md 2>/dev/null | head -20",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["grep"],
+        "args": [
+          {
+            "raw": "-rn",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\"Mode B\"",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          },
+          {
+            "raw": "docs/",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/work/docs",
+            "isFlag": false
+          },
+          {
+            "raw": "*.md",
+            "kind": "Glob",
+            "isPath": true,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": [
+          {
+            "direction": "ErrOut",
+            "target": "/dev/null",
+            "isDynamicSkip": false
+          }
+        ]
+      },
+      {
+        "operator": "Pipe",
+        "verb": ["head"],
+        "args": [
+          {
+            "raw": "-20",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Sanitized live-derived regression. The command is structurally complete; the unexpanded glob remains a path glob."
+}
