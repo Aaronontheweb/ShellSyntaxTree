@@ -6,6 +6,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using ShellSyntaxTree.Internal.Pwsh.Verbs;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests.Parsing;
@@ -1484,6 +1485,126 @@ public class ShellValueOracleTests
                 "dot=<down>",
                 "call=<start>",
                 "call=<down>",
+            },
+            Lines(output));
+    }
+
+    [Fact]
+    public void WindowsPowerShell51_pipeline_receiver_semantics_match_catalog()
+    {
+        if (!OperatingSystem.IsWindows() || !IsAvailable("powershell.exe"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "if($PSVersionTable.PSVersion.Major -ne 5 -or " +
+            "$PSVersionTable.PSVersion.Minor -ne 1){throw 'version'}; " +
+            "$x=''; @() | ForEach-Object -Begin { $x += 'B' } " +
+            "-Process { $x += 'P' } -End { $x += 'E' }; \"empty=<$x>\"; " +
+            "$x=''; 1,2 | % -Beg { $x += 'B' } -Pro { $x += 'P' } " +
+            "-En { $x += 'E' }; \"named=<$x>\"; " +
+            "$x=''; 1,2 | ForEach-Object { $x += 'B' } { $x += 'P1' } " +
+            "{ $x += 'P2' } { $x += 'E' }; \"positional=<$x>\"; " +
+            "$count=0; 1,2 | ? -Fil { $count += 1; $true } | Out-Null; " +
+            "\"where=<$count>\"; " +
+            "$count=0; Where-Object { $count += 1; $true } | Out-Null; " +
+            "\"standalone-where=<$count>\"; " +
+            "$x='outer'; 1 | ForEach-Object { \"mixed-nested=<$x>\"; " +
+            "$x='restricted' } -Process { $x='allowed' }; " +
+            "\"mixed-after=<$x>\"; " +
+            "try { 1 | ForEach-Object -Parallel { $_ } -ErrorAction Stop | " +
+            "Out-Null; 'parallel=<accepted>' } catch { " +
+            "\"parallel=<$($_.FullyQualifiedErrorId)>\" }");
+
+        Assert.Equal(
+            new[]
+            {
+                "empty=<BE>",
+                "named=<BPPE>",
+                "positional=<BP1P2P1P2E>",
+                "where=<2>",
+                "standalone-where=<0>",
+                "mixed-nested=<allowed>",
+                "mixed-after=<restricted>",
+                "parallel=<AmbiguousParameterSet,Microsoft.PowerShell.Commands.ForEachObjectCommand>",
+            },
+            Lines(output));
+    }
+
+    [Fact]
+    public void PowerShell7_mixed_named_and_positional_process_activation_order_is_not_source_order()
+    {
+        if (!IsAvailable("pwsh"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "pwsh",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$x='outer'; 1 | ForEach-Object { \"nested=<$x>\"; " +
+            "$x='restricted' } -Process { $x='allowed' }; " +
+            "\"after=<$x>\"");
+
+        Assert.Equal(
+            new[] { "nested=<allowed>", "after=<restricted>" },
+            Lines(output));
+    }
+
+    [Fact]
+    public void WindowsPowerShell51_pipeline_receiver_metadata_matches_pinned_inventory()
+    {
+        if (!OperatingSystem.IsWindows() || !IsAvailable("powershell.exe"))
+        {
+            return;
+        }
+
+        var output = Run(
+            "powershell.exe",
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "function Get-MetadataHash([string]$name) { " +
+            "$common=@('Verbose','Debug','ErrorAction','WarningAction'," +
+            "'InformationAction','ErrorVariable','WarningVariable'," +
+            "'InformationVariable','OutVariable','OutBuffer','PipelineVariable'," +
+            "'WhatIf','Confirm'); $c=Get-Command $name; " +
+            "$facts=@(\"DEFAULT|$($c.DefaultParameterSet)\"); " +
+            "foreach($p in $c.Parameters.Values | Sort-Object Name) { " +
+            "$facts += \"PARAM|$($p.Name)|$($p.ParameterType.FullName)|" +
+            "$([string]::Join(',', @($p.Aliases | Sort-Object)))\" }; " +
+            "foreach($s in $c.ParameterSets | Sort-Object Name) { $parts=@(); " +
+            "foreach($p in $s.Parameters | Where-Object { " +
+            "$common -notcontains $_.Name } | Sort-Object Name) { " +
+            "$parts += \"$($p.Name):$($p.IsMandatory):$($p.Position):" +
+            "$($p.ValueFromRemainingArguments)\" }; " +
+            "$facts += \"SET|$($s.Name)|$([string]::Join(',', $parts))\" }; " +
+            "$bytes=[Text.Encoding]::UTF8.GetBytes(" +
+            "[string]::Join([char]10,$facts)); " +
+            "$sha=[Security.Cryptography.SHA256]::Create(); try { " +
+            "([BitConverter]::ToString($sha.ComputeHash($bytes)))." +
+            "Replace('-','').ToLowerInvariant() } finally { $sha.Dispose() } }; " +
+            "\"version=<$($PSVersionTable.PSVersion.Major)." +
+            "$($PSVersionTable.PSVersion.Minor)>\"; " +
+            "\"foreach=<$(Get-MetadataHash 'ForEach-Object')>\"; " +
+            "\"where=<$(Get-MetadataHash 'Where-Object')>\"");
+
+        Assert.Equal(
+            new[]
+            {
+                "version=<5.1>",
+                $"foreach=<{PwshExecutionRegionBindingCatalog.PinnedWindowsPowerShellForEachObjectMetadataSha256}>",
+                $"where=<{PwshExecutionRegionBindingCatalog.PinnedWindowsPowerShellWhereObjectMetadataSha256}>",
             },
             Lines(output));
     }

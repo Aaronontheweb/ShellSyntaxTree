@@ -1,0 +1,207 @@
+{
+  "name": "V04 gci dynamic recurse unknown tree access",
+  "input": "Get-ChildItem -Path C:\\WORK\\PROJECT -Recurse:$recurse",
+  "powerShellInitialStateMode": "IsolatedNonInteractiveNoProfile",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\WORK\\PROJECT",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT"
+          },
+          {
+            "raw": "-Recurse",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "$recurse",
+            "kind": "EnvVar",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Get-ChildItem",
+            "value": "Get-ChildItem",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 13,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-Path",
+            "value": "-Path",
+            "role": "Argument",
+            "sourceStart": 14,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "C:\\WORK\\PROJECT",
+            "value": "C:\\WORK\\PROJECT",
+            "role": "Argument",
+            "sourceStart": 20,
+            "sourceLength": 15,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT"
+          },
+          {
+            "raw": "-Recurse:$recurse",
+            "value": "-Recurse:$recurse",
+            "role": "Argument",
+            "sourceStart": 36,
+            "sourceLength": 17,
+            "precedingVerbElementCount": 1,
+            "kind": "EnvVar",
+            "isFlag": true,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 53,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 53,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 53
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-Path"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "C:\\WORK\\PROJECT"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "authoredFileSystemValue": {
+              "kind": "Exact",
+              "values": [
+                "C:/WORK/PROJECT"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 2,
+            "clauseElementIndex": 3,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-Recurse"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 3,
+            "clauseElementIndex": 3,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        },
+        "fileSystemTreeAccesses": [
+          {
+            "rootArgumentIndex": null,
+            "root": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "traversal": "Unknown"
+          }
+        ]
+      }
+    ]
+  },
+  "notes": "Pins the all-Unknown tree-access marker for an unproved recurse value."
+}

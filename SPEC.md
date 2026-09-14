@@ -235,12 +235,19 @@ public enum CommandOccurrenceRole { ... }
 public enum CommandAncestryRegion { ... }
 public enum FileRedirectMode { ... }
 public enum HereDocumentExpansionMode { ... }
+
+// v0.4 authored-list and tree-access evidence — see §3.
+public sealed record ShellFileSystemTreeAccess { ... }
+public enum ShellTreeTraversalMode { ... }
 ```
 
-Stable v0.3 exposes only structural types the parsers can emit. Condition-loop
-and branch grammar remains fail closed and reserves no public type or enum
-member. Every new v0.3 result type is parser-owned; its constructor and result
-setters are not public. The stable v0.2 constructors and setters are unchanged.
+Stable v0.3 exposes only structural types the parsers can emit. The additive
+`ShellValueDomain.OrderedList` subtype plus the tree-access property, record,
+and enum above target `0.4.0-beta.1`; they must not be shipped under a v0.3
+package. Condition-loop and branch grammar remains
+fail closed and reserves no public type or enum member. Every result type added
+since v0.2 is parser-owned; its constructor and result setters are not public.
+The stable v0.2 constructors and setters are unchanged.
 
 That's the entire public API. **Everything else is internal.** The lexer,
 parser internals, verb tables, resolver — all implementation detail.
@@ -261,8 +268,8 @@ public sealed record ParsedCommand
 
     /// <summary>
     /// Canonical authored nested structure. Direct-source nodes have exact
-    /// source ranges; decoded wrapper nodes report unavailable ranges unless
-    /// an exact outer mapping exists.
+    /// source ranges; static same-language decoded-wrapper children report
+    /// unavailable outer ranges rather than guessed mappings.
     /// </summary>
     public ShellBlockSyntax Syntax { get; internal init; } = new();
 
@@ -291,6 +298,13 @@ public sealed record ParsedCommand
     public string? UnparseableReason { get; init; }
 }
 ```
+
+`WindowsPowerShell51` uses separately oracle-pinned grammar and metadata. Its
+command-owned execution-region catalog is limited to Windows PowerShell
+`5.1.19041.6456` `ForEach-Object` Begin/Process/RemainingScripts/End and
+`Where-Object -FilterScript` metadata; PowerShell 7-only parameters such as
+`ForEach-Object -Parallel` remain incomplete rather than borrowing proof from
+the default `PowerShell7` dialect. See `SPEC.POWERSHELL.md` §2 and §4.
 
 `BashInitialStateMode.Unknown` is the default. In this mode the parser does
 not publish bounded loop-variable facts: an ambient shell may already have
@@ -409,6 +423,20 @@ referencing the identical in-memory `Clause` instance. Serialization is not
 required to preserve that reference identity. For an unparseable result,
 `Commands` and `Clauses` are empty even when `Syntax` retains partial evidence
 for diagnostics.
+
+Diagnostic syntax is non-exhaustive. It never supplies approval, grant, path,
+cwd, state, ordering, execution-region, or value authority. A security
+consumer may use a direct-source `SimpleCommandSyntax.Clause` only as an
+additional hard-deny signal when every retained element has an exact matching
+source span. A statically decoded same-language wrapper child is the sole
+span exception: it may add a hard deny only when
+`Clause.IsCommandStringWrapped=true` and every element source span is
+unavailable. Those elements are source-authentic to the decoded inner payload;
+the parser never guesses an outer offset. The absence of a retained leaf never
+permits an input that the complete projection did not authorize.
+PowerShell returns an empty `Syntax` block for malformed, resource-limited,
+invalid-binding, and projection failures; the narrowly specified balanced
+increment/decrement diagnostic is the sole partial-syntax exception.
 
 ### Authored structural nodes (v0.3)
 
@@ -574,7 +602,7 @@ record family; consumers keep a default fail-closed switch arm for future
 library-owned alternatives. Compatibility is required against stable v0.2,
 not against any experimental `0.3.0-alpha.*` surface.
 
-Every v0.3 enum whose model admits an unknown state reserves zero as
+Every result enum added since v0.3 whose model admits an unknown state reserves zero as
 `Unknown`. Consumers fail closed on `Unknown` or an unrecognized numeric value
 when the fact affects policy. `FileRedirectMode` has no `Unknown` member:
 unresolved operations use `UnresolvedRedirectAnalysis`, and only the library
@@ -590,6 +618,8 @@ public sealed record CommandOccurrence
     public CommandOccurrenceRole ImmediateRole { get; internal init; }
     public IReadOnlyList<CommandAncestryFrame> Ancestry { get; internal init; } = [];
     public IReadOnlyList<AnalyzedArgument> Arguments { get; internal init; } = [];
+    public IReadOnlyList<ShellFileSystemTreeAccess> FileSystemTreeAccesses
+        { get; internal init; } = [];
     public ShellValueDomain WorkingDirectory { get; internal init; } = null!;
     public ShellWorkingDirectoryEffect WorkingDirectoryEffect
         { get; internal init; } = new ShellWorkingDirectoryEffect.Unknown();
@@ -656,6 +686,23 @@ public sealed record AnalyzedArgument
     public ShellPathShape AuthoredPathShape { get; internal init; }
 }
 
+public sealed record ShellFileSystemTreeAccess
+{
+    internal ShellFileSystemTreeAccess() { }
+    public AnalyzedArgument? RootArgument { get; internal init; }
+    public ShellValueDomain Root { get; internal init; } =
+        new ShellValueDomain.Unknown();
+    public ShellTreeTraversalMode Traversal { get; internal init; }
+}
+
+public enum ShellTreeTraversalMode
+{
+    Unknown,
+    DirectChildren,
+    RecursiveWithoutFollowingLinks,
+    RecursiveMayFollowLinks,
+}
+
 public enum ShellPathShape
 {
     Unknown,
@@ -671,6 +718,10 @@ public abstract record ShellValueDomain
     public sealed record Unknown : ShellValueDomain { ... }
     public sealed record Exact : ShellValueDomain { public string Value { get; } }
     public sealed record FiniteSet : ShellValueDomain
+    {
+        public IReadOnlyList<string> Values { get; }
+    }
+    public sealed record OrderedList : ShellValueDomain
     {
         public IReadOnlyList<string> Values { get; }
     }
@@ -705,6 +756,18 @@ later identities or values remain incomplete.
 not one per predicted runtime iteration. `Ancestry` is ordered outermost to
 innermost, excludes the simple-command leaf, and retains every enclosing
 execution relation. `ImmediateRole` describes the nearest relation.
+
+`FileSystemTreeAccesses` is parser-proved executable-effect evidence, never
+authority. Each item binds a bounded root to its traversal mode. A non-null
+`RootArgument` is the exact object from the same occurrence's `Arguments`.
+Null identifies either an exact implicit working-directory root or the single
+all-Unknown marker for a recognized tree access whose binding was not proved.
+`Root` is `Exact` for exact and implicit roots, `PathPattern` only for a proved
+leaf glob with its conservative covering directory, and `Unknown` otherwise.
+Consumers fail closed on unknown enums, Unknown markers, invalid reference
+identity, or a recognized catalog command without a proved access. These
+facts do not prove existence, trust-zone membership, link safety, or grant
+authority.
 
 `WorkingDirectory` is the occurrence's incoming shell-scope directory.
 `WorkingDirectoryEffect` is a separate relational outcome fact:
@@ -828,6 +891,8 @@ The parser emits only these value-domain combinations:
 - `Unknown`: no payload;
 - `Exact`: exactly one non-null value;
 - `FiniteSet`: 2–32 distinct non-null values;
+- `OrderedList`: 2–32 non-null members of one authored collection, preserving
+  source order and duplicates; it never represents scalar alternatives;
 - `PathPattern`: a non-empty pattern and non-empty covering directory;
 - `IntegerRange`: inclusive signed 64-bit bounds with minimum no greater than
   maximum, representing canonical signed ASCII decimal without a plus sign or
@@ -891,16 +956,18 @@ be path-shaped. PowerShell 0.3.1 sets `AuthoredValue=Value` and
 `AuthoredPathShape=Unknown` for exact compatibility.
 
 `AnalyzedArgument.AuthoredFileSystemValue` is a stronger, independent parser
-fact. `Unknown` means the parser proves no bounded local-filesystem value. In
-v0.3.3, only `Exact` and `FiniteSet` are positive. Every represented value is
+fact. `Unknown` means the parser proves no bounded local-filesystem value. Only
+`Exact` and `FiniteSet` are positive. `OrderedList` is forbidden in this slot.
+Every represented value is
 an absolute path normalized by the existing shell resolver. Publication
 requires an audited local-filesystem binding, one-field authored transform
 semantics, and an exact occurrence working directory. Compatibility
 `Arg.IsPath`, `ClauseElement.IsPath`, `FileVerbs`, lexical path shape, and
 generic positional fallback never create this fact by themselves.
 
-The initial audited catalog contains Bash `cat` file operands and the selected
-PowerShell dialect's exact `Get-Content -LiteralPath` value. Bash option values,
+The audited catalog contains Bash `cat` file operands and exact PowerShell
+`Get-Content` and `Get-ChildItem` `-Path`, `-LiteralPath`, and positional roots,
+plus exact `Select-String -Path`. Bash option values,
 `-` stream operands, active field splitting or pathname expansion, remote
 endpoints, and unaudited executable positions remain `Unknown`. PowerShell
 filters, rename fragments, non-filesystem or unresolved providers, remote
@@ -919,9 +986,12 @@ compatibility `IsPath` are not substitutes for this fact.
 `AnalyzedArgument.AuthoredNonFileSystemValue` is a separate positive parser
 fact for bounded authored values that an audited binding proves are not local-
 filesystem operands. `Unknown` combines unaudited semantics and values whose
-non-filesystem role is not proved. In v0.3.5, only `Exact` and `FiniteSet` are
-positive. The fact retains the authored value and does not alter lexical path
-shape. One argument never has positive filesystem and non-filesystem domains.
+non-filesystem role is not proved. `Exact` and `FiniteSet` represent scalar
+proofs; `OrderedList` represents one bounded authored collection. The fact
+retains the authored value and does not alter lexical path shape. One argument
+never has positive filesystem and non-filesystem domains. `OrderedList` cannot
+appear in effective `Value`, `AuthoredValue`, filesystem, cwd, redirect,
+tree-root, or concatenation-part domains.
 
 The initial non-filesystem catalog contains all Bash `tr` arguments. These
 arguments are options or translation data; `tr` reads standard input and writes
@@ -936,6 +1006,16 @@ not prove that the command is safe or read-only. Redirects, command effects,
 substitutions, ancestry, completeness, working directory, and every other
 argument remain independent. Unknown commands and unknown future domains stay
 strict.
+
+PowerShell additionally publishes `OrderedList` authored non-filesystem facts
+for exact static `Select-Object -Property` and flag-free positional property lists,
+`Get-ChildItem -Include`, and `Get-Process -Name` bindings. Order and duplicates
+are preserved; the members are not scalar alternatives. `-ExpandProperty`
+remains scalar `Exact`. A fixed static `Select-Object -Index` range publishes
+`IntegerRange`. Expressions, dynamic members, abbreviations, over-cap lists,
+and filesystem roles remain `Unknown`. These facts do not make a command safe.
+The `Get-Process -Name` row is retained because sanitized fresh-session
+evidence contains that exact prompt family.
 
 #### Bash bounded loop state
 

@@ -229,7 +229,7 @@ changes:
 | Prerelease shape | Stable v0.3 shape |
 |---|---|
 | `EffectiveArguments` plus `ClauseElementIndex` | `Arguments`, with direct `Argument` and `Element` references |
-| `ShellValueDomain.Kind`, `Values`, `Pattern` | pattern-match `Unknown`, `Exact`, `FiniteSet`, or `PathPattern` |
+| `ShellValueDomain.Kind`, `Values`, `Pattern` | pattern-match the closed runtime alternatives, including the v0.4 `OrderedList` collection domain |
 | `RedirectAnalysis.Operation` property bag | pattern-match the redirect record alternative |
 | `RedirectSource.Kind` plus `Descriptor` | pattern-match `Default`, `Descriptor`, `PowerShellAllStreams`, or `Unknown` |
 | copied ancestry kind/span fields | `CommandAncestryFrame.Ancestor` plus `Region` and `ChildIndex` |
@@ -446,6 +446,11 @@ foreach (var analyzed in occurrence.Arguments)
                 analyzed.Argument,
                 analyzed.Element,
                 finite.Values),
+        ShellValueDomain.OrderedList list =>
+            EvaluateOneOrderedCollection(
+                analyzed.Argument,
+                analyzed.Element,
+                list.Values),
         ShellValueDomain.PathPattern pattern =>
             EvaluatePattern(pattern.Pattern, pattern.CoveringDirectory),
         ShellValueDomain.IntegerRange range =>
@@ -467,6 +472,9 @@ foreach (var analyzed in occurrence.Arguments)
 - `Exact` contains one proved value.
 - `FiniteSet` contains 2 through 32 distinct proved values. Every candidate
   must independently satisfy policy; do not authorize only the first.
+- `OrderedList` contains 2 through 32 members of one authored collection.
+  Preserve order and duplicates and evaluate it only through a receiver-owned
+  collection rule; never treat its members as alternative scalar candidates.
 - `PathPattern` is a Bash path-shaped glob plus a conservative
   `CoveringDirectory`. Accept it only when policy understands both the pattern
   and the full covering scope without enumerating the filesystem.
@@ -688,6 +696,7 @@ static bool RequiresCompatibilityPathCheck(AnalyzedArgument argument)
     {
         ShellValueDomain.Exact => false,
         ShellValueDomain.FiniteSet => false,
+        ShellValueDomain.OrderedList => false,
         ShellValueDomain.Unknown => true,
         _ => true,
     };
@@ -701,7 +710,14 @@ effects, or other arguments. Thus `tr -d '\n' > /outside/result` still sends
 the redirect target through path policy.
 
 PowerShell uses the same public property and the selected dialect's argument
-binding. For example:
+binding. Exact audited comma-list roles use the distinct v0.4 `OrderedList`
+domain. For example, `Select-Object Name,Id,Name` preserves
+`["Name", "Id", "Name"]`; it is one property list, not three possible scalar
+arguments. `Get-ChildItem -Include` and the live-derived `Get-Process -Name`
+shape use the same bounded collection contract. Dynamic members and
+abbreviated parameters stay `Unknown`.
+
+For filesystem values:
 
 ```powershell
 Get-Content -LiteralPath:C:\work\a.txt
@@ -719,6 +735,29 @@ The existing resolver normalizes Windows separators to `/`. By contrast,
 `Rename-Item C:\old new` keeps `new` unknown because it is a name interpreted
 relative to another operand rather than an independently resolved path.
 Non-filesystem providers and native remote endpoints also remain unknown.
+
+## Filesystem tree-access effects
+
+Target 0.4.0-beta.1 adds `CommandOccurrence.FileSystemTreeAccesses` so a
+consumer does not have to infer traversal from PowerShell parameter spelling.
+For example, PowerShell 7 projects:
+
+```text
+Get-ChildItem -Path C:\work\src\*.cs -Recurse
+RootArgument: the exact analyzed `C:\work\src\*.cs` argument
+Root: PathPattern("C:\work\src\*.cs", "C:/work/src")
+Traversal: RecursiveWithoutFollowingLinks
+```
+
+Windows PowerShell 5.1 reports the same recursion as
+`RecursiveMayFollowLinks`; PowerShell 7 with exact `-FollowSymlink` does too.
+Unknown/multiple roots, directory-segment globs, provider ambiguity, or
+dynamic traversal controls yield an explicit all-Unknown access rather than a
+positive scope. Consumers must treat the fact as effect evidence only: validate
+the enum and reference identity, require every audited tree command to have a
+proved access, then apply their existing path/grant policy to `Exact` or the
+`PathPattern.CoveringDirectory`. A directory grant does not by itself authorize
+link-following traversal beyond that directory.
 
 `AuthoredPathShape` stays lexical evidence only:
 

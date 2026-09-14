@@ -561,6 +561,14 @@ internal static partial class PwshCommandParser
                 reason ?? "inner parse failed",
                 false,
                 usesNativeArgumentBinding: null);
+
+        public static BuildResult Diagnostic(ShellSyntaxNode syntax, string? reason) =>
+            new(
+                Array.Empty<Clause>(),
+                syntax,
+                reason ?? "inner parse failed",
+                true,
+                usesNativeArgumentBinding: null);
     }
 
     private static BuildResult BuildSegment(
@@ -1341,6 +1349,30 @@ internal static partial class PwshCommandParser
                 continue;
             }
 
+            // ---- parser-proved parenthesized integer range ----
+            if (t.Kind == PwshTokenKind.IntegerRange)
+            {
+                args.Add(new Arg
+                {
+                    Raw = SourceSlice(source, t),
+                    Kind = ArgKind.DynamicSkip,
+                    IsPath = false,
+                });
+                elements.Add(CreateElement(
+                    source,
+                    t,
+                    ClauseElementRole.Argument,
+                    precedingVerbTokenCount,
+                    ArgKind.DynamicSkip,
+                    isFlag: false,
+                    isPath: false,
+                    resolved: null));
+                pendingValueParam = null;
+                pendingNativeFlag = null;
+                pendingAmbiguousBinding = false;
+                continue;
+            }
+
             // ---- opaque tokens (script block / subexpression / splat / --%) ----
             if (t.Kind is PwshTokenKind.ScriptBlock or PwshTokenKind.Subexpression
                 or PwshTokenKind.Splat or PwshTokenKind.StopParsing)
@@ -2017,7 +2049,22 @@ internal static partial class PwshCommandParser
             sharedLocation: attribution);
         if (innerParsed.IsUnparseable)
         {
-            result = BuildResult.Fail(innerParsed.UnparseableReason);
+            if (!ContainsUnsupportedExpressionSyntax(innerParsed.Syntax) ||
+                !TryBuildDecodedWrapper(
+                    innerParsed,
+                    segment,
+                    ShellGroupKind.CurrentScope,
+                    Array.Empty<Redirect>(),
+                    Array.Empty<ClauseElement>(),
+                    out var diagnosticWrapper))
+            {
+                result = BuildResult.Fail(innerParsed.UnparseableReason);
+                return true;
+            }
+
+            result = BuildResult.Diagnostic(
+                diagnosticWrapper!,
+                innerParsed.UnparseableReason);
             return true;
         }
 
@@ -2277,7 +2324,22 @@ internal static partial class PwshCommandParser
                 sharedLocation: childLocation);
             if (innerParsed.IsUnparseable)
             {
-                result = BuildResult.Fail(innerParsed.UnparseableReason);
+                if (!ContainsUnsupportedExpressionSyntax(innerParsed.Syntax) ||
+                    !TryBuildDecodedWrapper(
+                        innerParsed,
+                        segment,
+                        ShellGroupKind.IsolatedScope,
+                        Array.Empty<Redirect>(),
+                        Array.Empty<ClauseElement>(),
+                        out var diagnosticWrapper))
+                {
+                    result = BuildResult.Fail(innerParsed.UnparseableReason);
+                    return true;
+                }
+
+                result = BuildResult.Diagnostic(
+                    diagnosticWrapper!,
+                    innerParsed.UnparseableReason);
                 return true;
             }
 

@@ -506,7 +506,6 @@ public class AuthoredOperandSemanticsTests
     }
 
     [Theory]
-    [InlineData("Get-ChildItem C:\\work *.cs")]
     [InlineData("Rename-Item C:\\old new")]
     [InlineData("Get-Content -LiteralPath Registry::HKEY_LOCAL_MACHINE")]
     [InlineData("scp user@example.invalid:/srv/file .")]

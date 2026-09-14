@@ -1204,6 +1204,11 @@ public class ShellSyntaxProjectionTests
             },
             new ShellValueDomainFacts
             {
+                Kind = ShellValueDomainKind.OrderedList,
+                Values = new[] { "first", "second" },
+            },
+            new ShellValueDomainFacts
+            {
                 Kind = ShellValueDomainKind.Pattern,
                 Pattern = "/work/*.txt",
             },

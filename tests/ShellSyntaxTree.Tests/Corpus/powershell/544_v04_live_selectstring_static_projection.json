@@ -1,0 +1,337 @@
+{
+  "name": "V04 live selectstring static projection",
+  "input": "Select-String -Path \u0022C:\\WORK\\PROJECT\\SourceFile.cs\u0022 -Pattern \u0022needle\u0022 | Select-Object Path,LineNumber",
+  "powerShellDialect": "WindowsPowerShell51",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Select-String"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\u0022C:\\WORK\\PROJECT\\SourceFile.cs\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT/SourceFile.cs",
+            "isFlag": false
+          },
+          {
+            "raw": "-Pattern",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": true
+          },
+          {
+            "raw": "\u0022needle\u0022",
+            "kind": "Literal",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Select-String",
+            "value": "Select-String",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 13,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-Path",
+            "value": "-Path",
+            "role": "Argument",
+            "sourceStart": 14,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "\u0022C:\\WORK\\PROJECT\\SourceFile.cs\u0022",
+            "value": "C:\\WORK\\PROJECT\\SourceFile.cs",
+            "role": "Argument",
+            "sourceStart": 20,
+            "sourceLength": 31,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT/SourceFile.cs"
+          },
+          {
+            "raw": "-Pattern",
+            "value": "-Pattern",
+            "role": "Argument",
+            "sourceStart": 52,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "\u0022needle\u0022",
+            "value": "needle",
+            "role": "Argument",
+            "sourceStart": 61,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Select-Object"
+        ],
+        "args": [
+          {
+            "raw": "Path,LineNumber",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Select-Object",
+            "value": "Select-Object",
+            "role": "Verb",
+            "sourceStart": 72,
+            "sourceLength": 13,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "Path,LineNumber",
+            "value": "Path,LineNumber",
+            "role": "Argument",
+            "sourceStart": 86,
+            "sourceLength": 15,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 101,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Pipeline",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 101,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "PipelineStage",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 69,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "PipelineStage",
+        "childIndex": 1,
+        "sourceStart": 72,
+        "sourceLength": 29,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 101
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 101
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-Path"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "C:\\WORK\\PROJECT\\SourceFile.cs"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "authoredFileSystemValue": {
+              "kind": "Exact",
+              "values": [
+                "C:/WORK/PROJECT/SourceFile.cs"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 2,
+            "clauseElementIndex": 3,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-Pattern"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 3,
+            "clauseElementIndex": 4,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "needle"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 101
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 101
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "authoredNonFileSystemValue": {
+              "kind": "OrderedList",
+              "values": [
+                "Path",
+                "LineNumber"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      }
+    ]
+  },
+  "notes": "Sanitized live-derived shape: exact Select-String path and ordered static property list."
+}

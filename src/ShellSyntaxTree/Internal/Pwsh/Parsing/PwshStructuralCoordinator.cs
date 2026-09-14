@@ -38,7 +38,7 @@ internal static partial class PwshCommandParser
             insideCommandSubstitution: false);
         if (!coordinator.TryParse(out var syntax, out var error))
         {
-            return StructuralFailure(source, error, syntax);
+            return StructuralFailure(source, error);
         }
 
         var incompleteForEachClauses = CollectIncompleteForEachClauses(syntax);
@@ -47,6 +47,7 @@ internal static partial class PwshCommandParser
             : sharedLocation?.ResolvedCwd ??
               options.WorkingDirectory ??
               Environment.CurrentDirectory;
+
         if (!PwshForEachValueAnalyzer.TryAnalyze(
                 syntax,
                 options,
@@ -55,8 +56,27 @@ internal static partial class PwshCommandParser
                 coordinator.GetForEachPlan,
                 incompleteForEachClauses,
                 out var analyzedSyntax,
-                out var analyzedFacts) ||
-            !ShellSyntaxProjection.TryProject(
+                out var analyzedFacts))
+        {
+            return StructuralFailure(
+                source,
+                "PowerShell structural syntax exceeded limits or contained invalid parser-owned facts");
+        }
+
+        // The existing value analyzer owns sequential alias and receiver
+        // binding state. Its rewritten syntax retains only bodies that were
+        // not proved script-block data. This branch deliberately runs before
+        // projection and strips all analyzer-derived authority.
+        if (coordinator.DiagnosticFailureReason is not null &&
+            ContainsUnsupportedExpressionSyntax(analyzedSyntax))
+        {
+            return StructuralFailure(
+                source,
+                coordinator.DiagnosticFailureReason,
+                SanitizeDiagnosticSyntax(analyzedSyntax));
+        }
+
+        if (!ShellSyntaxProjection.TryProject(
                 analyzedSyntax,
                 analyzedFacts,
                 ShellProjectionLanguage.PowerShell,
@@ -64,17 +84,31 @@ internal static partial class PwshCommandParser
         {
             return StructuralFailure(
                 source,
-                "PowerShell structural syntax exceeded limits or contained invalid parser-owned facts",
-                analyzedSyntax);
+                "PowerShell structural syntax exceeded limits or contained invalid parser-owned facts");
+        }
+
+        if (!PwshFileSystemTreeAccessProjection.TryApply(
+                projection.Commands,
+                options,
+                out var commands))
+        {
+            return StructuralFailure(
+                source,
+                "PowerShell filesystem tree-access projection contained invalid parser-owned facts");
         }
 
         return new ParsedCommand
         {
             Source = source,
             Syntax = analyzedSyntax,
-            Commands = projection.Commands,
+            Commands = commands,
             Clauses = projection.Clauses,
         };
+    }
+
+    private sealed record UnsupportedExpressionSyntax : ShellSyntaxNode
+    {
+        private protected override object LibraryOwnership => this;
     }
 
     private static ParsedCommand StructuralFailure(
@@ -89,6 +123,265 @@ internal static partial class PwshCommandParser
             IsUnparseable = true,
             UnparseableReason = reason,
         };
+
+    private static ShellBlockSyntax SanitizeDiagnosticSyntax(ShellBlockSyntax source)
+    {
+        var statements = new ShellSyntaxNode[source.Statements.Count];
+        for (var index = 0; index < statements.Length; index++)
+        {
+            statements[index] = SanitizeDiagnosticNode(source.Statements[index]);
+        }
+
+        return source with { Statements = statements };
+    }
+
+    private static ShellSyntaxNode SanitizeDiagnosticNode(ShellSyntaxNode source) =>
+        source switch
+        {
+            ShellBlockSyntax block => SanitizeDiagnosticSyntax(block),
+            SimpleCommandSyntax simple => SanitizeDiagnosticSimpleCommand(simple),
+            PipelineSyntax pipeline => pipeline with
+            {
+                Stages = SanitizeDiagnosticNodes(pipeline.Stages),
+            },
+            CommandListSyntax list => list with
+            {
+                Items = SanitizeDiagnosticItems(list.Items),
+            },
+            GroupSyntax group => group with
+            {
+                Body = SanitizeDiagnosticSyntax(group.Body),
+            },
+            ForEachSyntax forEach => forEach with
+            {
+                IteratorCommands = SanitizeDiagnosticSyntax(forEach.IteratorCommands),
+                Body = SanitizeDiagnosticSyntax(forEach.Body),
+            },
+            ConditionLoopSyntax loop => loop with
+            {
+                Condition = SanitizeDiagnosticSyntax(loop.Condition),
+                Body = SanitizeDiagnosticSyntax(loop.Body),
+            },
+            ConditionalSyntax conditional => conditional with
+            {
+                Branches = SanitizeDiagnosticBranches(conditional.Branches),
+                Else = conditional.Else is null
+                    ? null
+                    : SanitizeDiagnosticSyntax(conditional.Else),
+            },
+            ConditionalBranchSyntax branch => branch with
+            {
+                Condition = SanitizeDiagnosticSyntax(branch.Condition),
+                Body = SanitizeDiagnosticSyntax(branch.Body),
+            },
+            CommandSubstitutionSyntax substitution => substitution with
+            {
+                Body = SanitizeDiagnosticSyntax(substitution.Body),
+            },
+            ExecutionRegionSyntax region => SanitizeDiagnosticExecutionRegion(region),
+            UnsupportedExpressionSyntax unsupported => unsupported,
+            _ => new UnsupportedExpressionSyntax
+            {
+                SourceStart = source.SourceStart,
+                SourceLength = source.SourceLength,
+            },
+        };
+
+    private static SimpleCommandSyntax SanitizeDiagnosticSimpleCommand(
+        SimpleCommandSyntax source)
+    {
+        var elements = new ClauseElement[source.Clause.Elements.Count];
+        for (var index = 0; index < elements.Length; index++)
+        {
+            elements[index] = source.Clause.Elements[index] with
+            {
+                IsPath = false,
+                Resolved = null,
+            };
+        }
+
+        var substitutions = new CommandSubstitutionSyntax[source.Substitutions.Count];
+        for (var index = 0; index < substitutions.Length; index++)
+        {
+            substitutions[index] = (CommandSubstitutionSyntax)SanitizeDiagnosticNode(
+                source.Substitutions[index]);
+        }
+
+        var regions = new ExecutionRegionSyntax[source.ExecutionRegions.Count];
+        for (var index = 0; index < regions.Length; index++)
+        {
+            var region = SanitizeDiagnosticExecutionRegion(source.ExecutionRegions[index]);
+            var hostIndex = region.HostClauseElementIndex;
+            regions[index] = region with
+            {
+                HostArgument = hostIndex is >= 0 && hostIndex < elements.Length
+                    ? elements[hostIndex.Value]
+                    : null,
+            };
+        }
+
+        return source with
+        {
+            Clause = source.Clause with
+            {
+                Args = Array.Empty<Arg>(),
+                Redirects = Array.Empty<Redirect>(),
+                Elements = elements,
+            },
+            Substitutions = substitutions,
+            ExecutionRegions = regions,
+        };
+    }
+
+    private static ExecutionRegionSyntax SanitizeDiagnosticExecutionRegion(
+        ExecutionRegionSyntax source) => source with
+        {
+            HostArgument = null,
+            Phase = ExecutionRegionPhase.Unknown,
+            Timing = ExecutionRegionTiming.Unknown,
+            Cardinality = ExecutionRegionCardinality.Unknown,
+            Body = SanitizeDiagnosticSyntax(source.Body),
+        };
+
+    private static IReadOnlyList<ShellSyntaxNode> SanitizeDiagnosticNodes(
+        IReadOnlyList<ShellSyntaxNode> source)
+    {
+        var nodes = new ShellSyntaxNode[source.Count];
+        for (var index = 0; index < nodes.Length; index++)
+        {
+            nodes[index] = SanitizeDiagnosticNode(source[index]);
+        }
+
+        return nodes;
+    }
+
+    private static IReadOnlyList<CommandListItemSyntax> SanitizeDiagnosticItems(
+        IReadOnlyList<CommandListItemSyntax> source)
+    {
+        var items = new CommandListItemSyntax[source.Count];
+        for (var index = 0; index < items.Length; index++)
+        {
+            items[index] = source[index] with
+            {
+                Command = SanitizeDiagnosticNode(source[index].Command),
+            };
+        }
+
+        return items;
+    }
+
+    private static IReadOnlyList<ConditionalBranchSyntax> SanitizeDiagnosticBranches(
+        IReadOnlyList<ConditionalBranchSyntax> source)
+    {
+        var branches = new ConditionalBranchSyntax[source.Count];
+        for (var index = 0; index < branches.Length; index++)
+        {
+            branches[index] = (ConditionalBranchSyntax)SanitizeDiagnosticNode(source[index]);
+        }
+
+        return branches;
+    }
+
+    private static bool ContainsUnsupportedExpressionSyntax(ShellSyntaxNode source) =>
+        source switch
+        {
+            UnsupportedExpressionSyntax => true,
+            ShellBlockSyntax block => ContainsUnsupportedExpressionSyntax(block.Statements),
+            SimpleCommandSyntax simple =>
+                ContainsUnsupportedExpressionSyntax(simple.Substitutions) ||
+                ContainsUnsupportedExpressionSyntax(simple.ExecutionRegions),
+            PipelineSyntax pipeline => ContainsUnsupportedExpressionSyntax(pipeline.Stages),
+            CommandListSyntax list => ContainsUnsupportedExpressionSyntax(list.Items),
+            GroupSyntax group => ContainsUnsupportedExpressionSyntax(group.Body),
+            ForEachSyntax forEach =>
+                ContainsUnsupportedExpressionSyntax(forEach.IteratorCommands) ||
+                ContainsUnsupportedExpressionSyntax(forEach.Body),
+            ConditionLoopSyntax loop =>
+                ContainsUnsupportedExpressionSyntax(loop.Condition) ||
+                ContainsUnsupportedExpressionSyntax(loop.Body),
+            ConditionalSyntax conditional =>
+                ContainsUnsupportedExpressionSyntax(conditional.Branches) ||
+                conditional.Else is not null &&
+                ContainsUnsupportedExpressionSyntax(conditional.Else),
+            ConditionalBranchSyntax branch =>
+                ContainsUnsupportedExpressionSyntax(branch.Condition) ||
+                ContainsUnsupportedExpressionSyntax(branch.Body),
+            CommandSubstitutionSyntax substitution =>
+                ContainsUnsupportedExpressionSyntax(substitution.Body),
+            ExecutionRegionSyntax region =>
+                ContainsUnsupportedExpressionSyntax(region.Body),
+            _ => false,
+        };
+
+    private static bool ContainsUnsupportedExpressionSyntax(
+        IReadOnlyList<ShellSyntaxNode> source)
+    {
+        for (var index = 0; index < source.Count; index++)
+        {
+            if (ContainsUnsupportedExpressionSyntax(source[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsUnsupportedExpressionSyntax(
+        IReadOnlyList<CommandSubstitutionSyntax> source)
+    {
+        for (var index = 0; index < source.Count; index++)
+        {
+            if (ContainsUnsupportedExpressionSyntax(source[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsUnsupportedExpressionSyntax(
+        IReadOnlyList<ExecutionRegionSyntax> source)
+    {
+        for (var index = 0; index < source.Count; index++)
+        {
+            if (ContainsUnsupportedExpressionSyntax(source[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsUnsupportedExpressionSyntax(
+        IReadOnlyList<CommandListItemSyntax> source)
+    {
+        for (var index = 0; index < source.Count; index++)
+        {
+            if (ContainsUnsupportedExpressionSyntax(source[index].Command))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool ContainsUnsupportedExpressionSyntax(
+        IReadOnlyList<ConditionalBranchSyntax> source)
+    {
+        for (var index = 0; index < source.Count; index++)
+        {
+            if (ContainsUnsupportedExpressionSyntax(source[index]))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private sealed partial class StructuralCoordinator
     {
@@ -107,6 +400,7 @@ internal static partial class PwshCommandParser
             new(ClauseReferenceComparer.Instance);
         private readonly Dictionary<ForEachSyntax, PwshForEachAnalysisPlan> _forEachPlans =
             new(ForEachReferenceComparer.Instance);
+        private string? _diagnosticFailureReason;
         private int _position;
         private int _groupDepth;
 
@@ -224,6 +518,8 @@ internal static partial class PwshCommandParser
 
         internal PwshForEachAnalysisPlan? GetForEachPlan(ForEachSyntax forEach) =>
             _forEachPlans.TryGetValue(forEach, out var plan) ? plan : null;
+
+        internal string? DiagnosticFailureReason => _diagnosticFailureReason;
 
         internal bool TryParse(out ShellBlockSyntax syntax, out string? error)
         {
@@ -473,7 +769,8 @@ internal static partial class PwshCommandParser
                     (StartsWithInvokeExpression(CopyTokens(start, _position)) ||
                      IsForEachCommandArgument(
                          CopyTokens(start, _position),
-                         compatibilityOperator)))
+                         compatibilityOperator) ||
+                     IsSelectObjectIndexRange(start, _position)))
                 {
                     expressionDepth = 1;
                     _position++;
@@ -501,6 +798,28 @@ internal static partial class PwshCommandParser
                 return false;
             }
 
+            CollapseSelectObjectIndexRange(segmentTokens);
+
+            var firstSegmentToken = segmentTokens[0];
+            var lastSegmentToken = segmentTokens[segmentTokens.Count - 1];
+            var segmentSource = _source.Substring(
+                firstSegmentToken.SourceStart,
+                lastSegmentToken.SourceStart + lastSegmentToken.SourceLength -
+                    firstSegmentToken.SourceStart);
+            if (IsUnsupportedSubstitutionBody(segmentSource, segmentTokens) &&
+                ContainsIncrementOrDecrementMutation(segmentTokens))
+            {
+                RecordDiagnosticFailure(
+                    "PowerShell increment/decrement expression mutation is not supported");
+                command = new UnsupportedExpressionSyntax
+                {
+                    SourceStart = firstSegmentToken.SourceStart,
+                    SourceLength = lastSegmentToken.SourceStart +
+                        lastSegmentToken.SourceLength - firstSegmentToken.SourceStart,
+                };
+                return true;
+            }
+
             CollapseSafeForEachCommandArgument(segmentTokens, compatibilityOperator);
 
             if (TryDetectUnsupportedInvocationShape(
@@ -513,12 +832,6 @@ internal static partial class PwshCommandParser
 
             if (_insideCommandSubstitution)
             {
-                var firstSegmentToken = segmentTokens[0];
-                var lastSegmentToken = segmentTokens[segmentTokens.Count - 1];
-                var segmentSource = _source.Substring(
-                    firstSegmentToken.SourceStart,
-                    lastSegmentToken.SourceStart + lastSegmentToken.SourceLength -
-                        firstSegmentToken.SourceStart);
                 if (IsUnsupportedSubstitutionBody(segmentSource, segmentTokens))
                 {
                     error = "unsupported PowerShell expression statement in subexpression";
@@ -609,8 +922,21 @@ internal static partial class PwshCommandParser
                 _attribution);
             if (built.Error is not null)
             {
-                error = built.Error;
-                return false;
+                if (built.Syntax is null)
+                {
+                    error = built.Error;
+                    return false;
+                }
+
+                if (substitutions.Count > 0)
+                {
+                    error = "PowerShell wrapper recursion cannot retain parent-scope substitutions safely";
+                    return false;
+                }
+
+                RecordDiagnosticFailure(built.Error);
+                command = built.Syntax;
+                return true;
             }
 
             if (built.Syntax is not null)
@@ -662,6 +988,136 @@ internal static partial class PwshCommandParser
                 built.UsesNativeArgumentBinding);
             command = simple;
             return true;
+        }
+
+        private bool IsSelectObjectIndexRange(int start, int openIndex)
+        {
+            if (openIndex + 2 >= _tokens.Count ||
+                _tokens[openIndex + 2].Kind != PwshTokenKind.Operator ||
+                _tokens[openIndex + 2].OperatorText != ")" ||
+                !TryParseIntegerRange(_tokens[openIndex + 1], out _, out _))
+            {
+                return false;
+            }
+
+            var prefix = CopyTokens(start, openIndex);
+            return prefix.Count == 2 &&
+                prefix[0].Kind == PwshTokenKind.Word &&
+                IsSelectObject(prefix[0].Value) &&
+                prefix[1].Kind == PwshTokenKind.Parameter &&
+                string.Equals(prefix[1].Value, "-Index", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private void CollapseSelectObjectIndexRange(List<PwshToken> tokens)
+        {
+            if (tokens.Count != 5 ||
+                tokens[2].Kind != PwshTokenKind.Operator ||
+                tokens[2].OperatorText != "(" ||
+                tokens[4].Kind != PwshTokenKind.Operator ||
+                tokens[4].OperatorText != ")" ||
+                !TryParseIntegerRange(tokens[3], out _, out _))
+            {
+                return;
+            }
+
+            var start = tokens[2].SourceStart;
+            var end = tokens[4].SourceStart + tokens[4].SourceLength;
+            var raw = _source.Substring(start, end - start);
+            tokens.RemoveRange(2, 3);
+            tokens.Add(new PwshToken(
+                PwshTokenKind.IntegerRange,
+                raw,
+                null,
+                start,
+                end - start,
+                null)
+            {
+                ResolverValue = ShellValue.Literal(raw, start, end - start),
+            });
+        }
+
+        private bool IsSelectObject(string authoredCommand)
+        {
+            var canonical = PwshAliases.Resolve(authoredCommand, _options.Dialect) ??
+                authoredCommand;
+            return string.Equals(
+                canonical,
+                "Select-Object",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool TryParseIntegerRange(
+            PwshToken token,
+            out long first,
+            out long second)
+        {
+            first = 0;
+            second = 0;
+            if (token.Kind != PwshTokenKind.Word || token.HasInterpolation ||
+                token.ResolverValue is null || token.ResolverValue.HasOpaqueFragment ||
+                token.SourceStart < 0 || token.SourceLength != token.Value.Length ||
+                token.SourceStart + token.SourceLength > _source.Length ||
+                !string.Equals(
+                    _source.Substring(token.SourceStart, token.SourceLength),
+                    token.Value,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return TryParseIntegerRangeText(token.Value, out first, out second);
+        }
+
+        private static bool TryParseIntegerRangeText(
+            string value,
+            out long first,
+            out long second)
+        {
+            first = 0;
+            second = 0;
+            var separator = value.IndexOf("..", StringComparison.Ordinal);
+            if (separator <= 0 ||
+                value.IndexOf("..", separator + 2, StringComparison.Ordinal) >= 0)
+            {
+                return false;
+            }
+
+            return TryParseCanonicalSignedDecimal(
+                    value.Substring(0, separator),
+                    out first) &&
+                TryParseCanonicalSignedDecimal(
+                    value.Substring(separator + 2),
+                    out second);
+        }
+
+        private static bool TryParseCanonicalSignedDecimal(string value, out long result)
+        {
+            result = 0;
+            var digitStart = value.Length > 0 && value[0] == '-' ? 1 : 0;
+            if (digitStart == value.Length ||
+                value[digitStart] == '0' && value.Length - digitStart != 1)
+            {
+                return false;
+            }
+
+            for (var index = digitStart; index < value.Length; index++)
+            {
+                if (value[index] is < '0' or > '9')
+                {
+                    return false;
+                }
+            }
+
+            if (digitStart == 1 && value == "-0")
+            {
+                return false;
+            }
+
+            return long.TryParse(
+                value,
+                System.Globalization.NumberStyles.AllowLeadingSign,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out result);
         }
 
         private bool TryParseDirectExecutionRegion(
@@ -831,7 +1287,9 @@ internal static partial class PwshCommandParser
                 return false;
             }
 
-            if (significant.Count > 0 && IsUnsupportedSubstitutionBody(source, significant))
+            if (significant.Count > 0 &&
+                IsUnsupportedSubstitutionBody(source, significant) &&
+                !ContainsIncrementOrDecrementMutation(significant))
             {
                 foreach (var expressionToken in significant)
                 {
@@ -876,6 +1334,27 @@ internal static partial class PwshCommandParser
 
             MergeFacts(coordinator);
             return true;
+        }
+
+        private static bool ContainsIncrementOrDecrementMutation(
+            IReadOnlyList<PwshToken> tokens)
+        {
+            foreach (var token in tokens)
+            {
+                if (token.Kind is not PwshTokenKind.Word and not PwshTokenKind.Parameter)
+                {
+                    continue;
+                }
+
+                var value = token.Value;
+                if (value.IndexOf("++", StringComparison.Ordinal) >= 0 ||
+                    value.IndexOf("--", StringComparison.Ordinal) >= 0)
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static bool HasPowerShellSubexpression(PwshToken token)
@@ -1842,7 +2321,15 @@ internal static partial class PwshCommandParser
                 provenance.Add(new ShellValueElementProvenance(
                     elementIndex,
                     value,
-                    usesNativeArgumentBinding));
+                    usesNativeArgumentBinding,
+                    ParserOwnedDomain(element, sourceTokens),
+                    TryGetAuthoredValueGroup(
+                        simple.Clause,
+                        element,
+                        value,
+                        out var group)
+                        ? group
+                        : null));
             }
 
             var redirects = PwshRedirectAnalysis.Analyze(simple.Clause);
@@ -1855,6 +2342,118 @@ internal static partial class PwshCommandParser
                 IsComplete = IsStructurallyComplete(simple) &&
                     AreRedirectsComplete(redirects),
             });
+        }
+
+        private static ShellValueDomainFacts? ParserOwnedDomain(
+            ClauseElement element,
+            IReadOnlyList<PwshToken> sourceTokens)
+        {
+            if (element.SourceStart is not int start ||
+                element.SourceLength is not int length)
+            {
+                return null;
+            }
+
+            for (var index = 0; index < sourceTokens.Count; index++)
+            {
+                var token = sourceTokens[index];
+                if (token.Kind != PwshTokenKind.IntegerRange ||
+                    token.SourceStart != start || token.SourceLength != length ||
+                    token.Value.Length < 5 || token.Value[0] != '(' ||
+                    token.Value[token.Value.Length - 1] != ')' ||
+                    !TryParseIntegerRangeText(
+                        token.Value.Substring(1, token.Value.Length - 2),
+                        out var first,
+                        out var second))
+                {
+                    continue;
+                }
+
+                return ShellValueDomainFacts.IntegerRange(
+                    Math.Min(first, second),
+                    Math.Max(first, second));
+            }
+
+            return null;
+        }
+
+        private static bool TryGetAuthoredValueGroup(
+            Clause clause,
+            ClauseElement element,
+            ShellValue value,
+            out IReadOnlyList<string> group)
+        {
+            group = Array.Empty<string>();
+            if (clause.IsCommandStringWrapped ||
+                element.SourceStart is null || element.SourceLength is null)
+            {
+                return false;
+            }
+
+            if (element.IsFlag)
+            {
+                var separator = value.Decoded.IndexOf(':');
+                if (separator < 0 || separator + 1 >= value.Decoded.Length)
+                {
+                    return false;
+                }
+
+                value = value.Slice(separator + 1);
+            }
+
+            var members = new List<string>();
+            var current = new System.Text.StringBuilder();
+            var separatorCount = 0;
+            for (var index = 0; index < value.Fragments.Count; index++)
+            {
+                var fragment = value.Fragments[index];
+                if (fragment.SourceStart is null || fragment.SourceLength is null)
+                {
+                    return false;
+                }
+
+                if (fragment.Kind == ShellValueFragmentKind.Literal)
+                {
+                    current.Append(fragment.Value);
+                    continue;
+                }
+
+                if (fragment.Kind == ShellValueFragmentKind.Expansion &&
+                    fragment.Expansion is ShellExpansionReference expansion)
+                {
+                    if (expansion.Kind == ShellExpansionKind.Glob)
+                    {
+                        current.Append(fragment.Value);
+                        continue;
+                    }
+
+                    if (expansion.Kind == ShellExpansionKind.ArraySeparator)
+                    {
+                        if (current.Length == 0 ||
+                            members.Count == ShellAnalysisLimits.MaxValueCandidates)
+                        {
+                            return false;
+                        }
+
+                        members.Add(current.ToString());
+                        current.Clear();
+                        separatorCount++;
+                        continue;
+                    }
+                }
+
+                return false;
+            }
+
+            if (separatorCount == 0 || current.Length == 0 ||
+                members.Count == ShellAnalysisLimits.MaxValueCandidates)
+            {
+                return false;
+            }
+
+            members.Add(current.ToString());
+            group = members;
+            return true;
         }
 
         private static bool TryGetRedirectTargetValue(
@@ -1996,6 +2595,11 @@ internal static partial class PwshCommandParser
 
         private void MergeFacts(StructuralCoordinator nested)
         {
+            if (nested._diagnosticFailureReason is not null)
+            {
+                RecordDiagnosticFailure(nested._diagnosticFailureReason);
+            }
+
             foreach (var pair in nested._facts)
             {
                 _facts.Add(pair.Key, pair.Value);
@@ -2005,6 +2609,11 @@ internal static partial class PwshCommandParser
             {
                 _forEachPlans.Add(pair.Key, pair.Value);
             }
+        }
+
+        private void RecordDiagnosticFailure(string reason)
+        {
+            _diagnosticFailureReason ??= reason;
         }
 
         private sealed class ClauseReferenceComparer : IEqualityComparer<Clause>
@@ -2417,6 +3026,9 @@ internal static partial class PwshCommandParser
                     Condition = branchCondition,
                     Body = branchBody,
                 };
+                return true;
+            case UnsupportedExpressionSyntax:
+                clone = new UnsupportedExpressionSyntax();
                 return true;
             case CommandSubstitutionSyntax substitution:
                 if (!TryCloneDecodedBlock(substitution.Body, state, out var substitutionBody))

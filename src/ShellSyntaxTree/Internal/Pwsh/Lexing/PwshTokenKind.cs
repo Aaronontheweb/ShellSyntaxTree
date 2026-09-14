@@ -33,6 +33,12 @@ internal enum PwshTokenKind
     /// text is in <see cref="PwshToken.OperatorText"/>.</summary>
     Operator,
 
+    /// <summary>
+    /// A parser-proved parenthesized signed-decimal range bound to an audited
+    /// cmdlet parameter. The lexer never emits this kind directly.
+    /// </summary>
+    IntegerRange,
+
     /// <summary>Spaces/tabs, or a newline run. A newline-bearing run carries
     /// <see cref="PwshToken.IsStatementSeparator"/> = true.</summary>
     Whitespace,

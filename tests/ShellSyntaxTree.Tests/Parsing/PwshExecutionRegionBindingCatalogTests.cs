@@ -84,6 +84,89 @@ public class PwshExecutionRegionBindingCatalogTests
     }
 
     [Theory]
+    [InlineData(
+        "% -Beg { Write-Output begin } -Proc { Write-Output process } " +
+        "-En { Write-Output end }",
+        "Begin,Process,End")]
+    [InlineData(
+        "ForEach-Object { Write-Output begin } { Write-Output process } " +
+        "{ Write-Output remaining } { Write-Output end }",
+        "Begin,Process,Process,End")]
+    [InlineData("ForEach-Object -Pro { Get-Date }", "Process")]
+    [InlineData("? -Fil { Test-Path $_ }", "Filter")]
+    public void WindowsPowerShell51_pinned_receivers_bind_native_forms(
+        string source,
+        string expectedPhases)
+    {
+        var result = Bind(source, PwshDialect.WindowsPowerShell51);
+
+        Assert.Equal(PwshExecutionRegionBindingStatus.ProvedExecution, result.Status);
+        Assert.Equal(
+            expectedPhases.Split(','),
+            result.Bindings.Select(binding => binding.Phase.ToString()));
+        Assert.All(result.Bindings, binding =>
+        {
+            Assert.Equal(ExecutionRegionTiming.Synchronous, binding.Timing);
+            Assert.True(binding.IsComplete);
+        });
+    }
+
+    [Theory]
+    [InlineData("ForEach-Object -RemainingScripts { Get-Date }")]
+    [InlineData(
+        "ForEach-Object -Begin { Get-Date } -RemainingScripts { Get-Date }")]
+    [InlineData("ForEach-Object -Parallel { Get-Date }")]
+    [InlineData("ForEach-Object -UseNewRunspace { Get-Date }")]
+    [InlineData("ForEach-Object -AsJob { Get-Date }")]
+    [InlineData("ForEach-Object -ProgressAction Continue { Get-Date }")]
+    [InlineData("Where-Object -Not { Get-Date }")]
+    public void WindowsPowerShell51_invalid_or_newer_forms_remain_incomplete(string source)
+    {
+        var result = Bind(source, PwshDialect.WindowsPowerShell51);
+
+        Assert.Equal(PwshExecutionRegionBindingStatus.Ambiguous, result.Status);
+        Assert.All(result.Bindings, binding => Assert.False(binding.IsComplete));
+    }
+
+    [Theory]
+    [InlineData("Measure-Command { Get-Date }")]
+    [InlineData("Invoke-Command { Get-Date }")]
+    [InlineData("Start-Job { Get-Date }")]
+    public void WindowsPowerShell51_unpinned_receivers_remain_incomplete(string source)
+    {
+        var result = Bind(source, PwshDialect.WindowsPowerShell51);
+
+        Assert.Equal(PwshExecutionRegionBindingStatus.Ambiguous, result.Status);
+        Assert.All(result.Bindings, binding => Assert.False(binding.IsComplete));
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7)]
+    [InlineData(PwshDialect.WindowsPowerShell51)]
+    public void Mixed_named_and_positional_process_blocks_remain_incomplete(
+        PwshDialect dialect)
+    {
+        var positionalThenNamed = Bind(
+            "ForEach-Object { Write-Output positional } " +
+            "-Process { Write-Output named }",
+            dialect);
+        var namedThenPositional = Bind(
+            "ForEach-Object -RemainingScripts { Write-Output named } " +
+            "{ Write-Output positional }",
+            dialect);
+
+        Assert.Equal(
+            PwshExecutionRegionBindingStatus.Ambiguous,
+            positionalThenNamed.Status);
+        Assert.Equal(
+            PwshExecutionRegionBindingStatus.Ambiguous,
+            namedThenPositional.Status);
+        Assert.All(
+            positionalThenNamed.Bindings.Concat(namedThenPositional.Bindings),
+            binding => Assert.False(binding.IsComplete));
+    }
+
+    [Theory]
     [InlineData("& 'ForEach-Object' { Get-Date }")]
     [InlineData("& '%' { Get-Date }")]
     public void Static_command_spellings_share_the_canonical_receiver(string source)
@@ -836,13 +919,15 @@ public class PwshExecutionRegionBindingCatalogTests
         Assert.Contains("module-qualified cmdlet", parsed.UnparseableReason);
     }
 
-    private static PwshExecutionRegionBindingResult Bind(string source)
+    private static PwshExecutionRegionBindingResult Bind(
+        string source,
+        PwshDialect dialect = PwshDialect.PowerShell7)
     {
         var clause = ParseClause(source);
         var result = PwshExecutionRegionBindingCatalog.Bind(
             clause,
             commandIdentityProven: true,
-            dialect: PwshDialect.PowerShell7);
+            dialect);
         Assert.All(result.Bindings, binding =>
         {
             Assert.InRange(binding.HostClauseElementIndex, 0, clause.Elements.Count - 1);

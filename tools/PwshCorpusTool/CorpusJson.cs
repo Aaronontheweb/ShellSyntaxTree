@@ -382,6 +382,23 @@ internal static class CorpusJson
                 commandJson["workingDirectoryEffect"] =
                     BuildWorkingDirectoryEffect(command.WorkingDirectoryEffect);
 
+                if (command.FileSystemTreeAccesses.Count > 0)
+                {
+                    var accesses = new JsonArray();
+                    foreach (var access in command.FileSystemTreeAccesses)
+                    {
+                        accesses.Add(new JsonObject
+                        {
+                            ["rootArgumentIndex"] = JsonValue.Create(
+                                FindAnalyzedArgumentIndex(command, access.RootArgument)),
+                            ["root"] = BuildValueDomain(access.Root),
+                            ["traversal"] = access.Traversal.ToString(),
+                        });
+                    }
+
+                    commandJson["fileSystemTreeAccesses"] = accesses;
+                }
+
                 if (command.Redirects.Count > 0)
                 {
                     var redirects = new JsonArray();
@@ -404,6 +421,27 @@ internal static class CorpusJson
         return commands;
     }
 
+    private static int? FindAnalyzedArgumentIndex(
+        CommandOccurrence command,
+        AnalyzedArgument? argument)
+    {
+        if (argument is null)
+        {
+            return null;
+        }
+
+        for (var index = 0; index < command.Arguments.Count; index++)
+        {
+            if (ReferenceEquals(command.Arguments[index], argument))
+            {
+                return index;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "Tree-access root argument was not owned by its command occurrence");
+    }
+
     private static JsonObject BuildValueDomain(ShellValueDomain domain)
     {
         var values = new JsonArray();
@@ -418,15 +456,25 @@ internal static class CorpusJson
                 values.Add(value);
             }
         }
+        else if (domain is ShellValueDomain.OrderedList orderedList)
+        {
+            foreach (var value in orderedList.Values)
+            {
+                values.Add(value);
+            }
+        }
 
-        return new JsonObject
+        var result = new JsonObject
         {
             ["kind"] = domain switch
             {
                 ShellValueDomain.Unknown => "Unknown",
                 ShellValueDomain.Exact => "Exact",
                 ShellValueDomain.FiniteSet => "FiniteSet",
+                ShellValueDomain.OrderedList => "OrderedList",
                 ShellValueDomain.PathPattern => "Pattern",
+                ShellValueDomain.IntegerRange => "IntegerRange",
+                ShellValueDomain.Concatenation => "Concatenation",
                 _ => throw new InvalidOperationException(
                     $"Unknown value-domain type {domain.GetType().FullName}"),
             },
@@ -435,6 +483,25 @@ internal static class CorpusJson
             ["coveringDirectory"] =
                 (domain as ShellValueDomain.PathPattern)?.CoveringDirectory,
         };
+
+        if (domain is ShellValueDomain.IntegerRange range)
+        {
+            result["minimumInclusive"] = range.MinimumInclusive;
+            result["maximumInclusive"] = range.MaximumInclusive;
+        }
+
+        if (domain is ShellValueDomain.Concatenation concatenation)
+        {
+            var parts = new JsonArray();
+            foreach (var part in concatenation.Parts)
+            {
+                parts.Add(BuildValueDomain(part));
+            }
+
+            result["parts"] = parts;
+        }
+
+        return result;
     }
 
     private static JsonObject BuildWorkingDirectoryEffect(

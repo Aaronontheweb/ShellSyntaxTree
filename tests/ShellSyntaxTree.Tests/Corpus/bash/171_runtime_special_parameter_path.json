@@ -88,10 +88,12 @@
             "clauseArgumentIndex": 0,
             "clauseElementIndex": 1,
             "value": {
-              "kind": "Unknown",
+              "kind": "IntegerRange",
               "values": [],
               "pattern": null,
-              "coveringDirectory": null
+              "coveringDirectory": null,
+              "minimumInclusive": 0,
+              "maximumInclusive": 255
             }
           }
         ],

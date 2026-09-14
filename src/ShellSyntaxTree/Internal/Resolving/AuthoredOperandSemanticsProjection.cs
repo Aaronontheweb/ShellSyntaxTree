@@ -5,6 +5,8 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using ShellSyntaxTree.Internal.Parsing;
+using ShellSyntaxTree.Internal.Pwsh.Verbs;
 
 namespace ShellSyntaxTree.Internal.Resolving;
 
@@ -13,6 +15,7 @@ internal enum AuditedOperandBindingCategory
     Unknown,
     AllNonOptionOperands,
     ExactNamedParameterValue,
+    ExactPositionalValue,
     AllArguments,
 }
 
@@ -25,7 +28,9 @@ internal enum AuditedOperandSemantic
 
 internal readonly record struct AuditedOperandBinding(
     AuditedOperandBindingCategory Category,
-    AuditedOperandSemantic Semantic);
+    AuditedOperandSemantic Semantic,
+    ShellResolutionConsumer? PowerShellPathConsumer = null,
+    bool AcceptsAuthoredValueGroup = false);
 
 internal sealed class AuditedOperandBindingCatalogEntry
 {
@@ -36,6 +41,10 @@ internal sealed class AuditedOperandBindingCatalogEntry
         AuditedOperandBindingCategory category,
         AuditedOperandSemantic semantic,
         string? parameterName = null,
+        int? positionalIndex = null,
+        ShellResolutionConsumer? powerShellPathConsumer = null,
+        bool acceptsAuthoredValueGroup = false,
+        IReadOnlyDictionary<string, PwshBinding>? exactPowerShellParameters = null,
         bool stopsVerbChain = false)
     {
         if (category == AuditedOperandBindingCategory.ExactNamedParameterValue &&
@@ -54,6 +63,44 @@ internal sealed class AuditedOperandBindingCatalogEntry
                 nameof(parameterName));
         }
 
+        if (category == AuditedOperandBindingCategory.ExactPositionalValue !=
+            positionalIndex.HasValue || positionalIndex < 0)
+        {
+            throw new ArgumentException(
+                "An exact positional binding requires one non-negative position.",
+                nameof(positionalIndex));
+        }
+
+        if (powerShellPathConsumer is not null &&
+            (language != ShellProjectionLanguage.PowerShell ||
+             semantic != AuditedOperandSemantic.LocalFileSystem ||
+             powerShellPathConsumer is not (
+                 ShellResolutionConsumer.PowerShellCmdletPath or
+                 ShellResolutionConsumer.PowerShellCmdletLiteralPath)))
+        {
+            throw new ArgumentException(
+                "A PowerShell filesystem binding requires an audited cmdlet path consumer.",
+                nameof(powerShellPathConsumer));
+        }
+
+        if (acceptsAuthoredValueGroup &&
+            (language != ShellProjectionLanguage.PowerShell ||
+             semantic != AuditedOperandSemantic.NonFileSystem))
+        {
+            throw new ArgumentException(
+                "Only audited PowerShell non-filesystem bindings accept value groups.",
+                nameof(acceptsAuthoredValueGroup));
+        }
+
+        if (exactPowerShellParameters is not null &&
+            (language != ShellProjectionLanguage.PowerShell ||
+             category != AuditedOperandBindingCategory.ExactPositionalValue))
+        {
+            throw new ArgumentException(
+                "An exact PowerShell parameter inventory applies only to positional bindings.",
+                nameof(exactPowerShellParameters));
+        }
+
         if (semantic == AuditedOperandSemantic.Unknown ||
             category == AuditedOperandBindingCategory.Unknown)
         {
@@ -68,6 +115,10 @@ internal sealed class AuditedOperandBindingCatalogEntry
         Category = category;
         Semantic = semantic;
         ParameterName = parameterName;
+        PositionalIndex = positionalIndex;
+        PowerShellPathConsumer = powerShellPathConsumer;
+        AcceptsAuthoredValueGroup = acceptsAuthoredValueGroup;
+        ExactPowerShellParameters = exactPowerShellParameters;
         StopsVerbChain = stopsVerbChain;
     }
 
@@ -83,6 +134,14 @@ internal sealed class AuditedOperandBindingCatalogEntry
 
     internal string? ParameterName { get; }
 
+    internal int? PositionalIndex { get; }
+
+    internal ShellResolutionConsumer? PowerShellPathConsumer { get; }
+
+    internal bool AcceptsAuthoredValueGroup { get; }
+
+    internal IReadOnlyDictionary<string, PwshBinding>? ExactPowerShellParameters { get; }
+
     internal bool StopsVerbChain { get; }
 }
 
@@ -92,6 +151,42 @@ internal sealed class AuditedOperandBindingCatalogEntry
 /// </summary>
 internal static class AuditedOperandBindingCatalog
 {
+    // The initial positional-property proof intentionally admits no flags.
+    // A generic parameter table cannot establish Select-Object's parameter set.
+    private static readonly IReadOnlyDictionary<string, PwshBinding>
+        SelectObjectPositionalParameters = CreateParameterInventory(
+            Array.Empty<string>(),
+            Array.Empty<string>());
+
+    private static readonly IReadOnlyDictionary<string, PwshBinding>
+        GetChildItemPositionalParameters = CreateParameterInventory(
+            new[]
+            {
+                "-Attributes", "-Depth", "-ErrorAction", "-ErrorVariable",
+                "-Exclude", "-Filter", "-Include", "-InformationAction",
+                "-InformationVariable", "-LiteralPath", "-OutBuffer",
+                "-OutVariable", "-Path", "-PipelineVariable", "-WarningAction",
+                "-WarningVariable",
+            },
+            new[]
+            {
+                "-Debug", "-Directory", "-File", "-Force", "-Hidden", "-Name",
+                "-ReadOnly", "-Recurse", "-System", "-Verbose",
+            });
+
+    private static readonly IReadOnlyDictionary<string, PwshBinding>
+        GetContentPositionalParameters = CreateParameterInventory(
+            new[]
+            {
+                "-Delimiter", "-Encoding", "-ErrorAction", "-ErrorVariable",
+                "-Exclude", "-Filter", "-Include", "-InformationAction",
+                "-InformationVariable", "-LiteralPath", "-OutBuffer",
+                "-OutVariable", "-Path", "-PipelineVariable", "-ReadCount",
+                "-Stream", "-Tail", "-TotalCount", "-WarningAction",
+                "-WarningVariable",
+            },
+            new[] { "-Debug", "-Force", "-Raw", "-Verbose", "-Wait" });
+
     private static readonly IReadOnlyList<AuditedOperandBindingCatalogEntry> Entries =
         new[]
         {
@@ -107,7 +202,100 @@ internal static class AuditedOperandBindingCatalog
                 StringComparison.OrdinalIgnoreCase,
                 AuditedOperandBindingCategory.ExactNamedParameterValue,
                 AuditedOperandSemantic.LocalFileSystem,
-                "-LiteralPath"),
+                "-LiteralPath",
+                powerShellPathConsumer:
+                    ShellResolutionConsumer.PowerShellCmdletLiteralPath),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Get-Content",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactNamedParameterValue,
+                AuditedOperandSemantic.LocalFileSystem,
+                "-Path",
+                powerShellPathConsumer: ShellResolutionConsumer.PowerShellCmdletPath),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Get-Content",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactPositionalValue,
+                AuditedOperandSemantic.LocalFileSystem,
+                positionalIndex: 0,
+                powerShellPathConsumer: ShellResolutionConsumer.PowerShellCmdletPath,
+                exactPowerShellParameters: GetContentPositionalParameters),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Get-ChildItem",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactNamedParameterValue,
+                AuditedOperandSemantic.LocalFileSystem,
+                "-LiteralPath",
+                powerShellPathConsumer:
+                    ShellResolutionConsumer.PowerShellCmdletLiteralPath),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Get-ChildItem",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactNamedParameterValue,
+                AuditedOperandSemantic.LocalFileSystem,
+                "-Path",
+                powerShellPathConsumer: ShellResolutionConsumer.PowerShellCmdletPath),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Get-ChildItem",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactPositionalValue,
+                AuditedOperandSemantic.LocalFileSystem,
+                positionalIndex: 0,
+                powerShellPathConsumer: ShellResolutionConsumer.PowerShellCmdletPath,
+                exactPowerShellParameters: GetChildItemPositionalParameters),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Select-String",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactNamedParameterValue,
+                AuditedOperandSemantic.LocalFileSystem,
+                "-Path",
+                powerShellPathConsumer: ShellResolutionConsumer.PowerShellCmdletPath),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Select-Object",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactNamedParameterValue,
+                AuditedOperandSemantic.NonFileSystem,
+                "-Property",
+                acceptsAuthoredValueGroup: true),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Select-Object",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactPositionalValue,
+                AuditedOperandSemantic.NonFileSystem,
+                positionalIndex: 0,
+                acceptsAuthoredValueGroup: true,
+                exactPowerShellParameters: SelectObjectPositionalParameters),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Select-Object",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactNamedParameterValue,
+                AuditedOperandSemantic.NonFileSystem,
+                "-ExpandProperty"),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Get-ChildItem",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactNamedParameterValue,
+                AuditedOperandSemantic.NonFileSystem,
+                "-Include",
+                acceptsAuthoredValueGroup: true),
+            new AuditedOperandBindingCatalogEntry(
+                ShellProjectionLanguage.PowerShell,
+                "Get-Process",
+                StringComparison.OrdinalIgnoreCase,
+                AuditedOperandBindingCategory.ExactNamedParameterValue,
+                AuditedOperandSemantic.NonFileSystem,
+                "-Name",
+                acceptsAuthoredValueGroup: true),
             new AuditedOperandBindingCatalogEntry(
                 ShellProjectionLanguage.Bash,
                 "tr",
@@ -140,7 +328,23 @@ internal static class AuditedOperandBindingCatalog
                 continue;
             }
 
-            return Bind(entry, arguments);
+            var candidate = Bind(entry, arguments);
+            for (var argumentIndex = 0;
+                 argumentIndex < bindings.Length;
+                 argumentIndex++)
+            {
+                if (candidate[argumentIndex].Category ==
+                    AuditedOperandBindingCategory.Unknown)
+                {
+                    continue;
+                }
+
+                bindings[argumentIndex] = bindings[argumentIndex].Category ==
+                    AuditedOperandBindingCategory.Unknown ||
+                    bindings[argumentIndex] == candidate[argumentIndex]
+                        ? candidate[argumentIndex]
+                        : default;
+            }
         }
 
         return bindings;
@@ -160,6 +364,8 @@ internal static class AuditedOperandBindingCatalog
                     arguments,
                     bindings,
                     entry),
+            AuditedOperandBindingCategory.ExactPositionalValue =>
+                BindExactPositionalValue(arguments, bindings, entry),
             AuditedOperandBindingCategory.AllArguments =>
                 BindAllArguments(bindings, entry),
             _ => bindings,
@@ -192,7 +398,7 @@ internal static class AuditedOperandBindingCatalog
     {
         for (var index = 0; index < bindings.Length; index++)
         {
-            bindings[index] = new AuditedOperandBinding(entry.Category, entry.Semantic);
+            bindings[index] = CreateBinding(entry);
         }
 
         return bindings;
@@ -211,9 +417,7 @@ internal static class AuditedOperandBindingCatalog
             {
                 if (!argument.Argument.IsFlag)
                 {
-                    bindings[index] = new AuditedOperandBinding(
-                        entry.Category,
-                        entry.Semantic);
+                    bindings[index] = CreateBinding(entry);
                 }
 
                 expectsValue = false;
@@ -231,17 +435,113 @@ internal static class AuditedOperandBindingCatalog
         return bindings;
     }
 
+    private static IReadOnlyList<AuditedOperandBinding> BindExactPositionalValue(
+        IReadOnlyList<AnalyzedArgument> arguments,
+        AuditedOperandBinding[] bindings,
+        AuditedOperandBindingCatalogEntry entry)
+    {
+        var positionalIndex = 0;
+        var expectsNamedValue = false;
+        var exactInventory = entry.ExactPowerShellParameters;
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            var argument = arguments[index].Argument;
+            if (expectsNamedValue)
+            {
+                if (argument.IsFlag)
+                {
+                    return new AuditedOperandBinding[arguments.Count];
+                }
+
+                expectsNamedValue = false;
+                continue;
+            }
+
+            if (argument.IsFlag)
+            {
+                PwshBinding binding;
+                if (exactInventory is not null)
+                {
+                    if (!exactInventory.TryGetValue(argument.Raw, out binding) ||
+                        string.Equals(argument.Raw, "-Path", StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(
+                            argument.Raw,
+                            "-LiteralPath",
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new AuditedOperandBinding[arguments.Count];
+                    }
+                }
+                else
+                {
+                    var parameter = PwshBindingTables.Resolve(
+                        entry.CanonicalVerb,
+                        argument.Raw);
+                    if (!parameter.IsKnown || parameter.IsAmbiguous ||
+                        !string.Equals(
+                            argument.Raw,
+                            parameter.CanonicalName,
+                            StringComparison.OrdinalIgnoreCase))
+                    {
+                        return new AuditedOperandBinding[arguments.Count];
+                    }
+
+                    binding = parameter.Binding;
+                }
+
+                expectsNamedValue = binding == PwshBinding.Value;
+                continue;
+            }
+
+            if (positionalIndex == entry.PositionalIndex)
+            {
+                bindings[index] = CreateBinding(entry);
+            }
+
+            positionalIndex++;
+        }
+
+        return expectsNamedValue || exactInventory is not null && positionalIndex != 1
+            ? new AuditedOperandBinding[arguments.Count]
+            : bindings;
+    }
+
+    private static IReadOnlyDictionary<string, PwshBinding> CreateParameterInventory(
+        IReadOnlyList<string> valueParameters,
+        IReadOnlyList<string> switchParameters)
+    {
+        var result = new Dictionary<string, PwshBinding>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < valueParameters.Count; index++)
+        {
+            result.Add(valueParameters[index], PwshBinding.Value);
+        }
+
+        for (var index = 0; index < switchParameters.Count; index++)
+        {
+            result.Add(switchParameters[index], PwshBinding.Switch);
+        }
+
+        return result;
+    }
+
     private static IReadOnlyList<AuditedOperandBinding> BindAllArguments(
         AuditedOperandBinding[] bindings,
         AuditedOperandBindingCatalogEntry entry)
     {
         for (var index = 0; index < bindings.Length; index++)
         {
-            bindings[index] = new AuditedOperandBinding(entry.Category, entry.Semantic);
+            bindings[index] = CreateBinding(entry);
         }
 
         return bindings;
     }
+
+    private static AuditedOperandBinding CreateBinding(
+        AuditedOperandBindingCatalogEntry entry) => new(
+            entry.Category,
+            entry.Semantic,
+            entry.PowerShellPathConsumer,
+            entry.AcceptsAuthoredValueGroup);
 
     private static AuditedOperandBindingCatalogEntry? Find(
         ShellProjectionLanguage language,
@@ -305,26 +605,31 @@ internal static class AuthoredOperandSemanticsProjection
                     bashOptionsEnded = nextStates;
                     if (allCandidatesArePaths &&
                         TryGetProvenance(argument, clause, provenanceByElement, out var bashValue) &&
-                        IsBashTransformSafe(bashValue, candidates) &&
+                        IsBashTransformSafe(bashValue.Value, candidates) &&
                         TryResolve(
                             ShellProjectionLanguage.Bash,
                             candidates,
                             workingDirectory,
+                            powerShellConsumer: null,
                             out var bashDomain))
                     {
                         fileSystemDomain = bashDomain;
                     }
 
                     break;
-                case (AuditedOperandBindingCategory.ExactNamedParameterValue,
+                case (AuditedOperandBindingCategory.ExactNamedParameterValue or
+                    AuditedOperandBindingCategory.ExactPositionalValue,
                     AuditedOperandSemantic.LocalFileSystem):
                     if (candidates.Count > 0 &&
                         TryGetProvenance(argument, clause, provenanceByElement, out var pwshValue) &&
-                        IsSingleField(pwshValue) &&
+                        pwshValue.UsesNativeArgumentBinding == false &&
+                        IsSingleField(pwshValue.Value) &&
+                        binding.PowerShellPathConsumer is not null &&
                         TryResolve(
                             ShellProjectionLanguage.PowerShell,
                             candidates,
                             workingDirectory,
+                            binding.PowerShellPathConsumer,
                             out var pwshDomain))
                     {
                         fileSystemDomain = pwshDomain;
@@ -335,7 +640,34 @@ internal static class AuthoredOperandSemanticsProjection
                     AuditedOperandSemantic.NonFileSystem):
                     if (candidates.Count > 0 &&
                         TryGetProvenance(argument, clause, provenanceByElement, out var dataValue) &&
-                        IsBashTransformSafe(dataValue, candidates))
+                        IsBashTransformSafe(dataValue.Value, candidates))
+                    {
+                        nonFileSystemDomain = argument.AuthoredValue;
+                    }
+
+                    break;
+                case (AuditedOperandBindingCategory.ExactNamedParameterValue or
+                    AuditedOperandBindingCategory.ExactPositionalValue,
+                    AuditedOperandSemantic.NonFileSystem):
+                    if (!TryGetProvenance(
+                            argument,
+                            clause,
+                            provenanceByElement,
+                            out var pwshData) ||
+                        pwshData.UsesNativeArgumentBinding != false)
+                    {
+                        break;
+                    }
+
+                    if (binding.AcceptsAuthoredValueGroup &&
+                        pwshData.AuthoredValueGroup is { Count: >= 2 } group &&
+                        group.Count <= ShellAnalysisLimits.MaxValueCandidates)
+                    {
+                        nonFileSystemDomain = new ShellValueDomain.OrderedList(group);
+                    }
+                    else if (pwshData.AuthoredValueGroup is null &&
+                             candidates.Count > 0 &&
+                             IsStaticPowerShellData(pwshData.Value))
                     {
                         nonFileSystemDomain = argument.AuthoredValue;
                     }
@@ -358,12 +690,15 @@ internal static class AuthoredOperandSemanticsProjection
         for (var index = 0; index < arguments.Count; index++)
         {
             var argument = arguments[index];
-            var hasFileSystemValue = IsPositiveDomain(argument.AuthoredFileSystemValue);
-            var hasNonFileSystemValue = IsPositiveDomain(
+            var hasFileSystemValue = IsPositiveScalarDomain(
+                argument.AuthoredFileSystemValue);
+            var hasNonFileSystemValue = IsPositiveNonFileSystemDomain(
                 argument.AuthoredNonFileSystemValue);
             if (hasFileSystemValue && hasNonFileSystemValue ||
-                !IsAuditedDomain(argument.AuthoredFileSystemValue) ||
-                !IsAuditedDomain(argument.AuthoredNonFileSystemValue))
+                argument.Value is ShellValueDomain.OrderedList ||
+                argument.AuthoredValue is ShellValueDomain.OrderedList ||
+                !IsAuditedScalarDomain(argument.AuthoredFileSystemValue) ||
+                !IsAuditedNonFileSystemDomain(argument.AuthoredNonFileSystemValue))
             {
                 return false;
             }
@@ -386,26 +721,43 @@ internal static class AuthoredOperandSemanticsProjection
         return false;
     }
 
-    private static bool IsAuditedDomain(ShellValueDomain domain) => domain is
+    private static bool IsAuditedScalarDomain(ShellValueDomain domain) => domain is
         ShellValueDomain.Unknown or
         ShellValueDomain.Exact or
         ShellValueDomain.FiniteSet;
 
-    private static bool IsPositiveDomain(ShellValueDomain domain) => domain is
+    private static bool IsAuditedNonFileSystemDomain(ShellValueDomain domain) => domain switch
+    {
+        ShellValueDomain.Unknown or
+        ShellValueDomain.Exact or
+        ShellValueDomain.FiniteSet => true,
+        ShellValueDomain.OrderedList list =>
+            list.Values.Count >= 2 &&
+            list.Values.Count <= ShellAnalysisLimits.MaxValueCandidates &&
+            !ContainsNull(list.Values),
+        _ => false,
+    };
+
+    private static bool IsPositiveScalarDomain(ShellValueDomain domain) => domain is
         ShellValueDomain.Exact or
         ShellValueDomain.FiniteSet;
 
-    private static Dictionary<int, ShellValue> IndexProvenance(
+    private static bool IsPositiveNonFileSystemDomain(ShellValueDomain domain) => domain is
+        ShellValueDomain.Exact or
+        ShellValueDomain.FiniteSet or
+        ShellValueDomain.OrderedList;
+
+    private static Dictionary<int, ShellValueElementProvenance> IndexProvenance(
         IReadOnlyList<ShellValueElementProvenance> provenance)
     {
-        var indexed = new Dictionary<int, ShellValue>();
+        var indexed = new Dictionary<int, ShellValueElementProvenance>();
         for (var index = 0; index < provenance.Count; index++)
         {
             var current = provenance[index];
             if (current.ClauseElementIndex >= 0 &&
                 !indexed.ContainsKey(current.ClauseElementIndex))
             {
-                indexed.Add(current.ClauseElementIndex, current.Value);
+                indexed.Add(current.ClauseElementIndex, current);
             }
         }
 
@@ -415,8 +767,8 @@ internal static class AuthoredOperandSemanticsProjection
     private static bool TryGetProvenance(
         AnalyzedArgument argument,
         Clause clause,
-        IReadOnlyDictionary<int, ShellValue> provenance,
-        out ShellValue value)
+        IReadOnlyDictionary<int, ShellValueElementProvenance> provenance,
+        out ShellValueElementProvenance value)
     {
         for (var index = 0; index < clause.Elements.Count; index++)
         {
@@ -427,7 +779,20 @@ internal static class AuthoredOperandSemanticsProjection
             }
         }
 
-        value = ShellValue.Literal(string.Empty);
+        value = default;
+        return false;
+    }
+
+    private static bool ContainsNull(IReadOnlyList<string> values)
+    {
+        for (var index = 0; index < values.Count; index++)
+        {
+            if (values[index] is null)
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -526,6 +891,27 @@ internal static class AuthoredOperandSemanticsProjection
         return true;
     }
 
+    private static bool IsStaticPowerShellData(ShellValue value)
+    {
+        for (var index = 0; index < value.Fragments.Count; index++)
+        {
+            var fragment = value.Fragments[index];
+            if (fragment.Kind == ShellValueFragmentKind.Literal)
+            {
+                continue;
+            }
+
+            if (fragment.Kind != ShellValueFragmentKind.Expansion ||
+                fragment.Expansion is not ShellExpansionReference expansion ||
+                expansion.Kind != ShellExpansionKind.Glob)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static bool ContainsFieldSplitOrGlobCharacter(string value)
     {
         for (var index = 0; index < value.Length; index++)
@@ -543,6 +929,7 @@ internal static class AuthoredOperandSemanticsProjection
         ShellProjectionLanguage language,
         IReadOnlyList<string> candidates,
         ShellValueDomainFacts workingDirectory,
+        ShellResolutionConsumer? powerShellConsumer,
         out ShellValueDomain domain)
     {
         domain = new ShellValueDomain.Unknown();
@@ -561,7 +948,8 @@ internal static class AuthoredOperandSemanticsProjection
             var resolved = ResolveCandidate(
                 language,
                 candidates[index],
-                workingDirectory.Values[0]);
+                workingDirectory.Values[0],
+                powerShellConsumer);
             if (resolved is null)
             {
                 return false;
@@ -582,7 +970,8 @@ internal static class AuthoredOperandSemanticsProjection
     private static string? ResolveCandidate(
         ShellProjectionLanguage language,
         string candidate,
-        string workingDirectory)
+        string workingDirectory,
+        ShellResolutionConsumer? powerShellConsumer)
     {
         var value = ShellValue.Literal(candidate);
         var resolution = language switch
@@ -598,7 +987,7 @@ internal static class AuthoredOperandSemanticsProjection
                 treatAsPath: true,
                 new PwshParserOptions { WorkingDirectory = workingDirectory },
                 workingDirectoryUnknown: false,
-                ShellResolutionConsumer.PowerShellCmdletLiteralPath),
+                powerShellConsumer ?? ShellResolutionConsumer.PowerShellCmdletLiteralPath),
             _ => (ArgKind.DynamicSkip, null, false),
         };
 

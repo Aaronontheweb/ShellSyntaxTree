@@ -489,6 +489,14 @@ internal static class AstAssert
                     prefix + $"commands[{index}].workingDirectory");
             }
 
+            if (wanted.FileSystemTreeAccesses is not null)
+            {
+                AssertFileSystemTreeAccessesEqual(
+                    wanted.FileSystemTreeAccesses,
+                    observed,
+                    prefix + $"commands[{index}].fileSystemTreeAccesses");
+            }
+
             if (wanted.WorkingDirectoryEffect is not null)
             {
                 AssertWorkingDirectoryEffectEqual(
@@ -505,6 +513,50 @@ internal static class AstAssert
                     prefix + $"commands[{index}].redirects");
             }
         }
+    }
+
+    private static void AssertFileSystemTreeAccessesEqual(
+        IReadOnlyList<ExpectedFileSystemTreeAccess> expected,
+        CommandOccurrence command,
+        string path)
+    {
+        if (expected.Count != command.FileSystemTreeAccesses.Count)
+        {
+            throw new XunitException(
+                $"{path}.count: expected={expected.Count}, actual={command.FileSystemTreeAccesses.Count}");
+        }
+
+        for (var index = 0; index < expected.Count; index++)
+        {
+            var wanted = expected[index];
+            var observed = command.FileSystemTreeAccesses[index];
+            var rootArgumentIndex = observed.RootArgument is null
+                ? (int?)null
+                : FindAnalyzedArgumentIndex(command, observed.RootArgument);
+            if (wanted.RootArgumentIndex != rootArgumentIndex ||
+                !System.Enum.IsDefined(typeof(ShellTreeTraversalMode), wanted.Traversal) ||
+                wanted.Traversal != observed.Traversal)
+            {
+                throw new XunitException($"{path}[{index}] coordinate or traversal differs");
+            }
+
+            AssertValueDomainEqual(wanted.Root, observed.Root, $"{path}[{index}].root");
+        }
+    }
+
+    private static int FindAnalyzedArgumentIndex(
+        CommandOccurrence command,
+        AnalyzedArgument argument)
+    {
+        for (var index = 0; index < command.Arguments.Count; index++)
+        {
+            if (ReferenceEquals(command.Arguments[index], argument))
+            {
+                return index;
+            }
+        }
+
+        return -1;
     }
 
     private static void AssertWorkingDirectoryEffectEqual(
@@ -642,16 +694,29 @@ internal static class AstAssert
         var actualPattern = (actual as ShellValueDomain.PathPattern)?.Pattern;
         var actualCoveringDirectory =
             (actual as ShellValueDomain.PathPattern)?.CoveringDirectory;
+        var actualMinimum = (actual as ShellValueDomain.IntegerRange)?.MinimumInclusive;
+        var actualMaximum = (actual as ShellValueDomain.IntegerRange)?.MaximumInclusive;
+        var expectedParts = expected.Parts ?? new List<ExpectedValueDomain>();
+        var actualParts = (actual as ShellValueDomain.Concatenation)?.Parts ??
+            Array.Empty<ShellValueDomain>();
         if (expected.Kind != actualKind ||
             !expectedValues.SequenceEqual(actualValues) ||
             expected.Pattern != actualPattern ||
-            expected.CoveringDirectory != actualCoveringDirectory)
+            expected.CoveringDirectory != actualCoveringDirectory ||
+            expected.MinimumInclusive != actualMinimum ||
+            expected.MaximumInclusive != actualMaximum ||
+            expectedParts.Count != actualParts.Count)
         {
             throw new XunitException(
                 $"{path}: expected={expected.Kind}[{string.Join(",", expectedValues)}] "
                 + $"pattern={expected.Pattern}, covering={expected.CoveringDirectory}; "
                 + $"actual={actualKind}[{string.Join(",", actualValues)}] "
                 + $"pattern={actualPattern}, covering={actualCoveringDirectory}");
+        }
+
+        for (var index = 0; index < expectedParts.Count; index++)
+        {
+            AssertValueDomainEqual(expectedParts[index], actualParts[index], $"{path}.parts[{index}]");
         }
     }
 
@@ -660,7 +725,10 @@ internal static class AstAssert
         ShellValueDomain.Unknown => "Unknown",
         ShellValueDomain.Exact => "Exact",
         ShellValueDomain.FiniteSet => "FiniteSet",
+        ShellValueDomain.OrderedList => "OrderedList",
         ShellValueDomain.PathPattern => "Pattern",
+        ShellValueDomain.IntegerRange => "IntegerRange",
+        ShellValueDomain.Concatenation => "Concatenation",
         _ => "Unknown",
     };
 
@@ -669,6 +737,7 @@ internal static class AstAssert
         {
             ShellValueDomain.Exact exact => new[] { exact.Value },
             ShellValueDomain.FiniteSet finiteSet => finiteSet.Values,
+            ShellValueDomain.OrderedList orderedList => orderedList.Values,
             _ => Array.Empty<string>(),
         };
 

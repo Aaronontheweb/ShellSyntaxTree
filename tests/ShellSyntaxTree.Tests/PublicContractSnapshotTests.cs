@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------
-// <copyright file="V03PublicApiSnapshotTests.cs" company="Aaron Stannard">
+// <copyright file="PublicContractSnapshotTests.cs" company="Aaron Stannard">
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
@@ -12,8 +12,8 @@ using Xunit;
 
 namespace ShellSyntaxTree.Tests;
 
-/// <summary>Locks the stable-v0.3 parser-owned public result surface.</summary>
-public class V03PublicApiSnapshotTests
+/// <summary>Locks the parser-owned public result contract.</summary>
+public class PublicContractSnapshotTests
 {
     [Fact]
     public void Alpha_only_public_shapes_are_absent()
@@ -107,6 +107,8 @@ public class V03PublicApiSnapshotTests
             (nameof(CommandOccurrence.Ancestry),
                 typeof(IReadOnlyList<CommandAncestryFrame>)),
             (nameof(CommandOccurrence.Arguments), typeof(IReadOnlyList<AnalyzedArgument>)),
+            (nameof(CommandOccurrence.FileSystemTreeAccesses),
+                typeof(IReadOnlyList<ShellFileSystemTreeAccess>)),
             (nameof(CommandOccurrence.WorkingDirectory), typeof(ShellValueDomain)),
             (nameof(CommandOccurrence.WorkingDirectoryEffect),
                 typeof(ShellWorkingDirectoryEffect)),
@@ -126,8 +128,16 @@ public class V03PublicApiSnapshotTests
             (nameof(AnalyzedArgument.AuthoredFileSystemValue), typeof(ShellValueDomain)),
             (nameof(AnalyzedArgument.AuthoredNonFileSystemValue), typeof(ShellValueDomain)),
             (nameof(AnalyzedArgument.AuthoredPathShape), typeof(ShellPathShape)));
+        AssertResultRecord(
+            typeof(ShellFileSystemTreeAccess),
+            (nameof(ShellFileSystemTreeAccess.RootArgument), typeof(AnalyzedArgument)),
+            (nameof(ShellFileSystemTreeAccess.Root), typeof(ShellValueDomain)),
+            (nameof(ShellFileSystemTreeAccess.Traversal), typeof(ShellTreeTraversalMode)));
 
         AssertEnum<ShellPathShape>("Unknown", "Posix", "Windows");
+        AssertEnum<ShellTreeTraversalMode>(
+            "Unknown", "DirectChildren", "RecursiveWithoutFollowingLinks",
+            "RecursiveMayFollowLinks");
 
         AssertEnum<CommandOccurrenceRole>(
             "Unknown", "Ordinary", "PipelineStage", "Iterator", "LoopBody",
@@ -148,6 +158,10 @@ public class V03PublicApiSnapshotTests
         AssertResultRecordAccessors(
             typeof(ShellValueDomain.FiniteSet),
             (nameof(ShellValueDomain.FiniteSet.Values),
+                typeof(IReadOnlyList<string>), false));
+        AssertResultRecordAccessors(
+            typeof(ShellValueDomain.OrderedList),
+            (nameof(ShellValueDomain.OrderedList.Values),
                 typeof(IReadOnlyList<string>), false));
         AssertResultRecordAccessors(
             typeof(ShellValueDomain.PathPattern),
@@ -263,19 +277,24 @@ public class V03PublicApiSnapshotTests
         var ancestry = new[] { frame };
         var analyzed = new AnalyzedArgument();
         var arguments = new[] { analyzed };
+        var access = new ShellFileSystemTreeAccess();
+        var accesses = new[] { access };
         var redirect = new UnresolvedRedirectAnalysis();
         var redirects = new RedirectAnalysis[] { redirect };
         var occurrence = new CommandOccurrence
         {
             Ancestry = ancestry,
             Arguments = arguments,
+            FileSystemTreeAccesses = accesses,
             Redirects = redirects,
         };
         ancestry[0] = new CommandAncestryFrame();
         arguments[0] = new AnalyzedArgument();
+        accesses[0] = new ShellFileSystemTreeAccess();
         redirects[0] = new UnresolvedRedirectAnalysis();
         Assert.Same(frame, Assert.Single(occurrence.Ancestry));
         Assert.Same(analyzed, Assert.Single(occurrence.Arguments));
+        Assert.Same(access, Assert.Single(occurrence.FileSystemTreeAccesses));
         Assert.Same(redirect, Assert.Single(occurrence.Redirects));
 
         var occurrences = new[] { occurrence };
@@ -287,6 +306,11 @@ public class V03PublicApiSnapshotTests
         var finite = new ShellValueDomain.FiniteSet(values);
         values[0] = "changed";
         Assert.Equal(new[] { "a", "b" }, finite.Values);
+
+        var listValues = new[] { "a", "b", "a" };
+        var orderedList = new ShellValueDomain.OrderedList(listValues);
+        listValues[0] = "changed";
+        Assert.Equal(new[] { "a", "b", "a" }, orderedList.Values);
 
         var part = new ShellValueDomain.IntegerRange(0, 255);
         var parts = new ShellValueDomain[]
@@ -307,9 +331,11 @@ public class V03PublicApiSnapshotTests
             commandList.Items,
             occurrence.Ancestry,
             occurrence.Arguments,
+            occurrence.FileSystemTreeAccesses,
             occurrence.Redirects,
             parsed.Commands,
             finite.Values,
+            orderedList.Values,
             concatenation.Parts,
         };
         Assert.All(readOnlyLists, collection => Assert.False(collection.GetType().IsArray));
@@ -450,6 +476,7 @@ public class V03PublicApiSnapshotTests
         var enums = new[]
         {
             typeof(CommandOccurrenceRole),
+            typeof(ShellTreeTraversalMode),
             typeof(CommandAncestryRegion),
             typeof(ShellGroupKind),
             typeof(ExecutionRegionOrigin),
@@ -459,6 +486,7 @@ public class V03PublicApiSnapshotTests
             typeof(FileRedirectMode),
             typeof(HereDocumentExpansionMode),
             typeof(ShellPathShape),
+            typeof(ShellTreeTraversalMode),
         };
 
         Assert.All(enums, type => Assert.False(Enum.IsDefined(type, 999)));

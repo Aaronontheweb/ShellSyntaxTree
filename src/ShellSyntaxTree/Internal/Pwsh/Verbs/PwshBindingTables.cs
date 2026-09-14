@@ -56,6 +56,7 @@ internal static class PwshBindingTables
             // Frequently value-bearing cmdlet parameters.
             "-Name", "-Encoding", "-Depth", "-Stream", "-Delimiter",
             "-Command", "-EncodedCommand", "-File", "-ArgumentList",
+            "-Property", "-ExpandProperty", "-Index",
         };
 
     /// <summary>
@@ -75,15 +76,16 @@ internal static class PwshBindingTables
 
     /// <summary>
     /// Per-<c>(canonicalVerb, parameterName)</c> binding overrides — the
-    /// §6.5.4 <c>-File</c> collision. <c>-File</c> is a value-binding
-    /// parameter verb-agnostically (so <c>pwsh -File script.ps1</c> binds),
-    /// but it is a <em>switch</em> on <c>Get-ChildItem</c>; the override
-    /// row encodes that.
+    /// §6.5.4 <c>-File</c> and <c>-Name</c> collisions. Both names are
+    /// value-binding verb-agnostically, but are switches on
+    /// <c>Get-ChildItem</c>; the override rows keep its positional root
+    /// binding intact.
     /// </summary>
     private static readonly IReadOnlyDictionary<(string Verb, string Name), PwshBinding>
         Overrides = new Dictionary<(string, string), PwshBinding>(VerbNameComparer.Instance)
         {
             [("Get-ChildItem", "-File")] = PwshBinding.Switch,
+            [("Get-ChildItem", "-Name")] = PwshBinding.Switch,
         };
 
     /// <summary>

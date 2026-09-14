@@ -3,6 +3,8 @@
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -121,7 +123,23 @@ public class PwshExecutionRegionStructuralTests
         Assert.True(result.IsUnparseable);
         Assert.Empty(result.Commands);
         Assert.Empty(result.Clauses);
-        Assert.NotEmpty(result.Syntax.Statements);
+        Assert.Empty(result.Syntax.Statements);
+    }
+
+    [Fact]
+    public void Analyzer_failure_never_preserves_inert_script_block_data()
+    {
+        var result = ParseIsolatedRaw(
+            "Write-Output { netclaw daemon stop }; " +
+            "Invoke-Command -ScriptBlock { Get-Date } -AsJob");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Empty(result.Syntax.Statements);
+        Assert.DoesNotContain(
+            FindDiagnosticCommands(result.Syntax),
+            command => command.Clause.Verb.Joined == "netclaw daemon stop");
     }
 
     [Theory]
@@ -1200,6 +1218,8 @@ public class PwshExecutionRegionStructuralTests
     [Theory]
     [InlineData("Where-Object { $_.Length -gt 0 }")]
     [InlineData("ForEach-Object { $_ }")]
+    [InlineData("Where-Object { $_ -eq '++' }")]
+    [InlineData("Where-Object { $_ -eq \"--\" }")]
     public void Pure_output_expressions_do_not_invent_command_occurrences(string source)
     {
         var result = ParseIsolated(source);
@@ -1208,6 +1228,376 @@ public class PwshExecutionRegionStructuralTests
         Assert.Empty(Assert.Single(host.ExecutionRegions).Body.Statements);
         Assert.Single(result.Commands);
         Assert.True(result.Commands[0].IsComplete);
+    }
+
+    [Theory]
+    [InlineData(
+        "Get-ChildItem . | Where-Object { $_.Length -gt 0 }",
+        ExecutionRegionPhase.Filter)]
+    [InlineData(
+        "Get-ChildItem . | ForEach-Object { $_.FullName }",
+        ExecutionRegionPhase.Process)]
+    [InlineData(
+        "Get-ChildItem . | ? -Fil { $_ -eq '++' }",
+        ExecutionRegionPhase.Filter)]
+    public void WindowsPowerShell51_pure_receiver_expressions_are_typed_and_complete(
+        string source,
+        ExecutionRegionPhase expectedPhase)
+    {
+        var result = ParseIsolatedRaw(source, PwshDialect.WindowsPowerShell51);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+        var pipeline = Assert.IsType<PipelineSyntax>(Assert.Single(result.Syntax.Statements));
+        var host = Assert.IsType<SimpleCommandSyntax>(pipeline.Stages[1]);
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(expectedPhase, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Synchronous, region.Timing);
+        Assert.Equal(
+            ExecutionRegionCardinality.OncePerInputObject,
+            region.Cardinality);
+        Assert.Empty(region.Body.Statements);
+    }
+
+    [Fact]
+    public void WindowsPowerShell51_receiver_exposes_nested_commands_as_complete()
+    {
+        var result = ParseIsolatedRaw(
+            "Get-ChildItem . | ? { Test-Path $_ }",
+            PwshDialect.WindowsPowerShell51);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(
+            new[] { "Get-ChildItem", "?", "Test-Path" },
+            result.Commands.Select(command => command.Clause.Verb.Joined));
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+        var pipeline = Assert.IsType<PipelineSyntax>(Assert.Single(result.Syntax.Statements));
+        var host = Assert.IsType<SimpleCommandSyntax>(pipeline.Stages[1]);
+        Assert.Equal(
+            ExecutionRegionPhase.Filter,
+            Assert.Single(host.ExecutionRegions).Phase);
+    }
+
+    [Theory]
+    [InlineData("Get-ChildItem . | % { $_.Delete() }")]
+    [InlineData("Get-ChildItem . | ? { $value = $_ }")]
+    public void WindowsPowerShell51_receiver_rejects_unmodeled_mutation(string source)
+    {
+        var result = ParseIsolatedRaw(source, PwshDialect.WindowsPowerShell51);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Theory]
+    [InlineData("Get-ChildItem . | Where-Object { $_.Length -gt 0 }")]
+    [InlineData("Get-ChildItem . | ForEach-Object { $_.FullName }")]
+    public void WindowsPowerShell51_pure_receivers_are_complete_with_unknown_initial_state(
+        string source)
+    {
+        var result = ParseRaw(source, PwshDialect.WindowsPowerShell51);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+        var pipeline = Assert.IsType<PipelineSyntax>(Assert.Single(result.Syntax.Statements));
+        var host = Assert.IsType<SimpleCommandSyntax>(pipeline.Stages[1]);
+        Assert.Empty(Assert.Single(host.ExecutionRegions).Body.Statements);
+    }
+
+    [Theory]
+    [InlineData("Get-ChildItem . | ForEach-Object { $_.Delete() }")]
+    [InlineData("Get-ChildItem . | Where-Object { $value = $_ }")]
+    public void WindowsPowerShell51_unmodeled_receivers_fail_with_unknown_initial_state(
+        string source)
+    {
+        var result = ParseRaw(source, PwshDialect.WindowsPowerShell51);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Fact]
+    public void WindowsPowerShell51_for_each_process_invalidates_stale_current_scope_state()
+    {
+        var result = ParseIsolatedRaw(
+            "foreach ($x in 'outer') { }; " +
+            "Write-Output input | % -Proc { foreach ($x in 'inner') { } }; " +
+            "Write-Output $x",
+            PwshDialect.WindowsPowerShell51);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var continuation = result.Commands.Last();
+        Assert.Equal("Write-Output", continuation.Clause.Verb.Joined);
+        Assert.Equal(
+            ShellValueDomainKind.Unknown,
+            Assert.Single(continuation.EffectiveArguments).Value.Kind);
+        Assert.False(continuation.IsComplete);
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7)]
+    [InlineData(PwshDialect.WindowsPowerShell51)]
+    public void Pure_property_expression_in_direct_region_remains_complete(
+        PwshDialect dialect)
+    {
+        var result = ParseIsolatedRaw(
+            "Write-Output before; . { $item.Length -gt 0 }; Write-Output after",
+            dialect);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.All(result.Commands, command => Assert.True(command.IsComplete));
+        var list = Assert.IsType<CommandListSyntax>(Assert.Single(result.Syntax.Statements));
+        var region = Assert.IsType<ExecutionRegionSyntax>(list.Items[1].Command);
+        Assert.Equal(ExecutionRegionOrigin.DotSource, region.Origin);
+        Assert.Empty(region.Body.Statements);
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7, "$item++")]
+    [InlineData(PwshDialect.PowerShell7, "$item ++")]
+    [InlineData(PwshDialect.PowerShell7, "++$item")]
+    [InlineData(PwshDialect.PowerShell7, "++ $item")]
+    [InlineData(PwshDialect.PowerShell7, "$item--")]
+    [InlineData(PwshDialect.PowerShell7, "--$item")]
+    [InlineData(PwshDialect.PowerShell7, "$items[0]++")]
+    [InlineData(PwshDialect.PowerShell7, "$item.Count--")]
+    [InlineData(PwshDialect.PowerShell7, "$item++-gt 0")]
+    [InlineData(PwshDialect.PowerShell7, "$item++-eq 1")]
+    [InlineData(PwshDialect.PowerShell7, "$item+++1")]
+    [InlineData(PwshDialect.PowerShell7, "1+$item++")]
+    [InlineData(PwshDialect.PowerShell7, "$item++,$item")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "$item++")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "--$item")]
+    public void Increment_and_decrement_expression_mutations_fail_atomically(
+        PwshDialect dialect,
+        string mutation)
+    {
+        var result = ParseIsolatedRaw(
+            $"foreach ($item in '1') {{ }}; " +
+            $"Write-Output input | ForEach-Object {{ {mutation} }}; " +
+            "Write-Output $item",
+            dialect);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("increment/decrement", result.UnparseableReason);
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7, "$item++; Write-Output after")]
+    [InlineData(
+        PwshDialect.PowerShell7,
+        "Write-Output before; ++$item; Write-Output after")]
+    [InlineData(PwshDialect.PowerShell7, "Write-Output before; $item --")]
+    [InlineData(PwshDialect.PowerShell7, "Write-Output before\n$item++")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "$item++; Write-Output after")]
+    [InlineData(
+        PwshDialect.WindowsPowerShell51,
+        "Write-Output before; ++$item; Write-Output after")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "Write-Output before; $item --")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "Write-Output before\n$item++")]
+    public void Increment_and_decrement_in_mixed_region_bodies_fail_atomically(
+        PwshDialect dialect,
+        string body)
+    {
+        var result = ParseIsolatedRaw(
+            "foreach ($item in '1') { }; " +
+            $"Write-Output input | ForEach-Object {{ {body} }}; " +
+            "Write-Output $item",
+            dialect);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("increment/decrement", result.UnparseableReason);
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7, "ForEach-Object", ";")]
+    [InlineData(PwshDialect.PowerShell7, "Invoke-Custom", "\n")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "ForEach-Object", "\n")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "Invoke-Custom", ";")]
+    public void Increment_mutation_retains_source_authentic_denial_leaves(
+        PwshDialect dialect,
+        string receiver,
+        string separator)
+    {
+        var source = "Write-Output input | " + receiver + " { " +
+            "netclaw daemon stop" + separator + " $item++" + separator +
+            " Start-Process pwsh -Verb RunAs }";
+
+        var result = ParseIsolatedRaw(source, dialect);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains("increment/decrement", result.UnparseableReason);
+
+        var leaves = FindDiagnosticCommands(result.Syntax).ToArray();
+        Assert.Contains(leaves, command => command.Clause.Verb.Joined == "netclaw daemon stop");
+        Assert.Contains(leaves, command => command.Clause.Verb.Joined == "Start-Process");
+        Assert.All(leaves, command => AssertDenialOnlySourceFacts(source, command));
+
+        var host = Assert.Single(
+            leaves,
+            command => command.Clause.Verb.Joined == receiver);
+        var region = Assert.Single(host.ExecutionRegions);
+        Assert.Equal(ExecutionRegionOrigin.CommandArgument, region.Origin);
+        Assert.Equal(ExecutionRegionPhase.Unknown, region.Phase);
+        Assert.Equal(ExecutionRegionTiming.Unknown, region.Timing);
+        Assert.Equal(ExecutionRegionCardinality.Unknown, region.Cardinality);
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7, "Invoke-Expression")]
+    [InlineData(PwshDialect.PowerShell7, "pwsh -NoProfile -Command")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "Invoke-Expression")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "powershell -NoProfile -Command")]
+    public void Static_wrappers_retain_denial_leaves_without_guessed_source_ranges(
+        PwshDialect dialect,
+        string wrapper)
+    {
+        var source = wrapper + " 'Invoke-Custom { $item++; netclaw daemon stop }'";
+
+        var result = ParseIsolatedRaw(source, dialect);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        var diagnosticShape = string.Join(
+            ",",
+            FindDiagnosticCommands(result.Syntax).Select(command =>
+                command.Clause.Verb.Joined + ":" +
+                string.Join("/", command.ExecutionRegions.Select(region =>
+                    string.Join("+", FindDiagnosticCommands(region.Body).Select(child =>
+                        child.Clause.Verb.Joined))))));
+        Assert.Contains("netclaw daemon stop", diagnosticShape);
+        var denied = Assert.Single(
+            FindDiagnosticCommands(result.Syntax),
+            command => command.Clause.Verb.Joined == "netclaw daemon stop");
+        Assert.True(denied.Clause.IsCommandStringWrapped);
+        Assert.All(denied.Clause.Elements, element =>
+        {
+            Assert.Null(element.SourceStart);
+            Assert.Null(element.SourceLength);
+        });
+        AssertDenialOnlySourceFacts(source, denied);
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7)]
+    [InlineData(PwshDialect.WindowsPowerShell51)]
+    public void Inert_script_block_text_never_becomes_denial_evidence(
+        PwshDialect dialect)
+    {
+        var quoted = ParseIsolatedRaw(
+            "Invoke-Custom { Write-Output 'netclaw daemon stop'; " +
+            "Write-Output \"netclaw daemon stop\"; # netclaw daemon stop\n" +
+            "$item++ }",
+            dialect);
+
+        Assert.True(quoted.IsUnparseable);
+        Assert.DoesNotContain(
+            FindDiagnosticCommands(quoted.Syntax),
+            command => command.Clause.Verb.Joined == "netclaw daemon stop");
+
+        var data = ParseIsolatedRaw(
+            "Write-Output { netclaw daemon stop; $item++ }",
+            dialect);
+        Assert.False(data.IsUnparseable, data.UnparseableReason);
+        Assert.Single(data.Commands);
+        Assert.Single(data.Clauses);
+        Assert.DoesNotContain(
+            FindDiagnosticCommands(data.Syntax),
+            command => command.Clause.Verb.Joined == "netclaw daemon stop");
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7)]
+    [InlineData(PwshDialect.WindowsPowerShell51)]
+    public void Rebound_data_receiver_does_not_hide_diagnostic_script_block_leaves(
+        PwshDialect dialect)
+    {
+        var result = ParseIsolatedRaw(
+            "Set-Alias Write-Output Invoke-Command; " +
+            "Write-Output { netclaw daemon stop; $item++ }",
+            dialect);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Contains(
+            FindDiagnosticCommands(result.Syntax),
+            command => command.Clause.Verb.Joined == "netclaw daemon stop");
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7, "Invoke-Custom { netclaw daemon stop; $item++")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "Invoke-Custom { netclaw daemon stop; $item++")]
+    public void Lexically_unbalanced_regions_do_not_publish_partial_denial_leaves(
+        PwshDialect dialect,
+        string source)
+    {
+        var result = ParseIsolatedRaw(source, dialect);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+        Assert.Empty(result.Syntax.Statements);
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7)]
+    [InlineData(PwshDialect.WindowsPowerShell51)]
+    public void Native_double_dash_and_quoted_operator_text_remain_supported(
+        PwshDialect dialect)
+    {
+        var result = ParseIsolatedRaw(
+            "Write-Output input | ForEach-Object { " +
+            "git --version; Write-Output '--'; Write-Output '++' }",
+            dialect);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(
+            new[] { "Write-Output", "ForEach-Object", "git", "Write-Output", "Write-Output" },
+            result.Commands.Select(command =>
+                command.Clause.Verb.CanonicalVerb ?? command.Clause.Verb.Tokens[0]));
+    }
+
+    [Theory]
+    [InlineData(PwshDialect.PowerShell7)]
+    [InlineData(PwshDialect.WindowsPowerShell51)]
+    public void Mixed_named_and_positional_process_blocks_invalidate_value_and_path_state(
+        PwshDialect dialect)
+    {
+        var result = ParseIsolatedRaw(
+            "foreach ($path in 'C:\\outer') { }; " +
+            "Write-Output input | ForEach-Object { " +
+            "Get-Content -LiteralPath $path; " +
+            "foreach ($path in 'C:\\restricted') { } } " +
+            "-Process { foreach ($path in 'C:\\allowed') { } }; " +
+            "Get-Content -LiteralPath $path",
+            dialect);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(4, result.Commands.Count);
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.All(result.Commands.Skip(1), command => Assert.False(command.IsComplete));
+        foreach (var occurrence in result.Commands.Skip(2))
+        {
+            var path = Assert.Single(
+                occurrence.Arguments,
+                argument => argument.Argument.Raw == "$path");
+            Assert.IsType<ShellValueDomain.Unknown>(path.Value);
+            Assert.IsType<ShellValueDomain.Unknown>(path.AuthoredValue);
+            Assert.IsType<ShellValueDomain.Unknown>(path.AuthoredFileSystemValue);
+        }
     }
 
     [Theory]
@@ -1596,12 +1986,23 @@ public class PwshExecutionRegionStructuralTests
         return result;
     }
 
-    private static ParsedCommand ParseIsolatedRaw(string source) =>
+    private static ParsedCommand ParseIsolatedRaw(
+        string source,
+        PwshDialect dialect = PwshDialect.PowerShell7) =>
         new PwshParser(new PwshParserOptions
         {
             HomeDirectory = "C:/Users/test",
             WorkingDirectory = "C:/work",
             InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
+            Dialect = dialect,
+        }).Parse(source);
+
+    private static ParsedCommand ParseRaw(string source, PwshDialect dialect) =>
+        new PwshParser(new PwshParserOptions
+        {
+            HomeDirectory = "C:/Users/test",
+            WorkingDirectory = "C:/work",
+            Dialect = dialect,
         }).Parse(source);
 
     private static ParsedCommand ParseIsolated(string source)
@@ -1609,5 +2010,51 @@ public class PwshExecutionRegionStructuralTests
         var result = ParseIsolatedRaw(source);
         Assert.False(result.IsUnparseable, result.UnparseableReason);
         return result;
+    }
+
+    private static IEnumerable<SimpleCommandSyntax> FindDiagnosticCommands(
+        ShellSyntaxNode node)
+    {
+        switch (node)
+        {
+            case ShellBlockSyntax block:
+                return block.Statements.SelectMany(FindDiagnosticCommands);
+            case SimpleCommandSyntax simple:
+                return new[] { simple }
+                    .Concat(simple.Substitutions.SelectMany(FindDiagnosticCommands))
+                    .Concat(simple.ExecutionRegions.SelectMany(FindDiagnosticCommands));
+            case PipelineSyntax pipeline:
+                return pipeline.Stages.SelectMany(FindDiagnosticCommands);
+            case CommandListSyntax list:
+                return list.Items.SelectMany(item => FindDiagnosticCommands(item.Command));
+            case GroupSyntax group:
+                return FindDiagnosticCommands(group.Body);
+            case ForEachSyntax forEach:
+                return FindDiagnosticCommands(forEach.IteratorCommands)
+                    .Concat(FindDiagnosticCommands(forEach.Body));
+            case CommandSubstitutionSyntax substitution:
+                return FindDiagnosticCommands(substitution.Body);
+            case ExecutionRegionSyntax executionRegion:
+                return FindDiagnosticCommands(executionRegion.Body);
+            default:
+                return Array.Empty<SimpleCommandSyntax>();
+        }
+    }
+
+    private static void AssertDenialOnlySourceFacts(
+        string source,
+        SimpleCommandSyntax command)
+    {
+        Assert.Empty(command.Clause.Args);
+        Assert.Empty(command.Clause.Redirects);
+        Assert.All(command.Clause.Elements, element =>
+        {
+            Assert.False(element.IsPath);
+            Assert.Null(element.Resolved);
+            if (element.SourceStart is int start && element.SourceLength is int length)
+            {
+                Assert.Equal(element.Raw, source.Substring(start, length));
+            }
+        });
     }
 }
