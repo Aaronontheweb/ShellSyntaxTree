@@ -5182,6 +5182,16 @@ internal sealed class PwshForEachValueAnalyzer
                 continue;
             }
 
+            if (value.ParserOwnedDomain is not null)
+            {
+                effective.Add(new EffectiveArgumentFacts
+                {
+                    ClauseElementIndex = value.ClauseElementIndex,
+                    Value = value.ParserOwnedDomain,
+                });
+                continue;
+            }
+
             if (context.TryAnalyzeEffectiveValue(value.Value, out var domain))
             {
                 effective.Add(new EffectiveArgumentFacts

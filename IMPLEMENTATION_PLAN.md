@@ -113,14 +113,71 @@ priorities.
       PR #168 merged as `336807bf` after all 3,090 tests, strict OpenSpec,
       headers, Slopwatch, package validation, exact 0.3.4 API comparison,
       adversarial review, and Linux plus native Windows CI passed.
-- [ ] **Publish and consume v0.3.5.** Merge the bounded release PR, publish the
-      package through the bare `0.3.5` tag, then upgrade Netclaw and complete
-      the exact live `tr -d '\n'` policy regression before merging that slice.
+- [x] **Publish and consume v0.3.5.** Release commit `c8515de` carries the bare
+      `0.3.5` tag. Netclaw adopted the exact package and authored-data policy
+      regression in `df657198` (#1951).
 - [x] **Pin sanitized fresh-session approval facts.** Add identity-free direct
       regressions for ten representative Netclaw calls. Pin occurrence order,
       completeness, cwd effects, authored paths, redirects, and verb-element
       order. Add the recursive-search pipeline to the Bash corpus. The sampled
       facts are already correct, so no parser or public API change is required.
+- [x] **Fail closed on PowerShell increment/decrement expression mutation.**
+      Reject prefix and postfix `++` / `--` inside supported script-block
+      regions so isolated-state analysis cannot publish a stale exact or finite
+      binding for a later command. Preserve ordinary property/filter expression
+      bodies and pin the boundary in both supported dialects.
+- [x] **Pin common Windows PowerShell 5.1 pipeline receivers.** Independently
+      oracle-prove and catalog `ForEach-Object` Begin/Process/RemainingScripts/
+      End and `Where-Object -FilterScript`, including aliases, abbreviations,
+      positional blocks, cardinality, and current-scope behavior. Keep
+      PowerShell 7-only parameters and every other unproved 5.1 receiver
+      incomplete. Pin both isolated and default unknown-initial-state parser
+      boundaries for the native Netclaw fallback host. Mixed named Process /
+      RemainingScripts plus positional script blocks remain incomplete because
+      native activation order is not authored source order; state and path
+      proofs after that boundary are invalidated.
+- [x] **Implement bounded authored PowerShell collection facts for the
+      0.4.0-beta.1 target.** Add the defensive-copy `OrderedList` value-domain
+      alternative for exact static `Select-Object` named-property and flag-free
+      positional-property lists, `Get-ChildItem
+      -Include`, and live-derived `Get-Process -Name` lists. Preserve order and
+      duplicates, keep scalar effective/authored values unknown, cap lists at
+      32, and keep `FiniteSet` exclusively as scalar alternatives. Pin exact
+      cmdlet binding, source-authentic index ranges, corpus output, and
+      scalar-domain rejection.
+- [x] **Implement shell-neutral filesystem tree-access effects for the
+      0.4.0-beta.1 target.** Add the immutable occurrence-level root and
+      traversal contract, with an exact `Get-ChildItem` binder, dialect-pinned
+      recursive link behavior, implicit cwd and leaf-glob roots, explicit
+      Unknown markers, corruption/reference validation, API snapshots,
+      sanitized live-derived corpus cases, and consumer guidance. This is
+      executable-effect evidence only; Netclaw adoption and policy gates are a
+      separate consumer change.
+- [x] **Complete the partial hard-deny pairing before shipping the PowerShell
+      approval-fatigue candidate.** The parser now retains only exact-span,
+      direct-source sibling leaves around a balanced `++` / `--` expression
+      statement. It keeps `Commands` and `Clauses` empty and removes every
+      positive authorization fact. Decoded wrapper leaves keep null spans.
+      The Netclaw consumer uses those leaves only as an additive deny scan,
+      retains its unresolved legacy fallback, and proves paired categorical and
+      parameter-dependent deny cases. Released `0.3.5` denies a nested root
+      removal with literal-true or unknown
+      `-Recurse` before a later mutation. The `.4` pair allows that same source.
+      Do not publish or consume the local `.2` or `.4` candidate. The final
+      unpublished integration artifact is `0.4.0-pwshfatigue.6`, SHA-256
+      `b012f7e894592655dea1577460b2e3d616632f72581827ab85be022d43334f23`.
+      The paired Netclaw gate passes 79/79 selected security mutants with none
+      surviving. See the Netclaw evidence file
+      `docs/reviews/evidence/2026-09-13-pwsh51-paired-results.md` in the Netclaw
+      repository.
+- [x] **Restore package supply-chain health.** The build prerequisite pins
+      `Microsoft.SourceLink.GitHub` 10.0.400, which replaces the vulnerable
+      10.0.301 transitive `Microsoft.Build.Tasks.Git` package without
+      weakening NuGet audit enforcement.
+- [ ] **Release and consume `0.4.0-beta.1`.** After review, commit the SST
+      change, publish the beta, replace Netclaw's local integration pin with
+      the public package, and rerun the paired consumer gates. No commit, tag,
+      push, or publication is part of this worktree implementation.
 
 ## Completed v0.3.0 host integration and release acceptance
 

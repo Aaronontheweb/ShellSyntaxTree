@@ -15,6 +15,8 @@ public sealed record CommandOccurrence
     private IReadOnlyList<CommandAncestryFrame> _ancestry =
         Array.Empty<CommandAncestryFrame>();
     private IReadOnlyList<AnalyzedArgument> _arguments = Array.Empty<AnalyzedArgument>();
+    private IReadOnlyList<ShellFileSystemTreeAccess> _fileSystemTreeAccesses =
+        Array.Empty<ShellFileSystemTreeAccess>();
     private IReadOnlyList<RedirectAnalysis> _redirects = Array.Empty<RedirectAnalysis>();
 
     internal CommandOccurrence()
@@ -39,6 +41,16 @@ public sealed record CommandOccurrence
     {
         get => _arguments;
         internal init => _arguments = PublicCollection.Copy(value);
+    }
+
+    /// <summary>
+    /// Gets parser-proved filesystem tree-access effects. These facts
+    /// describe executable effects and never grant authority.
+    /// </summary>
+    public IReadOnlyList<ShellFileSystemTreeAccess> FileSystemTreeAccesses
+    {
+        get => _fileSystemTreeAccesses;
+        internal init => _fileSystemTreeAccesses = PublicCollection.Copy(value);
     }
 
     internal IReadOnlyList<EffectiveArgument> EffectiveArguments
@@ -237,6 +249,50 @@ public sealed record AnalyzedArgument
     internal bool HasEffectiveValue { get; init; }
 }
 
+/// <summary>
+/// One parser-proved filesystem tree-access effect for a command
+/// occurrence. This effect evidence does not grant authority.
+/// </summary>
+public sealed record ShellFileSystemTreeAccess
+{
+    internal ShellFileSystemTreeAccess()
+    {
+    }
+
+    /// <summary>
+    /// Gets the exact occurrence argument that authored the root. Null means
+    /// either an exact implicit working-directory root or the all-unknown
+    /// marker for a recognized tree access whose binding was not proved.
+    /// </summary>
+    public AnalyzedArgument? RootArgument { get; internal init; }
+
+    /// <summary>
+    /// Gets the proved root. Exact and leaf-pattern roots are bounded; an
+    /// unknown root carries no positive path claim.
+    /// </summary>
+    public ShellValueDomain Root { get; internal init; } =
+        new ShellValueDomain.Unknown();
+
+    /// <summary>Gets the proved traversal and link-following behavior.</summary>
+    public ShellTreeTraversalMode Traversal { get; internal init; }
+}
+
+/// <summary>Describes how a command accesses a filesystem tree.</summary>
+public enum ShellTreeTraversalMode
+{
+    /// <summary>No bounded traversal behavior is proved.</summary>
+    Unknown,
+
+    /// <summary>Only the root's direct children may be accessed.</summary>
+    DirectChildren,
+
+    /// <summary>Descendants may be accessed without following links.</summary>
+    RecursiveWithoutFollowingLinks,
+
+    /// <summary>Descendants may be accessed and links may be followed.</summary>
+    RecursiveMayFollowLinks,
+}
+
 /// <summary>Describes a shell word's lexical path shape.</summary>
 public enum ShellPathShape
 {
@@ -326,6 +382,26 @@ public abstract record ShellValueDomain
         public new IReadOnlyList<string> Values { get; }
     }
 
+    /// <summary>
+    /// Two through 32 authored collection members in source order. Order and
+    /// duplicate members are preserved.
+    /// </summary>
+    public sealed record OrderedList : ShellValueDomain
+    {
+        internal OrderedList(IEnumerable<string> values) =>
+            Values = PublicCollection.Copy(values);
+
+        private protected override object LibraryOwnership => this;
+
+        internal override ShellValueDomainKind InternalKind =>
+            ShellValueDomainKind.OrderedList;
+
+        internal override IReadOnlyList<string> InternalValues => Values;
+
+        /// <summary>Gets the authored collection members.</summary>
+        public new IReadOnlyList<string> Values { get; }
+    }
+
     /// <summary>An inclusive range of canonical signed decimal integers.</summary>
     public sealed record IntegerRange : ShellValueDomain
     {
@@ -400,6 +476,7 @@ internal enum ShellValueDomainKind
     Pattern,
     IntegerRange,
     Concatenation,
+    OrderedList,
 }
 
 internal static class ShellValueDomains
@@ -410,6 +487,9 @@ internal static class ShellValueDomains
 
     internal static ShellValueDomain FiniteSet(IEnumerable<string> values) =>
         new ShellValueDomain.FiniteSet(values);
+
+    internal static ShellValueDomain OrderedList(IEnumerable<string> values) =>
+        new ShellValueDomain.OrderedList(values);
 
     internal static ShellValueDomain Pattern(string pattern, string coveringDirectory) =>
         new ShellValueDomain.PathPattern(pattern, coveringDirectory);

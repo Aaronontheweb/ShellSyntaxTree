@@ -582,11 +582,29 @@ The version-pinned PowerShell 7 catalog covers:
 
 For `WindowsPowerShell51`, direct `& { ... }` and `. { ... }` retain the
 grammar- and state-proved semantics above, and a statically authored
-`Write-Output { ... }` remains proved non-executing data. Other command-owned
-script blocks remain visible but incomplete with Unknown execution and state
-facts until their 5.1 receiver and binder metadata is independently
-oracle-proved. This deliberately prevents the 5.1 dialect from inheriting the
-PowerShell 7 catalog merely because command spellings overlap.
+`Write-Output { ... }` remains proved non-executing data. A separately pinned
+Windows PowerShell `5.1.19041.6456` oracle proves the `ForEach-Object`
+Begin/Process/RemainingScripts/End and `Where-Object -FilterScript` rows above,
+including `%` / `?`, parameter aliases and unambiguous abbreviations, positional
+multi-block promotion, current-scope state, and empty-input Begin/End behavior.
+Its canonical parameter/type/alias/parameter-set metadata fingerprints are
+`f468f2bf1d91afc560ae74213f48b6df0a794f605d81999e233dfcb0594bf5d7` for
+`ForEach-Object` and
+`c6509a733f0bda585f0b2526292b39513c4dd94ec851bb36fc4402e5e80d3db7` for
+`Where-Object`. The native oracle accepts another 5.1 build only when that
+metadata is equivalent; the OS build number alone is not an acceptance gate.
+Named `Process` / `RemainingScripts` blocks and positional script blocks bind
+in an activation order that is not generally authored source order. A command
+that mixes those forms remains incomplete in both supported dialects until
+that ordering has its own state-flow model; pure named arrays and pure
+positional arrays retain the phases above.
+The 5.1 table omits `-Parallel`, `-AsJob`, `-UseNewRunspace`, `-ThrottleLimit`,
+`-TimeoutSeconds`, and the PowerShell 7 `-ProgressAction` common parameter.
+Those forms and other command-owned script blocks remain visible but incomplete
+with Unknown execution and state facts until their 5.1 receiver and binder
+metadata is independently oracle-proved. This deliberately prevents the 5.1
+dialect from inheriting the PowerShell 7 catalog merely because command
+spellings overlap.
 
 Remote `Invoke-Command` bodies begin with Unknown working directory and
 host-dependent values. Their static authored command occurrences remain
@@ -652,6 +670,32 @@ A leading `param(...)` declaration inside any execution region remains outside
 the stable-v0.3 body grammar and makes the whole parse unparseable. This
 deliberately limits realistic argument-completer and directly invoked blocks
 until parameter declaration and block-argument binding are modeled together.
+
+An authored prefix or postfix increment/decrement expression (`++` / `--`)
+inside a script-block body is likewise unparseable until its binding and
+mutation flow are modeled. It must not be collapsed into an empty output-
+expression body: doing so could preserve a stale exact or finite binding for a
+later command. Ordinary property reads and comparison/filter expressions
+remain supported empty bodies. That structure proves only that no authored
+simple command was hidden; it does not prove that a runtime property getter is
+side-effect-free.
+
+When a balanced increment/decrement expression statement is separated from
+otherwise parsed siblings by a parser-owned semicolon or newline boundary, the
+unparseable result may retain those direct-source sibling leaves in diagnostic
+`Syntax`. The unsupported expression remains an internal unknown syntax node.
+Normal state-aware execution-region binding runs before that diagnostic result
+is selected: if it proves the containing script block is non-executing data,
+the marker and body are opaque and the ordinary supported parse may succeed.
+The parser clears `Commands`, `Clauses`, arguments, redirects, path facts,
+resolved values, execution-region metadata, and state/value projections for
+the whole result. A consumer can use an exact-span sibling only to add a hard
+deny. A static same-language decoded-wrapper child may also add a hard deny
+only when `IsCommandStringWrapped=true` and all of its element spans are null:
+its elements are source-authentic to the decoded inner payload and no outer
+offset is guessed. Neither form can issue or reuse an approval from this
+diagnostic tree. Unbalanced regions, resource failures, and every other
+unsupported expression remain atomic and retain no such subset.
 
 PowerShell scope and location state remain shell-specific. Grouping `( ... )`
 does not isolate location. Foreach exits include the zero-iteration state. The
@@ -1072,13 +1116,70 @@ Over-classifying a stray literal as a positional path is at worst a
 recoverable extra prompt. This is why §7's positional rules are the floor,
 not the parameter layer.
 
-#### 6.5.4 The `-File` collision
+#### 6.5.4 The `-File` / `-Name` collisions
 
-`-File` is a `Get-ChildItem` switch but `pwsh -File` is value-binding.
+`-File` and `-Name` are `Get-ChildItem` switches, while those spellings are
+value-binding for other commands (`pwsh -File`, `Get-Process -Name`).
 Because the tables are keyed by `(canonicalVerb, parameterName)`, `-File`
 resolves to value-binding when the canonical verb is `pwsh` / `powershell`
-(§10) and to a switch otherwise; the verb-agnostic entries are the fallback
-only when no `(verb, name)` row exists.
+(§10), and both names resolve to switches for `Get-ChildItem`; verb-agnostic
+entries are the fallback only when no `(verb, name)` row exists.
+
+#### 6.5.5 Filesystem tree-access effects (target 0.4.0-beta.1)
+
+`CommandOccurrence.FileSystemTreeAccesses` publishes shell-neutral executable-
+effect evidence. The initial PowerShell producer is deliberately limited to
+the selected dialect's canonical `Get-ChildItem` and `ls` / `dir` / `gci`
+aliases. It independently binds the exact pinned parameter inventory; generic
+compatibility path classification and parameter abbreviations cannot create a
+positive fact.
+
+An exact `-Path`, `-LiteralPath`, positional root, or absent root produces one
+access. An absent root is the exact occurrence working directory. `-Path` and
+positional leaf globs produce `PathPattern` with a normalized conservative
+covering directory only when their root is relative, drive-rooted, or a
+complete UNC server/share root. A drive-relative root (`C:*.cs`), current-drive
+rooted separator (`\\*.cs` or `/*.cs`), incomplete UNC root, wildcard in a
+directory segment, multiple or
+dynamic roots, an unknown/ambiguous parameter, a non-filesystem or unproved
+provider, an invalid reference/domain, or a resource cap produces exactly one
+all-Unknown marker. An empty list is reserved for commands outside this audited
+tree-access catalog.
+
+`DirectChildren` is the default and includes exact unquoted
+`-Recurse:$false`/`${false}` and `-Depth 0`. Dynamic, quoted, escaped,
+duplicated, or ambiguous recurse/depth/link controls produce `Unknown`.
+Positive recursion is dialect-specific:
+
+| Dialect and exact controls | Traversal |
+|---|---|
+| Windows PowerShell 5.1 `-Recurse` or positive `-Depth` | `RecursiveMayFollowLinks` |
+| PowerShell 7 `-Recurse`/positive `-Depth`, no true `-FollowSymlink` | `RecursiveWithoutFollowingLinks` |
+| PowerShell 7 recursive plus true `-FollowSymlink` | `RecursiveMayFollowLinks` |
+
+`RootArgument`, when non-null, is reference-identical to the source occurrence
+argument. Null is allowed only for an exact implicit cwd root or the all-
+Unknown marker. The fact grants no authority and is not evidence that a path
+exists, is inside a trusted boundary, or cannot traverse a reparse point.
+
+#### 6.5.6 Audited authored lists and index ranges (target 0.4.0-beta.1)
+
+Exact static comma lists bound to `Select-Object -Property` or its flag-free
+positional property parameter, `Get-ChildItem -Include`, and `Get-Process -Name` publish
+`AuthoredNonFileSystemValue` as `ShellValueDomain.OrderedList`. The domain is
+one authored collection, not a set of possible scalar values. It preserves
+source order and duplicates and contains two through 32 members. Quoted or
+escaped commas remain one scalar; dynamic, calculated, empty, abbreviated, or
+over-cap lists remain `Unknown`. Effective `Value` and `AuthoredValue` remain
+`Unknown` for an accepted comma list.
+
+`Select-Object -ExpandProperty` remains scalar `Exact`. An exact canonical
+signed-decimal `Select-Object -Index (minimum..maximum)` spelling publishes an
+`IntegerRange`; quote, escape, expression, wrapper-provenance, or source-range
+ambiguity cannot create range bounds. The `Get-Process -Name` list is included
+because sanitized fresh-session evidence contains that exact command shape.
+All rows require exact cmdlet-specific parameter binding; generic parameter
+tables and parameter-name abbreviations cannot create a positive audited fact.
 
 ---
 
@@ -1590,6 +1691,9 @@ in **`SPEC.md` §11**.
    (not at verb position). `& git status` is the call operator and parses;
    `git status &` is a background job and does not.
 7. **Assignment statement** — a statement that begins `$var = ...`.
+   Prefix or postfix `++` / `--` expression mutations inside a supported
+   script-block body are also rejected until their binding transfer is
+   modeled.
 8. **Bare type-literal / .NET method call** — a statement that is just
    `[type]::Member(...)`, which has no verb.
 9. **PowerShell command-string recursion failure** — the shared

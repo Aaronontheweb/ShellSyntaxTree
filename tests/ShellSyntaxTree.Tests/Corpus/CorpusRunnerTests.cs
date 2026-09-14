@@ -1061,11 +1061,22 @@ public sealed record ExpectedCommandOccurrence
 
     public List<ExpectedAnalyzedArgument>? Arguments { get; init; }
 
+    public List<ExpectedFileSystemTreeAccess>? FileSystemTreeAccesses { get; init; }
+
     public ExpectedValueDomain? WorkingDirectory { get; init; }
 
     public ExpectedWorkingDirectoryEffect? WorkingDirectoryEffect { get; init; }
 
     public List<ExpectedRedirectAnalysis>? Redirects { get; init; }
+}
+
+public sealed record ExpectedFileSystemTreeAccess
+{
+    public int? RootArgumentIndex { get; init; }
+
+    public ExpectedValueDomain Root { get; init; } = new();
+
+    public ShellTreeTraversalMode Traversal { get; init; }
 }
 
 public enum ExpectedWorkingDirectoryEffectKind
@@ -1147,6 +1158,12 @@ public sealed record ExpectedValueDomain
     public string? Pattern { get; init; }
 
     public string? CoveringDirectory { get; init; }
+
+    public long? MinimumInclusive { get; init; }
+
+    public long? MaximumInclusive { get; init; }
+
+    public List<ExpectedValueDomain>? Parts { get; init; }
 }
 
 public sealed record ExpectedCommandAncestryFrame

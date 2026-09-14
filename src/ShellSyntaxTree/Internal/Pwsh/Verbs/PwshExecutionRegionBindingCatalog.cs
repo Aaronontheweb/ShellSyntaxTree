@@ -108,14 +108,22 @@ internal sealed record PwshExecutionRegionBindingResult
 }
 
 /// <summary>
-/// Version-pinned PowerShell 7.6.4 command and parameter metadata used to
-/// identify script-block arguments. This is intentionally separate from the
-/// parser's broad v0.2 path-binding table: only this closed catalog is allowed
-/// to prove that a script block executes or is data.
+/// Version-pinned PowerShell command and parameter metadata used to identify
+/// script-block arguments. PowerShell 7.6.4 and independently proved Windows
+/// PowerShell 5.1 receivers use separate tables. Only these closed catalogs can
+/// prove that a script block executes or is data.
 /// </summary>
 internal static class PwshExecutionRegionBindingCatalog
 {
     internal const string PinnedPowerShellVersion = "7.6.4";
+
+    internal const string PinnedWindowsPowerShellVersion = "5.1.19041.6456";
+
+    internal const string PinnedWindowsPowerShellForEachObjectMetadataSha256 =
+        "f468f2bf1d91afc560ae74213f48b6df0a794f605d81999e233dfcb0594bf5d7";
+
+    internal const string PinnedWindowsPowerShellWhereObjectMetadataSha256 =
+        "c6509a733f0bda585f0b2526292b39513c4dd94ec851bb36fc4402e5e80d3db7";
 
     internal const string PinnedThreadJobModuleVersion = "2.2.0";
 
@@ -125,6 +133,16 @@ internal static class PwshExecutionRegionBindingCatalog
         "WarningAction,WarningVariable");
 
     private static readonly HashSet<string> CommonSwitchParameters = Names("Debug,Verbose");
+
+    private static readonly HashSet<string> WindowsPowerShell51CommonParameters = Names(
+        "Debug,ErrorAction,ErrorVariable,InformationAction,InformationVariable," +
+        "OutBuffer,OutVariable,PipelineVariable,Verbose,WarningAction,WarningVariable");
+
+    private static readonly IReadOnlyDictionary<string, string>
+        WindowsPowerShell51CommonParameterAliases = Aliases(
+            "db=Debug,ea=ErrorAction,ev=ErrorVariable,infa=InformationAction," +
+            "iv=InformationVariable,ob=OutBuffer,ov=OutVariable,pv=PipelineVariable," +
+            "vb=Verbose,wa=WarningAction,wv=WarningVariable");
 
     private static readonly HashSet<string> ScriptBlockParameters = Names(
         "Action,Begin,End,Expression,FilterScript,InitializationScript,Parallel," +
@@ -260,6 +278,32 @@ internal static class PwshExecutionRegionBindingCatalog
                 "NoEnumerate"),
         };
 
+    private static readonly IReadOnlyDictionary<string, CommandEntry>
+        WindowsPowerShell51Commands =
+            new Dictionary<string, CommandEntry>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["ForEach-Object"] = WindowsPowerShell51Entry(
+                    PwshExecutionRegionReceiver.ForEachObject,
+                    "Microsoft.PowerShell.Core",
+                    "ArgumentList,Begin,Confirm,End,InputObject,MemberName,Process," +
+                    "RemainingScripts,WhatIf",
+                    "Confirm,WhatIf",
+                    aliases: "Args=ArgumentList,cf=Confirm,wi=WhatIf"),
+                ["Where-Object"] = WindowsPowerShell51Entry(
+                    PwshExecutionRegionReceiver.WhereObject,
+                    "Microsoft.PowerShell.Core",
+                    "CContains,CEQ,CGE,CGT,CIn,CLE,CLT,CLike,CMatch,CNE,CNotContains," +
+                    "CNotIn,CNotLike,CNotMatch,Contains,EQ,FilterScript,GE,GT,In," +
+                    "InputObject,Is,IsNot,LE,LT,Like,Match,NE,NotContains,NotIn," +
+                    "NotLike,NotMatch,Property,Value",
+                    "CContains,CEQ,CGE,CGT,CIn,CLE,CLT,CLike,CMatch,CNE,CNotContains," +
+                    "CNotIn,CNotLike,CNotMatch,Contains,EQ,GE,GT,In,Is,IsNot,LE,LT," +
+                    "Like,Match,NE,NotContains,NotIn,NotLike,NotMatch",
+                    aliases: "IContains=Contains,IEQ=EQ,IGE=GE,IGT=GT,IIn=In,ILE=LE," +
+                    "ILike=Like,ILT=LT,IMatch=Match,INE=NE,INotContains=NotContains," +
+                    "INotIn=NotIn,INotLike=NotLike,INotMatch=NotMatch"),
+            };
+
     internal static bool IsSupportedModuleQualifiedCommand(string command)
     {
         var separator = command.LastIndexOf('\\');
@@ -345,11 +389,16 @@ internal static class PwshExecutionRegionBindingCatalog
 
         if (dialect == PwshDialect.WindowsPowerShell51)
         {
-            // The 5.1 callback/job parameter catalogs are intentionally not
-            // inferred from the PowerShell 7 metadata table. Keep completely
-            // delimited bodies visible, but incomplete, until each receiver
-            // table is proved against the Windows PowerShell oracle.
-            return Ambiguous(canonicalName, entry.Receiver, scriptBlocks);
+            if (!WindowsPowerShell51Commands.TryGetValue(
+                    canonicalName!,
+                    out var windowsPowerShell51Entry))
+            {
+                // Only independently pinned 5.1 receivers may reuse execution-region
+                // semantics. Other delimited bodies remain visible but incomplete.
+                return Ambiguous(canonicalName, entry.Receiver, scriptBlocks);
+            }
+
+            entry = windowsPowerShell51Entry;
         }
 
         var arguments = BindArguments(clause.Elements, entry);
@@ -993,6 +1042,17 @@ internal static class PwshExecutionRegionBindingCatalog
             return true;
         }
 
+        if (receiver == PwshExecutionRegionReceiver.ForEachObject
+            && arguments.HasAnyNamed("Process", "RemainingScripts")
+            && arguments.PositionalScriptBlocks().Any())
+        {
+            // PowerShell binds named Process/RemainingScripts blocks ahead of
+            // positional blocks even when their source order is reversed.
+            // Until that activation ordering is modeled explicitly, treating
+            // source order as phase order could publish stale state.
+            return true;
+        }
+
         return (receiver == PwshExecutionRegionReceiver.RegisterObjectEvent
                 || receiver == PwshExecutionRegionReceiver.RegisterEngineEvent)
             && arguments.HasNamed("Forward");
@@ -1122,7 +1182,16 @@ internal static class PwshExecutionRegionBindingCatalog
                         element.Kind,
                         element.Value.Length - parameter.InlineValue!.Length));
                     if (HasTrailingComma(element)
-                        && !AcceptsScriptBlockArray(resolution.CanonicalName!))
+                        && AcceptsScriptBlockArray(resolution.CanonicalName!))
+                    {
+                        ConsumeNamedArrayContinuation(
+                            elements,
+                            index,
+                            resolution.CanonicalName!,
+                            consumed,
+                            result);
+                    }
+                    else if (HasTrailingComma(element))
                     {
                         result.HasInvalidScalarScriptBlockArray = true;
                     }
@@ -1182,7 +1251,8 @@ internal static class PwshExecutionRegionBindingCatalog
                     elements[valueIndex].Raw,
                     elements[valueIndex].Kind));
                 if (HasTrailingComma(elements[valueIndex]) &&
-                    AcceptsArgumentArray(resolution.CanonicalName!))
+                    (AcceptsArgumentArray(resolution.CanonicalName!) ||
+                     AcceptsScriptBlockArray(resolution.CanonicalName!)))
                 {
                     ConsumeNamedArrayContinuation(
                         elements,
@@ -1587,7 +1657,19 @@ internal static class PwshExecutionRegionBindingCatalog
         string parameters,
         string switches,
         string aliases = "") =>
-        new(receiver, moduleName, Names(parameters), Names(switches), Aliases(aliases));
+        new(receiver, moduleName, Names(parameters), Names(switches), Aliases(aliases),
+            CommonParameters, CommonParameterAliases);
+
+    private static CommandEntry WindowsPowerShell51Entry(
+        PwshExecutionRegionReceiver receiver,
+        string moduleName,
+        string parameters,
+        string switches,
+        string aliases = "") =>
+        new(receiver, moduleName, Names(parameters), Names(switches), Aliases(aliases),
+            WindowsPowerShell51CommonParameters,
+            WindowsPowerShell51CommonParameterAliases,
+            includeWhereNotParameterSet: false);
 
     private static HashSet<string> Names(string names)
     {
@@ -1617,7 +1699,8 @@ internal static class PwshExecutionRegionBindingCatalog
     }
 
     private static IReadOnlyList<ParameterSetDefinition> ParameterSetsFor(
-        PwshExecutionRegionReceiver receiver)
+        PwshExecutionRegionReceiver receiver,
+        bool includeWhereNotParameterSet)
     {
         switch (receiver)
         {
@@ -1637,7 +1720,7 @@ internal static class PwshExecutionRegionBindingCatalog
                         "Parallel"),
                 };
             case PwshExecutionRegionReceiver.WhereObject:
-                return WhereParameterSets();
+                return WhereParameterSets(includeWhereNotParameterSet);
             case PwshExecutionRegionReceiver.InvokeCommand:
                 return InvokeParameterSets();
             case PwshExecutionRegionReceiver.MeasureCommand:
@@ -1761,7 +1844,8 @@ internal static class PwshExecutionRegionBindingCatalog
         }
     }
 
-    private static IReadOnlyList<ParameterSetDefinition> WhereParameterSets()
+    private static IReadOnlyList<ParameterSetDefinition> WhereParameterSets(
+        bool includeNotParameterSet)
     {
         var result = new List<ParameterSetDefinition>
         {
@@ -1783,8 +1867,12 @@ internal static class PwshExecutionRegionBindingCatalog
                 "Property," + operation, new[] { Pos("Property"), Pos("Value") }));
         }
 
-        result.Add(Set("Not", "InputObject,Property,Not", "Property,Not",
-            new[] { Pos("Property") }));
+        if (includeNotParameterSet)
+        {
+            result.Add(Set("Not", "InputObject,Property,Not", "Property,Not",
+                new[] { Pos("Property") }));
+        }
+
         return result;
     }
 
@@ -2095,17 +2183,20 @@ internal static class PwshExecutionRegionBindingCatalog
             string moduleName,
             HashSet<string> parameters,
             HashSet<string> switches,
-            IReadOnlyDictionary<string, string> aliases)
+            IReadOnlyDictionary<string, string> aliases,
+            IReadOnlyCollection<string> commonParameters,
+            IReadOnlyDictionary<string, string> commonParameterAliases,
+            bool includeWhereNotParameterSet = true)
         {
             Receiver = receiver;
             ModuleName = moduleName;
-            _parameterSets = ParameterSetsFor(receiver);
-            _parameters = new HashSet<string>(CommonParameters, StringComparer.OrdinalIgnoreCase);
+            _parameterSets = ParameterSetsFor(receiver, includeWhereNotParameterSet);
+            _parameters = new HashSet<string>(commonParameters, StringComparer.OrdinalIgnoreCase);
             _parameters.UnionWith(parameters);
             _switches = new HashSet<string>(CommonSwitchParameters, StringComparer.OrdinalIgnoreCase);
             _switches.UnionWith(switches);
             _aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var alias in CommonParameterAliases)
+            foreach (var alias in commonParameterAliases)
             {
                 _aliases[alias.Key] = alias.Value;
             }

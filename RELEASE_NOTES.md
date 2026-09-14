@@ -1,3 +1,39 @@
+#### Unreleased ####
+
+This implementation slice adds bounded PowerShell approval-fatigue evidence
+while keeping unsupported mutation syntax fail closed. The release PR will
+rename and date this section for `0.4.0-beta.1`.
+
+## Added
+
+- Add `ShellValueDomain.OrderedList` for audited, source-ordered PowerShell
+  collections, plus source-authentic `Select-Object -Index` integer ranges.
+- Add `CommandOccurrence.FileSystemTreeAccesses` and the closed
+  `ShellFileSystemTreeAccess` / `ShellTreeTraversalMode` contract for audited
+  `Get-ChildItem` tree-access effects, including dialect-specific link
+  traversal and explicit Unknown markers.
+- Pin independently proved Windows PowerShell 5.1 callback receiver binding
+  for `ForEach-Object` and `Where-Object`.
+
+## Fixed
+
+- Reject authored prefix and postfix `++` / `--` mutations inside supported
+  PowerShell script-block regions until their state transfer is modeled.
+- Retain only exact-span direct-source sibling leaves for the paired
+  diagnostic result; clear commands, clauses, arguments, redirects, and all
+  positive authorization facts so the result can only support an additive
+  consumer hard-deny scan.
+
+## Security and compatibility
+
+- Keep wrapper-decoded diagnostic leaves spanless and preserve atomic failure
+  for unbalanced, unsupported, or resource-limit syntax.
+- Keep tree-access evidence executable-effect data only; it grants no path
+  authority and remains Unknown for dynamic, ambiguous, non-filesystem, or
+  unproved roots and traversal controls.
+- Upgrade `Microsoft.SourceLink.GitHub` to 10.0.400 to restore the package
+  supply-chain fix tracked by Dependabot PR #156.
+
 #### 0.3.5 2026-08-14 ####
 
 This additive release distinguishes audited non-filesystem operand data from

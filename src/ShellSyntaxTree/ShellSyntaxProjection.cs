@@ -494,7 +494,9 @@ internal sealed record ShellValueDomainFacts
 internal readonly record struct ShellValueElementProvenance(
     int ClauseElementIndex,
     ShellValue Value,
-    bool? UsesNativeArgumentBinding = null);
+    bool? UsesNativeArgumentBinding = null,
+    ShellValueDomainFacts? ParserOwnedDomain = null,
+    IReadOnlyList<string>? AuthoredValueGroup = null);
 
 /// <summary>
 /// Retains the shell-owned value fragments for one file-redirect target so
