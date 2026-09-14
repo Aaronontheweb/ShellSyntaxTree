@@ -174,12 +174,13 @@ priorities.
       `Microsoft.SourceLink.GitHub` 10.0.400, which replaces the vulnerable
       10.0.301 transitive `Microsoft.Build.Tasks.Git` package without
       weakening NuGet audit enforcement.
-- [ ] **Release and consume `0.4.0-beta.1`.** The implementation merged in
-      ShellSyntaxTree PR #173; this release-only change prepares the
-      `0.4.0-beta.1` candidate. After review, publish the beta, replace
-      Netclaw's local integration pin with the public package, and rerun the
-      paired consumer gates. Publication and downstream consumption remain
-      pending.
+- [x] **Release and consume `0.4.0-beta.1`.** ShellSyntaxTree PR #173 and
+      release PR #174 are merged. Tag `0.4.0-beta.1` and the GitHub prerelease
+      are published; publish workflow run [34839960055](https://github.com/Aaronontheweb/ShellSyntaxTree/actions/runs/34839960055)
+      passed, and the package is public on NuGet. Netclaw PR #2176 is merged
+      and pins the official package. Netclaw policy PR #2177 is also merged;
+      its local gates and all required GitHub checks passed. No new Netclaw
+      beta was cut.
 
 ## Completed v0.3.0 host integration and release acceptance
 
