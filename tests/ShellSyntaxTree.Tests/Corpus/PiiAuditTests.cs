@@ -16,7 +16,7 @@ namespace ShellSyntaxTree.Tests.Corpus;
 
 /// <summary>
 /// PII audit gate per SPEC §14 / SPEC.POWERSHELL.md §14. Scans every JSON
-/// entry under the executable corpus and the pre-implementation design corpus
+/// string under the executable corpus and the pre-implementation design corpus
 /// for the forbidden patterns listed in the sanitization table. The audit
 /// reads from the build-output copies so CI runs against the same bytes a
 /// developer's local <c>dotnet test</c> would.
@@ -24,11 +24,8 @@ namespace ShellSyntaxTree.Tests.Corpus;
 /// <remarks>
 /// Scanning policy:
 /// <list type="bullet">
-///   <item>Only <c>input</c>, <c>notes</c>, and <c>raw</c> string fields
-///         are scanned. Synthetic resolved paths and the
-///         <c>&lt;dynamic-cwd&gt;</c> sentinel surface in other fields and
-///         would generate noise (e.g. <c>/work/foo</c> from
-///         WorkingDirectory pinning).</item>
+///   <item>Every JSON string is scanned, including expected projections and
+///         metadata, so sensitive text cannot hide in an unscanned field.</item>
 ///   <item>A small allowlist of generic placeholder usernames is honored:
 ///         <c>user, test, foo, dev, runner, gh-actions, ci</c>. Anything
 ///         else under <c>/home/</c> or <c>/Users/</c> trips the audit.</item>
@@ -70,25 +67,25 @@ public class PiiAuditTests
         new(@"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", RegexOptions.Compiled);
 
     private static readonly Regex LongKeyPattern =
-        new(@"[A-Za-z0-9]{32,}", RegexOptions.Compiled);
+        new(@"[A-Za-z0-9]{20,}", RegexOptions.Compiled);
 
     // The home/users patterns capture the username segment; we then allow-list it.
     private static readonly Regex HomePattern =
-        new(@"/home/([a-zA-Z0-9_.-]+)/", RegexOptions.Compiled);
+        new(@"/home/([a-zA-Z0-9_.-]+)(?:/|$)", RegexOptions.Compiled);
 
     private static readonly Regex UsersPattern =
-        new(@"/Users/([a-zA-Z0-9_.-]+)/", RegexOptions.Compiled);
+        new(@"/Users/([a-zA-Z0-9_.-]+)(?:/|$)", RegexOptions.Compiled);
 
     // Repository-path pattern: /home/<user>/repositories/<org>/<repo>/... where
     // <repo> isn't one of the public-corpus placeholders.
     private static readonly Regex RepoPathPattern =
-        new(@"/home/[^/]+/repositories/[^/]+/([a-zA-Z0-9_.-]+)/", RegexOptions.Compiled);
+        new(@"/home/[^/]+/repositories/[^/]+/([a-zA-Z0-9_.-]+)(?:/|$)", RegexOptions.Compiled);
 
     // SPEC.POWERSHELL.md §14: a concrete C:\Users\<username>\ path (mixed
     // slashes allowed). A literal $env:USERNAME / $env:USERPROFILE reference
     // is not PII and is not matched here.
     private static readonly Regex WindowsUserPattern =
-        new(@"[A-Za-z]:[\\/]Users[\\/]([A-Za-z0-9_.-]+)[\\/]", RegexOptions.Compiled);
+        new(@"[A-Za-z]:[\\/]Users[\\/]([A-Za-z0-9_.-]+)(?:[\\/]|$)", RegexOptions.Compiled);
 
     // SPEC.POWERSHELL.md §14: a UNC \\<hostname>\share path.
     private static readonly Regex UncHostPattern =
@@ -96,6 +93,31 @@ public class PiiAuditTests
 
     private static readonly HashSet<string> AllowedUncHosts =
         new(StringComparer.Ordinal) { "internal-host.example" };
+
+    private static readonly HashSet<string> AllowedSyntheticHomeSegments =
+        new(StringComparer.Ordinal)
+        {
+            "test.json",
+            "test.txt",
+            "user.Length",
+            "user.json",
+            "user.txt",
+        };
+
+    private static bool IsAllowedPlaceholderPathSegment(
+        string segment,
+        HashSet<string> allowlist)
+    {
+        if (allowlist.Contains(segment))
+        {
+            return true;
+        }
+
+        // A few resolver projections append a known synthetic suffix to the
+        // placeholder home. Keep this list exact so a dotted real username
+        // cannot pass merely because its prefix resembles a placeholder.
+        return AllowedSyntheticHomeSegments.Contains(segment);
+    }
 
     [Fact]
     public void Corpus_contains_no_pii_per_spec_section_14()
@@ -115,6 +137,9 @@ public class PiiAuditTests
             {
                 var name = Path.GetRelativePath(AppContext.BaseDirectory, file)
                     .Replace('\\', '/');
+                // Filenames are part of the committed corpus surface too;
+                // scan their slug so identifiers cannot be hidden in paths.
+                ScanString(Path.GetFileNameWithoutExtension(file), name, "<filename>", hits);
                 try
                 {
                     using var doc = JsonDocument.Parse(File.ReadAllText(file));
@@ -160,10 +185,7 @@ public class PiiAuditTests
                 break;
 
             case JsonValueKind.String:
-                if (ShouldScan(fieldPath))
-                {
-                    ScanString(element.GetString() ?? string.Empty, fileName, fieldPath, hits);
-                }
+                ScanString(element.GetString() ?? string.Empty, fileName, fieldPath, hits);
                 break;
         }
     }
@@ -186,22 +208,6 @@ public class PiiAuditTests
         }
 
         return true;
-    }
-
-    /// <summary>
-    /// Decide whether a JSON string at <paramref name="fieldPath"/> is in
-    /// scope for the audit. SPEC §14: scan <c>input</c>, <c>notes</c>,
-    /// and any <c>raw</c> nested under args. Skip synthetic fields like
-    /// <c>resolved</c>, <c>target</c>, etc. — those carry parser-produced
-    /// paths (e.g. <c>/home/test/file</c>) that we explicitly want to allow.
-    /// </summary>
-    private static bool ShouldScan(string fieldPath)
-    {
-        if (fieldPath == "input") return true;
-        if (fieldPath == "notes") return true;
-        if (fieldPath.EndsWith(".command", StringComparison.Ordinal)) return true;
-        if (fieldPath.EndsWith(".raw", StringComparison.Ordinal)) return true;
-        return false;
     }
 
     private static void ScanString(string value, string fileName, string fieldPath, List<string> hits)
@@ -239,7 +245,9 @@ public class PiiAuditTests
         {
             foreach (Match m in LongKeyPattern.Matches(value))
             {
-                if (IsLowEntropyRun(m.Value))
+                if (IsLowEntropyRun(m.Value)
+                    || !m.Value.Any(char.IsDigit)
+                    || !m.Value.Any(char.IsLetter))
                 {
                     continue;
                 }
@@ -252,7 +260,7 @@ public class PiiAuditTests
         foreach (Match m in HomePattern.Matches(value))
         {
             var user = m.Groups[1].Value;
-            if (!AllowedHomeUsernames.Contains(user))
+            if (!IsAllowedPlaceholderPathSegment(user, AllowedHomeUsernames))
             {
                 hits.Add($"{fileName} ({fieldPath}): /home/{user}/ — not in allowed-placeholder list (SPEC §14)");
             }
@@ -262,7 +270,7 @@ public class PiiAuditTests
         foreach (Match m in UsersPattern.Matches(value))
         {
             var user = m.Groups[1].Value;
-            if (!AllowedUsersUsernames.Contains(user))
+            if (!IsAllowedPlaceholderPathSegment(user, AllowedUsersUsernames))
             {
                 hits.Add($"{fileName} ({fieldPath}): /Users/{user}/ — not in allowed-placeholder list (SPEC §14)");
             }
@@ -282,7 +290,7 @@ public class PiiAuditTests
         foreach (Match m in WindowsUserPattern.Matches(value))
         {
             var user = m.Groups[1].Value;
-            if (!AllowedUsersUsernames.Contains(user))
+            if (!IsAllowedPlaceholderPathSegment(user, AllowedUsersUsernames))
             {
                 hits.Add($"{fileName} ({fieldPath}): Windows user path 'Users\\{user}\\' — not in allowed-placeholder list (SPEC.POWERSHELL.md §14)");
             }

@@ -1231,6 +1231,43 @@ public class PwshExecutionRegionStructuralTests
     }
 
     [Theory]
+    [InlineData(PwshDialect.PowerShell7, "ForEach-Object { ($_ -split '/')[0..3] -join '/' }")]
+    [InlineData(PwshDialect.PowerShell7, "ForEach-Object { ($PSItem -split \"/\")[2] -join \"/\" }")]
+    [InlineData(PwshDialect.PowerShell7, "ForEach-Object { ($_ -SPLIT '/')[0] -JOIN '/' }")]
+    [InlineData(PwshDialect.WindowsPowerShell51, "ForEach-Object { ($_ -split '/')[0..3] -join '/' }")]
+    public void Static_split_index_join_projection_contains_no_authored_commands(
+        PwshDialect dialect,
+        string source)
+    {
+        var result = ParseIsolatedRaw(source, dialect);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Single(result.Commands);
+        Assert.True(result.Commands[0].IsComplete);
+        Assert.Empty(Assert.Single(
+            Assert.IsType<SimpleCommandSyntax>(Assert.Single(result.Syntax.Statements))
+                .ExecutionRegions).Body.Statements);
+    }
+
+    [Theory]
+    [InlineData("ForEach-Object { ($_ -split '/')[0..$(Get-Date)] -join '/' }")]
+    [InlineData("ForEach-Object { ($_ -split $separator)[0] -join '/' }")]
+    [InlineData("ForEach-Object { ($_ -split '/')[0] -join $(Get-Date) }")]
+    [InlineData("ForEach-Object { ($_ -split '/')[0].ToString() -join '/' }")]
+    [InlineData("ForEach-Object { ($_ -split '/')[0] -join '/'; Get-Date }")]
+    [InlineData("ForEach-Object { $value = ($_ -split '/')[0] -join '/' }")]
+    [InlineData("ForEach-Object { ($_ -split '/')\n[0..3] -join '/' }")]
+    [InlineData("ForEach-Object { ($_ -split '/')[0] -join '/'\nGet-Date }")]
+    public void Unsupported_split_index_join_projection_shapes_fail_closed(string source)
+    {
+        var result = ParseIsolatedRaw(source, PwshDialect.PowerShell7);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Theory]
     [InlineData(
         "Get-ChildItem . | Where-Object { $_.Length -gt 0 }",
         ExecutionRegionPhase.Filter)]

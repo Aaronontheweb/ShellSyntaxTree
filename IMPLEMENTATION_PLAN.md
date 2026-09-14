@@ -181,6 +181,17 @@ priorities.
       and pins the official package. Netclaw policy PR #2177 is also merged;
       its local gates and all required GitHub checks passed. No new Netclaw
       beta was cut.
+- [x] **Harvest post-deployment PowerShell approval prompts.** Review every
+      shell call from the two sessions created after the deployed
+      `0.27.0-beta.4` daemon started. Fourteen of 28 shell calls prompted.
+      Add one sanitized, generator-owned corpus case for each prompt shape and
+      remove product-specific labels from the older Bash corpus. Thirteen
+      prompt shapes already produce complete command projections and therefore
+      remain downstream policy evidence. The remaining split/index/join
+      projection now has a narrow no-command recognizer with positive and
+      adversarial tests; dynamic and executable variants still fail closed.
+      The PII audit now scans every JSON string and filename with exact,
+      synthetic-only placeholder exceptions.
 
 ## Completed v0.3.0 host integration and release acceptance
 

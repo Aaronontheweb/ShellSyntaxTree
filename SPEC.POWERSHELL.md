@@ -85,6 +85,15 @@ Pipeline-produced objects and unsupported expressions remain unknown without
 execution. `while`, `if`, `elseif`, `else`, `do`, `switch`, definitions, and
 arbitrary script evaluation stay outside the supported grammar.
 
+The v0.4 grammar also recognizes one bounded projection expression inside a
+cataloged script-block execution region:
+`($_ -split <static-literal>)[<static-integer-or-range>] -join <static-literal>`
+(with `$PSItem` accepted in place of `$_`). Recognition proves only that the
+authored region contains no nested command. It does not evaluate the
+expression, predict its value, or claim that runtime conversion is
+side-effect-free. Every dynamic operand and every other unsupported expression
+still fails closed.
+
 ---
 
 ## 2. Public API Surface
@@ -678,7 +687,12 @@ expression body: doing so could preserve a stale exact or finite binding for a
 later command. Ordinary property reads and comparison/filter expressions
 remain supported empty bodies. That structure proves only that no authored
 simple command was hidden; it does not prove that a runtime property getter is
-side-effect-free.
+side-effect-free. The same empty-body rule applies to the bounded v0.4
+split/index/join projection from §1. Its delimiters must be non-interpolating
+quoted literals without dollar signs, backticks, or newlines; its selector must
+be one static integer or integer range; and the body may contain no statement
+separator, member call, assignment, subexpression, splat, or additional
+operator.
 
 When a balanced increment/decrement expression statement is separated from
 otherwise parsed siblings by a parser-owned semicolon or newline boundary, the
@@ -2063,8 +2077,9 @@ v0.2.0 ships when **all** of these hold:
 - `function`/`filter`/`class`/`enum` definitions,
   `param()`/`begin`/`process`/`end` blocks, `trap`, and `DATA`.
 - `.ps1` script-file parsing.
-- General PowerShell expression evaluation, `$_` / `$PSItem` semantics, .NET
-  method calls, object-to-string prediction, and runtime pipeline evaluation.
+- General PowerShell expression evaluation, `$_` / `$PSItem` semantics beyond
+  the bounded no-command structural recognition in §1, .NET method calls,
+  object-to-string prediction, and runtime pipeline evaluation.
 - Desired State Configuration (DSC).
 - A real `Push-Location` / `Pop-Location` directory-stack model (§9).
 - Per-element path extraction from a comma-separated array
