@@ -13,12 +13,14 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 
 ```bash
 # Current package
-dotnet add package ShellSyntaxTree --version 0.3.5
+dotnet add package ShellSyntaxTree --version 0.4.0-beta.1
 ```
 
-Version `0.3.5` includes the typed syntax tree, command-occurrence API,
-bounded authored-value analysis, audited filesystem and non-filesystem operand
-facts, and parser-owned working-directory effects documented below.
+Version `0.4.0-beta.1` includes bounded PowerShell collection facts,
+shell-neutral filesystem tree-access effects, and fail-closed approval-fatigue
+diagnostics alongside the typed syntax tree, command-occurrence API, bounded
+authored-value analysis, audited filesystem and non-filesystem operand facts,
+and parser-owned working-directory effects documented below.
 
 ## What you get
 
@@ -275,6 +277,9 @@ workflow asserts this and fails fast on misformatted tags.
 - **0.3.0** — typed nested syntax, complete command occurrences, bounded value
   and cwd facts, explicit redirects, Bash `for ... in`, and PowerShell
   `foreach`, while retaining the v0.2 `Clauses` compatibility projection.
+- **0.4.0** — bounded PowerShell approval-fatigue evidence, including ordered
+  collections, filesystem tree-access effects, and additive fail-closed
+  diagnostics for unsupported mutation syntax.
 - **1.0.0** — when an external consumer beyond Netclaw ships against
   it without finding API gaps.
 

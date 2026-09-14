@@ -1,8 +1,7 @@
-#### Unreleased ####
+#### 0.4.0-beta.1 2026-09-14 ####
 
 This implementation slice adds bounded PowerShell approval-fatigue evidence
-while keeping unsupported mutation syntax fail closed. The release PR will
-rename and date this section for `0.4.0-beta.1`.
+while keeping unsupported mutation syntax fail closed.
 
 ## Added
 
