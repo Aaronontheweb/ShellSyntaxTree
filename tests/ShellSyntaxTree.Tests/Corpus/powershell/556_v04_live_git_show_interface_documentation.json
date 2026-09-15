@@ -1,0 +1,185 @@
+{
+  "name": "V04 live git show interface documentation",
+  "input": "git -C C:\\WORK\\PROJECT show feature/sample-branch:src/client/documentation/interfaces/application-models.md",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git",
+          "show"
+        ],
+        "args": [
+          {
+            "raw": "-C",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\WORK\\PROJECT",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT"
+          },
+          {
+            "raw": "feature/sample-branch:src/client/documentation/interfaces/application-models.md",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/feature/sample-branch:src/client/documentation/interfaces/application-models.md"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "git",
+            "value": "git",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-C",
+            "value": "-C",
+            "role": "Argument",
+            "sourceStart": 4,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "C:\\WORK\\PROJECT",
+            "value": "C:\\WORK\\PROJECT",
+            "role": "Argument",
+            "sourceStart": 7,
+            "sourceLength": 15,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT"
+          },
+          {
+            "raw": "show",
+            "value": "show",
+            "role": "Verb",
+            "sourceStart": 23,
+            "sourceLength": 4,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "feature/sample-branch:src/client/documentation/interfaces/application-models.md",
+            "value": "feature/sample-branch:src/client/documentation/interfaces/application-models.md",
+            "role": "Argument",
+            "sourceStart": 28,
+            "sourceLength": 79,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/feature/sample-branch:src/client/documentation/interfaces/application-models.md"
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 107,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 107,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 107
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-C"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "C:\\WORK\\PROJECT"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 2,
+            "clauseElementIndex": 4,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "feature/sample-branch:src/client/documentation/interfaces/application-models.md"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      }
+    ]
+  },
+  "notes": "Sanitized deployed-consumer approval prompt: exact repository documentation retrieval."
+}

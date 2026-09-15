@@ -1,0 +1,21 @@
+{
+  "name": "Greedy verb chain: supportcli ticket list --status open (synthetic CLI)",
+  "input": "supportcli ticket list --status open",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": ["supportcli", "ticket", "list"],
+        "args": [
+          { "raw": "--status", "kind": "Literal", "isPath": false, "isFlag": true },
+          { "raw": "open", "kind": "Literal", "isPath": false, "resolved": "__NULL__" }
+        ],
+        "redirects": [],
+        "isSubshell": false,
+        "isCommandStringWrapped": false
+      }
+    ]
+  },
+  "notes": "Issue #27 headline: unknown/private CLIs used to truncate to a 1-token verb chain. The greedy heuristic walks verb-like Word tokens (lowercase[a-z0-9._-]) and stops at the first flag, so the canonical subcommand stack `supportcli ticket list` extracts fully without requiring a curated table entry."
+}

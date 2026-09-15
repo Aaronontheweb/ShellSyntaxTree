@@ -1,0 +1,455 @@
+{
+  "name": "V04 live git tree example client filter",
+  "input": "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/sample-branch \u0022examples/Example.App.Client/src/app\u0022 | Select-String -Pattern \u0022model|dto\u0022 -CaseSensitive:$false",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git",
+          "ls-tree"
+        ],
+        "args": [
+          {
+            "raw": "-C",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\WORK\\PROJECT",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT"
+          },
+          {
+            "raw": "-r",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "--name-only",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "feature/sample-branch",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/feature/sample-branch"
+          },
+          {
+            "raw": "\u0022examples/Example.App.Client/src/app\u0022",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/examples/Example.App.Client/src/app"
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "git",
+            "value": "git",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-C",
+            "value": "-C",
+            "role": "Argument",
+            "sourceStart": 4,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "C:\\WORK\\PROJECT",
+            "value": "C:\\WORK\\PROJECT",
+            "role": "Argument",
+            "sourceStart": 7,
+            "sourceLength": 15,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT"
+          },
+          {
+            "raw": "ls-tree",
+            "value": "ls-tree",
+            "role": "Verb",
+            "sourceStart": 23,
+            "sourceLength": 7,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-r",
+            "value": "-r",
+            "role": "Argument",
+            "sourceStart": 31,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "--name-only",
+            "value": "--name-only",
+            "role": "Argument",
+            "sourceStart": 34,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "feature/sample-branch",
+            "value": "feature/sample-branch",
+            "role": "Argument",
+            "sourceStart": 46,
+            "sourceLength": 21,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/feature/sample-branch"
+          },
+          {
+            "raw": "\u0022examples/Example.App.Client/src/app\u0022",
+            "value": "examples/Example.App.Client/src/app",
+            "role": "Argument",
+            "sourceStart": 68,
+            "sourceLength": 37,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/examples/Example.App.Client/src/app"
+          }
+        ]
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Select-String"
+        ],
+        "args": [
+          {
+            "raw": "-Pattern",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0022model|dto\u0022",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-CaseSensitive",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "$false",
+            "kind": "EnvVar",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Select-String",
+            "value": "Select-String",
+            "role": "Verb",
+            "sourceStart": 108,
+            "sourceLength": 13,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-Pattern",
+            "value": "-Pattern",
+            "role": "Argument",
+            "sourceStart": 122,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "\u0022model|dto\u0022",
+            "value": "model|dto",
+            "role": "Argument",
+            "sourceStart": 131,
+            "sourceLength": 11,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-CaseSensitive:$false",
+            "value": "-CaseSensitive:$false",
+            "role": "Argument",
+            "sourceStart": 143,
+            "sourceLength": 21,
+            "precedingVerbElementCount": 1,
+            "kind": "EnvVar",
+            "isFlag": true,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 164,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Pipeline",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 164,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "PipelineStage",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 105,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "PipelineStage",
+        "childIndex": 1,
+        "sourceStart": 108,
+        "sourceLength": 56,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 164
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 164
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-C"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "C:\\WORK\\PROJECT"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 2,
+            "clauseElementIndex": 4,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-r"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 3,
+            "clauseElementIndex": 5,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--name-only"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 4,
+            "clauseElementIndex": 6,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "feature/sample-branch"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 5,
+            "clauseElementIndex": 7,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "examples/Example.App.Client/src/app"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 164
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 164
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-Pattern"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "model|dto"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 2,
+            "clauseElementIndex": 3,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-CaseSensitive"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 3,
+            "clauseElementIndex": 3,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      }
+    ]
+  },
+  "notes": "Sanitized deployed-consumer approval prompt: scoped example-client model filter."
+}

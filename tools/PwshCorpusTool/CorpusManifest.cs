@@ -1554,5 +1554,66 @@ internal static class CorpusManifest
         VIE("v04_gci_dynamic_follow_unknown_tree_access",
             "Get-ChildItem -Path C:\\WORK\\PROJECT -Recurse -FollowSymlink:$follow",
             "Pins the all-Unknown tree-access marker for an unproved link-follow value."),
+        VE("v04_live_recursive_directory_filter",
+            "Get-ChildItem -Path C:\\Users\\user -Recurse -Directory -ErrorAction SilentlyContinue | " +
+            "Where-Object { $_.Name -like \"*sample*\" -or $_.Name -like \"*project*\" } | " +
+            "Select-Object -First 30 FullName",
+            "Sanitized deployed-consumer approval prompt: recursive directory filtering and bounded projection."),
+        VE("v04_live_git_ref_listing",
+            "git -C C:\\WORK\\PROJECT for-each-ref --sort=-committerdate --format='%(committerdate:iso8601) %(refname:short)' refs/heads refs/remotes --count=40",
+            "Sanitized deployed-consumer approval prompt: bounded ref listing with authored format."),
+        VE("v04_live_git_tree_client_filter",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/sample-branch | " +
+            "Select-String -Pattern \"client\" -CaseSensitive:$false | Select-Object -First 60",
+            "Sanitized deployed-consumer approval prompt: tree listing with bounded client filter."),
+        VE("v04_live_git_tree_client_model_filter",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/sample-branch | " +
+            "Select-String -Pattern \"client\" -CaseSensitive:$false | " +
+            "Select-String -Pattern \"model|dto|shared\" -CaseSensitive:$false",
+            "Sanitized deployed-consumer approval prompt: tree listing with chained model filter."),
+        VE("v04_live_git_tree_models_filter",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/sample-branch | " +
+            "Select-String -Pattern \"models/.*application|models/.*instance\" -CaseSensitive:$false",
+            "Sanitized deployed-consumer approval prompt: tree listing with bounded model path filter."),
+        VE("v04_live_git_tree_project_library_filter",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/sample-branch | " +
+            "Select-String -Pattern \"projects/example/common/src/lib\" | " +
+            "Select-String -Pattern \"model\" -CaseSensitive:$false",
+            "Sanitized deployed-consumer approval prompt: tree listing with project-library model filter."),
+        VE("v04_live_git_tree_project_library_skip",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/sample-branch | " +
+            "Select-String -Pattern \"projects/example/common/src/lib\" | " +
+            "Select-String -Pattern \"model\" -CaseSensitive:$false | Select-Object -Skip 20",
+            "Sanitized deployed-consumer approval prompt: tree listing with skipped result prefix."),
+        VE("v04_live_git_show_interface_documentation",
+            "git -C C:\\WORK\\PROJECT show feature/sample-branch:src/client/documentation/interfaces/application-models.md",
+            "Sanitized deployed-consumer approval prompt: exact repository documentation retrieval."),
+        VE("v04_live_git_diff_stat_filter",
+            "git -C C:\\WORK\\PROJECT diff --stat origin/dev...feature/sample-branch | " +
+            "Select-String -Pattern \"client|model|dto\" -CaseSensitive:$false | Select-Object -First 60",
+            "Sanitized deployed-consumer approval prompt: bounded diff-stat filtering."),
+        VE("v04_live_git_tree_instance_filter",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/sample-branch | " +
+            "Select-String -Pattern \"instance\" -CaseSensitive:$false",
+            "Sanitized deployed-consumer approval prompt: tree listing with instance filter."),
+        VE("v04_live_git_tree_alternate_branch_filter",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/alternate-branch | " +
+            "Select-String -Pattern \"src/client\" | Select-String -Pattern \"model\" -CaseSensitive:$false | " +
+            "Select-Object -First 40",
+            "Sanitized deployed-consumer approval prompt: alternate-branch tree filtering."),
+        VE("v04_live_git_tree_remote_alternate_branch_filter",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only origin/feature/alternate-branch | " +
+            "Select-String -Pattern \"src/client\" | Select-String -Pattern \"model\" -CaseSensitive:$false | " +
+            "Select-Object -First 40",
+            "Sanitized deployed-consumer approval prompt: remote alternate-branch tree filtering."),
+        VE("v04_live_git_tree_client_project_segments",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/sample-branch | " +
+            "Select-String -Pattern \"src/client/projects\" | " +
+            "ForEach-Object { ($_ -split '/')[0..3] -join '/' } | Sort-Object -Unique",
+            "Sanitized deployed-consumer approval prompt: unique projected tree segments."),
+        VE("v04_live_git_tree_example_client_filter",
+            "git -C C:\\WORK\\PROJECT ls-tree -r --name-only feature/sample-branch \"examples/Example.App.Client/src/app\" | " +
+            "Select-String -Pattern \"model|dto\" -CaseSensitive:$false",
+            "Sanitized deployed-consumer approval prompt: scoped example-client model filter."),
     };
 }

@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Pwsh.Lexing;
 using ShellSyntaxTree.Internal.Resolving;
@@ -1287,18 +1288,21 @@ internal static partial class PwshCommandParser
                 return false;
             }
 
+            var isSupportedProjectionExpression =
+                significant.Count > 0 && IsSupportedProjectionExpression(source);
             if (significant.Count > 0 &&
-                IsUnsupportedSubstitutionBody(source, significant) &&
+                (isSupportedProjectionExpression || IsUnsupportedSubstitutionBody(source, significant)) &&
                 !ContainsIncrementOrDecrementMutation(significant))
             {
                 foreach (var expressionToken in significant)
                 {
-                    if (HasPowerShellSubexpression(expressionToken)
-                        || expressionToken.Kind is PwshTokenKind.Subexpression
-                            or PwshTokenKind.ScriptBlock
-                            or PwshTokenKind.Splat
-                        || expressionToken.IsStatementSeparator
-                        || expressionToken.Kind == PwshTokenKind.Operator)
+                    if (!isSupportedProjectionExpression &&
+                        (HasPowerShellSubexpression(expressionToken)
+                            || expressionToken.Kind is PwshTokenKind.Subexpression
+                                or PwshTokenKind.ScriptBlock
+                                or PwshTokenKind.Splat
+                            || expressionToken.IsStatementSeparator
+                            || expressionToken.Kind == PwshTokenKind.Operator))
                     {
                         body = new ShellBlockSyntax();
                         error = "unsupported execution-bearing PowerShell script-block expression";
@@ -1624,6 +1628,20 @@ internal static partial class PwshCommandParser
             error = null;
             return true;
         }
+
+        private static readonly Regex SupportedProjectionExpressionPattern =
+            new(
+                @"^[ \t]*\([ \t]*(?:\$_|\$PSItem)[ \t]+-split[ \t]+" +
+                @"(?:'[^'`$\r\n]*'|\x22[^\x22`$\r\n]*\x22)[ \t]*\)" +
+                @"[ \t]*\[[ \t]*[+-]?\d+(?:[ \t]*\.\.[ \t]*[+-]?\d+)?[ \t]*\]" +
+                @"[ \t]+-join[ \t]+(?:'[^'`$\r\n]*'|\x22[^\x22`$\r\n]*\x22)[ \t]*$",
+                RegexOptions.CultureInvariant | RegexOptions.IgnoreCase,
+                TimeSpan.FromMilliseconds(50));
+
+        // This is structural recognition only: it publishes no value and
+        // proves only that this exact script-block body hides no authored command.
+        private static bool IsSupportedProjectionExpression(string source) =>
+            SupportedProjectionExpressionPattern.IsMatch(source);
 
         private static bool IsUnsupportedSubstitutionBody(
             string source,

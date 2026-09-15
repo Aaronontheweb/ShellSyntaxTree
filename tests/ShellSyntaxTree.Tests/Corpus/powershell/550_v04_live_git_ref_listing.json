@@ -1,0 +1,350 @@
+{
+  "name": "V04 live git ref listing",
+  "input": "git -C C:\\WORK\\PROJECT for-each-ref --sort=-committerdate --format=\u0027%(committerdate:iso8601) %(refname:short)\u0027 refs/heads refs/remotes --count=40",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "git",
+          "for-each-ref"
+        ],
+        "args": [
+          {
+            "raw": "-C",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\WORK\\PROJECT",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT"
+          },
+          {
+            "raw": "--sort",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-committerdate",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "--format",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "\u0027%(committerdate:iso8601) %(refname:short)\u0027",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "refs/heads",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/refs/heads"
+          },
+          {
+            "raw": "refs/remotes",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/work/refs/remotes"
+          },
+          {
+            "raw": "--count",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "40",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "git",
+            "value": "git",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-C",
+            "value": "-C",
+            "role": "Argument",
+            "sourceStart": 4,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "C:\\WORK\\PROJECT",
+            "value": "C:\\WORK\\PROJECT",
+            "role": "Argument",
+            "sourceStart": 7,
+            "sourceLength": 15,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/WORK/PROJECT"
+          },
+          {
+            "raw": "for-each-ref",
+            "value": "for-each-ref",
+            "role": "Verb",
+            "sourceStart": 23,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "--sort=-committerdate",
+            "value": "--sort=-committerdate",
+            "role": "Argument",
+            "sourceStart": 36,
+            "sourceLength": 21,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "--format=\u0027%(committerdate:iso8601) %(refname:short)\u0027",
+            "value": "--format=%(committerdate:iso8601) %(refname:short)",
+            "role": "Argument",
+            "sourceStart": 58,
+            "sourceLength": 52,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "refs/heads",
+            "value": "refs/heads",
+            "role": "Argument",
+            "sourceStart": 111,
+            "sourceLength": 10,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/refs/heads"
+          },
+          {
+            "raw": "refs/remotes",
+            "value": "refs/remotes",
+            "role": "Argument",
+            "sourceStart": 122,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/work/refs/remotes"
+          },
+          {
+            "raw": "--count=40",
+            "value": "--count=40",
+            "role": "Argument",
+            "sourceStart": 135,
+            "sourceLength": 10,
+            "precedingVerbElementCount": 2,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 145,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 145,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 145
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-C"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "C:\\WORK\\PROJECT"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 2,
+            "clauseElementIndex": 4,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--sort"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 3,
+            "clauseElementIndex": 4,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-committerdate"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 4,
+            "clauseElementIndex": 5,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--format"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 5,
+            "clauseElementIndex": 5,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--format=%(committerdate:iso8601) %(refname:short)"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 6,
+            "clauseElementIndex": 6,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "refs/heads"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 7,
+            "clauseElementIndex": 7,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "refs/remotes"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 8,
+            "clauseElementIndex": 8,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "--count"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 9,
+            "clauseElementIndex": 8,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "40"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      }
+    ]
+  },
+  "notes": "Sanitized deployed-consumer approval prompt: bounded ref listing with authored format."
+}

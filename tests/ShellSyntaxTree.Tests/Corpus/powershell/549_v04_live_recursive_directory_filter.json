@@ -1,0 +1,566 @@
+{
+  "name": "V04 live recursive directory filter",
+  "input": "Get-ChildItem -Path C:\\Users\\user -Recurse -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like \u0022*sample*\u0022 -or $_.Name -like \u0022*project*\u0022 } | Select-Object -First 30 FullName",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "Get-ChildItem"
+        ],
+        "args": [
+          {
+            "raw": "-Path",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "C:\\Users\\user",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          },
+          {
+            "raw": "-Recurse",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-Directory",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "-ErrorAction",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "SilentlyContinue",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Get-ChildItem",
+            "value": "Get-ChildItem",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 13,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-Path",
+            "value": "-Path",
+            "role": "Argument",
+            "sourceStart": 14,
+            "sourceLength": 5,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "C:\\Users\\user",
+            "value": "C:\\Users\\user",
+            "role": "Argument",
+            "sourceStart": 20,
+            "sourceLength": 13,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "C:/Users/user"
+          },
+          {
+            "raw": "-Recurse",
+            "value": "-Recurse",
+            "role": "Argument",
+            "sourceStart": 34,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "-Directory",
+            "value": "-Directory",
+            "role": "Argument",
+            "sourceStart": 43,
+            "sourceLength": 10,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "-ErrorAction",
+            "value": "-ErrorAction",
+            "role": "Argument",
+            "sourceStart": 54,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "SilentlyContinue",
+            "value": "SilentlyContinue",
+            "role": "Argument",
+            "sourceStart": 67,
+            "sourceLength": 16,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Where-Object"
+        ],
+        "args": [
+          {
+            "raw": "{ $_.Name -like \u0022*sample*\u0022 -or $_.Name -like \u0022*project*\u0022 }",
+            "kind": "DynamicSkip",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Where-Object",
+            "value": "Where-Object",
+            "role": "Verb",
+            "sourceStart": 86,
+            "sourceLength": 12,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "{ $_.Name -like \u0022*sample*\u0022 -or $_.Name -like \u0022*project*\u0022 }",
+            "value": "{ $_.Name -like \u0022*sample*\u0022 -or $_.Name -like \u0022*project*\u0022 }",
+            "role": "Argument",
+            "sourceStart": 99,
+            "sourceLength": 58,
+            "precedingVerbElementCount": 1,
+            "kind": "DynamicSkip",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      },
+      {
+        "operator": "Pipe",
+        "verb": [
+          "Select-Object"
+        ],
+        "args": [
+          {
+            "raw": "-First",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "30",
+            "kind": "Literal",
+            "isPath": false
+          },
+          {
+            "raw": "FullName",
+            "kind": "Literal",
+            "isPath": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "Select-Object",
+            "value": "Select-Object",
+            "role": "Verb",
+            "sourceStart": 160,
+            "sourceLength": 13,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "-First",
+            "value": "-First",
+            "role": "Argument",
+            "sourceStart": 174,
+            "sourceLength": 6,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": true,
+            "isPath": false
+          },
+          {
+            "raw": "30",
+            "value": "30",
+            "role": "Argument",
+            "sourceStart": 181,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "FullName",
+            "value": "FullName",
+            "role": "Argument",
+            "sourceStart": 184,
+            "sourceLength": 8,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 192,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "Pipeline",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 192,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "PipelineStage",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 83,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "PipelineStage",
+        "childIndex": 1,
+        "sourceStart": 86,
+        "sourceLength": 71,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "ExecutionRegion",
+        "parentIndex": 3,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 99,
+        "sourceLength": 58,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null,
+        "executionOrigin": "CommandArgument",
+        "hostClauseElementIndex": 1,
+        "executionPhase": "Filter",
+        "executionTiming": "Synchronous",
+        "executionCardinality": "OncePerInputObject"
+      },
+      {
+        "kind": "Block",
+        "parentIndex": 4,
+        "region": "ExecutionRegion",
+        "childIndex": 0,
+        "sourceStart": 100,
+        "sourceLength": 56,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "PipelineStage",
+        "childIndex": 2,
+        "sourceStart": 160,
+        "sourceLength": 32,
+        "clauseIndex": 2,
+        "groupKind": null,
+        "listOperator": null
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 192
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 192
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-Path"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "C:\\Users\\user"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "authoredFileSystemValue": {
+              "kind": "Exact",
+              "values": [
+                "C:/Users/user"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 2,
+            "clauseElementIndex": 3,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-Recurse"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 3,
+            "clauseElementIndex": 4,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-Directory"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 4,
+            "clauseElementIndex": 5,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-ErrorAction"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 5,
+            "clauseElementIndex": 6,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "SilentlyContinue"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        },
+        "fileSystemTreeAccesses": [
+          {
+            "rootArgumentIndex": 1,
+            "root": {
+              "kind": "Exact",
+              "values": [
+                "C:/Users/user"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "traversal": "RecursiveWithoutFollowingLinks"
+          }
+        ]
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 192
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 192
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Unknown",
+              "values": [],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "PipelineStage",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 192
+          },
+          {
+            "ancestorKind": "Pipeline",
+            "region": "PipelineStage",
+            "childIndex": 2,
+            "sourceStart": 0,
+            "sourceLength": 192
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "-First"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 1,
+            "clauseElementIndex": 2,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "30"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          },
+          {
+            "clauseArgumentIndex": 2,
+            "clauseElementIndex": 3,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "FullName"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "C:/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      }
+    ]
+  },
+  "notes": "Sanitized deployed-consumer approval prompt: recursive directory filtering and bounded projection."
+}

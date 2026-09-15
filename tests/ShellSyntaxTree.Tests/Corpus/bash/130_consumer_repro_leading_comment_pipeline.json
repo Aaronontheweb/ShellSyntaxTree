@@ -1,5 +1,5 @@
 {
-  "name": "Netclaw repro: leading comment + git worktree list | awk | tr | sort pipeline",
+  "name": "Consumer repro: leading comment + git worktree list | awk | tr | sort pipeline",
   "input": "# Extract all unique branch names from worktrees\ngit -C /home/user/repos/sample-repo worktree list | awk '{print $NF}' | tr -d '[]' | sort -u",
   "expected": {
     "isUnparseable": false,
@@ -48,5 +48,5 @@
       }
     ]
   },
-  "notes": "Issue #25 — original Netclaw repro, paths sanitized per SPEC §14. Without the v0.1.3 comment-skip fix, Clause 0's verb parsed as `[#, Extract]`. Updated for issue #27 / v0.1.4-alpha: the greedy heuristic now walks past the consumed `-C /repo` flag-value pair and captures `worktree list` as part of the verb chain instead of leaving `list` as a stranded positional arg."
+  "notes": "Issue #25 consumer repro, paths sanitized per SPEC §14. Without the v0.1.3 comment-skip fix, Clause 0's verb parsed as `[#, Extract]`. Updated for issue #27 / v0.1.4-alpha: the greedy heuristic now walks past the consumed `-C /repo` flag-value pair and captures `worktree list` as part of the verb chain instead of leaving `list` as a stranded positional arg."
 }
