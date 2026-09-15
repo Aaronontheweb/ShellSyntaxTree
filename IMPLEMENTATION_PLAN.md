@@ -192,10 +192,12 @@ priorities.
       adversarial tests; dynamic and executable variants still fail closed.
       The PII audit now scans every JSON string and filename with exact,
       synthetic-only placeholder exceptions.
-- [ ] **Release and consume `0.4.0-beta.2`.** Publish the post-beta.1
-      PowerShell approval-projection fixes from ShellSyntaxTree PR #176,
-      then replace Netclaw's package pin and rerun the downstream approval
-      gates.
+- [x] **Released and consumed `0.4.0-beta.2`.** ShellSyntaxTree
+      [PR #177](https://github.com/Aaronontheweb/ShellSyntaxTree/pull/177)
+      published the post-beta.1 PowerShell approval-projection fixes. Netclaw
+      [PR #2181](https://github.com/netclaw-dev/netclaw/pull/2181) updated the
+      package pin and passed its downstream test, mutation, and native smoke
+      gates without cutting a new Netclaw beta.
 
 ## Completed v0.3.0 host integration and release acceptance
 
