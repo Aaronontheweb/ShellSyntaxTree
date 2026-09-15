@@ -1,3 +1,21 @@
+#### 0.4.0-beta.2 2026-09-14 ####
+
+This maintenance prerelease publishes the post-beta.1 PowerShell approval
+projection cases verified from live Netclaw prompts.
+
+## Added
+
+- Handle the remaining split/index/join projection as a bounded no-command
+  case, preserving authored data while exposing no executable command.
+- Add sanitized corpus coverage for the live PowerShell prompt shapes now
+  handled by the parser.
+
+## Security and compatibility
+
+- Keep dynamic and executable split/index/join variants fail closed as
+  unparseable or dynamically skipped rather than guessing their meaning.
+- Preserve the beta.1 public API and all existing Bash and PowerShell facts.
+
 #### 0.4.0-beta.1 2026-09-14 ####
 
 This implementation slice adds bounded PowerShell approval-fatigue evidence
