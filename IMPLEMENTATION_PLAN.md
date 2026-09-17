@@ -10,6 +10,13 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.3 finite Bash scopes)
+
+- [x] Define an additive public scope result in `SPEC.md`.
+- [x] Prove exact directories and reparse each authored simple command under every reachable scope.
+- [x] Run Release tests, the public API contract, the corpus PII audit, the header check, and package checks.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.3` and verify NuGet publication.
+
 ## NOW (0.3.4 working-directory effects and downstream acceptance)
 
 - [x] **Create the v0.3.1 approval-fact OpenSpec.** Harvest and sanitize the

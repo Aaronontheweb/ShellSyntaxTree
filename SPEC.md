@@ -107,6 +107,9 @@ public sealed class BashParser : IShellParser
     public BashParser();
     public BashParser(BashParserOptions options);
     public ParsedCommand Parse(string command);
+    public bool TryProjectFiniteScopes(
+        string command,
+        out BashFiniteScopeProjection? projection);
 }
 
 /// <summary>PowerShell implementation of IShellParser (v0.2.0). The
@@ -239,6 +242,10 @@ public enum HereDocumentExpansionMode { ... }
 // v0.4 authored-list and tree-access evidence — see §3.
 public sealed record ShellFileSystemTreeAccess { ... }
 public enum ShellTreeTraversalMode { ... }
+
+// v0.4.0-beta.3 finite Bash scope evidence — see §3.
+public sealed record BashFiniteScopeProjection { ... }
+public sealed record BashScopedCommand { ... }
 ```
 
 Stable v0.3 exposes only structural types the parsers can emit. The additive
@@ -248,6 +255,8 @@ package. Condition-loop and branch grammar remains
 fail closed and reserves no public type or enum member. Every result type added
 since v0.2 is parser-owned; its constructor and result setters are not public.
 The stable v0.2 constructors and setters are unchanged.
+The finite Bash scope method and result records target `0.4.0-beta.3`.
+They add no authority rule and do not change an existing occurrence.
 
 That's the entire public API. **Everything else is internal.** The lexer,
 parser internals, verb tables, resolver — all implementation detail.
@@ -296,6 +305,25 @@ public sealed record ParsedCommand
     /// Human-readable diagnostic when IsUnparseable=true; null otherwise.
     /// </summary>
     public string? UnparseableReason { get; init; }
+}
+```
+
+`TryProjectFiniteScopes` returns these parser-owned records:
+
+```csharp
+public sealed record BashFiniteScopeProjection
+{
+    public ParsedCommand Parsed { get; internal init; }
+    public IReadOnlyList<BashScopedCommand> Commands { get; internal init; }
+}
+
+public sealed record BashScopedCommand
+{
+    public CommandOccurrence SourceOccurrence { get; internal init; }
+    public CommandOccurrence ScopedOccurrence { get; internal init; }
+    public string Source { get; internal init; }
+    public int SourceStart { get; internal init; }
+    public string WorkingDirectory { get; internal init; }
 }
 ```
 
@@ -790,6 +818,45 @@ shell path style. Unknown proves a success-only mutation without a bounded
 destination. Any other domain, malformed set, over-limit join, or missing fact
 makes the whole public effect `Unknown`. A target does not prove existence,
 accessibility, authorization, or runtime success.
+
+#### Finite Bash scope projection (v0.4.0-beta.3)
+
+`BashParser.TryProjectFiniteScopes` parses the full source and proves each
+reachable exact directory for a bounded static top-level command list.
+It returns `false` and a null result if it cannot complete the proof.
+The result owns the full `ParsedCommand` and ordered `BashScopedCommand` records.
+Records follow list-item order, ordinal directory order within an item, and
+pipeline-stage order within a directory.
+Each record identifies the original occurrence, its exact source slice and
+offset, one reachable directory, and a fresh occurrence parsed in that directory.
+The fresh occurrence supplies its own argument, redirect, and tree-access path
+facts. Unknown path facts remain unknown; an exact directory does not make a
+dynamic operand exact.
+
+The projection uses this schematic flow:
+
+```text
+entry = initial exact directory
+for each top-level list item:
+    choose entry directories from prior success, failure, or both
+    parse every simple command under each entry directory
+    reject nested execution and an unknown directory effect
+    keep the entry directory after failure
+    use the exact target after a successful directory change
+    preserve both outcomes at a sequence boundary
+```
+
+Each pipeline stage receives the same entry directory. A pipeline stage with
+a directory effect other than `Unchanged` makes the projection fail.
+The result includes each reachable directory, even when a directory change can
+fail. The proof stops above 32 directories or 128 scoped occurrences.
+It also stops on unknown effects, nested execution, incomplete occurrences,
+source-span mismatch, or unsupported list structure.
+
+For example, `cd /work/sub && true; touch marker.txt` from `/work` yields
+`touch` under both `/work` and `/work/sub`. Its path facts name both possible
+files. By contrast, `cd "$target" && touch marker.txt` yields no projection.
+The caller owns filesystem checks, policy, grant matching, and process launch.
 
 Effects join per authored occurrence. Two `Unchanged` visits remain
 `Unchanged`; two success-only changes join their bounded targets. Unknown,

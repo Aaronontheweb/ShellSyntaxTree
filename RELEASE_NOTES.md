@@ -1,3 +1,19 @@
+#### 0.4.0-beta.3 2026-09-17 ####
+
+This prerelease adds bounded Bash directory facts for complete static compounds.
+
+## Added
+
+- Add `BashParser.TryProjectFiniteScopes` and parser-owned scoped occurrences.
+- Preserve exact path facts for each reachable directory after `&&`, `||`, and `;`.
+- Preserve both success and failure directories after an exact `cd` target.
+
+## Security and compatibility
+
+- Reject unknown directory effects, nested execution, changed source slices, and excess scopes.
+- Keep dynamic operands unknown inside an exact directory.
+- Preserve the existing parser result and public methods. The new API grants no authority.
+
 #### 0.4.0-beta.2 2026-09-14 ####
 
 This maintenance prerelease publishes the post-beta.1 PowerShell approval
