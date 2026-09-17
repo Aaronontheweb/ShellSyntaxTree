@@ -1,0 +1,359 @@
+{
+  "name": "v0.4 finite Bash scope compound",
+  "input": "cd /work/sub && cat result.txt; ls .",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cd"
+        ],
+        "args": [
+          {
+            "raw": "/work/sub",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/work/sub",
+            "isFlag": false
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "cd",
+            "value": "cd",
+            "role": "Verb",
+            "sourceStart": 0,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "/work/sub",
+            "value": "/work/sub",
+            "role": "Argument",
+            "sourceStart": 3,
+            "sourceLength": 9,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/sub"
+          }
+        ]
+      },
+      {
+        "operator": "AndIf",
+        "verb": [
+          "cat"
+        ],
+        "args": [
+          {
+            "raw": "result.txt",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/work/sub/result.txt",
+            "isFlag": false
+          },
+          {
+            "raw": "/work/sub",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/work/sub",
+            "isFlag": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "cat",
+            "value": "cat",
+            "role": "Verb",
+            "sourceStart": 16,
+            "sourceLength": 3,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": "result.txt",
+            "value": "result.txt",
+            "role": "Argument",
+            "sourceStart": 20,
+            "sourceLength": 10,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true,
+            "resolved": "/work/sub/result.txt"
+          }
+        ]
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "ls"
+        ],
+        "args": [
+          {
+            "raw": ".",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "__NULL__",
+            "isFlag": false
+          },
+          {
+            "raw": "<dynamic-cwd>",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false,
+            "isCwdAttribution": true
+          }
+        ],
+        "redirects": [],
+        "elements": [
+          {
+            "raw": "ls",
+            "value": "ls",
+            "role": "Verb",
+            "sourceStart": 32,
+            "sourceLength": 2,
+            "precedingVerbElementCount": 0,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": false
+          },
+          {
+            "raw": ".",
+            "value": ".",
+            "role": "Argument",
+            "sourceStart": 35,
+            "sourceLength": 1,
+            "precedingVerbElementCount": 1,
+            "kind": "Literal",
+            "isFlag": false,
+            "isPath": true
+          }
+        ]
+      }
+    ],
+    "syntax": [
+      {
+        "kind": "Block",
+        "parentIndex": null,
+        "region": "Unknown",
+        "childIndex": null,
+        "sourceStart": 0,
+        "sourceLength": 36,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "CommandList",
+        "parentIndex": 0,
+        "region": "Root",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 36,
+        "clauseIndex": null,
+        "groupKind": null,
+        "listOperator": null
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 0,
+        "sourceStart": 0,
+        "sourceLength": 12,
+        "clauseIndex": 0,
+        "groupKind": null,
+        "listOperator": "None"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 1,
+        "sourceStart": 16,
+        "sourceLength": 14,
+        "clauseIndex": 1,
+        "groupKind": null,
+        "listOperator": "AndIf"
+      },
+      {
+        "kind": "SimpleCommand",
+        "parentIndex": 1,
+        "region": "Statement",
+        "childIndex": 2,
+        "sourceStart": 32,
+        "sourceLength": 4,
+        "clauseIndex": 2,
+        "groupKind": null,
+        "listOperator": "Sequence"
+      }
+    ],
+    "commands": [
+      {
+        "clauseIndex": 0,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 36
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 36
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "/work/sub"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "ChangesOnSuccess",
+          "target": {
+            "kind": "Exact",
+            "values": [
+              "/work/sub"
+            ],
+            "pattern": null,
+            "coveringDirectory": null
+          }
+        }
+      },
+      {
+        "clauseIndex": 1,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 36
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 1,
+            "sourceStart": 0,
+            "sourceLength": 36
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "result.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            },
+            "authoredFileSystemValue": {
+              "kind": "Exact",
+              "values": [
+                "/work/sub/result.txt"
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Exact",
+          "values": [
+            "/work/sub"
+          ],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      },
+      {
+        "clauseIndex": 2,
+        "immediateRole": "Ordinary",
+        "isComplete": true,
+        "ancestry": [
+          {
+            "ancestorKind": "Block",
+            "region": "Root",
+            "childIndex": 0,
+            "sourceStart": 0,
+            "sourceLength": 36
+          },
+          {
+            "ancestorKind": "CommandList",
+            "region": "Statement",
+            "childIndex": 2,
+            "sourceStart": 0,
+            "sourceLength": 36
+          }
+        ],
+        "arguments": [
+          {
+            "clauseArgumentIndex": 0,
+            "clauseElementIndex": 1,
+            "value": {
+              "kind": "Exact",
+              "values": [
+                "."
+              ],
+              "pattern": null,
+              "coveringDirectory": null
+            }
+          }
+        ],
+        "workingDirectory": {
+          "kind": "Unknown",
+          "values": [],
+          "pattern": null,
+          "coveringDirectory": null
+        },
+        "workingDirectoryEffect": {
+          "kind": "Unchanged"
+        }
+      }
+    ]
+  },
+  "notes": "Sanitized static command list. The finite scope API proves both directories for the final ls after cd can fail."
+}

@@ -44,4 +44,16 @@ public sealed class BashParser : IShellParser
 
         return Internal.Bash.Parsing.BashCommandParser.Parse(command, _options);
     }
+
+    /// <summary>
+    /// Proves exact directories for a bounded static compound command.
+    /// Each scoped occurrence retains its parser-proved value and path facts.
+    /// </summary>
+    public bool TryProjectFiniteScopes(
+        string command,
+        out BashFiniteScopeProjection? projection)
+    {
+        var parsed = Parse(command);
+        return BashFiniteScopeAnalyzer.TryProject(parsed, _options, out projection);
+    }
 }

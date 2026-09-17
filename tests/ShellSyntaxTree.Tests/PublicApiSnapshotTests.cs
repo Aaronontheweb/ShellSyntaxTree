@@ -64,8 +64,12 @@ public class PublicApiSnapshotTests
         Assert.NotNull(parse);
         Assert.Equal(typeof(ParsedCommand), parse!.ReturnType);
         Assert.Equal(
-            new[] { nameof(BashParser.Parse) },
+            new[] { nameof(BashParser.Parse), nameof(BashParser.TryProjectFiniteScopes) },
             DeclaredPublicMethodNames(t));
+        var project = t.GetMethod(nameof(BashParser.TryProjectFiniteScopes),
+            new[] { typeof(string), typeof(BashFiniteScopeProjection).MakeByRefType() });
+        Assert.NotNull(project);
+        Assert.Equal(typeof(bool), project!.ReturnType);
         AssertReferenceNullability(parse.ReturnParameter, NullabilityState.NotNull);
         AssertReferenceNullability(
             Assert.Single(parse.GetParameters()),
@@ -334,6 +338,20 @@ public class PublicApiSnapshotTests
         Assert.Null(instance.UnparseableReason);
     }
 
+    [Fact]
+    public void Bash_finite_scope_results_have_expected_shapes()
+    {
+        AssertIsRecord(typeof(BashFiniteScopeProjection));
+        AssertIsRecord(typeof(BashScopedCommand));
+        AssertDeclaredPropertyNames(typeof(BashFiniteScopeProjection),
+            "Parsed", "Commands");
+        AssertDeclaredPropertyNames(typeof(BashScopedCommand),
+            "SourceOccurrence", "ScopedOccurrence", "Source", "SourceStart",
+            "WorkingDirectory");
+        Assert.Empty(typeof(BashFiniteScopeProjection).GetConstructors());
+        Assert.Empty(typeof(BashScopedCommand).GetConstructors());
+    }
+
     // -------- Clause --------
 
     [Fact]
@@ -595,8 +613,10 @@ public class PublicApiSnapshotTests
             nameof(AnalyzedArgument),
             nameof(ArgKind),
             nameof(BashParser),
+            nameof(BashFiniteScopeProjection),
             nameof(BashInitialStateMode),
             nameof(BashParserOptions),
+            nameof(BashScopedCommand),
             nameof(Clause),
             nameof(ClauseElement),
             nameof(ClauseElementRole),
