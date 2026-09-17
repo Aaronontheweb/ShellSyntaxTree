@@ -34,12 +34,27 @@ public class BashFiniteScopeProjectionTests
         });
         Assert.Equal("/work/sub", projection.Commands.Single(scoped =>
             scoped.Source == "cat result.txt").WorkingDirectory);
+        Assert.Equal("/work/sub", projection.Commands.Single(scoped =>
+            scoped.Source == "sed -n '1p'").WorkingDirectory);
         Assert.Equal(new[] { "/work", "/work/sub" }, projection.Commands
             .Where(scoped => scoped.Source == "ls .")
             .Select(scoped => scoped.WorkingDirectory)
             .OrderBy(value => value));
         Assert.Equal("/work/sub/result.txt", projection.Commands.Single(scoped =>
             scoped.Source == "cat result.txt").ScopedOccurrence.Arguments[0].Argument.Resolved);
+    }
+
+    [Fact]
+    public void An_or_branch_uses_the_failed_directory_and_preserves_both_final_scopes()
+    {
+        Assert.True(Parser.TryProjectFiniteScopes(
+            "cd /work/sub || touch failed.txt; ls .", out var projection));
+
+        Assert.Equal("/work", projection!.Commands.Single(scoped =>
+            scoped.Source == "touch failed.txt").WorkingDirectory);
+        Assert.Equal(new[] { "/work", "/work/sub" }, projection.Commands
+            .Where(scoped => scoped.Source == "ls .")
+            .Select(scoped => scoped.WorkingDirectory));
     }
 
     [Fact]
@@ -50,8 +65,7 @@ public class BashFiniteScopeProjectionTests
 
         Assert.Equal(new[] { "/work", "/work/sub" }, projection!.Commands
             .Where(scoped => scoped.Source == "touch marker.txt")
-            .Select(scoped => scoped.WorkingDirectory)
-            .OrderBy(value => value));
+            .Select(scoped => scoped.WorkingDirectory));
         Assert.Equal(new[] { "/work/marker.txt", "/work/sub/marker.txt" },
             projection.Commands
                 .Where(scoped => scoped.Source == "touch marker.txt")

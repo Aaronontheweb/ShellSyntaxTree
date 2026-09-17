@@ -825,6 +825,8 @@ accessibility, authorization, or runtime success.
 reachable exact directory for a bounded static top-level command list.
 It returns `false` and a null result if it cannot complete the proof.
 The result owns the full `ParsedCommand` and ordered `BashScopedCommand` records.
+Records follow list-item order, ordinal directory order within an item, and
+pipeline-stage order within a directory.
 Each record identifies the original occurrence, its exact source slice and
 offset, one reachable directory, and a fresh occurrence parsed in that directory.
 The fresh occurrence supplies its own argument, redirect, and tree-access path

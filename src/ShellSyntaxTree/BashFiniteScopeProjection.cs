@@ -24,7 +24,10 @@ public sealed record BashFiniteScopeProjection
     /// <summary>Gets the full authored parse that owns each source occurrence.</summary>
     public ParsedCommand Parsed { get; internal init; } = null!;
 
-    /// <summary>Gets one command for each reachable exact directory.</summary>
+    /// <summary>
+    /// Gets one command for each reachable exact directory, in list-item,
+    /// ordinal directory, then pipeline-stage order.
+    /// </summary>
     public IReadOnlyList<BashScopedCommand> Commands
     {
         get => _commands;
@@ -95,7 +98,7 @@ internal static class BashFiniteScopeAnalyzer
 
             var itemSuccess = new HashSet<string>(StringComparer.Ordinal);
             var itemFailure = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var directory in input)
+            foreach (var directory in input.OrderBy(value => value, StringComparer.Ordinal))
             {
                 ShellWorkingDirectoryEffect? effect = null;
                 foreach (var simple in commands)
