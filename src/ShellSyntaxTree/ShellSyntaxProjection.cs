@@ -22,6 +22,9 @@ internal sealed class CommandOccurrenceFacts
     internal IReadOnlyList<EffectiveArgumentFacts> AuthoredArguments { get; init; } =
         Array.Empty<EffectiveArgumentFacts>();
 
+    internal IReadOnlyList<ShellVariableAssignment> Assignments { get; init; } =
+        Array.Empty<ShellVariableAssignment>();
+
     internal bool PublishAuthoredPathShape { get; init; }
 
     internal ShellValueDomainFacts WorkingDirectory { get; init; } = ShellValueDomainFacts.Unknown;
@@ -667,6 +670,7 @@ internal static class ShellSyntaxProjection
                         nestedCollectionChildIndex,
                         nextDepth,
                         isAttachedExecutionRegion),
+                ShellAssignmentSyntax assignment => IsValidAssignment(assignment.Assignment),
                 _ => false,
             };
 
@@ -745,6 +749,7 @@ internal static class ShellSyntaxProjection
                     facts,
                     _language,
                     out var arguments,
+                    out var assignments,
                     out var workingDirectory,
                     out var workingDirectoryEffect,
                     out var redirects))
@@ -758,6 +763,7 @@ internal static class ShellSyntaxProjection
                 ImmediateRole = role,
                 Ancestry = _ancestry.ToArray(),
                 Arguments = arguments,
+                Assignments = assignments,
                 WorkingDirectory = workingDirectory,
                 WorkingDirectoryEffect = workingDirectoryEffect,
                 Redirects = redirects,
@@ -1017,28 +1023,33 @@ internal static class ShellSyntaxProjection
             CommandOccurrenceFacts facts,
             ShellProjectionLanguage language,
             out IReadOnlyList<AnalyzedArgument> arguments,
+            out IReadOnlyList<ShellVariableAssignment> assignments,
             out ShellValueDomain workingDirectory,
             out ShellWorkingDirectoryEffect workingDirectoryEffect,
             out IReadOnlyList<RedirectAnalysis> redirects)
         {
             arguments = Array.Empty<AnalyzedArgument>();
+            assignments = Array.Empty<ShellVariableAssignment>();
             workingDirectory = new ShellValueDomain.Unknown();
             workingDirectoryEffect = new ShellWorkingDirectoryEffect.Unknown();
             redirects = Array.Empty<RedirectAnalysis>();
             if (facts is null ||
                 facts.EffectiveArguments is null ||
                 facts.AuthoredArguments is null ||
+                facts.Assignments is null ||
                 facts.WorkingDirectory is null ||
                 facts.Redirects is null ||
                 facts.ValueProvenance is null ||
                 ContainsNull(facts.EffectiveArguments) ||
                 ContainsNull(facts.AuthoredArguments) ||
+                ContainsNull(facts.Assignments) ||
                 ContainsNull(facts.Redirects) ||
                 !IsValidValueDomain(facts.WorkingDirectory) ||
                 facts.WorkingDirectory.Kind is not (
                     ShellValueDomainKind.Unknown or ShellValueDomainKind.Exact) ||
                 !AreValidEffectiveArguments(clause, facts.EffectiveArguments) ||
                 !AreValidEffectiveArguments(clause, facts.AuthoredArguments) ||
+                !AreValidAssignments(facts.Assignments) ||
                 !AreValidRedirects(clause, facts.Redirects, facts.IsComplete) ||
                 facts.IsComplete &&
                 (clause.Verb.IsDynamic || clause.Verb.Tokens.Count == 0))
@@ -1047,6 +1058,7 @@ internal static class ShellSyntaxProjection
             }
 
             workingDirectory = ToPublicDomain(facts.WorkingDirectory);
+            assignments = facts.Assignments;
             workingDirectoryEffect = ToPublicEffect(
                 facts.WorkingDirectoryEffect,
                 language);
@@ -1061,6 +1073,33 @@ internal static class ShellSyntaxProjection
                     out arguments) &&
                 TryCreateRedirectAnalyses(clause, facts.Redirects, out redirects);
         }
+
+        private static bool AreValidAssignments(
+            IReadOnlyList<ShellVariableAssignment> assignments)
+        {
+            for (var index = 0; index < assignments.Count; index++)
+            {
+                var assignment = assignments[index];
+                if (string.IsNullOrEmpty(assignment.Name) ||
+                    assignment.SourceStart < 0 || assignment.SourceLength <= 0 ||
+                    assignment.Scope is not (
+                        ShellVariableAssignmentScope.ShellState or
+                        ShellVariableAssignmentScope.CommandEnvironment) ||
+                    assignment.Scope == ShellVariableAssignmentScope.CommandEnvironment &&
+                    !assignment.MayAffectProcessEnvironment ||
+                    assignment.AuthoredValue is not ShellValueDomain.Exact ||
+                    assignment.EffectiveValue is not ShellValueDomain.Exact)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsValidAssignment(ShellVariableAssignment? assignment) =>
+            assignment is not null &&
+            AreValidAssignments(new[] { assignment });
 
         private static bool IsValidClauseShape(Clause clause) =>
             Enum.IsDefined(typeof(CompoundOperator), clause.Operator) &&

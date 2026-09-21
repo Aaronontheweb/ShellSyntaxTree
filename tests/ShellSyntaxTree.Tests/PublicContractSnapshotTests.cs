@@ -107,6 +107,8 @@ public class PublicContractSnapshotTests
             (nameof(CommandOccurrence.Ancestry),
                 typeof(IReadOnlyList<CommandAncestryFrame>)),
             (nameof(CommandOccurrence.Arguments), typeof(IReadOnlyList<AnalyzedArgument>)),
+            (nameof(CommandOccurrence.Assignments),
+                typeof(IReadOnlyList<ShellVariableAssignment>)),
             (nameof(CommandOccurrence.FileSystemTreeAccesses),
                 typeof(IReadOnlyList<ShellFileSystemTreeAccess>)),
             (nameof(CommandOccurrence.WorkingDirectory), typeof(ShellValueDomain)),
@@ -133,11 +135,22 @@ public class PublicContractSnapshotTests
             (nameof(ShellFileSystemTreeAccess.RootArgument), typeof(AnalyzedArgument)),
             (nameof(ShellFileSystemTreeAccess.Root), typeof(ShellValueDomain)),
             (nameof(ShellFileSystemTreeAccess.Traversal), typeof(ShellTreeTraversalMode)));
+        AssertResultRecord(
+            typeof(ShellVariableAssignment),
+            (nameof(ShellVariableAssignment.Name), typeof(string)),
+            (nameof(ShellVariableAssignment.AuthoredValue), typeof(ShellValueDomain)),
+            (nameof(ShellVariableAssignment.EffectiveValue), typeof(ShellValueDomain)),
+            (nameof(ShellVariableAssignment.Scope), typeof(ShellVariableAssignmentScope)),
+            (nameof(ShellVariableAssignment.MayAffectProcessEnvironment), typeof(bool)),
+            (nameof(ShellVariableAssignment.SourceStart), typeof(int)),
+            (nameof(ShellVariableAssignment.SourceLength), typeof(int)));
 
         AssertEnum<ShellPathShape>("Unknown", "Posix", "Windows");
         AssertEnum<ShellTreeTraversalMode>(
             "Unknown", "DirectChildren", "RecursiveWithoutFollowingLinks",
             "RecursiveMayFollowLinks");
+        AssertEnum<ShellVariableAssignmentScope>(
+            "Unknown", "ShellState", "CommandEnvironment");
 
         AssertEnum<CommandOccurrenceRole>(
             "Unknown", "Ordinary", "PipelineStage", "Iterator", "LoopBody",
@@ -277,6 +290,8 @@ public class PublicContractSnapshotTests
         var ancestry = new[] { frame };
         var analyzed = new AnalyzedArgument();
         var arguments = new[] { analyzed };
+        var assignment = new ShellVariableAssignment();
+        var assignments = new[] { assignment };
         var access = new ShellFileSystemTreeAccess();
         var accesses = new[] { access };
         var redirect = new UnresolvedRedirectAnalysis();
@@ -285,15 +300,18 @@ public class PublicContractSnapshotTests
         {
             Ancestry = ancestry,
             Arguments = arguments,
+            Assignments = assignments,
             FileSystemTreeAccesses = accesses,
             Redirects = redirects,
         };
         ancestry[0] = new CommandAncestryFrame();
         arguments[0] = new AnalyzedArgument();
+        assignments[0] = new ShellVariableAssignment();
         accesses[0] = new ShellFileSystemTreeAccess();
         redirects[0] = new UnresolvedRedirectAnalysis();
         Assert.Same(frame, Assert.Single(occurrence.Ancestry));
         Assert.Same(analyzed, Assert.Single(occurrence.Arguments));
+        Assert.Same(assignment, Assert.Single(occurrence.Assignments));
         Assert.Same(access, Assert.Single(occurrence.FileSystemTreeAccesses));
         Assert.Same(redirect, Assert.Single(occurrence.Redirects));
 
@@ -331,6 +349,7 @@ public class PublicContractSnapshotTests
             commandList.Items,
             occurrence.Ancestry,
             occurrence.Arguments,
+            occurrence.Assignments,
             occurrence.FileSystemTreeAccesses,
             occurrence.Redirects,
             parsed.Commands,
@@ -434,6 +453,25 @@ public class PublicContractSnapshotTests
             "\"AuthoredNonFileSystemValue\"",
             JsonSerializer.Serialize(positive),
             StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Assignment_values_are_non_null_and_part_of_record_shape()
+    {
+        var strict = new ShellVariableAssignment();
+        var positive = strict with
+        {
+            Name = "mode",
+            AuthoredValue = new ShellValueDomain.Exact("fast"),
+            EffectiveValue = new ShellValueDomain.Exact("fast"),
+            Scope = ShellVariableAssignmentScope.ShellState,
+        };
+
+        Assert.IsType<ShellValueDomain.Unknown>(strict.AuthoredValue);
+        Assert.IsType<ShellValueDomain.Unknown>(strict.EffectiveValue);
+        Assert.NotEqual(strict, positive);
+        Assert.NotEqual(strict.GetHashCode(), positive.GetHashCode());
+        Assert.Contains("Name = mode", positive.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]

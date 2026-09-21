@@ -229,6 +229,7 @@ public class PublicApiSnapshotTests
     {
         Assert.Equal(0, (int)BashInitialStateMode.Unknown);
         Assert.Equal(1, (int)BashInitialStateMode.IsolatedNonInteractive);
+        Assert.Equal(2, (int)BashInitialStateMode.FreshNonInteractiveNoStartup);
     }
 
     // -------- PwshParserOptions --------
@@ -662,6 +663,8 @@ public class PublicApiSnapshotTests
             nameof(ShellSyntaxNode),
             nameof(ShellValueDomain),
             nameof(ShellTreeTraversalMode),
+            nameof(ShellVariableAssignment),
+            nameof(ShellVariableAssignmentScope),
             nameof(ShellWorkingDirectoryEffect),
             nameof(SimpleCommandSyntax),
             nameof(HereDocumentRedirectAnalysis),

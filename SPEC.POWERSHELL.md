@@ -1,14 +1,14 @@
-# ShellSyntaxTree — PowerShell Specification (through v0.3)
+# ShellSyntaxTree — PowerShell Specification (through v0.4 beta)
 
-**Status:** v0.2.0 shipped; the accepted v0.3 contract adds bounded PowerShell
-`foreach` structure plus shared command-occurrence and explicit redirect
-analysis.
+**Status:** v0.2.0 shipped; v0.3 adds bounded PowerShell `foreach` structure
+plus shared occurrence and redirect analysis. The v0.4 beta adds one bounded
+ordinary scalar assignment before one command.
 **Audience:** Whoever (human or agent) implements, consumes, or maintains the
 ShellSyntaxTree PowerShell parser.
 **Read `SPEC.md` (the bash and shared-contract specification) end-to-end
 first — this document specifies only what differs for PowerShell.**
 
-This document specifies the PowerShell parser through ShellSyntaxTree v0.3:
+This document specifies the PowerShell parser through the v0.4 beta:
 its grammar, tokenization, cmdlet/verb tables, alias resolution, resolver
 semantics, bounded control-flow analysis, and corpus contract. PowerShell
 reuses the shared public API defined in `SPEC.md` §2–§3.
@@ -93,6 +93,10 @@ authored region contains no nested command. It does not evaluate the
 expression, predict its value, or claim that runtime conversion is
 side-effect-free. Every dynamic operand and every other unsupported expression
 still fails closed.
+
+The v0.4 beta also accepts one ordinary unscoped scalar assignment as the first
+statement under `IsolatedNonInteractiveNoProfile`. Exactly one ordinary simple
+command must follow. Section 4 defines the full fail-closed boundary.
 
 ---
 
@@ -372,6 +376,18 @@ quoted_string    := single_quoted | double_quoted
                     // backtick-escaped spellings do not
 ```
 
+The v0.4 beta adds this separate bounded form:
+
+```text
+bounded_assignment_command := ordinary_assignment statement_terminator static_invocation
+ordinary_assignment        := "$" ascii_identifier "=" single_quoted
+```
+
+The assignment must be the first statement. Exactly one command follows it.
+The command cannot contain a redirect, substitution, execution region, call
+operator, dot source, group, pipeline, or conditional operator. The parser
+rejects all other assignment forms.
+
 **Notes:**
 
 - Whitespace between tokens is one or more spaces or tabs.
@@ -428,8 +444,9 @@ quoted_string    := single_quoted | double_quoted
   a non-executing literal form may remain an opaque value.
 - Under v0.2, control-flow keywords fall outside the grammar. Stable v0.3 owns
   only the contextual statement forms below. Definition keywords, unsupported
-  block keywords, `param()`, assignment statements, bare `[type]::member`
-  calls, and bare arithmetic at statement position remain unparseable (§11).
+  block keywords, `param()`, assignments outside the bounded v0.4 beta form,
+  bare `[type]::member` calls, and bare arithmetic at statement position remain
+  unparseable (§11).
 
 ### v0.3 structured PowerShell grammar
 
@@ -499,6 +516,16 @@ special names are visible in the submitted source and can change host behavior.
 Typed and validated ambient bindings are the reason default-mode effective
 values stay `Unknown`; the parser never reports authored text as a proved
 runtime value when coercion or rejection is possible.
+
+The bounded assignment form uses the same eligible binding-name catalog. Its
+right-hand side is one single-quoted scalar string. The parser publishes a
+`ShellVariableAssignment` with `Scope=ShellState`, exact authored and effective
+values, and `MayAffectProcessEnvironment=false`. The assignment is the first
+statement, and exactly one ordinary simple command follows. This limit prevents
+an earlier command from creating a typed, validated, read-only, or constant
+binding. It also prevents an intervening command from changing the value before
+another occurrence uses it. `PwshInitialStateMode.Unknown` keeps all assignment
+statements unparseable.
 
 Parenthesized groups, `$()`, and static `Invoke-Expression` execute in the
 current runspace and share supported authored binding and location state.
@@ -1732,7 +1759,7 @@ in **`SPEC.md` §11**.
 (1) input over the size cap, checked before lexing; (2) lexer
 `UnparseableSentinel` tokens; (3) a control-flow / definition / block keyword
 at statement position; (4) a trailing `&` background job; (5) an assignment
-or bare type-literal statement; (6) grouping `( )` balance errors or an
+outside the bounded v0.4 form or a bare type-literal statement; (6) grouping `( )` balance errors or an
 unexpected operator; (7) a command-string binding failure or recursion cap,
 an inner-parse `IsUnparseable`, or an `-EncodedCommand` decode failure.
 

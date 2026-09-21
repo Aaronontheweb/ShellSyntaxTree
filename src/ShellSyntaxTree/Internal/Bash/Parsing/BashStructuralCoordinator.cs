@@ -160,6 +160,18 @@ internal static partial class BashCommandParser
 
     private sealed class StructuralCoordinator
     {
+        private static readonly HashSet<string> BashBuiltins = new(StringComparer.Ordinal)
+        {
+            ".", ":", "[", "alias", "bg", "bind", "break", "builtin", "caller",
+            "cd", "command", "compgen", "complete", "compopt", "continue", "declare",
+            "dirs", "disown", "echo", "enable", "eval", "exec", "exit", "export",
+            "false", "fc", "fg", "getopts", "hash", "help", "history", "jobs", "kill",
+            "let", "local", "logout", "mapfile", "popd", "printf", "pushd", "pwd",
+            "read", "readarray", "readonly", "return", "set", "shift", "shopt",
+            "source", "suspend", "test", "times", "trap", "true", "type", "typeset",
+            "ulimit", "umask", "unalias", "unset", "wait",
+        };
+
         private readonly string _source;
         private readonly IReadOnlyList<BashToken> _tokens;
         private readonly BashParserOptions _options;
@@ -179,6 +191,7 @@ internal static partial class BashCommandParser
         private int _loopDepth;
         private bool _hasUnmodeledShellStateMutation;
         private bool _hasUnmodeledVariableStateMutation;
+        private string? _boundedAssignmentName;
 
         internal StructuralCoordinator(
             string source,
@@ -365,6 +378,11 @@ internal static partial class BashCommandParser
                 });
             }
 
+            if (!ValidateBoundedAssignmentList(items, out error))
+            {
+                return false;
+            }
+
             if (items.Count == 1)
             {
                 command = first;
@@ -400,6 +418,12 @@ internal static partial class BashCommandParser
             var stages = new List<ShellSyntaxNode> { first! };
             while (IsOperator("|"))
             {
+                if (stages[stages.Count - 1] is ShellAssignmentSyntax)
+                {
+                    error = "bounded Bash assignments are not supported in pipelines";
+                    return false;
+                }
+
                 _position++;
                 SkipNewlines();
                 if (_position == _tokens.Count || IsOperator(")"))
@@ -416,6 +440,25 @@ internal static partial class BashCommandParser
                 stages.Add(stage!);
             }
 
+            if (stages.Count > 1 && stages[stages.Count - 1] is ShellAssignmentSyntax)
+            {
+                error = "bounded Bash assignments are not supported in pipelines";
+                return false;
+            }
+
+            if (stages.Count > 1)
+            {
+                foreach (var stage in stages)
+                {
+                    if (stage is SimpleCommandSyntax
+                        { EnvironmentAssignments.Count: > 0 })
+                    {
+                        error = "Bash assignment prefixes are not supported in pipelines";
+                        return false;
+                    }
+                }
+            }
+
             if (stages.Count == 1)
             {
                 command = first;
@@ -428,6 +471,65 @@ internal static partial class BashCommandParser
                 SourceStart = CombinedStart(stages),
                 SourceLength = CombinedLength(stages),
             };
+            error = null;
+            return true;
+        }
+
+        private static bool ValidateBoundedAssignmentList(
+            IReadOnlyList<CommandListItemSyntax> items,
+            out string? error)
+        {
+            var assignmentIndex = -1;
+            for (var index = 0; index < items.Count; index++)
+            {
+                if (items[index].Command is SimpleCommandSyntax
+                        { EnvironmentAssignments.Count: > 0 } &&
+                    (items[index].Operator is CompoundOperator.AndIf or
+                        CompoundOperator.OrIf ||
+                     index + 1 < items.Count &&
+                        items[index + 1].Operator is CompoundOperator.AndIf or
+                            CompoundOperator.OrIf))
+                {
+                    error = "Bash assignment prefixes are not supported in conditional lists";
+                    return false;
+                }
+
+                if (items[index].Command is not ShellAssignmentSyntax)
+                {
+                    continue;
+                }
+
+                if (assignmentIndex >= 0)
+                {
+                    error = "multiple Bash assignments are not supported";
+                    return false;
+                }
+
+                assignmentIndex = index;
+                if (items[index].Operator is not (
+                        CompoundOperator.None or CompoundOperator.Sequence) ||
+                    index + 1 >= items.Count ||
+                    items[index + 1].Operator != CompoundOperator.Sequence)
+                {
+                    error = "bounded Bash assignment state requires a following sequence command";
+                    return false;
+                }
+            }
+
+            if (assignmentIndex >= 0)
+            {
+                for (var index = assignmentIndex + 1; index < items.Count; index++)
+                {
+                    if (items[index].Operator != CompoundOperator.Sequence ||
+                        items[index].Command is not SimpleCommandSyntax simple ||
+                        simple.Substitutions.Count > 0 || IsBuiltin(simple.Clause))
+                    {
+                        error = "bounded Bash assignment state requires ordinary external sequence commands";
+                        return false;
+                    }
+                }
+            }
+
             error = null;
             return true;
         }
@@ -484,11 +586,59 @@ internal static partial class BashCommandParser
                 PrecedingOperator = compatibilityOperator,
                 Tokens = segmentTokens,
             };
+            var segmentSourceStart = segmentTokens[0].SourceStart;
+            ShellVariableAssignment? assignment = null;
 
             if (HasAssignmentPrefix(segmentTokens))
             {
-                error = "Bash assignment-prefix commands are not supported";
-                return false;
+                if (!TryCreateBoundedAssignment(
+                        segmentTokens[0],
+                        segmentTokens.Count == 1
+                            ? ShellVariableAssignmentScope.ShellState
+                            : ShellVariableAssignmentScope.CommandEnvironment,
+                        out assignment,
+                        out error))
+                {
+                    return false;
+                }
+
+                if (_bashCDepth > 0 || _structuralDepth > 0 ||
+                    _subshellDepth > 0 || _loopDepth > 0)
+                {
+                    error = "bounded Bash assignments require a top-level source";
+                    return false;
+                }
+
+                if (segmentTokens.Count == 1)
+                {
+                    _boundedAssignmentName = assignment!.Name;
+                    command = new ShellAssignmentSyntax
+                    {
+                        Assignment = assignment!,
+                        SourceStart = segmentTokens[0].SourceStart,
+                        SourceLength = segmentTokens[0].SourceLength,
+                    };
+                    return true;
+                }
+
+                if (segmentTokens[1].Kind == BashTokenKind.Operator)
+                {
+                    error = "redirects on assignment-only Bash statements are not supported";
+                    return false;
+                }
+
+                if (HasAssignmentPrefix(segmentTokens.GetRange(1, segmentTokens.Count - 1)))
+                {
+                    error = "multiple Bash assignments are not supported";
+                    return false;
+                }
+
+                segmentTokens.RemoveAt(0);
+                segment = new Segment
+                {
+                    PrecedingOperator = compatibilityOperator,
+                    Tokens = segmentTokens,
+                };
             }
 
             if (!TryCollectCommandSubstitutions(
@@ -502,6 +652,12 @@ internal static partial class BashCommandParser
 
             if (TryDetectBashCWrapper(segment, _source, out var innerCommand))
             {
+                if (assignment is not null)
+                {
+                    error = "a Bash assignment prefix on a decoded shell wrapper is not supported";
+                    return false;
+                }
+
                 if (!IsExactStaticWrapper(segmentTokens))
                 {
                     error = "bash -c wrapper has unsupported trailing arguments or redirects";
@@ -610,6 +766,11 @@ internal static partial class BashCommandParser
                 IsCommandStringWrapped = _markBashCWrapped,
             };
             var emitted = AttachAttributionArg(clause, _attribution);
+            if (assignment is not null && IsBuiltin(emitted))
+            {
+                error = "a Bash assignment prefix before a builtin is not supported";
+                return false;
+            }
             var executionBoundary =
                 BashCwdInvocationGrammar.ClassifyExecutionBoundary(emitted);
             if (executionBoundary == BashExecutionBoundaryKind.ExecutionBearingBuiltin)
@@ -640,7 +801,8 @@ internal static partial class BashCommandParser
             if (ContainsNamedParameterExpansion(segmentTokens) &&
                 (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive ||
                  _hasUnmodeledVariableStateMutation) &&
-                !CanPublishActiveLoopBindingFacts(segmentTokens))
+                !CanPublishActiveLoopBindingFacts(segmentTokens) &&
+                !CanPublishBoundedAssignmentFacts(segmentTokens))
             {
                 error = "Bash named parameter expansion requires proved variable-attribute state";
                 return false;
@@ -694,8 +856,11 @@ internal static partial class BashCommandParser
             {
                 Clause = emitted,
                 Substitutions = substitutions,
-                SourceStart = firstSource.SourceStart,
-                SourceLength = sourceEnd - firstSource.SourceStart,
+                EnvironmentAssignments = assignment is null
+                    ? Array.Empty<ShellVariableAssignment>()
+                    : new[] { assignment },
+                SourceStart = segmentSourceStart,
+                SourceLength = sourceEnd - segmentSourceStart,
             };
             RegisterFacts(
                 simple,
@@ -1222,6 +1387,111 @@ internal static partial class BashCommandParser
 
             return index < spelling.Length && spelling[index] == '=';
         }
+
+        private bool TryCreateBoundedAssignment(
+            BashToken token,
+            ShellVariableAssignmentScope scope,
+            out ShellVariableAssignment? assignment,
+            out string? error)
+        {
+            assignment = null;
+            if (_hasUnmodeledShellStateMutation || _hasUnmodeledVariableStateMutation)
+            {
+                error = "bounded Bash assignments cannot follow an unmodeled state mutation";
+                return false;
+            }
+
+            if (_options.InitialStateMode !=
+                BashInitialStateMode.FreshNonInteractiveNoStartup)
+            {
+                error = "Bash assignment-prefix commands are not supported without fresh non-interactive state";
+                return false;
+            }
+
+            var spelling = _source.Substring(token.SourceStart, token.SourceLength)
+                .Replace("\\\r\n", string.Empty)
+                .Replace("\\\n", string.Empty)
+                .Replace("\\\r", string.Empty);
+            var equals = spelling.IndexOf('=');
+            var name = equals > 0 ? spelling.Substring(0, equals) : string.Empty;
+            if (scope == ShellVariableAssignmentScope.ShellState
+                    ? !IsSupportedScalarBinding(name)
+                    : !BashVariableAssignmentGrammar.IsEligibleCommandEnvironmentName(name))
+            {
+                error = "bounded Bash assignment names must use the ordinary scalar boundary";
+                return false;
+            }
+
+            if (!IsExactStaticAssignmentValue(spelling.Substring(equals + 1)))
+            {
+                error = "bounded Bash assignment values must exclude shell-native expansion syntax";
+                return false;
+            }
+
+            if (token.ResolverValue is not ShellValue value ||
+                !string.Equals(
+                    value.Decoded.Substring(0, Math.Min(value.Decoded.Length, name.Length + 1)),
+                    name + "=",
+                    StringComparison.Ordinal) ||
+                !HasOnlyLiteralFragments(value))
+            {
+                error = "bounded Bash assignment values must be exact static scalars";
+                return false;
+            }
+
+            var decoded = value.Decoded.Substring(name.Length + 1);
+            var exact = new ShellValueDomain.Exact(decoded);
+            assignment = new ShellVariableAssignment
+            {
+                Name = name,
+                AuthoredValue = exact,
+                EffectiveValue = exact,
+                Scope = scope,
+                MayAffectProcessEnvironment = true,
+                SourceStart = token.SourceStart,
+                SourceLength = token.SourceLength,
+            };
+            error = null;
+            return true;
+        }
+
+        private static bool IsExactStaticAssignmentValue(string value)
+        {
+            if (value.Length >= 2 && value[0] == '\'' && value[value.Length - 1] == '\'')
+            {
+                return value.IndexOf('\'', 1) == value.Length - 1;
+            }
+
+            foreach (var character in value)
+            {
+                if (!IsExactUnquotedAssignmentCharacter(character))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsExactUnquotedAssignmentCharacter(char value) =>
+            value is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or >= '0' and <= '9' ||
+            value is '_' or '.' or '/' or ',' or ':' or '+' or '-' or '@' or '%' or '=';
+
+        private static bool HasOnlyLiteralFragments(ShellValue value)
+        {
+            foreach (var fragment in value.Fragments)
+            {
+                if (fragment.Kind != ShellValueFragmentKind.Literal)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool IsBuiltin(Clause clause) =>
+            clause.Verb.Tokens.Count > 0 && BashBuiltins.Contains(clause.Verb.Tokens[0]);
 
         private static bool IsBashIdentifierStart(char value) =>
             value == '_' || value is >= 'A' and <= 'Z' or >= 'a' and <= 'z';
@@ -1760,6 +2030,50 @@ internal static partial class BashCommandParser
                         }
 
                         if (!_activeLoopBindings.Contains(name))
+                        {
+                            return false;
+                        }
+
+                        sawBinding = true;
+                    }
+                }
+            }
+
+            return sawBinding;
+        }
+
+        private bool CanPublishBoundedAssignmentFacts(IReadOnlyList<BashToken> tokens)
+        {
+            if (_options.InitialStateMode !=
+                    BashInitialStateMode.FreshNonInteractiveNoStartup ||
+                _hasUnmodeledVariableStateMutation || _boundedAssignmentName is null)
+            {
+                return false;
+            }
+
+            var sawBinding = false;
+            foreach (var token in tokens)
+            {
+                foreach (var value in new[] { token.ResolverValue, token.HeredocBodyValue })
+                {
+                    if (value is null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var fragment in value.Fragments)
+                    {
+                        if (fragment.Kind != ShellValueFragmentKind.Expansion ||
+                            fragment.Expansion is not
+                            { Kind: ShellExpansionKind.Variable, Name: { } name })
+                        {
+                            continue;
+                        }
+
+                        if (!string.Equals(
+                                name,
+                                _boundedAssignmentName,
+                                StringComparison.Ordinal))
                         {
                             return false;
                         }

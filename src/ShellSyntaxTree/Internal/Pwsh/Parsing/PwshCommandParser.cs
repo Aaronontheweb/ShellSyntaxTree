@@ -92,7 +92,7 @@ internal static partial class PwshCommandParser
             return new ParsedCommand { Source = source, Clauses = Array.Empty<Clause>() };
         }
 
-        if (TryDetectAnomaly(significant, options.Dialect, out var anomalyReason))
+        if (TryDetectAnomaly(significant, options, out var anomalyReason))
         {
             return Unparseable(source, anomalyReason);
         }
@@ -149,7 +149,9 @@ internal static partial class PwshCommandParser
             if (filtered.Count > 0
                 && IsNativeArgumentFragment(filtered[filtered.Count - 1])
                 && IsNativeArgumentFragment(t)
-                && IsAdjacent(filtered[filtered.Count - 1], t))
+                && IsAdjacent(filtered[filtered.Count - 1], t)
+                && !PwshVariableAssignmentGrammar.TryReadTarget(
+                    filtered[filtered.Count - 1], out _))
             {
                 var previous = filtered[filtered.Count - 1];
                 var previousValue = previous.ResolverValue
@@ -184,9 +186,10 @@ internal static partial class PwshCommandParser
 
     private static bool TryDetectAnomaly(
         IReadOnlyList<PwshToken> tokens,
-        PwshDialect dialect,
+        PwshParserOptions options,
         out string? reason)
     {
+        var dialect = options.Dialect;
         if (dialect == PwshDialect.WindowsPowerShell51 &&
             ContainsPipelineChainOperator(tokens))
         {
@@ -212,7 +215,7 @@ internal static partial class PwshCommandParser
         }
 
         // Item 5: an assignment or bare type-literal statement.
-        if (TryDetectAssignmentOrTypeLiteral(tokens, out reason))
+        if (TryDetectAssignmentOrTypeLiteral(tokens, options.InitialStateMode, out reason))
         {
             return true;
         }
@@ -220,6 +223,19 @@ internal static partial class PwshCommandParser
         reason = null;
         return false;
     }
+
+    private static bool TryDetectAnomaly(
+        IReadOnlyList<PwshToken> tokens,
+        PwshDialect dialect,
+        out string? reason) =>
+        TryDetectAnomaly(
+            tokens,
+            new PwshParserOptions
+            {
+                Dialect = dialect,
+                InitialStateMode = PwshInitialStateMode.Unknown,
+            },
+            out reason);
 
     private static bool TryDetectUnsupportedInvocationShape(
         IReadOnlyList<PwshToken> tokens,
@@ -394,7 +410,9 @@ internal static partial class PwshCommandParser
     }
 
     private static bool TryDetectAssignmentOrTypeLiteral(
-        IReadOnlyList<PwshToken> tokens, out string? reason)
+        IReadOnlyList<PwshToken> tokens,
+        PwshInitialStateMode initialStateMode,
+        out string? reason)
     {
         var verbSlot = true;
         for (var i = 0; i < tokens.Count; i++)
@@ -412,10 +430,10 @@ internal static partial class PwshCommandParser
                 continue;
             }
 
-            if (verbSlot && t.Kind == PwshTokenKind.Word)
+            if (t.Kind == PwshTokenKind.Word)
             {
                 var v = t.Value;
-                if (v.Length > 0 && v[0] == '[')
+                if (verbSlot && v.Length > 0 && v[0] == '[')
                 {
                     reason = "a bare type-literal / .NET method-call statement is not supported in v0.2";
                     return true;
@@ -424,6 +442,21 @@ internal static partial class PwshCommandParser
                 if (v.Length > 0 && v[0] == '$'
                     && (v.IndexOf('=') > 0 || NextIsAssignmentOperator(tokens, i)))
                 {
+                    if (verbSlot && initialStateMode ==
+                            PwshInitialStateMode.IsolatedNonInteractiveNoProfile &&
+                        PwshVariableAssignmentGrammar.TryRead(
+                            tokens,
+                            i,
+                            out _,
+                            out _,
+                            out var tokenCount) &&
+                        IsStatementEnd(tokens, i + tokenCount))
+                    {
+                        i += tokenCount - 1;
+                        verbSlot = false;
+                        continue;
+                    }
+
                     reason = "an assignment statement is not supported in v0.2";
                     return true;
                 }
@@ -435,6 +468,15 @@ internal static partial class PwshCommandParser
         reason = null;
         return false;
     }
+
+    private static bool IsStatementEnd(
+        IReadOnlyList<PwshToken> tokens,
+        int index) =>
+        index == tokens.Count ||
+        tokens[index].Kind == PwshTokenKind.Whitespace &&
+        tokens[index].IsStatementSeparator ||
+        tokens[index].Kind == PwshTokenKind.Operator &&
+        tokens[index].OperatorText is ";" or "&&" or "||" or "|";
 
     private static bool NextSignificantIsOpenParen(IReadOnlyList<PwshToken> tokens, int i)
     {

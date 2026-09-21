@@ -28,6 +28,7 @@ public abstract record ShellSyntaxNode
         ForEachSyntax => ShellSyntaxKind.ForEach,
         CommandSubstitutionSyntax => ShellSyntaxKind.CommandSubstitution,
         ExecutionRegionSyntax => ShellSyntaxKind.ExecutionRegion,
+        ShellAssignmentSyntax => ShellSyntaxKind.Assignment,
         _ => ShellSyntaxKind.Unknown,
     };
 
@@ -47,6 +48,7 @@ internal enum ShellSyntaxKind
     ForEach,
     CommandSubstitution,
     ExecutionRegion,
+    Assignment,
 }
 
 /// <summary>An ordered block of authored statements.</summary>
@@ -74,6 +76,8 @@ public sealed record SimpleCommandSyntax : ShellSyntaxNode
         Array.Empty<CommandSubstitutionSyntax>();
     private IReadOnlyList<ExecutionRegionSyntax> _executionRegions =
         Array.Empty<ExecutionRegionSyntax>();
+    private IReadOnlyList<ShellVariableAssignment> _environmentAssignments =
+        Array.Empty<ShellVariableAssignment>();
 
     internal SimpleCommandSyntax()
     {
@@ -94,6 +98,23 @@ public sealed record SimpleCommandSyntax : ShellSyntaxNode
         get => _executionRegions;
         internal init => _executionRegions = PublicCollection.Copy(value);
     }
+
+    internal IReadOnlyList<ShellVariableAssignment> EnvironmentAssignments
+    {
+        get => _environmentAssignments;
+        init => _environmentAssignments = PublicCollection.Copy(value);
+    }
+}
+
+internal sealed record ShellAssignmentSyntax : ShellSyntaxNode
+{
+    internal ShellAssignmentSyntax()
+    {
+    }
+
+    private protected override object LibraryOwnership => this;
+
+    internal ShellVariableAssignment Assignment { get; init; } = null!;
 }
 
 /// <summary>An ordered pipeline.</summary>

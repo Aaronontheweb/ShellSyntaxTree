@@ -131,6 +131,7 @@ public enum BashInitialStateMode
 {
     Unknown,
     IsolatedNonInteractive,
+    FreshNonInteractiveNoStartup,
 }
 
 /// <summary>Configuration knobs for BashParser. As of v0.2.0 a sealed
@@ -220,6 +221,8 @@ public enum ExecutionRegionCardinality { ... }
 
 // v0.3 authorization and bounded-analysis projections — see §3.
 public sealed record CommandOccurrence { ... }
+public sealed record ShellVariableAssignment { ... }
+public enum ShellVariableAssignmentScope { ... }
 public sealed record CommandAncestryFrame { ... }
 public sealed record AnalyzedArgument { ... }
 public abstract record ShellValueDomain { ... }
@@ -257,6 +260,8 @@ since v0.2 is parser-owned; its constructor and result setters are not public.
 The stable v0.2 constructors and setters are unchanged.
 The finite Bash scope method and result records target `0.4.0-beta.3`.
 They add no authority rule and do not change an existing occurrence.
+The assignment records and the fresh-process initial-state mode target
+`0.4.0-beta.4`. They expose parser facts only and grant no authority.
 
 That's the entire public API. **Everything else is internal.** The lexer,
 parser internals, verb tables, resolver — all implementation detail.
@@ -348,6 +353,23 @@ name. A consumer may select this mode only when its execution path enforces
 those conditions. Supplying this option while executing in a reused,
 interactive, startup-scripted, or uncontrolled environment invalidates the
 analysis.
+
+`BashInitialStateMode.FreshNonInteractiveNoStartup` is the v0.4 assignment
+contract. The caller starts a new non-interactive Bash process, disables profile
+and rc files, removes `BASH_ENV`, `ENV`, `SHELLOPTS`, `BASHOPTS`, `CDPATH`,
+`GLOBIGNORE`, `IFS`, `POSIXLY_CORRECT`, and `BASH_COMPAT`, and removes inherited
+`BASH_FUNC_*`, `LD_*`, and `DYLD_*` entries plus `LIBPATH` and `SHLIB_PATH`.
+Ordinary inherited environment entries may remain
+because a new Bash process imports them as exported scalar strings. This mode
+also requires a controlled Bash option baseline. The caller supplies no `-x`,
+`-v`, `--posix`, or other behavior-changing option flag and does not reuse
+caller-enabled shell options. This requirement prevents prompt variables such
+as inherited `PS4` from executing hidden substitution text through xtrace.
+The mode does not prove executable lookup or grant authority. A consumer that
+does not enforce every process boundary above must use `Unknown`. The special
+variable catalog covers supported GNU Bash 5.2 and 5.3 releases. A caller on a
+later Bash release must use `Unknown` until that release receives catalog and
+oracle review.
 
 Recognized variable-state mutation in the analyzed source invalidates isolated
 mode for every later region that can observe it. In particular, a decoded
@@ -646,6 +668,8 @@ public sealed record CommandOccurrence
     public CommandOccurrenceRole ImmediateRole { get; internal init; }
     public IReadOnlyList<CommandAncestryFrame> Ancestry { get; internal init; } = [];
     public IReadOnlyList<AnalyzedArgument> Arguments { get; internal init; } = [];
+    public IReadOnlyList<ShellVariableAssignment> Assignments
+        { get; internal init; } = [];
     public IReadOnlyList<ShellFileSystemTreeAccess> FileSystemTreeAccesses
         { get; internal init; } = [];
     public ShellValueDomain WorkingDirectory { get; internal init; } = null!;
@@ -654,6 +678,81 @@ public sealed record CommandOccurrence
     public IReadOnlyList<RedirectAnalysis> Redirects { get; internal init; } = [];
     public bool IsComplete { get; internal init; }
 }
+
+public sealed record ShellVariableAssignment
+{
+    internal ShellVariableAssignment() { }
+    public string Name { get; internal init; } = "";
+    public ShellValueDomain AuthoredValue { get; internal init; } = null!;
+    public ShellValueDomain EffectiveValue { get; internal init; } = null!;
+    public ShellVariableAssignmentScope Scope { get; internal init; }
+    public bool MayAffectProcessEnvironment { get; internal init; }
+    public int SourceStart { get; internal init; }
+    public int SourceLength { get; internal init; }
+}
+
+public enum ShellVariableAssignmentScope
+{
+    Unknown,
+    ShellState,
+    CommandEnvironment,
+}
+
+Every occurrence carries each accepted shell-state assignment that can affect
+it, followed by its direct command-environment prefix when present. The
+authored value describes the exact decoded right-hand side. The effective value
+is exact only under the matching shell-specific initial-state contract. A Bash
+`ShellState` fact sets `MayAffectProcessEnvironment=true` because an ordinary
+inherited variable retains its export attribute after assignment. A PowerShell
+ordinary variable assignment sets it to false. A `CommandEnvironment` fact
+sets it to true because the prefix supplies the value to that command. All
+names remain visible because any executable can interpret an environment
+entry. These parser facts do not grant authority.
+
+The bounded Bash slice accepts one exact lowercase ordinary shell-state name.
+An assignment-only statement can precede later commands through `;` or a
+newline. One direct assignment prefix can precede a non-builtin external
+command. The prefix name can use uppercase letters when it does not match a
+shell-owned, command-resolution, startup, or loader name. The parser rejects
+multiple assignments, dynamic values, substitutions, arrays, `+=`, redirects
+on assignment-only statements, pipelines, subshells, condition operators, and
+all builtin prefixes. It also rejects assignment after unmodeled shell-state
+or variable-state mutation. Shell-sensitive names include `_`, `PATH`,
+`BASH_ENV`, `ENV`, `SHELLOPTS`, `BASHOPTS`, `CDPATH`, `GLOBIGNORE`, `IFS`,
+loader-variable families, imported-function spellings, exact Bash special
+names, and guarded `BASH*`, `COMP*`, `HIST*`, `READLINE_*`, `LC_*`, `PROMPT*`,
+and `PS` plus digits families.
+
+An accepted Bash right-hand side is one complete single-quoted scalar or an
+unquoted ASCII scalar from the parser's fixed safe character set. The parser
+rejects tilde expansion, ANSI-C `$'...'` quotes, locale `$"..."` quotes,
+joined quote forms, parameter and arithmetic expansion, command and process
+substitution, backticks, escapes, braces, and glob syntax. It never publishes
+the authored spelling as an effective value when Bash can transform it.
+
+For example, `root=/work/tree; inspect "$root/file"` publishes `root` as an
+exact shell-state assignment and resolves the later argument only under the
+fresh-process mode. `MODE=fast inspect item` publishes one command-environment
+assignment on `inspect`. By contrast, `PATH=/other inspect item`,
+`root=$(discover); inspect "$root/file"`, and `root=/work > marker` are
+unparseable and publish no commands.
+
+The bounded PowerShell slice requires
+`PwshInitialStateMode.IsolatedNonInteractiveNoProfile`. It accepts one ordinary
+unscoped ASCII scalar name with one single-quoted string value. The assignment
+must be the first statement, and exactly one ordinary simple command must
+follow through `;` or a newline. The command receives one `ShellState` fact,
+and later argument expansion can use the exact value. PowerShell has no Bash
+command-environment prefix.
+
+For example, `$root='C:/work/tree'; Get-Item "$root/file"` publishes `root`
+and resolves the command argument. The parser rejects unknown initial state,
+reserved names, provider or scoped targets, typed, member, or indexed targets,
+arrays, hash tables, compound assignment, expandable right-hand sides,
+subexpressions, redirects, pipelines, groups, call operators, dot source,
+script blocks, prior commands, multiple assignments, and additional following
+commands. These limits prevent an unproved command from changing a typed,
+constant, read-only, validated, or ordinary variable before a later expansion.
 
 public abstract record ShellWorkingDirectoryEffect
 {
@@ -1726,7 +1825,7 @@ quoted_string   := single-quoted | double-quoted
   NOT path-resolved. The parser carries the raw token (e.g. `&1`) on
   `Redirect.Target` and sets `Redirect.IsDynamicSkip = true`. This
   prevents `2>&1` from being incorrectly resolved to `<cwd>/&1`.
-- Function definitions, assignment-prefix commands, `while` / `until`, `if` /
+- Function definitions, assignments outside the bounded v0.4 slice, `while` / `until`, `if` /
   `elif` / `else`, `case`/`esac`, C-style or implicit loops, arithmetic
   execution, process substitution, and single-`&` background lists remain
   unparseable in stable v0.3 because they can hide executable regions outside

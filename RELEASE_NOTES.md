@@ -1,3 +1,22 @@
+#### 0.4.0-beta.4 2026-09-21 ####
+
+This prerelease publishes bounded assignment facts for simple Bash and PowerShell commands.
+
+## Added
+
+- Add exact `ShellVariableAssignment` facts to each affected command occurrence.
+- Distinguish persistent shell state from one-command Bash environment prefixes.
+- Add a fresh Bash process mode with an explicit startup and option baseline.
+- Add one isolated PowerShell scalar assignment before one ordinary command.
+
+## Security and compatibility
+
+- Keep unknown state, dynamic values, substitutions, arrays, redirects, pipelines, groups, and unsupported scopes fail closed.
+- Reject Bash tilde, ANSI-C quote, locale quote, joined quote, and other shell-native value expansions.
+- Reject Bash builtins, shell-owned names, lookup variables, startup variables, loader variables, and future special-name families for prefixes.
+- Require the PowerShell assignment as the first statement and exactly one ordinary command after it.
+- Expose every accepted assignment to the consumer. The new facts grant no authority.
+
 #### 0.4.0-beta.3 2026-09-17 ####
 
 This prerelease adds bounded Bash directory facts for complete static compounds.

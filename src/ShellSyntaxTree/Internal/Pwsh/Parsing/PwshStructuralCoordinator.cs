@@ -630,6 +630,11 @@ internal static partial class PwshCommandParser
                 });
             }
 
+            if (!ValidateBoundedAssignmentList(items, out error))
+            {
+                return false;
+            }
+
             if (items.Count == 1)
             {
                 command = first;
@@ -651,6 +656,85 @@ internal static partial class PwshCommandParser
             return true;
         }
 
+        private bool ValidateBoundedAssignmentList(
+            IReadOnlyList<CommandListItemSyntax> items,
+            out string? error)
+        {
+            var assignmentIndex = -1;
+            for (var index = 0; index < items.Count; index++)
+            {
+                if (items[index].Command is not ShellAssignmentSyntax)
+                {
+                    continue;
+                }
+
+                if (assignmentIndex >= 0)
+                {
+                    error = "multiple PowerShell assignments are not supported";
+                    return false;
+                }
+
+                assignmentIndex = index;
+                if (items[index].Operator is not (
+                        CompoundOperator.None or CompoundOperator.Sequence) ||
+                    index + 1 >= items.Count ||
+                    items[index + 1].Operator != CompoundOperator.Sequence)
+                {
+                    error = "bounded PowerShell assignment state requires a following sequence command";
+                    return false;
+                }
+            }
+
+            if (assignmentIndex < 0)
+            {
+                error = null;
+                return true;
+            }
+
+            if (assignmentIndex != 0 || items.Count != 2)
+            {
+                error = "bounded PowerShell assignment state supports one following command";
+                return false;
+            }
+
+            for (var index = 0; index < items.Count; index++)
+            {
+                if (items[index].Operator is not (
+                        CompoundOperator.None or CompoundOperator.Sequence))
+                {
+                    error = "bounded PowerShell assignments require a top-level statement sequence";
+                    return false;
+                }
+
+                if (items[index].Command is ShellAssignmentSyntax)
+                {
+                    continue;
+                }
+
+                if (items[index].Command is not SimpleCommandSyntax simple ||
+                    simple.Substitutions.Count > 0 ||
+                    simple.ExecutionRegions.Count > 0 ||
+                    simple.Clause.Redirects.Count > 0 ||
+                    simple.Clause.Verb.IsDynamic ||
+                    StartsWithCallOperator(simple) ||
+                    IsDotSource(simple.Clause))
+                {
+                    error = "bounded PowerShell assignments require ordinary top-level commands";
+                    return false;
+                }
+            }
+
+            error = null;
+            return true;
+        }
+
+        private bool StartsWithCallOperator(SimpleCommandSyntax simple) =>
+            simple.SourceStart is int start && start >= 0 && start < _source.Length &&
+            _source[start] == '&';
+
+        private static bool IsDotSource(Clause clause) =>
+            clause.Verb.Tokens.Count == 1 && clause.Verb.Tokens[0] == ".";
+
         private bool TryParsePipeline(
             CompoundOperator firstCompatibilityOperator,
             out ShellSyntaxNode? command,
@@ -671,6 +755,12 @@ internal static partial class PwshCommandParser
             var stages = new List<ShellSyntaxNode> { first! };
             while (IsOperator("|"))
             {
+                if (stages[stages.Count - 1] is ShellAssignmentSyntax)
+                {
+                    error = "bounded PowerShell assignments are not supported in pipelines";
+                    return false;
+                }
+
                 _position++;
                 SkipNewlines();
                 if (_position == _tokens.Count || IsOperator(")"))
@@ -691,6 +781,12 @@ internal static partial class PwshCommandParser
                 }
 
                 stages.Add(stage!);
+            }
+
+            if (stages.Count > 1 && stages[stages.Count - 1] is ShellAssignmentSyntax)
+            {
+                error = "bounded PowerShell assignments are not supported in pipelines";
+                return false;
             }
 
             if (stages.Count == 1)
@@ -807,6 +903,23 @@ internal static partial class PwshCommandParser
                 firstSegmentToken.SourceStart,
                 lastSegmentToken.SourceStart + lastSegmentToken.SourceLength -
                     firstSegmentToken.SourceStart);
+            if (TryCreateBoundedAssignment(segmentTokens, out var assignment, out error))
+            {
+                command = new ShellAssignmentSyntax
+                {
+                    Assignment = assignment!,
+                    SourceStart = firstSegmentToken.SourceStart,
+                    SourceLength = lastSegmentToken.SourceStart +
+                        lastSegmentToken.SourceLength - firstSegmentToken.SourceStart,
+                };
+                return true;
+            }
+
+            if (error is not null)
+            {
+                return false;
+            }
+
             if (IsUnsupportedSubstitutionBody(segmentSource, segmentTokens) &&
                 ContainsIncrementOrDecrementMutation(segmentTokens))
             {
@@ -988,6 +1101,61 @@ internal static partial class PwshCommandParser
                 segmentTokens,
                 built.UsesNativeArgumentBinding);
             command = simple;
+            return true;
+        }
+
+        private bool TryCreateBoundedAssignment(
+            IReadOnlyList<PwshToken> tokens,
+            out ShellVariableAssignment? assignment,
+            out string? error)
+        {
+            assignment = null;
+            error = null;
+            if (!PwshVariableAssignmentGrammar.TryRead(
+                    tokens,
+                    0,
+                    out var name,
+                    out var value,
+                    out var tokenCount))
+            {
+                return false;
+            }
+
+            if (tokens.Count != tokenCount ||
+                _options.InitialStateMode !=
+                    PwshInitialStateMode.IsolatedNonInteractiveNoProfile ||
+                _recursionDepth != 0 || _structuralDepth != 0 ||
+                _groupDepth != 0 || _insideCommandSubstitution)
+            {
+                error = "bounded PowerShell assignments require a fresh top-level source";
+                return false;
+            }
+
+            var target = tokens[0];
+            var expectedTarget = "$" + name + "=";
+            if (target.SourceStart < 0 ||
+                target.SourceStart + target.SourceLength > _source.Length ||
+                !string.Equals(
+                    _source.Substring(target.SourceStart, target.SourceLength),
+                    expectedTarget,
+                    StringComparison.Ordinal))
+            {
+                error = "bounded PowerShell assignment target is not an exact scalar name";
+                return false;
+            }
+
+            var right = tokens[1];
+            var exact = new ShellValueDomain.Exact(value);
+            assignment = new ShellVariableAssignment
+            {
+                Name = name,
+                AuthoredValue = exact,
+                EffectiveValue = exact,
+                Scope = ShellVariableAssignmentScope.ShellState,
+                MayAffectProcessEnvironment = false,
+                SourceStart = target.SourceStart,
+                SourceLength = right.SourceStart + right.SourceLength - target.SourceStart,
+            };
             return true;
         }
 

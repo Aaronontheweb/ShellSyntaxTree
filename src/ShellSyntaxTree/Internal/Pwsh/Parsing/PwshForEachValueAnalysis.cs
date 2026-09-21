@@ -1947,6 +1947,7 @@ internal sealed class PwshForEachValueAnalyzer
     private long _childRunspaceProcessEscapeRiskCount;
     private bool _pipelineStageMayReceiveInput;
     private bool _pipelineStageEffectsMayReachRegionBodies;
+    private ShellVariableAssignment? _activeAssignment;
 
     private PwshForEachValueAnalyzer(
         PwshParserOptions options,
@@ -2019,8 +2020,36 @@ internal sealed class PwshForEachValueAnalyzer
             ForEachSyntax forEach => AnalyzeForEach(forEach, input),
             CommandSubstitutionSyntax substitution => AnalyzeSubstitution(substitution, input),
             ExecutionRegionSyntax region => AnalyzeExecutionRegion(region, input),
+            ShellAssignmentSyntax assignment => AnalyzeAssignment(assignment, input),
             _ => AnalyzeUnsupportedNode(input),
         };
+
+    private PwshFlowResult AnalyzeAssignment(
+        ShellAssignmentSyntax syntax,
+        AnalysisContext input)
+    {
+        if (_options.InitialStateMode !=
+                PwshInitialStateMode.IsolatedNonInteractiveNoProfile ||
+            _activeAssignment is not null || _nonRegionStateMutationCount != 0 ||
+            syntax.Assignment is not
+            {
+                Scope: ShellVariableAssignmentScope.ShellState,
+                EffectiveValue: ShellValueDomain.Exact exact,
+            } assignment)
+        {
+            _isComplete = false;
+            return new PwshFlowResult(null, null);
+        }
+
+        var domain = new ShellValueDomainFacts
+        {
+            Kind = ShellValueDomainKind.Exact,
+            Values = new[] { exact.Value },
+        };
+        _activeAssignment = assignment;
+        return PwshFlowResult.Success(
+            input.WithBinding(assignment.Name, domain, canPromote: true));
+    }
 
     private PwshFlowResult AnalyzeUnsupportedNode(AnalysisContext input)
     {
@@ -2086,6 +2115,18 @@ internal sealed class PwshForEachValueAnalyzer
             source,
             effective,
             redirects);
+
+        if (_activeAssignment is not null &&
+            PwshPersistentStateMutation.TryGetEffect(
+                simple.Clause,
+                _options.Dialect,
+                effective,
+                providerLocationUnknown: current.WorkingDirectory is null,
+                out _))
+        {
+            _isComplete = false;
+            return new PwshFlowResult(null, null);
+        }
 
         var hasCommandResolutionMutation =
             PwshPersistentStateMutation.TryGetCommandResolutionMutation(
@@ -3131,6 +3172,9 @@ internal sealed class PwshForEachValueAnalyzer
         var current = new CommandOccurrenceFacts
         {
             EffectiveArguments = effective,
+            Assignments = _activeAssignment is null
+                ? Array.Empty<ShellVariableAssignment>()
+                : new[] { _activeAssignment },
             WorkingDirectory = input.ToWorkingDirectoryDomain(),
             Redirects = redirects,
             RedirectTargetProvenance = source.RedirectTargetProvenance,
@@ -3151,6 +3195,7 @@ internal sealed class PwshForEachValueAnalyzer
             EffectiveArguments = JoinEffectiveArguments(
                 prior.EffectiveArguments,
                 current.EffectiveArguments),
+            Assignments = current.Assignments,
             WorkingDirectory = JoinWorkingDirectories(
                 prior.WorkingDirectory,
                 current.WorkingDirectory),
@@ -4186,6 +4231,7 @@ internal sealed class PwshForEachValueAnalyzer
             ? new CommandOccurrenceFacts
             {
                 EffectiveArguments = source.EffectiveArguments,
+                Assignments = source.Assignments,
                 WorkingDirectory = ShellValueDomainFacts.Unknown,
                 Redirects = RewriteRedirectsForUnknownState(source),
                 RedirectTargetProvenance = source.RedirectTargetProvenance,
@@ -4298,6 +4344,7 @@ internal sealed class PwshForEachValueAnalyzer
         facts.Add(clause, new CommandOccurrenceFacts
         {
             EffectiveArguments = source.EffectiveArguments,
+            Assignments = source.Assignments,
             WorkingDirectory = source.WorkingDirectory,
             WorkingDirectoryEffect = GetWorkingDirectoryEffect(simple.Clause),
             Redirects = redirects,
@@ -4937,6 +4984,9 @@ internal sealed class PwshForEachValueAnalyzer
                 _facts[simple.Clause] = new CommandOccurrenceFacts
                 {
                     EffectiveArguments = effective.ToArray(),
+                    Assignments = _activeAssignment is null
+                        ? Array.Empty<ShellVariableAssignment>()
+                        : new[] { _activeAssignment },
                     WorkingDirectory = ShellValueDomainFacts.Unknown,
                     Redirects = RewriteRedirectsForUnknownState(source),
                     RedirectTargetProvenance = source.RedirectTargetProvenance,

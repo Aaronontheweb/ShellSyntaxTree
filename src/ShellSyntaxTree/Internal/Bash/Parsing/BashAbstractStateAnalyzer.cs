@@ -63,7 +63,8 @@ internal sealed class BashAbstractStateAnalyzer
         var initial = new BashAbstractState(
             options.WorkingDirectory ?? Environment.CurrentDirectory,
             hasCompatibilityAttribution: false,
-            new BashLoopBindingContext());
+            new BashLoopBindingContext(),
+            assignment: null);
         analyzer.AnalyzeBlock(syntax, initial);
         if (!analyzer._isComplete)
         {
@@ -107,8 +108,31 @@ internal sealed class BashAbstractStateAnalyzer
             ConditionLoopSyntax => BashFlowResult.Both(input.WithUnknownCwd()),
             ConditionalSyntax conditional => AnalyzeConditional(conditional, input),
             ConditionalBranchSyntax branch => AnalyzeBranch(branch, input),
+            ShellAssignmentSyntax assignment => AnalyzeAssignment(assignment, input),
             _ => BashFlowResult.Both(input.WithUnknownCwd()),
         };
+
+    private static BashFlowResult AnalyzeAssignment(
+        ShellAssignmentSyntax syntax,
+        BashAbstractState input)
+    {
+        if (syntax.Assignment is not
+            {
+                Scope: ShellVariableAssignmentScope.ShellState,
+                EffectiveValue: ShellValueDomain.Exact exact,
+            } assignment)
+        {
+            return new BashFlowResult(null, null);
+        }
+
+        var domain = new ShellValueDomainFacts
+        {
+            Kind = ShellValueDomainKind.Exact,
+            Values = new[] { exact.Value },
+        };
+        return BashFlowResult.Success(
+            input.WithBinding(assignment.Name, domain).WithAssignment(assignment));
+    }
 
     private BashFlowResult AnalyzeBlock(ShellBlockSyntax block, BashAbstractState input)
     {
@@ -1542,7 +1566,8 @@ internal sealed class BashAbstractStateAnalyzer
             input = new BashAbstractState(
                 workingDirectory: null,
                 hasCompatibilityAttribution: true,
-                bindings: new BashLoopBindingContext());
+                bindings: new BashLoopBindingContext(),
+                assignment: null);
         }
 
         var clause = RewriteClause(simple.Clause, input, sourceFacts.CwdPathDependencies);
@@ -1556,6 +1581,7 @@ internal sealed class BashAbstractStateAnalyzer
         {
             EffectiveArguments = CreateEffectiveArguments(simple.Clause),
             AuthoredArguments = CreateAuthoredArguments(simple.Clause),
+            Assignments = CreateAssignments(input.Assignment, simple.EnvironmentAssignments),
             PublishAuthoredPathShape = true,
             WorkingDirectory = input.ToDomain(),
             WorkingDirectoryEffect = GetWorkingDirectoryEffect(simple.Clause),
@@ -1570,6 +1596,25 @@ internal sealed class BashAbstractStateAnalyzer
             Clause = clause,
             Substitutions = substitutions,
         };
+    }
+
+    private static IReadOnlyList<ShellVariableAssignment> CreateAssignments(
+        ShellVariableAssignment? stateAssignment,
+        IReadOnlyList<ShellVariableAssignment> environmentAssignments)
+    {
+        if (stateAssignment is null)
+        {
+            return environmentAssignments;
+        }
+
+        var assignments = new ShellVariableAssignment[environmentAssignments.Count + 1];
+        assignments[0] = stateAssignment;
+        for (var index = 0; index < environmentAssignments.Count; index++)
+        {
+            assignments[index + 1] = environmentAssignments[index];
+        }
+
+        return assignments;
     }
 
     private IReadOnlyList<EffectiveArgumentFacts> CreateEffectiveArguments(Clause clause)
@@ -2308,11 +2353,13 @@ internal sealed class BashAbstractStateAnalyzer
         internal BashAbstractState(
             string? workingDirectory,
             bool hasCompatibilityAttribution,
-            BashLoopBindingContext bindings)
+            BashLoopBindingContext bindings,
+            ShellVariableAssignment? assignment)
         {
             WorkingDirectory = workingDirectory;
             HasCompatibilityAttribution = hasCompatibilityAttribution;
             Bindings = bindings;
+            Assignment = assignment;
         }
 
         internal string? WorkingDirectory { get; }
@@ -2321,7 +2368,10 @@ internal sealed class BashAbstractStateAnalyzer
 
         internal BashLoopBindingContext Bindings { get; }
 
-        internal BashAbstractState WithUnknownCwd() => new(null, true, Bindings);
+        internal ShellVariableAssignment? Assignment { get; }
+
+        internal BashAbstractState WithUnknownCwd() =>
+            new(null, true, Bindings, Assignment);
 
         internal BashAbstractState WithBinding(
             string name,
@@ -2329,18 +2379,26 @@ internal sealed class BashAbstractStateAnalyzer
             new(
                 WorkingDirectory,
                 HasCompatibilityAttribution,
-                Bindings.WithBinding(name, domain));
+                Bindings.WithBinding(name, domain),
+                Assignment);
+
+        internal BashAbstractState WithAssignment(ShellVariableAssignment assignment) =>
+            new(WorkingDirectory, HasCompatibilityAttribution, Bindings, assignment);
 
         internal BashAbstractState WithoutBindings() =>
-            new(WorkingDirectory, HasCompatibilityAttribution, Bindings.WithoutBindings());
+            new(
+                WorkingDirectory,
+                HasCompatibilityAttribution,
+                Bindings.WithoutBindings(),
+                Assignment);
 
         internal BashAbstractState WithCwd(
             string? workingDirectory,
             bool hasCompatibilityAttribution) =>
-            new(workingDirectory, hasCompatibilityAttribution, Bindings);
+            new(workingDirectory, hasCompatibilityAttribution, Bindings, Assignment);
 
         internal BashAbstractState WithoutCompatibilityAttribution() =>
-            new(WorkingDirectory, WorkingDirectory is null, Bindings);
+            new(WorkingDirectory, WorkingDirectory is null, Bindings, Assignment);
 
         internal ShellValueDomainFacts ToDomain() =>
             WorkingDirectory is null
@@ -2354,7 +2412,8 @@ internal sealed class BashAbstractStateAnalyzer
         internal bool StateEquals(BashAbstractState other) =>
             string.Equals(WorkingDirectory, other.WorkingDirectory, StringComparison.Ordinal) &&
             HasCompatibilityAttribution == other.HasCompatibilityAttribution &&
-            Bindings.StateEquals(other.Bindings);
+            Bindings.StateEquals(other.Bindings) &&
+            Equals(Assignment, other.Assignment);
 
         internal static BashAbstractState Join(
             BashAbstractState left,
@@ -2366,7 +2425,8 @@ internal sealed class BashAbstractStateAnalyzer
                     ? left.WorkingDirectory
                     : null,
                 left.HasCompatibilityAttribution || right.HasCompatibilityAttribution,
-                BashLoopBindingContext.JoinState(left.Bindings, right.Bindings));
+                BashLoopBindingContext.JoinState(left.Bindings, right.Bindings),
+                Equals(left.Assignment, right.Assignment) ? left.Assignment : null);
 
         internal static BashAbstractState Widen(
             BashAbstractState left,
@@ -2378,7 +2438,8 @@ internal sealed class BashAbstractStateAnalyzer
                     ? left.WorkingDirectory
                     : null,
                 left.HasCompatibilityAttribution || right.HasCompatibilityAttribution,
-                BashLoopBindingContext.WidenState(left.Bindings, right.Bindings));
+                BashLoopBindingContext.WidenState(left.Bindings, right.Bindings),
+                Equals(left.Assignment, right.Assignment) ? left.Assignment : null);
 
         internal static BashAbstractState? JoinNullable(
             BashAbstractState? left,

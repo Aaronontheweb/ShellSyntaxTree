@@ -171,7 +171,9 @@ public enum PwshDialect { Unknown, PowerShell7, WindowsPowerShell51 }
 
 public sealed record ParsedCommand { /* Source, Syntax, Commands, Clauses, IsUnparseable, … */ }
 public abstract record ShellSyntaxNode;
-public sealed record CommandOccurrence { /* Clause, role, ancestry, analyzed arguments, cwd, cwd effect, redirects, completeness */ }
+public sealed record CommandOccurrence { /* Clause, role, ancestry, analyzed arguments, assignments, cwd, redirects, completeness */ }
+public sealed record ShellVariableAssignment { /* name, values, scope, environment effect, source span */ }
+public enum ShellVariableAssignmentScope { Unknown, ShellState, CommandEnvironment }
 public sealed record AnalyzedArgument  { /* direct Arg + ClauseElement + ShellValueDomain join */ }
 public abstract record ShellValueDomain; // nested Unknown, Exact, FiniteSet, PathPattern
 public abstract record ShellWorkingDirectoryEffect; // nested Unknown, Unchanged, ChangesOnSuccess

@@ -10,12 +10,20 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.3 finite Bash scopes)
+## NOW (0.4.0-beta.4 bounded assignment facts)
+
+- [x] Define public assignment facts that distinguish shell state from one-command environment prefixes.
+- [x] Implement the bounded Bash slice under a fresh process, startup, and option contract.
+- [x] Implement the isolated PowerShell scalar slice with one following ordinary command.
+- [x] Complete Release tests, the public API comparison, the PII audit, the header check, package checks, and security review.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.4` and verify NuGet publication.
+
+## Completed (0.4.0-beta.3 finite Bash scopes)
 
 - [x] Define an additive public scope result in `SPEC.md`.
 - [x] Prove exact directories and reparse each authored simple command under every reachable scope.
 - [x] Run Release tests, the public API contract, the corpus PII audit, the header check, and package checks.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.3` and verify NuGet publication.
+- [x] Merge PR #184 after Linux and Windows CI. Tag `0.4.0-beta.3` and verify NuGet publication.
 
 ## NOW (0.3.4 working-directory effects and downstream acceptance)
 
