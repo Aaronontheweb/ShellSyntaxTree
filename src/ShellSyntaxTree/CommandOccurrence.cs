@@ -15,6 +15,8 @@ public sealed record CommandOccurrence
     private IReadOnlyList<CommandAncestryFrame> _ancestry =
         Array.Empty<CommandAncestryFrame>();
     private IReadOnlyList<AnalyzedArgument> _arguments = Array.Empty<AnalyzedArgument>();
+    private IReadOnlyList<ShellVariableAssignment> _assignments =
+        Array.Empty<ShellVariableAssignment>();
     private IReadOnlyList<ShellFileSystemTreeAccess> _fileSystemTreeAccesses =
         Array.Empty<ShellFileSystemTreeAccess>();
     private IReadOnlyList<RedirectAnalysis> _redirects = Array.Empty<RedirectAnalysis>();
@@ -41,6 +43,13 @@ public sealed record CommandOccurrence
     {
         get => _arguments;
         internal init => _arguments = PublicCollection.Copy(value);
+    }
+
+    /// <summary>Gets bounded assignments that can affect this occurrence.</summary>
+    public IReadOnlyList<ShellVariableAssignment> Assignments
+    {
+        get => _assignments;
+        internal init => _assignments = PublicCollection.Copy(value);
     }
 
     /// <summary>
@@ -109,6 +118,52 @@ public sealed record CommandOccurrence
 
         return -1;
     }
+}
+
+/// <summary>One bounded authored shell-variable assignment.</summary>
+public sealed record ShellVariableAssignment
+{
+    internal ShellVariableAssignment()
+    {
+    }
+
+    /// <summary>Gets the exact scalar variable name.</summary>
+    public string Name { get; internal init; } = "";
+
+    /// <summary>Gets the exact decoded authored right-hand side.</summary>
+    public ShellValueDomain AuthoredValue { get; internal init; } =
+        new ShellValueDomain.Unknown();
+
+    /// <summary>Gets the parser-proved effective right-hand side.</summary>
+    public ShellValueDomain EffectiveValue { get; internal init; } =
+        new ShellValueDomain.Unknown();
+
+    /// <summary>Gets the assignment lifetime.</summary>
+    public ShellVariableAssignmentScope Scope { get; internal init; }
+
+    /// <summary>
+    /// Gets whether the assignment can affect a child process environment.
+    /// </summary>
+    public bool MayAffectProcessEnvironment { get; internal init; }
+
+    /// <summary>Gets the assignment word start in the submitted source.</summary>
+    public int SourceStart { get; internal init; }
+
+    /// <summary>Gets the assignment word length in the submitted source.</summary>
+    public int SourceLength { get; internal init; }
+}
+
+/// <summary>Identifies the lifetime of a bounded variable assignment.</summary>
+public enum ShellVariableAssignmentScope
+{
+    /// <summary>No assignment lifetime is proved.</summary>
+    Unknown,
+
+    /// <summary>The assignment changes the current shell state.</summary>
+    ShellState,
+
+    /// <summary>The assignment applies to one command environment.</summary>
+    CommandEnvironment,
 }
 
 /// <summary>

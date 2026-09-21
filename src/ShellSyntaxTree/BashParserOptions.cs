@@ -16,6 +16,14 @@ public enum BashInitialStateMode
     /// content or an inherited environment entry for a loop-bound name.
     /// </summary>
     IsolatedNonInteractive,
+
+    /// <summary>
+    /// The source runs in a new non-interactive Bash process. Startup
+    /// overrides, inherited function records, loader overrides, and
+    /// behavior-changing option flags are absent. The contract supports GNU
+    /// Bash 5.2 and 5.3 releases.
+    /// </summary>
+    FreshNonInteractiveNoStartup,
 }
 
 /// <summary>

@@ -277,6 +277,31 @@ outside the first bounded scalar grammar. The parser also downgrades a decoded
 `export`; resolver-only option cloning for an exact cwd retains the independent
 variable-state assertion.
 
+Bash assignment facts require the stronger
+`FreshNonInteractiveNoStartup` contract. Select it only when the same launcher:
+
+- starts a new noninteractive Bash process for the complete source;
+- disables profile and rc input;
+- removes `BASH_ENV`, `ENV`, `SHELLOPTS`, `BASHOPTS`, `CDPATH`, `GLOBIGNORE`,
+  `IFS`, `POSIXLY_CORRECT`, `BASH_COMPAT`, and every `BASH_FUNC_*` entry; and
+- removes every `LD_*` and `DYLD_*` entry plus `LIBPATH` and `SHLIB_PATH`;
+- supplies no `-x`, `-v`, `--posix`, or other behavior-changing option flag.
+
+Ordinary inherited environment entries can remain. Bash imports them as
+exported scalar values. An assignment-only statement can preserve that export
+attribute, so its `ShellState` fact sets `MayAffectProcessEnvironment=true`.
+Use `Unknown` when the launcher cannot prove every condition.
+The catalog covers supported GNU Bash 5.2 and 5.3 releases. Use `Unknown` on a
+later Bash release until ShellSyntaxTree reviews its special-variable catalog.
+
+```csharp
+var parser = new BashParser(new BashParserOptions
+{
+    WorkingDirectory = workingDirectory,
+    InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+});
+```
+
 ShellSyntaxTree also treats Bash command resolution as parser-owned security
 state. `exec` and mutating or ambiguous `hash`, `alias`, `unalias`, `shopt`,
 and `enable` forms make the complete result unparseable, including through exact `command`
@@ -317,6 +342,34 @@ not inherit exact environment, home, provider, or cwd facts that were not
 independently proved. `( ... )`, `$()`, and static `Invoke-Expression` share
 current-runspace authored state. Never select isolated mode merely to suppress
 approval prompts.
+
+The isolated PowerShell mode also permits one bounded assignment form. One
+ordinary unscoped ASCII scalar assignment must be the first statement. It must
+use one single-quoted value, and exactly one ordinary simple command follows.
+The command receives a `ShellState` assignment fact with
+`MayAffectProcessEnvironment=false`. Provider, scoped, typed, member, indexed,
+compound, expandable, grouped, redirected, piped, or execution-bearing forms
+remain unparseable.
+
+## Evaluating assignment facts
+
+Treat every `CommandOccurrence.Assignments` entry as a separate policy input.
+The parser does not approve the variable name or its value. It only proves the
+authored assignment, its effective scalar value, its lifetime, and whether it
+can reach a process environment.
+
+A Bash `CommandEnvironment` assignment applies only to its occurrence. A Bash
+`ShellState` assignment appears on every later accepted occurrence. The narrow
+PowerShell form appears on its one following command. Consumers must evaluate
+all assignment names and values before they reuse approval for the command.
+They must also apply their normal verb, argument, redirect, path, ancestry, and
+completeness checks.
+
+An arbitrary environment entry can change an executable's behavior. A consumer
+can accept a name only when its own environment policy allows that name and
+value for the selected verb. ShellSyntaxTree rejects names that can change
+shell lookup, startup, tracing, or loader behavior before an external command.
+It does not replace the consumer's executable behavior policy.
 
 The parser still treats facts visible in the submitted source as security
 boundaries. Computed invocation such as `& $exe`, computed

@@ -79,6 +79,17 @@ internal static class BashFiniteScopeAnalyzer
             return false;
         }
 
+        foreach (var occurrence in parsed.Commands)
+        {
+            foreach (var assignment in occurrence.Assignments)
+            {
+                if (assignment.Scope == ShellVariableAssignmentScope.ShellState)
+                {
+                    return false;
+                }
+            }
+        }
+
         var scoped = new List<BashScopedCommand>();
         var visited = new List<Clause>();
         var success = new HashSet<string>(StringComparer.Ordinal);

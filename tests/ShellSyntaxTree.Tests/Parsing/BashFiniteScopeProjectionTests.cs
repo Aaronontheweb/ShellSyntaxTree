@@ -106,4 +106,19 @@ public class BashFiniteScopeProjectionTests
         Assert.False(Parser.TryProjectFiniteScopes(source, out var projection));
         Assert.Null(projection);
     }
+
+    [Fact]
+    public void Shell_assignment_state_has_no_source_slice_projection()
+    {
+        var parser = new BashParser(new BashParserOptions
+        {
+            WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+        });
+
+        Assert.False(parser.TryProjectFiniteScopes(
+            "root='/work'; inspect \"$root/file\"; inspect next",
+            out var projection));
+        Assert.Null(projection);
+    }
 }
