@@ -1,3 +1,18 @@
+#### 0.4.0-beta.5 2026-09-22 ####
+
+This prerelease accepts PowerShell horizontal whitespace around a bounded scalar assignment operator.
+
+## Fixed
+
+- Accept ASCII spaces or tabs before and after one exact `=` in the bounded PowerShell assignment form.
+- Preserve the full exact assignment source span, including accepted whitespace.
+
+## Security and compatibility
+
+- Reject comments, continuations, newlines, Unicode whitespace, compound operators, chained or tuple targets, and unsupported right-hand sides.
+- Keep provider, scoped, typed, member, indexed, redirected, piped, grouped, and multi-command assignment forms fail closed.
+- Preserve the public API exactly. This release changes parser behavior only.
+
 #### 0.4.0-beta.4 2026-09-21 ####
 
 This prerelease publishes bounded assignment facts for simple Bash and PowerShell commands.

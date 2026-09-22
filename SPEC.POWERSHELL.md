@@ -380,13 +380,15 @@ The v0.4 beta adds this separate bounded form:
 
 ```text
 bounded_assignment_command := ordinary_assignment statement_terminator static_invocation
-ordinary_assignment        := "$" ascii_identifier "=" single_quoted
+ordinary_assignment        := "$" ascii_identifier horizontal_ws? "=" horizontal_ws? single_quoted
+horizontal_ws              := (" " | "\\t")+
 ```
 
 The assignment must be the first statement. Exactly one command follows it.
 The command cannot contain a redirect, substitution, execution region, call
 operator, dot source, group, pipeline, or conditional operator. The parser
-rejects all other assignment forms.
+rejects all other assignment forms. Comments, continuations, newlines, and
+Unicode whitespace cannot replace `horizontal_ws`.
 
 **Notes:**
 
@@ -517,11 +519,13 @@ Typed and validated ambient bindings are the reason default-mode effective
 values stay `Unknown`; the parser never reports authored text as a proved
 runtime value when coercion or rejection is possible.
 
-The bounded assignment form uses the same eligible binding-name catalog. Its
-right-hand side is one single-quoted scalar string. The parser publishes a
+The bounded assignment form uses the same eligible binding-name catalog. ASCII
+spaces and tabs can surround its one exact `=` operator. Its right-hand side is
+one single-quoted scalar string. The parser publishes a
 `ShellVariableAssignment` with `Scope=ShellState`, exact authored and effective
-values, and `MayAffectProcessEnvironment=false`. The assignment is the first
-statement, and exactly one ordinary simple command follows. This limit prevents
+values, `MayAffectProcessEnvironment=false`, and a source span that includes
+the accepted whitespace. The assignment is the first statement, and exactly
+one ordinary simple command follows. This limit prevents
 an earlier command from creating a typed, validated, read-only, or constant
 binding. It also prevents an intervening command from changing the value before
 another occurrence uses it. `PwshInitialStateMode.Unknown` keeps all assignment

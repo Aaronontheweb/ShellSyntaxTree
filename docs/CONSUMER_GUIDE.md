@@ -346,7 +346,9 @@ approval prompts.
 The isolated PowerShell mode also permits one bounded assignment form. One
 ordinary unscoped ASCII scalar assignment must be the first statement. It must
 use one single-quoted value, and exactly one ordinary simple command follows.
-The command receives a `ShellState` assignment fact with
+ASCII spaces or tabs can surround its exact `=` operator. Comments,
+continuations, newlines, and Unicode whitespace in those gaps remain
+unparseable. The command receives a `ShellState` assignment fact with
 `MayAffectProcessEnvironment=false`. Provider, scoped, typed, member, indexed,
 compound, expandable, grouped, redirected, piped, or execution-bearing forms
 remain unparseable.

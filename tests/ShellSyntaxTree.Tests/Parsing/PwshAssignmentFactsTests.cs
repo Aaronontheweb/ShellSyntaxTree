@@ -15,10 +15,15 @@ public class PwshAssignmentFactsTests
         InitialStateMode = PwshInitialStateMode.IsolatedNonInteractiveNoProfile,
     });
 
-    [Fact]
-    public void Assignment_state_resolves_a_later_argument_and_remains_visible()
+    [Theory]
+    [InlineData("$root='C:/work/tree'; Get-Item \"$root/file\"")]
+    [InlineData("$root= 'C:/work/tree'; Get-Item \"$root/file\"")]
+    [InlineData("$root ='C:/work/tree'; Get-Item \"$root/file\"")]
+    [InlineData("$root = 'C:/work/tree'; Get-Item \"$root/file\"")]
+    [InlineData("$root\t=\t'C:/work/tree'; Get-Item \"$root/file\"")]
+    public void Assignment_state_resolves_a_later_argument_and_remains_visible(
+        string source)
     {
-        const string source = "$root='C:/work/tree'; Get-Item \"$root/file\"";
         var result = Parser.Parse(source);
 
         Assert.False(result.IsUnparseable, result.UnparseableReason);
@@ -36,6 +41,12 @@ public class PwshAssignmentFactsTests
         Assert.Equal(source.IndexOf(';'), assignment.SourceLength);
         Assert.Equal("C:/work/tree/file", Assert.IsType<ShellValueDomain.Exact>(
             Assert.Single(command.Arguments).Value).Value);
+
+        var list = Assert.IsType<CommandListSyntax>(Assert.Single(result.Syntax.Statements));
+        var syntax = Assert.IsType<ShellAssignmentSyntax>(list.Items[0].Command);
+        Assert.Equal(0, syntax.SourceStart);
+        Assert.Equal(source.IndexOf(';'), syntax.SourceLength);
+        Assert.Same(assignment, syntax.Assignment);
     }
 
     [Fact]
@@ -51,28 +62,69 @@ public class PwshAssignmentFactsTests
 
     [Theory]
     [InlineData("$root='one'; $root='two'; Get-Item $root")]
+    [InlineData("$root = 'one'; $root = 'two'; Get-Item $root")]
     [InlineData("$root='value'")]
+    [InlineData("$root = 'value'")]
     [InlineData("$root='value' && Get-Item $root")]
+    [InlineData("$root = 'value' && Get-Item $root")]
     [InlineData("$root='value' || Get-Item $root")]
     [InlineData("$root='value' | Get-Item item")]
+    [InlineData("$root = 'value' | Get-Item item")]
     [InlineData("($root='value'; Get-Item item)")]
     [InlineData("$root='value' > marker; Get-Item item")]
+    [InlineData("$root = 'value' > marker; Get-Item item")]
     [InlineData("$root=\"value\"; Get-Item $root")]
+    [InlineData("$root = \"value\"; Get-Item $root")]
     [InlineData("$root=$(Get-Item value); Get-Item $root")]
+    [InlineData("$root = $(Get-Item value); Get-Item $root")]
+    [InlineData("$root = & 'Get-Item' value; Get-Item $root")]
+    [InlineData("$root = { Get-Item value }; Get-Item $root")]
     [InlineData("$root=@('value'); Get-Item $root")]
+    [InlineData("$root = @('value'); Get-Item $root")]
     [InlineData("$root=@{ key='value' }; Get-Item $root")]
+    [InlineData("$root = @{ key='value' }; Get-Item $root")]
     [InlineData("$root+='value'; Get-Item $root")]
+    [InlineData("$root += 'value'; Get-Item $root")]
+    [InlineData("$root -= 'value'; Get-Item $root")]
+    [InlineData("$root *= 'value'; Get-Item $root")]
+    [InlineData("$root /= 'value'; Get-Item $root")]
+    [InlineData("$root %= 'value'; Get-Item $root")]
+    [InlineData("$root ??= 'value'; Get-Item $root")]
+    [InlineData("$root == 'value'; Get-Item $root")]
+    [InlineData("$root =+ 'value'; Get-Item $root")]
+    [InlineData("$root =- 'value'; Get-Item $root")]
+    [InlineData("$a=$b='value'; Get-Item $a")]
+    [InlineData("$a = $b = 'value'; Get-Item $a")]
+    [InlineData("$a, $b = 'value'; Get-Item $a")]
     [InlineData("$env:ROOT='value'; Get-Item item")]
+    [InlineData("$env:ROOT = 'value'; Get-Item item")]
     [InlineData("$global:root='value'; Get-Item item")]
+    [InlineData("$global:root = 'value'; Get-Item item")]
     [InlineData("[string]$root='value'; Get-Item $root")]
+    [InlineData("[string]$root = 'value'; Get-Item $root")]
     [InlineData("$state.root='value'; Get-Item item")]
+    [InlineData("$state.root = 'value'; Get-Item item")]
     [InlineData("$items[0]='value'; Get-Item item")]
+    [InlineData("$items[0] = 'value'; Get-Item item")]
     [InlineData("$HOME='value'; Get-Item item")]
+    [InlineData("$HOME = 'value'; Get-Item item")]
     [InlineData("$root='value'; & 'Get-Item' item")]
     [InlineData("$root='value'; . './script.ps1'")]
     [InlineData("$root='value'; ForEach-Object { Get-Item item }")]
     [InlineData("$root='value'; Invoke-CustomMutation; Get-Item $root")]
     [InlineData("Remove-Item $x='/tmp/target'")]
+    [InlineData("Remove-Item $x = '/tmp/target'")]
+    [InlineData("$root <# gap #> = 'value'; Get-Item $root")]
+    [InlineData("$root=<# gap #>'value'; Get-Item $root")]
+    [InlineData("$root = <# gap #> 'value'; Get-Item $root")]
+    [InlineData("$root # gap\n= 'value'; Get-Item $root")]
+    [InlineData("$root = # gap\n'value'; Get-Item $root")]
+    [InlineData("$root`\n= 'value'; Get-Item $root")]
+    [InlineData("$root =`\n'value'; Get-Item $root")]
+    [InlineData("$root\u00A0= 'value'; Get-Item $root")]
+    [InlineData("$root =\u00A0'value'; Get-Item $root")]
+    [InlineData("$root = @'\nvalue\n'@; Get-Item $root")]
+    [InlineData("$root = @\"\nvalue\n\"@; Get-Item $root")]
     public void Unsupported_assignment_state_fails_closed(string source)
     {
         var result = Parser.Parse(source);
