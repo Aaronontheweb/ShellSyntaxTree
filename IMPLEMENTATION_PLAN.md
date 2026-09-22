@@ -10,13 +10,20 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.4 bounded assignment facts)
+## NOW (0.4.0-beta.5 PowerShell assignment whitespace)
+
+- [x] Accept ASCII spaces and tabs around the bounded PowerShell assignment operator.
+- [x] Preserve exact assignment spans and keep comments, continuations, Unicode whitespace, and unsupported forms fail closed.
+- [x] Complete Release tests, the public API comparison, the PII audit, the header check, package checks, and security review.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.5` and verify NuGet publication.
+
+## Completed (0.4.0-beta.4 bounded assignment facts)
 
 - [x] Define public assignment facts that distinguish shell state from one-command environment prefixes.
 - [x] Implement the bounded Bash slice under a fresh process, startup, and option contract.
 - [x] Implement the isolated PowerShell scalar slice with one following ordinary command.
 - [x] Complete Release tests, the public API comparison, the PII audit, the header check, package checks, and security review.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.4` and verify NuGet publication.
+- [x] Merge PR #187 after Linux and Windows CI. Tag `0.4.0-beta.4` and verify NuGet publication.
 
 ## Completed (0.4.0-beta.3 finite Bash scopes)
 

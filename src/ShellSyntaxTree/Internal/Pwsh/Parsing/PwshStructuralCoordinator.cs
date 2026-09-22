@@ -1112,6 +1112,7 @@ internal static partial class PwshCommandParser
             assignment = null;
             error = null;
             if (!PwshVariableAssignmentGrammar.TryRead(
+                    _source,
                     tokens,
                     0,
                     out var name,
@@ -1132,19 +1133,7 @@ internal static partial class PwshCommandParser
             }
 
             var target = tokens[0];
-            var expectedTarget = "$" + name + "=";
-            if (target.SourceStart < 0 ||
-                target.SourceStart + target.SourceLength > _source.Length ||
-                !string.Equals(
-                    _source.Substring(target.SourceStart, target.SourceLength),
-                    expectedTarget,
-                    StringComparison.Ordinal))
-            {
-                error = "bounded PowerShell assignment target is not an exact scalar name";
-                return false;
-            }
-
-            var right = tokens[1];
+            var right = tokens[tokenCount - 1];
             var exact = new ShellValueDomain.Exact(value);
             assignment = new ShellVariableAssignment
             {

@@ -13,14 +13,14 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 
 ```bash
 # Current package
-dotnet add package ShellSyntaxTree --version 0.4.0-beta.1
+dotnet add package ShellSyntaxTree --version 0.4.0-beta.5
 ```
 
-Version `0.4.0-beta.1` includes bounded PowerShell collection facts,
-shell-neutral filesystem tree-access effects, and fail-closed approval-fatigue
-diagnostics alongside the typed syntax tree, command-occurrence API, bounded
-authored-value analysis, audited filesystem and non-filesystem operand facts,
-and parser-owned working-directory effects documented below.
+Version `0.4.0-beta.5` includes bounded Bash and PowerShell assignment facts,
+bounded PowerShell collection facts, shell-neutral filesystem tree-access
+effects, and fail-closed approval diagnostics alongside the typed syntax tree,
+command-occurrence API, bounded authored-value analysis, audited filesystem and
+non-filesystem operand facts, and parser-owned working-directory effects.
 
 ## What you get
 

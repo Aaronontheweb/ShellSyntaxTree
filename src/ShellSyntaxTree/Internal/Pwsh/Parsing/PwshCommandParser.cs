@@ -92,7 +92,7 @@ internal static partial class PwshCommandParser
             return new ParsedCommand { Source = source, Clauses = Array.Empty<Clause>() };
         }
 
-        if (TryDetectAnomaly(significant, options, out var anomalyReason))
+        if (TryDetectAnomaly(source, significant, options, out var anomalyReason))
         {
             return Unparseable(source, anomalyReason);
         }
@@ -151,7 +151,8 @@ internal static partial class PwshCommandParser
                 && IsNativeArgumentFragment(t)
                 && IsAdjacent(filtered[filtered.Count - 1], t)
                 && !PwshVariableAssignmentGrammar.TryReadTarget(
-                    filtered[filtered.Count - 1], out _))
+                    filtered[filtered.Count - 1], out _)
+                && !StartsSpacedAssignmentValue(filtered))
             {
                 var previous = filtered[filtered.Count - 1];
                 var previousValue = previous.ResolverValue
@@ -182,9 +183,17 @@ internal static partial class PwshCommandParser
         return filtered;
     }
 
+    private static bool StartsSpacedAssignmentValue(IReadOnlyList<PwshToken> tokens) =>
+        tokens.Count >= 2 &&
+        tokens[tokens.Count - 1] is { Kind: PwshTokenKind.Word, Value: "=" } &&
+        PwshVariableAssignmentGrammar.TryReadBareTarget(
+            tokens[tokens.Count - 2],
+            out _);
+
     // ---------------------------------------------------------------- anomalies
 
     private static bool TryDetectAnomaly(
+        string? source,
         IReadOnlyList<PwshToken> tokens,
         PwshParserOptions options,
         out string? reason)
@@ -215,7 +224,11 @@ internal static partial class PwshCommandParser
         }
 
         // Item 5: an assignment or bare type-literal statement.
-        if (TryDetectAssignmentOrTypeLiteral(tokens, options.InitialStateMode, out reason))
+        if (TryDetectAssignmentOrTypeLiteral(
+                source,
+                tokens,
+                options.InitialStateMode,
+                out reason))
         {
             return true;
         }
@@ -229,6 +242,7 @@ internal static partial class PwshCommandParser
         PwshDialect dialect,
         out string? reason) =>
         TryDetectAnomaly(
+            source: null,
             tokens,
             new PwshParserOptions
             {
@@ -410,6 +424,7 @@ internal static partial class PwshCommandParser
     }
 
     private static bool TryDetectAssignmentOrTypeLiteral(
+        string? source,
         IReadOnlyList<PwshToken> tokens,
         PwshInitialStateMode initialStateMode,
         out string? reason)
@@ -444,7 +459,9 @@ internal static partial class PwshCommandParser
                 {
                     if (verbSlot && initialStateMode ==
                             PwshInitialStateMode.IsolatedNonInteractiveNoProfile &&
+                        source is not null &&
                         PwshVariableAssignmentGrammar.TryRead(
+                            source,
                             tokens,
                             i,
                             out _,
@@ -508,7 +525,8 @@ internal static partial class PwshCommandParser
             }
 
             var v = tokens[j].Value;
-            return v is "=" or "+=" or "-=" or "*=" or "/=" or "%=" or "??=";
+            return v is "=" or "==" or "=+" or "=-" or
+                "+=" or "-=" or "*=" or "/=" or "%=" or "??=";
         }
 
         return false;

@@ -739,11 +739,14 @@ unparseable and publish no commands.
 
 The bounded PowerShell slice requires
 `PwshInitialStateMode.IsolatedNonInteractiveNoProfile`. It accepts one ordinary
-unscoped ASCII scalar name with one single-quoted string value. The assignment
-must be the first statement, and exactly one ordinary simple command must
-follow through `;` or a newline. The command receives one `ShellState` fact,
-and later argument expansion can use the exact value. PowerShell has no Bash
-command-environment prefix.
+unscoped ASCII scalar name with one single-quoted string value. ASCII spaces or
+tabs can surround its one exact `=` operator. Comments, continuations,
+newlines, and Unicode whitespace cannot occur in those gaps. The assignment
+must be the first statement, and exactly one ordinary simple command must follow
+through `;` or a newline. The command receives one `ShellState` fact, and later
+argument expansion can use the exact value. The assignment fact and syntax node
+span the full exact assignment text. PowerShell has no Bash command-environment
+prefix.
 
 For example, `$root='C:/work/tree'; Get-Item "$root/file"` publishes `root`
 and resolves the command argument. The parser rejects unknown initial state,
