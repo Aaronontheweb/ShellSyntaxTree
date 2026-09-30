@@ -70,6 +70,147 @@ public class BashAssignmentFactsTests
         Assert.Equal(source.IndexOf(' '), assignment.SourceLength);
     }
 
+    [Theory]
+    [InlineData("X=1 Y=2 ls -la", "ls -la")]
+    [InlineData("A=1 B='two words' C='x' ls", "ls")]
+    [InlineData("FOO=a BAR=b BAZ=c make test", "make test")]
+    [InlineData("X=1 Y=2 netclaw daemon stop", "netclaw daemon stop")]
+    [InlineData("A=1 B=2 C=3 D=4 E=5 inspect --catalog item", "inspect --catalog item")]
+    public void Multiple_command_environment_prefixes_match_the_single_prefix_command(
+        string source,
+        string command)
+    {
+        var multiple = Parser.Parse(source);
+        var single = Parser.Parse("X=1 " + command);
+
+        Assert.False(multiple.IsUnparseable, multiple.UnparseableReason);
+        Assert.False(single.IsUnparseable, single.UnparseableReason);
+        var actual = Assert.Single(multiple.Commands);
+        var expected = Assert.Single(single.Commands);
+        Assert.Equal(expected.Clause.Verb.Tokens, actual.Clause.Verb.Tokens);
+        Assert.Equal(
+            expected.Clause.Args.Select(arg => (arg.Raw, arg.Resolved, arg.Kind)),
+            actual.Clause.Args.Select(arg => (arg.Raw, arg.Resolved, arg.Kind)));
+        Assert.Equal(
+            expected.Arguments.Select(argument => argument.Value),
+            actual.Arguments.Select(argument => argument.Value));
+        Assert.Equal(
+            expected.Clause.Verb.Tokens,
+            Assert.Single(multiple.Clauses).Verb.Tokens);
+    }
+
+    [Fact]
+    public void Multiple_command_environment_prefixes_publish_each_fact_in_order()
+    {
+        const string source = "A=1 B='two words' C=x inspect --catalog";
+        var result = Parser.Parse(source);
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var command = Assert.Single(result.Commands);
+        Assert.Equal("inspect", Assert.Single(command.Clause.Verb.Tokens));
+        Assert.Equal(
+            new[]
+            {
+                ("A", "1", 0, 3),
+                ("B", "two words", 4, 13),
+                ("C", "x", 18, 3),
+            },
+            command.Assignments.Select(assignment => (
+                assignment.Name,
+                Assert.IsType<ShellValueDomain.Exact>(assignment.EffectiveValue).Value,
+                assignment.SourceStart,
+                assignment.SourceLength)));
+        foreach (var assignment in command.Assignments)
+        {
+            Assert.Equal(
+                ShellVariableAssignmentScope.CommandEnvironment,
+                assignment.Scope);
+            Assert.True(assignment.MayAffectProcessEnvironment);
+            Assert.Equal(assignment.EffectiveValue, assignment.AuthoredValue);
+        }
+    }
+
+    [Fact]
+    public void Shell_state_precedes_multiple_command_environment_prefixes()
+    {
+        var result = Parser.Parse(
+            "root='/work'; A=1 B=2 inspect \"$root/file\"; inspect next");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.Equal(2, result.Commands.Count);
+        Assert.Equal(
+            new[]
+            {
+                ("root", ShellVariableAssignmentScope.ShellState),
+                ("A", ShellVariableAssignmentScope.CommandEnvironment),
+                ("B", ShellVariableAssignmentScope.CommandEnvironment),
+            },
+            result.Commands[0].Assignments.Select(assignment =>
+                (assignment.Name, assignment.Scope)));
+        Assert.Equal("/work/file", Assert.IsType<ShellValueDomain.Exact>(
+            Assert.Single(result.Commands[0].Arguments).Value).Value);
+        Assert.Equal("root", Assert.Single(result.Commands[1].Assignments).Name);
+    }
+
+    [Theory]
+    [InlineData("X=$(id) Y=2 ls")]
+    [InlineData("X=1 Y=$(id) ls")]
+    [InlineData("X=1 Y=2 Z=$(id) ls")]
+    [InlineData("X=1 Y=`id` ls")]
+    [InlineData("X=1 Y=$other ls")]
+    [InlineData("X=1 Y=\"$other\" ls")]
+    [InlineData("A=1 B=\"two words\" C='x' ls")]
+    [InlineData("X=1 Y=~ ls")]
+    [InlineData("X=1 Y=$'a' ls")]
+    [InlineData("X=1 Y=* ls")]
+    [InlineData("X=1 Y+=2 ls")]
+    [InlineData("X=1 Y[0]=2 ls")]
+    [InlineData("X=1 PATH=/other ls")]
+    [InlineData("X=1 Y=2 LD_PRELOAD=/other/lib.so ls")]
+    [InlineData("X=1 BASH_ENV=/other ls")]
+    [InlineData("X=1 X=2 ls")]
+    [InlineData("X=1 Y=2 Z=3 X=4 ls")]
+    [InlineData("X=1 Y=2")]
+    [InlineData("X=1 Y=2 Z=3")]
+    [InlineData("X=1 Y=2; inspect item")]
+    [InlineData("X=1 Y=2 > marker")]
+    [InlineData("X=1 > marker Y=2 inspect item")]
+    [InlineData("X=1 Y=2 > marker inspect item")]
+    [InlineData("X=1 Y=2 printf '%s' item")]
+    [InlineData("X=1 Y=2 cd /work")]
+    [InlineData("X=1 Y=2 bash -c 'inspect item'")]
+    [InlineData("X=1 Y=2 inspect \"$X\"")]
+    [InlineData("X=1 Y=2 inspect item | inspect next")]
+    [InlineData("X=1 Y=2 inspect item && inspect next")]
+    [InlineData("(X=1 Y=2 inspect item)")]
+    [InlineData("inspect \"$(X=1 Y=2 inspect item)\"")]
+    public void Unsafe_multiple_prefix_forms_fail_closed(string source)
+    {
+        var result = Parser.Parse(source);
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
+    [Theory]
+    [InlineData(BashInitialStateMode.Unknown)]
+    [InlineData(BashInitialStateMode.IsolatedNonInteractive)]
+    public void Multiple_prefixes_require_fresh_initial_state(BashInitialStateMode mode)
+    {
+        var parser = new BashParser(new BashParserOptions
+        {
+            WorkingDirectory = "/work",
+            InitialStateMode = mode,
+        });
+
+        var result = parser.Parse("X=1 Y=2 ls -la");
+
+        Assert.True(result.IsUnparseable);
+        Assert.Empty(result.Commands);
+        Assert.Empty(result.Clauses);
+    }
+
     [Fact]
     public void Prefix_expansion_uses_prior_state_and_does_not_persist()
     {

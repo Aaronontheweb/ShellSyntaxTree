@@ -587,20 +587,44 @@ internal static partial class BashCommandParser
                 Tokens = segmentTokens,
             };
             var segmentSourceStart = segmentTokens[0].SourceStart;
-            ShellVariableAssignment? assignment = null;
+            var assignments = new List<ShellVariableAssignment>();
 
-            if (HasAssignmentPrefix(segmentTokens))
+            if (IsAssignmentWord(segmentTokens[0]))
             {
-                if (!TryCreateBoundedAssignment(
-                        segmentTokens[0],
-                        segmentTokens.Count == 1
-                            ? ShellVariableAssignmentScope.ShellState
-                            : ShellVariableAssignmentScope.CommandEnvironment,
-                        out assignment,
-                        out error))
+                var scope = segmentTokens.Count == 1
+                    ? ShellVariableAssignmentScope.ShellState
+                    : ShellVariableAssignmentScope.CommandEnvironment;
+
+                // Bash applies every leading assignment word to the command. Each
+                // word must pass the same bounded-value gate. A repeated name is
+                // rejected because only the last value reaches the command, so an
+                // earlier fact would publish a value the command never receives.
+                var prefixCount = 0;
+                do
                 {
-                    return false;
+                    if (!TryCreateBoundedAssignment(
+                            segmentTokens[prefixCount],
+                            scope,
+                            out var assignment,
+                            out error))
+                    {
+                        return false;
+                    }
+
+                    foreach (var prior in assignments)
+                    {
+                        if (string.Equals(prior.Name, assignment!.Name, StringComparison.Ordinal))
+                        {
+                            error = "repeated Bash assignment prefix names are not supported";
+                            return false;
+                        }
+                    }
+
+                    assignments.Add(assignment!);
+                    prefixCount++;
                 }
+                while (prefixCount < segmentTokens.Count &&
+                       IsAssignmentWord(segmentTokens[prefixCount]));
 
                 if (_bashCDepth > 0 || _structuralDepth > 0 ||
                     _subshellDepth > 0 || _loopDepth > 0)
@@ -611,29 +635,29 @@ internal static partial class BashCommandParser
 
                 if (segmentTokens.Count == 1)
                 {
-                    _boundedAssignmentName = assignment!.Name;
+                    _boundedAssignmentName = assignments[0].Name;
                     command = new ShellAssignmentSyntax
                     {
-                        Assignment = assignment!,
+                        Assignment = assignments[0],
                         SourceStart = segmentTokens[0].SourceStart,
                         SourceLength = segmentTokens[0].SourceLength,
                     };
                     return true;
                 }
 
-                if (segmentTokens[1].Kind == BashTokenKind.Operator)
-                {
-                    error = "redirects on assignment-only Bash statements are not supported";
-                    return false;
-                }
-
-                if (HasAssignmentPrefix(segmentTokens.GetRange(1, segmentTokens.Count - 1)))
+                if (prefixCount == segmentTokens.Count)
                 {
                     error = "multiple Bash assignments are not supported";
                     return false;
                 }
 
-                segmentTokens.RemoveAt(0);
+                if (segmentTokens[prefixCount].Kind == BashTokenKind.Operator)
+                {
+                    error = "redirects on assignment-only Bash statements are not supported";
+                    return false;
+                }
+
+                segmentTokens.RemoveRange(0, prefixCount);
                 segment = new Segment
                 {
                     PrecedingOperator = compatibilityOperator,
@@ -652,7 +676,7 @@ internal static partial class BashCommandParser
 
             if (TryDetectBashCWrapper(segment, _source, out var innerCommand))
             {
-                if (assignment is not null)
+                if (assignments.Count > 0)
                 {
                     error = "a Bash assignment prefix on a decoded shell wrapper is not supported";
                     return false;
@@ -766,7 +790,7 @@ internal static partial class BashCommandParser
                 IsCommandStringWrapped = _markBashCWrapped,
             };
             var emitted = AttachAttributionArg(clause, _attribution);
-            if (assignment is not null && IsBuiltin(emitted))
+            if (assignments.Count > 0 && IsBuiltin(emitted))
             {
                 error = "a Bash assignment prefix before a builtin is not supported";
                 return false;
@@ -856,9 +880,7 @@ internal static partial class BashCommandParser
             {
                 Clause = emitted,
                 Substitutions = substitutions,
-                EnvironmentAssignments = assignment is null
-                    ? Array.Empty<ShellVariableAssignment>()
-                    : new[] { assignment },
+                EnvironmentAssignments = assignments,
                 SourceStart = segmentSourceStart,
                 SourceLength = sourceEnd - segmentSourceStart,
             };
@@ -1347,9 +1369,9 @@ internal static partial class BashCommandParser
             return true;
         }
 
-        private bool HasAssignmentPrefix(IReadOnlyList<BashToken> tokens)
+        private bool IsAssignmentWord(BashToken token)
         {
-            var spelling = _source.Substring(tokens[0].SourceStart, tokens[0].SourceLength)
+            var spelling = _source.Substring(token.SourceStart, token.SourceLength)
                 .Replace("\\\r\n", string.Empty)
                 .Replace("\\\n", string.Empty)
                 .Replace("\\\r", string.Empty);

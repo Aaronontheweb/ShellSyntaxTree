@@ -360,7 +360,9 @@ The parser does not approve the variable name or its value. It only proves the
 authored assignment, its effective scalar value, its lifetime, and whether it
 can reach a process environment.
 
-A Bash `CommandEnvironment` assignment applies only to its occurrence. A Bash
+A Bash `CommandEnvironment` assignment applies only to its occurrence. One
+occurrence can carry several of these facts, one for each prefix in source
+order. A Bash
 `ShellState` assignment appears on every later accepted occurrence. The narrow
 PowerShell form appears on its one following command. Consumers must evaluate
 all assignment names and values before they reuse approval for the command.
