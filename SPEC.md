@@ -699,7 +699,7 @@ public enum ShellVariableAssignmentScope
 }
 
 Every occurrence carries each accepted shell-state assignment that can affect
-it, followed by its direct command-environment prefix when present. The
+it, followed by its direct command-environment prefixes in source order. The
 authored value describes the exact decoded right-hand side. The effective value
 is exact only under the matching shell-specific initial-state contract. A Bash
 `ShellState` fact sets `MayAffectProcessEnvironment=true` because an ordinary
@@ -711,12 +711,13 @@ entry. These parser facts do not grant authority.
 
 The bounded Bash slice accepts one exact lowercase ordinary shell-state name.
 An assignment-only statement can precede later commands through `;` or a
-newline. One direct assignment prefix can precede a non-builtin external
-command. The prefix name can use uppercase letters when it does not match a
-shell-owned, command-resolution, startup, or loader name. The parser rejects
-multiple assignments, dynamic values, substitutions, arrays, `+=`, redirects
-on assignment-only statements, pipelines, subshells, condition operators, and
-all builtin prefixes. It also rejects assignment after unmodeled shell-state
+newline. One or more direct assignment prefixes can precede a non-builtin
+external command. Each prefix must pass the same name and value gates. A
+prefix name can use uppercase letters when it does not match a shell-owned,
+command-resolution, startup, or loader name. The parser rejects more than one
+assignment-only word, a repeated prefix name, dynamic values, substitutions,
+arrays, `+=`, redirects before the command name, pipelines, subshells,
+condition operators, and all builtin prefixes. It also rejects assignment after unmodeled shell-state
 or variable-state mutation. Shell-sensitive names include `_`, `PATH`,
 `BASH_ENV`, `ENV`, `SHELLOPTS`, `BASHOPTS`, `CDPATH`, `GLOBIGNORE`, `IFS`,
 loader-variable families, imported-function spellings, exact Bash special
@@ -733,9 +734,11 @@ the authored spelling as an effective value when Bash can transform it.
 For example, `root=/work/tree; inspect "$root/file"` publishes `root` as an
 exact shell-state assignment and resolves the later argument only under the
 fresh-process mode. `MODE=fast inspect item` publishes one command-environment
-assignment on `inspect`. By contrast, `PATH=/other inspect item`,
-`root=$(discover); inspect "$root/file"`, and `root=/work > marker` are
-unparseable and publish no commands.
+assignment on `inspect`. `A=1 B='two words' inspect item` publishes `A` and
+then `B` on `inspect`. By contrast, `PATH=/other inspect item`,
+`root=$(discover); inspect "$root/file"`, `A=1 B=$(id) inspect item`,
+`A=1 A=2 inspect item`, `A=1 B=2`, and `root=/work > marker` are unparseable
+and publish no commands.
 
 The bounded PowerShell slice requires
 `PwshInitialStateMode.IsolatedNonInteractiveNoProfile`. It accepts one ordinary

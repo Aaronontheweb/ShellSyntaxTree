@@ -10,12 +10,19 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.5 PowerShell assignment whitespace)
+## NOW (0.4.0-beta.6 multiple Bash assignment prefixes)
+
+- [x] Accept one or more bounded Bash command-environment prefixes before one external command (#189).
+- [x] Keep dynamic values, repeated names, assignment-only lists, and all other unsupported forms fail closed.
+- [x] Complete Release tests, the PII audit, and the header check.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.6` and verify NuGet publication.
+
+## Completed (0.4.0-beta.5 PowerShell assignment whitespace)
 
 - [x] Accept ASCII spaces and tabs around the bounded PowerShell assignment operator.
 - [x] Preserve exact assignment spans and keep comments, continuations, Unicode whitespace, and unsupported forms fail closed.
 - [x] Complete Release tests, the public API comparison, the PII audit, the header check, package checks, and security review.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.5` and verify NuGet publication.
+- [x] Merge PR #188 after Linux and Windows CI. Tag `0.4.0-beta.5` and verify NuGet publication.
 
 ## Completed (0.4.0-beta.4 bounded assignment facts)
 

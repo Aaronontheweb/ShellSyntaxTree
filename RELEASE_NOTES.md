@@ -1,3 +1,21 @@
+#### 0.4.0-beta.6 2026-09-30 ####
+
+This prerelease accepts more than one bounded Bash assignment prefix before one external command.
+
+## Fixed
+
+- Parse `X=1 Y=2 ls -la` and other simple commands with one or more command-environment prefixes (#189).
+- Publish one exact `CommandEnvironment` fact for each prefix in source order.
+- Keep the command name and arguments identical to the single-prefix result.
+
+## Security and compatibility
+
+- Apply the existing name and value gates to each prefix. One unbounded value, such as `Y=$(id)`, rejects the complete input.
+- Reject repeated prefix names, because only the last value reaches the command.
+- Keep assignment-only lists such as `X=1 Y=2`, redirects before the command name, builtins, wrappers, pipelines, and condition lists fail closed.
+- Require `FreshNonInteractiveNoStartup` as before. `Unknown` and `IsolatedNonInteractive` still reject every prefix.
+- Preserve the public API exactly. This release changes parser behavior only.
+
 #### 0.4.0-beta.5 2026-09-22 ####
 
 This prerelease accepts PowerShell horizontal whitespace around a bounded scalar assignment operator.
