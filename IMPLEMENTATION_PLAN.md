@@ -15,7 +15,11 @@ priorities.
 - [x] Accept one or more bounded Bash command-environment prefixes before one external command (#189).
 - [x] Keep dynamic values, repeated names, assignment-only lists, and all other unsupported forms fail closed.
 - [x] Complete Release tests, the PII audit, and the header check.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.6` and verify NuGet publication.
+- [x] Merge PR #191 after Linux and Windows CI. Tag `0.4.0-beta.6` on merge
+      `d4a29060` and verify NuGet publication. Workflow run 36663082543
+      published the package and the GitHub prerelease.
+- [ ] Upgrade Netclaw to the public 0.4.0-beta.6 package. The Netclaw owner
+      does this upgrade.
 
 ## Completed (0.4.0-beta.5 PowerShell assignment whitespace)
 
