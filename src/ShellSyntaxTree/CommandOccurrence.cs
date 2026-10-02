@@ -236,8 +236,8 @@ public abstract record ShellWorkingDirectoryEffect
 /// <c>git -p filter-branch</c> gives <c>git filter-branch</c>. An option
 /// value can therefore only make the word list more specific. A quoted
 /// single word counts: <c>git "push"</c> gives <c>git push</c>. A bare glob
-/// is skipped as a path pattern, but the shell can expand it to a file name,
-/// so a consumer must evaluate glob arguments separately.
+/// such as <c>*</c> gives <see cref="Unknown"/>, because the shell can
+/// replace it with any file name.
 /// </remarks>
 public abstract record ShellCommandWords
 {

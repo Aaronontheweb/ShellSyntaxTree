@@ -25,11 +25,13 @@ namespace ShellSyntaxTree.Internal.Parsing;
 /// Each word after the program word gets exactly one class:
 /// <list type="bullet">
 ///   <item>option: the word starts with <c>-</c>;</item>
-///   <item>path: a path, a directory reference, or a glob pattern;</item>
+///   <item>path: a path, a directory reference, or a glob that contains
+///   <c>/</c>;</item>
 ///   <item>dynamic: the shell expands the word before the program runs, so
-///   the parser cannot prove the program's words. The result is
-///   <see cref="ShellCommandWords.Unknown"/>;</item>
-///   <item>text: a static value that contains whitespace, or is empty;</item>
+///   the parser cannot prove the program's words. A bare glob is dynamic.
+///   The result is <see cref="ShellCommandWords.Unknown"/>;</item>
+///   <item>text: a static value that is empty or contains whitespace or a
+///   quoted glob character;</item>
 ///   <item>value: a static value that contains an ASCII digit;</item>
 ///   <item>command word: every other static value, quoted or not.</item>
 /// </list>
@@ -151,9 +153,16 @@ internal static class ShellCommandWordProjection
             return WordClass.Option;
         }
 
-        if (element.Kind == ArgKind.Glob)
+        if (element.Kind == ArgKind.Glob || shape == WordShape.Glob)
         {
-            return WordClass.Path;
+            // Owner decision (Option A, #194). The shell replaces a glob with
+            // matching file names. A glob that contains `/` can only give
+            // words that contain `/`, so every result is a path and none can
+            // be a subcommand: `./*`, `src/*`, `**/x`. A bare glob such as
+            // `*` or `p?sh` can give any file name in the directory. If a
+            // file named `push` exists, `git *` runs `git push`. The parser
+            // cannot prove the words, so the result is unknown.
+            return element.Value.IndexOf('/') >= 0 ? WordClass.Path : WordClass.Dynamic;
         }
 
         if (!isStatic)
@@ -165,8 +174,12 @@ internal static class ShellCommandWordProjection
         }
 
         var value = element.Value;
-        if (value.Length == 0 || ContainsWhitespace(value))
+        if (value.Length == 0 ||
+            ContainsWhitespace(value) ||
+            value.IndexOfAny(GlobCharacters) >= 0)
         {
+            // A quoted or escaped glob such as "*" or \* reaches the program
+            // as one literal value. It is data, not a command word.
             return WordClass.Text;
         }
 
@@ -185,6 +198,8 @@ internal static class ShellCommandWordProjection
         element.IsPath ||
         BashResolver.LooksLikePathOperand(element.Value, isGlobPattern: false);
 
+    private static readonly char[] GlobCharacters = { '*', '?', '[' };
+
     private enum WordShape
     {
         /// <summary>The authored word has one static value.</summary>
@@ -192,6 +207,9 @@ internal static class ShellCommandWordProjection
 
         /// <summary>The word has an expansion that keeps it one word.</summary>
         Expanded,
+
+        /// <summary>The word has an unquoted glob character.</summary>
+        Glob,
 
         /// <summary>The word has an expansion that can give more words.</summary>
         MaySplit,
@@ -299,7 +317,7 @@ internal static class ShellCommandWordProjection
                 case '*':
                 case '?':
                 case '[':
-                    shape = Max(shape, WordShape.Expanded);
+                    shape = Max(shape, WordShape.Glob);
                     break;
                 case '~' when index == 0:
                     shape = Max(shape, WordShape.Expanded);
@@ -419,7 +437,7 @@ internal static class ShellCommandWordProjection
                 case '*' when !isCommandName:
                 case '?' when !isCommandName:
                 case '[' when !isCommandName:
-                    shape = Max(shape, WordShape.Expanded);
+                    shape = Max(shape, WordShape.Glob);
                     break;
                 case '~' when index == 0:
                     shape = Max(shape, WordShape.Expanded);

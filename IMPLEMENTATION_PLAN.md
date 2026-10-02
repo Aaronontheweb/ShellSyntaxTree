@@ -16,7 +16,8 @@ priorities.
 - [x] Report `.`, `..`, and unquoted globs as path operands for programs without a per-verb rule (#193).
 - [x] Keep unbounded globs unresolved and keep incomplete or dynamic occurrences `Unknown`.
 - [x] Complete Release tests, the public API comparison, the PII audit, and the header check.
-- [ ] Merge the PR after Linux and Windows CI and owner confirmation of the plain-word-after-option rule. Tag `0.4.0-beta.7` and verify NuGet publication.
+- [x] Apply the owner rules: keep a plain word after an option, count a quoted single word, and make expansions and bare globs `Unknown`.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.7` and verify NuGet publication.
 - [ ] Netclaw consumes `CommandWords` for shell approval grants. The Netclaw owner does this change.
 
 ## Completed (0.4.0-beta.6 multiple Bash assignment prefixes)

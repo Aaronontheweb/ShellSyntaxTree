@@ -8,6 +8,7 @@ This prerelease adds a command-words fact and reports more general path operands
 - Skip options, paths, globs, words with a digit, text with whitespace, and redirect targets. PowerShell parameter tokens are options.
 - Count a quoted single word as a command word. `git "push"` and `git \push` give `git push`.
 - Return `Unknown` for an expansion outside an option or a path, such as `git $(cmd)` or `git {push,log}`, and for any word that can split into more words.
+- Return `Unknown` for a bare glob such as `*` or `p?sh`, because the shell can replace it with any file name. A glob that contains `/`, such as `./*`, is skipped as a path pattern. `du -sh *` gives `Unknown`, and `du -sh ./*` gives `du`.
 - Keep a plain word after an option, because the parser cannot tell an option value from a subcommand. `pgrep -x name` gives `pgrep name`.
 
 ## Fixed
@@ -19,7 +20,6 @@ This prerelease adds a command-words fact and reports more general path operands
 
 - `CommandWords` is `Unknown` when the occurrence is incomplete or its command name is dynamic.
 - `CommandWords` is a parser fact. It does not grant authority.
-- Known limit: a bare glob is skipped as a path pattern. If a file named `push` exists, `git *` runs `git push` but gives `git`. Consumers must evaluate glob arguments separately.
 - A new glob path fact keeps `Kind = Glob`, `Resolved = null`, and an `Unknown` value. It adds no tree access and no loop pattern.
 - A quoted or escaped `*` stays data. Per-verb rules such as `grep` patterns and `curl` URLs still win.
 - After an unknown `cd` target, `.` becomes `DynamicSkip`, the same as `./x`.

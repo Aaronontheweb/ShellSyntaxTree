@@ -31,7 +31,7 @@ public class CommandWordsTests
     [InlineData("git push origin feature-x", "git push origin feature-x")]
     [InlineData("pgrep -x name", "pgrep name")]
     [InlineData("df -h .", "df")]
-    [InlineData("du -sh *", "du")]
+    [InlineData("du -sh ./*", "du")]
     [InlineData("ls -la ../x", "ls")]
     [InlineData("echo \"hello world\"", "echo")]
     [InlineData("make build", "make build")]
@@ -171,6 +171,9 @@ public class CommandWordsTests
     [InlineData("Get-Process $var")]
     [InlineData("Get-Process -Name $var")]
     [InlineData("Get-Process @params")]
+    [InlineData("du -sh *")]
+    [InlineData("git p?sh")]
+    [InlineData("Get-ChildItem *.cs")]
     public void PowerShell_expansion_makes_words_unknown(string source)
     {
         var command = ParsePwsh(source).Commands.Last();
@@ -187,13 +190,12 @@ public class CommandWordsTests
     [InlineData("tool ../x")]
     [InlineData("tool ~/x")]
     [InlineData("tool /abs")]
-    [InlineData("tool *")]
-    [InlineData("tool *.cs")]
+    [InlineData("tool ./*")]
     [InlineData("tool src/*")]
+    [InlineData("tool src/*.cs")]
     [InlineData("tool **/x")]
-    [InlineData("tool ?")]
-    [InlineData("tool [ab]")]
-    public void Bash_path_and_glob_operands_are_skipped(string source)
+    [InlineData("tool ../*.cs")]
+    public void Bash_path_and_slash_glob_operands_are_skipped(string source)
     {
         var command = Assert.Single(ParseBash(source).Commands);
         var operand = Assert.Single(command.Clause.Elements, item => item.Role == ClauseElementRole.Argument);
@@ -213,7 +215,7 @@ public class CommandWordsTests
 
         Assert.False(operand.IsPath);
         Assert.Equal(ArgKind.Literal, operand.Kind);
-        Assert.Equal("tool *", Words(command));
+        Assert.Equal("tool", Words(command));
     }
 
     [Fact]
@@ -228,12 +230,50 @@ public class CommandWordsTests
     }
 
     [Theory]
-    // Known limitation, pending owner review: a glob is a path pattern, so
-    // it is skipped. If the working directory has a file named `push`,
-    // the shell turns `git *` into `git push`.
-    [InlineData("git *", "git")]
-    [InlineData("git p?sh", "git")]
-    public void Bash_bare_glob_is_skipped_as_a_path_pattern(string source, string expected) =>
+    // Option A (#194): a bare glob can expand to any file name, such as
+    // `push`, so the words are unknown. The glob is still a path fact.
+    [InlineData("git *")]
+    [InlineData("git p?sh")]
+    [InlineData("git [ab]*")]
+    [InlineData("git **")]
+    [InlineData("git push *")]
+    [InlineData("du -sh *")]
+    [InlineData("tool *.cs")]
+    [InlineData("tool ?")]
+    [InlineData("tool [ab]")]
+    public void Bash_bare_glob_makes_words_unknown(string source)
+    {
+        var command = Assert.Single(ParseBash(source).Commands);
+        var glob = command.Clause.Elements.Last();
+
+        Assert.IsType<ShellCommandWords.Unknown>(command.CommandWords);
+        Assert.Equal(ArgKind.Glob, glob.Kind);
+        Assert.True(glob.IsPath);
+    }
+
+    [Fact]
+    public void Bare_glob_is_unknown_even_when_the_lexer_kind_is_not_glob()
+    {
+        // tar -F takes command text, so the parser marks the value
+        // DynamicSkip. The shell still expands the unquoted glob first.
+        var command = Assert.Single(ParseBash("tar -F *.json").Commands);
+
+        Assert.Equal(ArgKind.DynamicSkip, command.Clause.Elements.Last().Kind);
+        Assert.IsType<ShellCommandWords.Unknown>(command.CommandWords);
+    }
+
+    [Theory]
+    [InlineData("du -sh ./*", "du")]
+    [InlineData("git ./*", "git")]
+    [InlineData("ls src/*.cs", "ls")]
+    [InlineData("git ../*.cs", "git")]
+    [InlineData("tool --include=*.cs", "tool")]
+    [InlineData("du -sh \"*\"", "du")]
+    [InlineData("du -sh \\*", "du")]
+    [InlineData("git 'p?sh'", "git")]
+    public void Bash_slash_glob_option_glob_and_quoted_glob_are_skipped(
+        string source,
+        string expected) =>
         AssertBashWords(source, expected);
 
     // ------------------------------------------------------------ digits
@@ -289,14 +329,15 @@ public class CommandWordsTests
     [InlineData("Remove-Item x.txt -Force", "Remove-Item")]
     [InlineData("Get-Item -Path:foo bar", "Get-Item")]
     [InlineData("Get-ChildItem .", "Get-ChildItem")]
-    [InlineData("Get-ChildItem *.cs", "Get-ChildItem")]
+    [InlineData("Get-ChildItem ./*.cs", "Get-ChildItem")]
+    [InlineData("du -sh ./*", "du")]
+    [InlineData("du -sh '*'", "du")]
     [InlineData("Write-Output \"a b\"", "Write-Output")]
     [InlineData("Write-Output 'it''s'", "Write-Output it's")]
     [InlineData("& 'C:\\x\\tool.exe' arg", "C:\\x\\tool.exe arg")]
     [InlineData("& 'gh' pr view", "gh pr view")]
     [InlineData("gh -R o/r pr view 1", "gh pr view")]
     [InlineData("gh pr view 1 -R o/r", "gh pr view")]
-    [InlineData("du -sh *", "du")]
     [InlineData("ssh user@host", "ssh user@host")]
     public void PowerShell_words(string source, string expected) =>
         AssertPwshWords(source, expected);

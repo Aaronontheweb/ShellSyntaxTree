@@ -966,10 +966,10 @@ change the word. Each later verb or argument element then gets one class:
 | Class | Rule | Result |
 |---|---|---|
 | option | starts with `-`, including `--name=value`, bare `--`, and PowerShell `-Name` | skipped |
-| path | a path, `.`, `..`, or a glob pattern | skipped |
-| dynamic | an expansion that is not in an option or a path | whole result `Unknown` |
+| path | a path, `.`, `..`, or a glob that contains `/` | skipped |
+| dynamic | an expansion that is not in an option or a path, or a bare glob | whole result `Unknown` |
 | split | a word that can become more than one word | whole result `Unknown` |
-| text | a static value with whitespace, or an empty value | skipped |
+| text | a static value that is empty or has whitespace or a quoted glob character | skipped |
 | value | a static value with an ASCII digit | skipped |
 | command word | any other static value, quoted or not | kept |
 
@@ -981,6 +981,14 @@ change the word. Each later verb or argument element then gets one class:
 - An expansion inside an option, such as `--repo="$r"`, or inside a path,
   such as `"$r/x"`, is skipped. The value stays one option word or one path
   word, so it cannot become a command word.
+- A glob that contains `/`, such as `./*`, `src/*.cs`, or `**/x`, is a path
+  pattern and is skipped. The shell replaces it only with names that contain
+  `/`, so no result can be a subcommand.
+- A bare glob, such as `*`, `p?sh`, or `[ab]*`, gives `Unknown`. The shell can
+  replace it with any file name in the directory. If a file named `push`
+  exists, `git *` runs `git push`.
+- A quoted or escaped glob, such as `"*"` or `\*`, reaches the program as one
+  literal value. It is data, so it is skipped.
 - A split word is an unquoted Bash expansion, a Bash brace list, or a
   PowerShell array, splat, or subexpression. It gives `Unknown` even inside an
   option or a path. With `r='x push'`, `git --c=$r log` runs
@@ -1007,20 +1015,19 @@ named policy point, `KeepsPlainWordAfterOption`.
 | `git -p filter-branch --force HEAD` | `git filter-branch HEAD` |
 | `pgrep -x name` | `pgrep name` |
 | `git commit -m "fix the bug"` | `git commit` |
-| `du -sh *` | `du` |
+| `du -sh ./*` | `du` |
+| `du -sh *` | `Unknown` |
 | `Get-Process -Name foo` | `Get-Process foo` |
 | `git {push,log}` | `Unknown` |
 
 The value is also `Unknown` when `IsComplete` is false, when the command name
 is dynamic, or when the elements do not agree with the verb chain.
 
-Known limits:
+Known cost: a word with a digit is skipped. Branch names such as
+`release-2.0` therefore share one key.
 
-- A word with a digit is skipped. Branch names such as `release-2.0` therefore
-  share one key.
-- A bare glob is a path pattern and is skipped. The shell expands it to file
-  names in the working directory. If a file named `push` exists, `git *` runs
-  `git push` but gives `git`.
+The bare-glob rule applies to the command words only. The glob is still a path
+fact on its element, as the path-operand fallback in §8 describes.
 
 #### Finite Bash scope projection (v0.4.0-beta.3)
 
