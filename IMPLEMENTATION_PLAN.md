@@ -17,7 +17,9 @@ priorities.
 - [x] Keep unbounded globs unresolved and keep incomplete or dynamic occurrences `Unknown`.
 - [x] Complete Release tests, the public API comparison, the PII audit, and the header check.
 - [x] Apply the owner rules: keep a plain word after an option, count a quoted single word, and make expansions and bare globs `Unknown`.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.7` and verify NuGet publication.
+- [x] Merge PR #195 after Linux and Windows CI. Tag `0.4.0-beta.7` on merge
+      `1e99260c` and verify NuGet publication. Workflow run 37053354677
+      published the package and the GitHub prerelease.
 - [ ] Netclaw consumes `CommandWords` for shell approval grants. The Netclaw owner does this change.
 
 ## Completed (0.4.0-beta.6 multiple Bash assignment prefixes)
