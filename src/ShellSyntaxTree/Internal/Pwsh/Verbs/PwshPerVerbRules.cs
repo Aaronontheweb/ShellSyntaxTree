@@ -138,7 +138,9 @@ internal static class PwshPerVerbRules
 
         // Non-FileVerb cmdlet: keep the path-shape heuristic so an explicit
         // path argument is recognized even for a cmdlet absent from the
-        // FileVerbs table.
-        return BashResolver.LooksLikePath(token ?? "");
+        // FileVerbs table. `.` and `..` are paths for every command. A
+        // wildcard is not: PowerShell passes it to a cmdlet unexpanded, and
+        // only the cmdlet decides whether it means file names (#193).
+        return BashResolver.LooksLikePathOperand(token ?? "", isGlobPattern: false);
     }
 }

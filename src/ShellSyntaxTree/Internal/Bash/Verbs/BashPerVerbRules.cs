@@ -14,7 +14,7 @@ namespace ShellSyntaxTree.Internal.Bash.Verbs;
 /// this class "is the i-th non-flag positional of <c>verb</c> a path?" and
 /// gets a boolean back. The rules are a layered fall-through:
 /// per-verb override → FileVerb default ("all positionals are paths") →
-/// <see cref="BashResolver.LooksLikePath"/> heuristic for non-FileVerb verbs.
+/// <see cref="BashResolver.LooksLikePathOperand"/> heuristic for non-FileVerb verbs.
 /// </summary>
 /// <remarks>
 /// This file also owns the per-flag value-classification table referenced
@@ -82,30 +82,47 @@ internal static class BashPerVerbRules
     /// <param name="verb">Verb chain; only the first token drives the rule.</param>
     /// <param name="positionalIndex">0-based positional index among non-flag args.</param>
     /// <param name="token">The token text itself (used for the LooksLikePath fallback).</param>
+    /// <param name="isGlobPattern">
+    /// True when the lexer proved that the shell expands the token to file
+    /// names. The fallback then reports it as a path pattern.
+    /// </param>
     /// <returns>True when this slot is a path; false otherwise.</returns>
     internal static bool IsPositionalPathArg(
         VerbChain verb,
         int positionalIndex,
-        string token) =>
-        IsPositionalPathArg(verb, positionalIndex, token, useBashAuditedSemantics: true);
+        string token,
+        bool isGlobPattern) =>
+        IsPositionalPathArg(
+            verb,
+            positionalIndex,
+            token,
+            isGlobPattern,
+            useBashAuditedSemantics: true);
 
     internal static bool IsNativePositionalPathArg(
         VerbChain verb,
         int positionalIndex,
-        string token) =>
-        IsPositionalPathArg(verb, positionalIndex, token, useBashAuditedSemantics: false);
+        string token,
+        bool isGlobPattern) =>
+        IsPositionalPathArg(
+            verb,
+            positionalIndex,
+            token,
+            isGlobPattern,
+            useBashAuditedSemantics: false);
 
     private static bool IsPositionalPathArg(
         VerbChain verb,
         int positionalIndex,
         string token,
+        bool isGlobPattern,
         bool useBashAuditedSemantics)
     {
         if (verb is null || verb.Tokens is null || verb.Tokens.Count == 0)
         {
             // No verb (redirect-only clause). Fall back to the path-shape
             // heuristic on the token itself.
-            return BashResolver.LooksLikePath(token ?? "");
+            return BashResolver.LooksLikePathOperand(token ?? "", isGlobPattern);
         }
 
         var firstVerb = verb.Tokens[0];
@@ -132,10 +149,11 @@ internal static class BashPerVerbRules
             return true;
         }
 
-        // Non-FileVerb verb: fall back to the SPEC §8 LooksLikePath
+        // Non-FileVerb verb: fall back to the SPEC §8 path-operand
         // heuristic on the token. Keeps `cmd /etc/foo` recognizing the path
-        // even when the verb is unknown to our tables.
-        return BashResolver.LooksLikePath(token ?? "");
+        // even when the verb is unknown to our tables. `.`, `..`, and an
+        // unquoted glob are path operands for every program (#193).
+        return BashResolver.LooksLikePathOperand(token ?? "", isGlobPattern);
     }
 
     /// <summary>

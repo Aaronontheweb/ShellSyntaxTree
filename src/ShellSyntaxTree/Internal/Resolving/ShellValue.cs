@@ -126,6 +126,36 @@ internal sealed class ShellValue
         return false;
     }
 
+    /// <summary>
+    /// True when the value is a pathname-expansion pattern: at least one
+    /// unquoted glob region and no other expansion or opaque region. The
+    /// shell expands such a word to file names before the program runs.
+    /// </summary>
+    internal bool IsGlobPattern
+    {
+        get
+        {
+            var hasGlob = false;
+            foreach (var fragment in _fragments)
+            {
+                if (fragment.Kind == ShellValueFragmentKind.Literal)
+                {
+                    continue;
+                }
+
+                if (fragment.Kind != ShellValueFragmentKind.Expansion ||
+                    fragment.Expansion is not { Kind: ShellExpansionKind.Glob })
+                {
+                    return false;
+                }
+
+                hasGlob = true;
+            }
+
+            return hasGlob;
+        }
+    }
+
     internal static ShellValue Literal(
         string value,
         int? sourceStart = null,

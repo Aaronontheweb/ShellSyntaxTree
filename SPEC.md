@@ -249,6 +249,9 @@ public enum ShellTreeTraversalMode { ... }
 // v0.4.0-beta.3 finite Bash scope evidence — see §3.
 public sealed record BashFiniteScopeProjection { ... }
 public sealed record BashScopedCommand { ... }
+
+// v0.4.0-beta.7 command-word evidence — see §3.
+public abstract record ShellCommandWords { ... }
 ```
 
 Stable v0.3 exposes only structural types the parsers can emit. The additive
@@ -262,6 +265,8 @@ The finite Bash scope method and result records target `0.4.0-beta.3`.
 They add no authority rule and do not change an existing occurrence.
 The assignment records and the fresh-process initial-state mode target
 `0.4.0-beta.4`. They expose parser facts only and grant no authority.
+`CommandOccurrence.CommandWords` and the `ShellCommandWords` family target
+`0.4.0-beta.7`. They expose a parser fact only and grant no authority.
 
 That's the entire public API. **Everything else is internal.** The lexer,
 parser internals, verb tables, resolver — all implementation detail.
@@ -677,6 +682,8 @@ public sealed record CommandOccurrence
         { get; internal init; } = new ShellWorkingDirectoryEffect.Unknown();
     public IReadOnlyList<RedirectAnalysis> Redirects { get; internal init; } = [];
     public bool IsComplete { get; internal init; }
+    public ShellCommandWords CommandWords
+        { get; internal init; } = new ShellCommandWords.Unknown();
 }
 
 public sealed record ShellVariableAssignment
@@ -770,6 +777,18 @@ public abstract record ShellWorkingDirectoryEffect
     public sealed record ChangesOnSuccess : ShellWorkingDirectoryEffect
     {
         public ShellValueDomain Target { get; }
+    }
+}
+
+public abstract record ShellCommandWords
+{
+    private protected ShellCommandWords() { }
+    private protected abstract object LibraryOwnership { get; }
+
+    public sealed record Unknown : ShellCommandWords { ... }
+    public sealed record Known : ShellCommandWords
+    {
+        public IReadOnlyList<string> Words { get; }
     }
 }
 
@@ -923,6 +942,92 @@ shell path style. Unknown proves a success-only mutation without a bounded
 destination. Any other domain, malformed set, over-limit join, or missing fact
 makes the whole public effect `Unknown`. A target does not prove existence,
 accessibility, authorization, or runtime success.
+
+#### Command words (v0.4.0-beta.7)
+
+`CommandWords` gives the ordered command words of one occurrence. The fact
+uses general shell conventions only. It does not use the option grammar or
+the subcommand grammar of a program. `ShellCommandWordProjection` owns the
+rules. The input is the occurrence's `Clause.Elements`, and the result is
+call-local to the parse.
+
+Security goal: the words must never be shorter than the words that the
+program really receives. A consumer can key an approval grant on the words,
+so a hidden subcommand could widen a grant.
+
+The first word is the program word as the lexer decodes it. `"git"` and
+`\git` give `git`. An expanded program word gives `Unknown`. A consumer can
+substitute `VerbChain.CanonicalVerb`. A wrapper such as `env` or `command` is
+the program word, so `env git push` gives `env git push`.
+
+A quote-aware scan of each authored word decides whether the shell can
+change the word. Each later verb or argument element then gets one class:
+
+| Class | Rule | Result |
+|---|---|---|
+| option | starts with `-`, including `--name=value`, bare `--`, and PowerShell `-Name` | skipped |
+| path | a path, `.`, `..`, or a glob that contains `/` | skipped |
+| dynamic | an expansion that is not in an option or a path, or a bare glob | whole result `Unknown` |
+| split | a word that can become more than one word | whole result `Unknown` |
+| text | a static value that is empty or has whitespace or a quoted glob character | skipped |
+| value | a static value with an ASCII digit | skipped |
+| command word | any other static value, quoted or not | kept |
+
+- A quoted single word is a command word. `git "push"`, `git 'push'`,
+  `git "pu"sh`, and `git \push` all give `git push`.
+- An expansion is a variable, a command or arithmetic substitution, or a
+  Bash brace list. `git {push,log}`, `git "$x"`, and `git $(cmd)` give
+  `Unknown`.
+- An expansion inside an option, such as `--repo="$r"`, or inside a path,
+  such as `"$r/x"`, is skipped. The value stays one option word or one path
+  word, so it cannot become a command word.
+- A glob that contains `/`, such as `./*`, `src/*.cs`, or `**/x`, is a path
+  pattern and is skipped. The shell replaces it only with names that contain
+  `/`, so no result can be a subcommand.
+- A bare glob, such as `*`, `p?sh`, or `[ab]*`, gives `Unknown`. The shell can
+  replace it with any file name in the directory. If a file named `push`
+  exists, `git *` runs `git push`.
+- A quoted or escaped glob, such as `"*"` or `\*`, reaches the program as one
+  literal value. It is data, so it is skipped.
+- A split word is an unquoted Bash expansion, a Bash brace list, or a
+  PowerShell array, splat, or subexpression. It gives `Unknown` even inside an
+  option or a path. With `r='x push'`, `git --c=$r log` runs
+  `git --c=x push log`.
+- The parser rejects many expansions before this fact exists. For example,
+  `git $SUB`, ``git `cmd` ``, `git $((1+1))`, and `git $'push'` are
+  unparseable.
+
+Only command words follow the program word. Redirect targets are not words of
+the command. Bash assignment prefixes are not clause elements. Option order
+does not change the result.
+
+A plain word directly after an option stays a command word. The parser cannot
+tell an option value from a subcommand after a valueless switch. If the word
+were dropped, a subcommand could hide behind a switch. If the word is kept,
+an option value can only make the list more specific. This choice is one
+named policy point, `KeepsPlainWordAfterOption`.
+
+| Source | `CommandWords` |
+|---|---|
+| `gh -R o/r pr view 123` | `gh pr view` |
+| `gh pr view 123 -R o/r` | `gh pr view` |
+| `git push origin v0.4.0` | `git push origin` |
+| `git -p filter-branch --force HEAD` | `git filter-branch HEAD` |
+| `pgrep -x name` | `pgrep name` |
+| `git commit -m "fix the bug"` | `git commit` |
+| `du -sh ./*` | `du` |
+| `du -sh *` | `Unknown` |
+| `Get-Process -Name foo` | `Get-Process foo` |
+| `git {push,log}` | `Unknown` |
+
+The value is also `Unknown` when `IsComplete` is false, when the command name
+is dynamic, or when the elements do not agree with the verb chain.
+
+Known cost: a word with a digit is skipped. Branch names such as
+`release-2.0` therefore share one key.
+
+The bare-glob rule applies to the command words only. The glob is still a path
+fact on its element, as the path-operand fallback in §8 describes.
 
 #### Finite Bash scope projection (v0.4.0-beta.3)
 
@@ -2364,6 +2469,11 @@ a normalized absolute path. Resolution order:
 
    **In a non-path slot:** `IsPath = false`.
 
+   The path-operand fallback (see the path-shape heuristic below) marks an
+   unquoted glob as a path slot for a program that has no per-verb rule.
+   The glob stays `Kind = Glob` with `Resolved = null`. The fallback does not
+   change the covering-directory, tree-access, or loop-pattern facts.
+
    Per locked interpretation #3, glob and DynamicSkip carry **distinct**
    signals — globs preserve a useful covering-dir hint that DynamicSkip
    tokens lack.
@@ -2408,6 +2518,24 @@ double-quote escape-collapse artifact (`"foo\\"` lexes to Value `foo\\`)
 and is not a meaningful path signal on its own.
 
 The per-verb rule wins when present; the heuristic is the fallback.
+
+For a positional operand of a program without a per-verb rule, the fallback
+also accepts these general shell facts (v0.4.0-beta.7, #193):
+
+```
+LooksLikePathOperand(token, isGlobPattern) =
+   LooksLikePath(token)
+|| token is "." or ".."
+|| isGlobPattern
+```
+
+`isGlobPattern` comes from the lexer. It is true only when the word has an
+unquoted glob region and no other expansion. So `du -sh *` reports `*` as a
+path pattern, but `du -sh '*'` and `du -sh \*` do not. The fallback applies
+to Bash commands and to PowerShell native commands. For a PowerShell cmdlet it
+accepts `.` and `..` only, because PowerShell passes a wildcard to a cmdlet
+unexpanded. `LooksLikePath` itself does not change, because the verb-chain
+walk and the loop-pattern analysis use it.
 
 ---
 

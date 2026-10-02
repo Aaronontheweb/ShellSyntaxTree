@@ -5413,7 +5413,8 @@ internal sealed class PwshForEachValueAnalyzer
                     : BashPerVerbRules.IsNativePositionalPathArg(
                         clause.Verb,
                         positionalIndex,
-                        element.Value);
+                        element.Value,
+                        element.Kind == ArgKind.Glob);
             }
 
             if (pendingValue is not null)

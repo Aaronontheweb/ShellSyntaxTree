@@ -13,10 +13,10 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 
 ```bash
 # Current package
-dotnet add package ShellSyntaxTree --version 0.4.0-beta.6
+dotnet add package ShellSyntaxTree --version 0.4.0-beta.7
 ```
 
-Version `0.4.0-beta.6` includes bounded Bash and PowerShell assignment facts,
+Version `0.4.0-beta.7` includes command-word facts, bounded Bash and PowerShell assignment facts,
 bounded PowerShell collection facts, shell-neutral filesystem tree-access
 effects, and fail-closed approval diagnostics alongside the typed syntax tree,
 command-occurrence API, bounded authored-value analysis, audited filesystem and

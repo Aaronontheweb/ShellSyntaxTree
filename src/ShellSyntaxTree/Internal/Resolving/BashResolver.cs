@@ -442,6 +442,26 @@ internal static class BashResolver
         return false;
     }
 
+    /// <summary>
+    /// True for the bare directory references <c>.</c> and <c>..</c>. Both
+    /// name a directory for every program, so they are path operands even
+    /// though <see cref="LooksLikePath"/> does not match them.
+    /// </summary>
+    internal static bool IsDirectoryReference(string token) =>
+        token is "." or "..";
+
+    /// <summary>
+    /// Path-operand fallback for a positional whose program has no per-verb
+    /// rule. It adds the general shell facts that <see cref="LooksLikePath"/>
+    /// omits: <c>.</c>, <c>..</c>, and a word that the shell expands to file
+    /// names (<paramref name="isGlobPattern"/>). The caller proves the glob
+    /// fact from the lexer, so a quoted or escaped <c>*</c> stays data.
+    /// <see cref="LooksLikePath"/> itself is unchanged because loop and
+    /// verb-chain analysis use it for other decisions.
+    /// </summary>
+    internal static bool LooksLikePathOperand(string token, bool isGlobPattern) =>
+        isGlobPattern || IsDirectoryReference(token) || LooksLikePath(token);
+
     internal static BashTildeExpansionKind ClassifyTildeExpansion(
         ShellValue value,
         int fragmentIndex)

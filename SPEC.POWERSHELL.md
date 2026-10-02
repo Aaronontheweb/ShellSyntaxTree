@@ -1279,6 +1279,12 @@ classifies as a path for canonical FileVerbs. Per-cmdlet overrides:
 The default for a canonical FileVerb with no override is "all non-flag
 positionals are paths," exactly as `SPEC.md` §7.
 
+A cmdlet without a positional rule uses the `SPEC.md` §8 path-operand
+fallback. The bare operands `.` and `..` are paths. A wildcard such as `*` is
+not a path for such a cmdlet, because PowerShell passes it to the cmdlet
+unexpanded. A native command uses the complete fallback, so an unquoted glob
+in `du -sh *` is a path pattern (#193).
+
 ### 7.3 Native commands
 
 After selected-dialect alias resolution, commands that remain native reuse the
