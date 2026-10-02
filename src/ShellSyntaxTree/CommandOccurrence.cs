@@ -108,11 +108,12 @@ public sealed record CommandOccurrence
 
     /// <summary>
     /// Gets the ordered command words: the program word, then every later
-    /// plain literal word. Options, paths, glob patterns, words with a digit,
-    /// quoted or expanded words, and redirect targets are not command words.
-    /// The value is <see cref="ShellCommandWords.Unknown"/> when the
-    /// occurrence is incomplete or its command name is dynamic. This parser
-    /// fact does not grant authority.
+    /// static single word. Options, paths, glob patterns, words with a digit,
+    /// text with whitespace, and redirect targets are not command words. The
+    /// value is <see cref="ShellCommandWords.Unknown"/> when the occurrence is
+    /// incomplete, its command name is dynamic, or an expansion outside an
+    /// option or a path can change the words. This parser fact does not
+    /// grant authority.
     /// </summary>
     public ShellCommandWords CommandWords { get; internal init; } =
         new ShellCommandWords.Unknown();
@@ -233,9 +234,10 @@ public abstract record ShellWorkingDirectoryEffect
 /// cannot tell an option value from a subcommand. For example,
 /// <c>pgrep -x name</c> gives <c>pgrep name</c>, and
 /// <c>git -p filter-branch</c> gives <c>git filter-branch</c>. An option
-/// value can therefore only make the word list more specific. A skipped
-/// quoted or expanded word can still carry meaning for the program, so a
-/// consumer must evaluate it separately.
+/// value can therefore only make the word list more specific. A quoted
+/// single word counts: <c>git "push"</c> gives <c>git push</c>. A bare glob
+/// is skipped as a path pattern, but the shell can expand it to a file name,
+/// so a consumer must evaluate glob arguments separately.
 /// </remarks>
 public abstract record ShellCommandWords
 {

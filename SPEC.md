@@ -951,18 +951,43 @@ the subcommand grammar of a program. `ShellCommandWordProjection` owns the
 rules. The input is the occurrence's `Clause.Elements`, and the result is
 call-local to the parse.
 
-The first word is the authored program word, `Verb.Tokens[0]`. A consumer can
-substitute `VerbChain.CanonicalVerb`. Each later verb or argument element gets
-one class:
+Security goal: the words must never be shorter than the words that the
+program really receives. A consumer can key an approval grant on the words,
+so a hidden subcommand could widen a grant.
 
-- option: the authored word starts with `-`, including `--name=value` and a
-  bare `--`. A PowerShell parameter token such as `-Name` is an option;
-- expanded: the element is not a `Literal`, the author quoted or escaped it,
-  or it contains a shell expansion character. This class includes variables,
-  substitutions, tilde words, and Bash brace words;
-- path: the element is a path, `.`, `..`, or another path-shaped word;
-- value: the word contains an ASCII digit;
-- command word: every other plain literal word.
+The first word is the program word as the lexer decodes it. `"git"` and
+`\git` give `git`. An expanded program word gives `Unknown`. A consumer can
+substitute `VerbChain.CanonicalVerb`. A wrapper such as `env` or `command` is
+the program word, so `env git push` gives `env git push`.
+
+A quote-aware scan of each authored word decides whether the shell can
+change the word. Each later verb or argument element then gets one class:
+
+| Class | Rule | Result |
+|---|---|---|
+| option | starts with `-`, including `--name=value`, bare `--`, and PowerShell `-Name` | skipped |
+| path | a path, `.`, `..`, or a glob pattern | skipped |
+| dynamic | an expansion that is not in an option or a path | whole result `Unknown` |
+| split | a word that can become more than one word | whole result `Unknown` |
+| text | a static value with whitespace, or an empty value | skipped |
+| value | a static value with an ASCII digit | skipped |
+| command word | any other static value, quoted or not | kept |
+
+- A quoted single word is a command word. `git "push"`, `git 'push'`,
+  `git "pu"sh`, and `git \push` all give `git push`.
+- An expansion is a variable, a command or arithmetic substitution, or a
+  Bash brace list. `git {push,log}`, `git "$x"`, and `git $(cmd)` give
+  `Unknown`.
+- An expansion inside an option, such as `--repo="$r"`, or inside a path,
+  such as `"$r/x"`, is skipped. The value stays one option word or one path
+  word, so it cannot become a command word.
+- A split word is an unquoted Bash expansion, a Bash brace list, or a
+  PowerShell array, splat, or subexpression. It gives `Unknown` even inside an
+  option or a path. With `r='x push'`, `git --c=$r log` runs
+  `git --c=x push log`.
+- The parser rejects many expansions before this fact exists. For example,
+  `git $SUB`, ``git `cmd` ``, `git $((1+1))`, and `git $'push'` are
+  unparseable.
 
 Only command words follow the program word. Redirect targets are not words of
 the command. Bash assignment prefixes are not clause elements. Option order
@@ -979,16 +1004,23 @@ named policy point, `KeepsPlainWordAfterOption`.
 | `gh -R o/r pr view 123` | `gh pr view` |
 | `gh pr view 123 -R o/r` | `gh pr view` |
 | `git push origin v0.4.0` | `git push origin` |
+| `git -p filter-branch --force HEAD` | `git filter-branch HEAD` |
 | `pgrep -x name` | `pgrep name` |
+| `git commit -m "fix the bug"` | `git commit` |
 | `du -sh *` | `du` |
 | `Get-Process -Name foo` | `Get-Process foo` |
+| `git {push,log}` | `Unknown` |
 
-The value is `Unknown` when `IsComplete` is false, when the command name is
-dynamic, or when the elements do not agree with the verb chain. For example,
-`& $exe pr view` has unknown words. A skipped quoted or expanded word can
-still carry meaning for the program. For example, `git "push"` gives `git`.
-A consumer that keys approval on the words must evaluate skipped words and
-arguments separately.
+The value is also `Unknown` when `IsComplete` is false, when the command name
+is dynamic, or when the elements do not agree with the verb chain.
+
+Known limits:
+
+- A word with a digit is skipped. Branch names such as `release-2.0` therefore
+  share one key.
+- A bare glob is a path pattern and is skipped. The shell expands it to file
+  names in the working directory. If a file named `push` exists, `git *` runs
+  `git push` but gives `git`.
 
 #### Finite Bash scope projection (v0.4.0-beta.3)
 

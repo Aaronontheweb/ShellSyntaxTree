@@ -5,7 +5,9 @@ This prerelease adds a command-words fact and reports more general path operands
 ## Added
 
 - Add `CommandOccurrence.CommandWords` and the closed `ShellCommandWords` family (#194). `Known.Words` gives the program word, then every later plain literal word. `gh -R o/r pr view 123` and `gh pr view 123 -R o/r` both give `gh pr view`.
-- Skip options, paths, globs, words with a digit, quoted or expanded words, and redirect targets. PowerShell parameter tokens are options.
+- Skip options, paths, globs, words with a digit, text with whitespace, and redirect targets. PowerShell parameter tokens are options.
+- Count a quoted single word as a command word. `git "push"` and `git \push` give `git push`.
+- Return `Unknown` for an expansion outside an option or a path, such as `git $(cmd)` or `git {push,log}`, and for any word that can split into more words.
 - Keep a plain word after an option, because the parser cannot tell an option value from a subcommand. `pgrep -x name` gives `pgrep name`.
 
 ## Fixed
@@ -16,7 +18,8 @@ This prerelease adds a command-words fact and reports more general path operands
 ## Security and compatibility
 
 - `CommandWords` is `Unknown` when the occurrence is incomplete or its command name is dynamic.
-- `CommandWords` is a parser fact. It does not grant authority. A skipped quoted or expanded word can still carry meaning, so consumers must evaluate arguments separately.
+- `CommandWords` is a parser fact. It does not grant authority.
+- Known limit: a bare glob is skipped as a path pattern. If a file named `push` exists, `git *` runs `git push` but gives `git`. Consumers must evaluate glob arguments separately.
 - A new glob path fact keeps `Kind = Glob`, `Resolved = null`, and an `Unknown` value. It adds no tree access and no loop pattern.
 - A quoted or escaped `*` stays data. Per-verb rules such as `grep` patterns and `curl` URLs still win.
 - After an unknown `cd` target, `.` becomes `DynamicSkip`, the same as `./x`.

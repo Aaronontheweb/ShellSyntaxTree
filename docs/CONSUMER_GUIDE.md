@@ -931,14 +931,17 @@ static string? GetCommandWordKey(CommandOccurrence occurrence) =>
 | `df -h .` | `df` |
 | `Start-Sleep -Seconds 300` | `Start-Sleep` |
 
-The words skip options, paths, globs, words with a digit, quoted or expanded
-words, and redirect targets. A plain word after an option stays, because the
-parser cannot tell an option value from a subcommand. This rule can only make
-a key more specific.
+The words skip options, paths, globs, words with a digit, text with
+whitespace, and redirect targets. A quoted single word counts: `git "push"`
+gives `git push`. An expansion that is not inside an option or a path, such as
+`git $(cmd)` or `git {push,log}`, makes the result `Unknown`. A plain word
+after an option stays, because the parser cannot tell an option value from a
+subcommand. This rule can only make a key more specific.
 
-Caution: a skipped word can still change what the program does. For example,
-`git "push"` gives `git`. Evaluate the arguments, dynamic values, and paths of
-the occurrence before you reuse a grant that is keyed on the words.
+Caution: a bare glob is skipped as a path pattern, but the shell expands it to
+file names. If a file named `push` exists, `git *` runs `git push` and gives
+`git`. Evaluate glob arguments and paths before you reuse a grant that is
+keyed on the words.
 
 ## Evaluating arguments and paths
 
