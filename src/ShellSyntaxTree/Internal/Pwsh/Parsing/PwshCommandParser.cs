@@ -1517,7 +1517,11 @@ internal static partial class PwshCommandParser
                     : BashPerVerbRules.IsNativePositionalPathArg(
                         nativeVerbChain,
                         positionalIndex,
-                        t.Value);
+                        t.Value,
+                        GetResolverValue(
+                            t,
+                            t.Value,
+                            preserveLiteralPrefixBoundary: true).IsGlobPattern);
                 if (cmdletStyle && treatAsPath)
                 {
                     consumer = ShellResolutionConsumer.PowerShellCmdletPath;

@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree;
@@ -757,6 +758,8 @@ internal static class ShellSyntaxProjection
                 return false;
             }
 
+            var isComplete = facts.IsComplete && _structuralContextIsComplete &&
+                AreExecutionRegionFactsComplete(simple.ExecutionRegions);
             _commands.Add(new CommandOccurrence
             {
                 Clause = simple.Clause,
@@ -767,8 +770,11 @@ internal static class ShellSyntaxProjection
                 WorkingDirectory = workingDirectory,
                 WorkingDirectoryEffect = workingDirectoryEffect,
                 Redirects = redirects,
-                IsComplete = facts.IsComplete && _structuralContextIsComplete &&
-                    AreExecutionRegionFactsComplete(simple.ExecutionRegions),
+                IsComplete = isComplete,
+                CommandWords = ShellCommandWordProjection.Project(
+                    simple.Clause,
+                    isComplete,
+                    _language),
             });
             _clauses.Add(simple.Clause);
 

@@ -1190,7 +1190,11 @@ internal static partial class BashCommandParser
                         }
                         else
                         {
-                            treatAsPath = BashPerVerbRules.IsPositionalPathArg(verb, positionalIndex, t.Value);
+                            treatAsPath = BashPerVerbRules.IsPositionalPathArg(
+                                verb,
+                                positionalIndex,
+                                t.Value,
+                                GetResolverValue(t, t.Value).IsGlobPattern);
                             positionalIndex++;
                         }
 
@@ -1264,7 +1268,11 @@ internal static partial class BashCommandParser
                         }
                         else
                         {
-                            treatAsPath = BashPerVerbRules.IsPositionalPathArg(verb, positionalIndex, t.Value);
+                            treatAsPath = BashPerVerbRules.IsPositionalPathArg(
+                                verb,
+                                positionalIndex,
+                                t.Value,
+                                GetResolverValue(t, t.Value).IsGlobPattern);
                             positionalIndex++;
                         }
 

@@ -655,6 +655,7 @@ public class PublicApiSnapshotTests
             nameof(RedirectDirection),
             nameof(RedirectSource),
             nameof(ShellBlockSyntax),
+            nameof(ShellCommandWords),
             nameof(ShellGroupKind),
             nameof(ShellFileSystemTreeAccess),
             nameof(ShellParserOptions),

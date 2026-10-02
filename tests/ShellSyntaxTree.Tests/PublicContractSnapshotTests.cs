@@ -115,7 +115,8 @@ public class PublicContractSnapshotTests
             (nameof(CommandOccurrence.WorkingDirectoryEffect),
                 typeof(ShellWorkingDirectoryEffect)),
             (nameof(CommandOccurrence.Redirects), typeof(IReadOnlyList<RedirectAnalysis>)),
-            (nameof(CommandOccurrence.IsComplete), typeof(bool)));
+            (nameof(CommandOccurrence.IsComplete), typeof(bool)),
+            (nameof(CommandOccurrence.CommandWords), typeof(ShellCommandWords)));
         AssertResultRecord(
             typeof(CommandAncestryFrame),
             (nameof(CommandAncestryFrame.Ancestor), typeof(ShellSyntaxNode)),
@@ -200,6 +201,17 @@ public class PublicContractSnapshotTests
             typeof(ShellWorkingDirectoryEffect.ChangesOnSuccess),
             (nameof(ShellWorkingDirectoryEffect.ChangesOnSuccess.Target),
                 typeof(ShellValueDomain), false));
+    }
+
+    [Fact]
+    public void Command_words_are_a_closed_runtime_discriminated_family()
+    {
+        AssertClosedBase(typeof(ShellCommandWords));
+        AssertResultRecord(typeof(ShellCommandWords.Unknown));
+        AssertResultRecordAccessors(
+            typeof(ShellCommandWords.Known),
+            (nameof(ShellCommandWords.Known.Words),
+                typeof(IReadOnlyList<string>), false));
     }
 
     [Fact]

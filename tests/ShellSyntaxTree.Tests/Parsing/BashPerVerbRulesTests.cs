@@ -22,32 +22,32 @@ public class BashPerVerbRulesTests
     [Fact]
     public void Chmod_first_positional_is_not_a_path()
     {
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("chmod"), 0, "755"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("chmod"), 0, "755", isGlobPattern: false));
     }
 
     [Fact]
     public void Chmod_second_positional_is_a_path()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("chmod"), 1, "/etc/passwd"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("chmod"), 1, "/etc/passwd", isGlobPattern: false));
     }
 
     [Fact]
     public void Chown_first_positional_is_not_a_path()
     {
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("chown"), 0, "user:group"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("chown"), 0, "user:group", isGlobPattern: false));
     }
 
     [Fact]
     public void Chown_second_positional_is_a_path()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("chown"), 1, "/var/log"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("chown"), 1, "/var/log", isGlobPattern: false));
     }
 
     [Fact]
     public void Chgrp_first_is_group_rest_are_paths()
     {
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("chgrp"), 0, "wheel"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("chgrp"), 1, "/var/log"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("chgrp"), 0, "wheel", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("chgrp"), 1, "/var/log", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- ln
@@ -55,8 +55,8 @@ public class BashPerVerbRulesTests
     [Fact]
     public void Ln_all_positionals_are_paths()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("ln"), 0, "/a/source"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("ln"), 1, "/b/target"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("ln"), 0, "/a/source", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("ln"), 1, "/b/target", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- find
@@ -64,15 +64,15 @@ public class BashPerVerbRulesTests
     [Fact]
     public void Find_first_positional_is_a_path()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("find"), 0, "/var/log"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("find"), 0, "/var/log", isGlobPattern: false));
     }
 
     [Fact]
     public void Find_predicate_args_are_not_paths()
     {
         // Predicate args like `-name`, `"*.log"`, `-type`, `f` are not paths.
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("find"), 1, "*.log"));
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("find"), 2, "f"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("find"), 1, "*.log", isGlobPattern: false));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("find"), 2, "f", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- grep / rg
@@ -80,20 +80,20 @@ public class BashPerVerbRulesTests
     [Fact]
     public void Grep_first_positional_is_pattern()
     {
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("grep"), 0, "pattern"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("grep"), 0, "pattern", isGlobPattern: false));
     }
 
     [Fact]
     public void Grep_second_positional_is_path()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("grep"), 1, "/etc/hosts"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("grep"), 1, "/etc/hosts", isGlobPattern: false));
     }
 
     [Fact]
     public void Rg_first_is_pattern_rest_paths()
     {
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("rg"), 0, "regex"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("rg"), 1, "/path"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("rg"), 0, "regex", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("rg"), 1, "/path", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- sed / awk
@@ -101,15 +101,15 @@ public class BashPerVerbRulesTests
     [Fact]
     public void Sed_first_is_script_rest_paths()
     {
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("sed"), 0, "s/foo/bar/"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("sed"), 1, "file.txt"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("sed"), 0, "s/foo/bar/", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("sed"), 1, "file.txt", isGlobPattern: false));
     }
 
     [Fact]
     public void Awk_first_is_program_rest_paths()
     {
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("awk"), 0, "{print $1}"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("awk"), 1, "input.txt"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("awk"), 0, "{print $1}", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("awk"), 1, "input.txt", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- tar (default rule)
@@ -118,8 +118,8 @@ public class BashPerVerbRulesTests
     public void Tar_default_rule_marks_all_positionals_as_paths()
     {
         // Locked interpretation #8: no action-flag awareness in v0.1.
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("tar"), 0, "archive.tar.gz"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("tar"), 1, "/target"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("tar"), 0, "archive.tar.gz", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("tar"), 1, "/target", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- curl / wget
@@ -127,14 +127,14 @@ public class BashPerVerbRulesTests
     [Fact]
     public void Curl_url_positional_is_not_a_path()
     {
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("curl"), 0, "https://example.com"));
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("curl"), 1, "https://other.example"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("curl"), 0, "https://example.com", isGlobPattern: false));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("curl"), 1, "https://other.example", isGlobPattern: false));
     }
 
     [Fact]
     public void Wget_url_positional_is_not_a_path()
     {
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("wget"), 0, "https://example.com"));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(Verb("wget"), 0, "https://example.com", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- scp / rsync / sftp
@@ -142,15 +142,15 @@ public class BashPerVerbRulesTests
     [Fact]
     public void Scp_all_positionals_are_paths()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("scp"), 0, "user@host:/path"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("scp"), 1, "/local"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("scp"), 0, "user@host:/path", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("scp"), 1, "/local", isGlobPattern: false));
     }
 
     [Fact]
     public void Rsync_all_positionals_are_paths()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("rsync"), 0, "src/"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("rsync"), 1, "dst/"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("rsync"), 0, "src/", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("rsync"), 1, "dst/", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- cd / chdir / pushd / popd
@@ -158,19 +158,19 @@ public class BashPerVerbRulesTests
     [Fact]
     public void Cd_first_positional_is_path()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("cd"), 0, "/tmp"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("cd"), 0, "/tmp", isGlobPattern: false));
     }
 
     [Fact]
     public void Chdir_first_positional_is_path()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("chdir"), 0, "/tmp"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("chdir"), 0, "/tmp", isGlobPattern: false));
     }
 
     [Fact]
     public void Pushd_first_positional_is_path()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("pushd"), 0, "/tmp"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("pushd"), 0, "/tmp", isGlobPattern: false));
     }
 
     [Fact]
@@ -179,7 +179,7 @@ public class BashPerVerbRulesTests
         // popd takes no positional path arg in real bash, but if one's
         // typed we still classify it as a path slot. CwdVerbs are also
         // FileVerbs by the table.
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("popd"), 0, "+1"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("popd"), 0, "+1", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- default file-verb rule
@@ -187,12 +187,12 @@ public class BashPerVerbRulesTests
     [Fact]
     public void Default_file_verb_rule_all_positionals_are_paths()
     {
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("cat"), 0, "file.txt"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("rm"), 0, "/tmp/foo"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("cp"), 0, "/src"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("cp"), 1, "/dst"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("mv"), 0, "/src"));
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("ls"), 0, "/tmp"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("cat"), 0, "file.txt", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("rm"), 0, "/tmp/foo", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("cp"), 0, "/src", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("cp"), 1, "/dst", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("mv"), 0, "/src", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(Verb("ls"), 0, "/tmp", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- non-file-verb fallback
@@ -202,9 +202,9 @@ public class BashPerVerbRulesTests
     {
         // unknown verb + path-shaped token → IsPath=true.
         Assert.True(BashPerVerbRules.IsPositionalPathArg(
-            Verb("totally-unknown-verb"), 0, "/etc/foo"));
+            Verb("totally-unknown-verb"), 0, "/etc/foo", isGlobPattern: false));
         Assert.True(BashPerVerbRules.IsPositionalPathArg(
-            Verb("totally-unknown-verb"), 0, "./config.json"));
+            Verb("totally-unknown-verb"), 0, "./config.json", isGlobPattern: false));
     }
 
     [Fact]
@@ -212,9 +212,37 @@ public class BashPerVerbRulesTests
     {
         // unknown verb + plain word → IsPath=false.
         Assert.False(BashPerVerbRules.IsPositionalPathArg(
-            Verb("totally-unknown-verb"), 0, "argument"));
+            Verb("totally-unknown-verb"), 0, "argument", isGlobPattern: false));
         Assert.False(BashPerVerbRules.IsPositionalPathArg(
-            Verb("totally-unknown-verb"), 1, "main"));
+            Verb("totally-unknown-verb"), 1, "main", isGlobPattern: false));
+    }
+
+    [Fact]
+    public void Non_file_verb_fallback_reports_directory_references_and_globs()
+    {
+        // `.`, `..`, and a lexer-proved glob name the file system for
+        // every program (#193). A plain word stays data.
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(
+            Verb("df"), 0, ".", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(
+            Verb("du"), 0, "..", isGlobPattern: false));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(
+            Verb("du"), 0, "*", isGlobPattern: true));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(
+            Verb("du"), 0, "*", isGlobPattern: false));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(
+            Verb("du"), 0, "...", isGlobPattern: false));
+    }
+
+    [Fact]
+    public void Per_verb_override_wins_over_directory_reference_and_glob()
+    {
+        // grep's first positional is a pattern, and curl's are URLs. The
+        // general path-operand fallback must not override either rule.
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(
+            Verb("grep"), 0, ".", isGlobPattern: false));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(
+            Verb("curl"), 0, "*", isGlobPattern: true));
     }
 
     [Fact]
@@ -224,11 +252,11 @@ public class BashPerVerbRulesTests
         // fall back to LooksLikePath. `origin` / `main` are not path-shaped;
         // `/local/repo` is.
         Assert.False(BashPerVerbRules.IsPositionalPathArg(
-            Verb("git", "push"), 0, "origin"));
+            Verb("git", "push"), 0, "origin", isGlobPattern: false));
         Assert.False(BashPerVerbRules.IsPositionalPathArg(
-            Verb("git", "push"), 1, "main"));
+            Verb("git", "push"), 1, "main", isGlobPattern: false));
         Assert.True(BashPerVerbRules.IsPositionalPathArg(
-            Verb("git", "clone"), 0, "/local/repo"));
+            Verb("git", "clone"), 0, "/local/repo", isGlobPattern: false));
     }
 
     // ---------------------------------------------------------------- ValueOfFlagIsPath
@@ -370,7 +398,7 @@ public class BashPerVerbRulesTests
     public void Empty_verb_chain_falls_back_to_looks_like_path()
     {
         var empty = new VerbChain();
-        Assert.True(BashPerVerbRules.IsPositionalPathArg(empty, 0, "/etc/foo"));
-        Assert.False(BashPerVerbRules.IsPositionalPathArg(empty, 0, "argument"));
+        Assert.True(BashPerVerbRules.IsPositionalPathArg(empty, 0, "/etc/foo", isGlobPattern: false));
+        Assert.False(BashPerVerbRules.IsPositionalPathArg(empty, 0, "argument", isGlobPattern: false));
     }
 }

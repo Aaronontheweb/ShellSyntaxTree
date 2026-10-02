@@ -106,6 +106,17 @@ public sealed record CommandOccurrence
     /// <summary>Gets whether parser-owned shell analysis is structurally complete.</summary>
     public bool IsComplete { get; internal init; }
 
+    /// <summary>
+    /// Gets the ordered command words: the program word, then every later
+    /// plain literal word. Options, paths, glob patterns, words with a digit,
+    /// quoted or expanded words, and redirect targets are not command words.
+    /// The value is <see cref="ShellCommandWords.Unknown"/> when the
+    /// occurrence is incomplete or its command name is dynamic. This parser
+    /// fact does not grant authority.
+    /// </summary>
+    public ShellCommandWords CommandWords { get; internal init; } =
+        new ShellCommandWords.Unknown();
+
     private int FindElementIndex(ClauseElement element)
     {
         for (var index = 0; index < Clause.Elements.Count; index++)
@@ -210,6 +221,52 @@ public abstract record ShellWorkingDirectoryEffect
 
         /// <summary>Gets the modeled directory after successful completion.</summary>
         public ShellValueDomain Target { get; }
+    }
+}
+
+/// <summary>
+/// The ordered command words of one simple command. The words come from
+/// general shell conventions only, not from the grammar of a program.
+/// </summary>
+/// <remarks>
+/// A plain word after an option stays a command word, because the parser
+/// cannot tell an option value from a subcommand. For example,
+/// <c>pgrep -x name</c> gives <c>pgrep name</c>, and
+/// <c>git -p filter-branch</c> gives <c>git filter-branch</c>. An option
+/// value can therefore only make the word list more specific. A skipped
+/// quoted or expanded word can still carry meaning for the program, so a
+/// consumer must evaluate it separately.
+/// </remarks>
+public abstract record ShellCommandWords
+{
+    private protected ShellCommandWords()
+    {
+    }
+
+    private protected abstract object LibraryOwnership { get; }
+
+    /// <summary>No complete command-word list is proved.</summary>
+    public sealed record Unknown : ShellCommandWords
+    {
+        internal Unknown()
+        {
+        }
+
+        private protected override object LibraryOwnership => this;
+    }
+
+    /// <summary>The parser accounted for every word of the command.</summary>
+    public sealed record Known : ShellCommandWords
+    {
+        internal Known(IEnumerable<string> words) => Words = PublicCollection.Copy(words);
+
+        private protected override object LibraryOwnership => this;
+
+        /// <summary>
+        /// Gets the program word as authored, then the later command words
+        /// in source order. The list always has at least one word.
+        /// </summary>
+        public IReadOnlyList<string> Words { get; }
     }
 }
 

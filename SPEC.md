@@ -249,6 +249,9 @@ public enum ShellTreeTraversalMode { ... }
 // v0.4.0-beta.3 finite Bash scope evidence — see §3.
 public sealed record BashFiniteScopeProjection { ... }
 public sealed record BashScopedCommand { ... }
+
+// v0.4.0-beta.7 command-word evidence — see §3.
+public abstract record ShellCommandWords { ... }
 ```
 
 Stable v0.3 exposes only structural types the parsers can emit. The additive
@@ -262,6 +265,8 @@ The finite Bash scope method and result records target `0.4.0-beta.3`.
 They add no authority rule and do not change an existing occurrence.
 The assignment records and the fresh-process initial-state mode target
 `0.4.0-beta.4`. They expose parser facts only and grant no authority.
+`CommandOccurrence.CommandWords` and the `ShellCommandWords` family target
+`0.4.0-beta.7`. They expose a parser fact only and grant no authority.
 
 That's the entire public API. **Everything else is internal.** The lexer,
 parser internals, verb tables, resolver — all implementation detail.
@@ -677,6 +682,8 @@ public sealed record CommandOccurrence
         { get; internal init; } = new ShellWorkingDirectoryEffect.Unknown();
     public IReadOnlyList<RedirectAnalysis> Redirects { get; internal init; } = [];
     public bool IsComplete { get; internal init; }
+    public ShellCommandWords CommandWords
+        { get; internal init; } = new ShellCommandWords.Unknown();
 }
 
 public sealed record ShellVariableAssignment
@@ -770,6 +777,18 @@ public abstract record ShellWorkingDirectoryEffect
     public sealed record ChangesOnSuccess : ShellWorkingDirectoryEffect
     {
         public ShellValueDomain Target { get; }
+    }
+}
+
+public abstract record ShellCommandWords
+{
+    private protected ShellCommandWords() { }
+    private protected abstract object LibraryOwnership { get; }
+
+    public sealed record Unknown : ShellCommandWords { ... }
+    public sealed record Known : ShellCommandWords
+    {
+        public IReadOnlyList<string> Words { get; }
     }
 }
 
@@ -923,6 +942,53 @@ shell path style. Unknown proves a success-only mutation without a bounded
 destination. Any other domain, malformed set, over-limit join, or missing fact
 makes the whole public effect `Unknown`. A target does not prove existence,
 accessibility, authorization, or runtime success.
+
+#### Command words (v0.4.0-beta.7)
+
+`CommandWords` gives the ordered command words of one occurrence. The fact
+uses general shell conventions only. It does not use the option grammar or
+the subcommand grammar of a program. `ShellCommandWordProjection` owns the
+rules. The input is the occurrence's `Clause.Elements`, and the result is
+call-local to the parse.
+
+The first word is the authored program word, `Verb.Tokens[0]`. A consumer can
+substitute `VerbChain.CanonicalVerb`. Each later verb or argument element gets
+one class:
+
+- option: the authored word starts with `-`, including `--name=value` and a
+  bare `--`. A PowerShell parameter token such as `-Name` is an option;
+- expanded: the element is not a `Literal`, the author quoted or escaped it,
+  or it contains a shell expansion character. This class includes variables,
+  substitutions, tilde words, and Bash brace words;
+- path: the element is a path, `.`, `..`, or another path-shaped word;
+- value: the word contains an ASCII digit;
+- command word: every other plain literal word.
+
+Only command words follow the program word. Redirect targets are not words of
+the command. Bash assignment prefixes are not clause elements. Option order
+does not change the result.
+
+A plain word directly after an option stays a command word. The parser cannot
+tell an option value from a subcommand after a valueless switch. If the word
+were dropped, a subcommand could hide behind a switch. If the word is kept,
+an option value can only make the list more specific. This choice is one
+named policy point, `KeepsPlainWordAfterOption`.
+
+| Source | `CommandWords` |
+|---|---|
+| `gh -R o/r pr view 123` | `gh pr view` |
+| `gh pr view 123 -R o/r` | `gh pr view` |
+| `git push origin v0.4.0` | `git push origin` |
+| `pgrep -x name` | `pgrep name` |
+| `du -sh *` | `du` |
+| `Get-Process -Name foo` | `Get-Process foo` |
+
+The value is `Unknown` when `IsComplete` is false, when the command name is
+dynamic, or when the elements do not agree with the verb chain. For example,
+`& $exe pr view` has unknown words. A skipped quoted or expanded word can
+still carry meaning for the program. For example, `git "push"` gives `git`.
+A consumer that keys approval on the words must evaluate skipped words and
+arguments separately.
 
 #### Finite Bash scope projection (v0.4.0-beta.3)
 
@@ -2364,6 +2430,11 @@ a normalized absolute path. Resolution order:
 
    **In a non-path slot:** `IsPath = false`.
 
+   The path-operand fallback (see the path-shape heuristic below) marks an
+   unquoted glob as a path slot for a program that has no per-verb rule.
+   The glob stays `Kind = Glob` with `Resolved = null`. The fallback does not
+   change the covering-directory, tree-access, or loop-pattern facts.
+
    Per locked interpretation #3, glob and DynamicSkip carry **distinct**
    signals — globs preserve a useful covering-dir hint that DynamicSkip
    tokens lack.
@@ -2408,6 +2479,24 @@ double-quote escape-collapse artifact (`"foo\\"` lexes to Value `foo\\`)
 and is not a meaningful path signal on its own.
 
 The per-verb rule wins when present; the heuristic is the fallback.
+
+For a positional operand of a program without a per-verb rule, the fallback
+also accepts these general shell facts (v0.4.0-beta.7, #193):
+
+```
+LooksLikePathOperand(token, isGlobPattern) =
+   LooksLikePath(token)
+|| token is "." or ".."
+|| isGlobPattern
+```
+
+`isGlobPattern` comes from the lexer. It is true only when the word has an
+unquoted glob region and no other expansion. So `du -sh *` reports `*` as a
+path pattern, but `du -sh '*'` and `du -sh \*` do not. The fallback applies
+to Bash commands and to PowerShell native commands. For a PowerShell cmdlet it
+accepts `.` and `..` only, because PowerShell passes a wildcard to a cmdlet
+unexpanded. `LooksLikePath` itself does not change, because the verb-chain
+walk and the loop-pattern analysis use it.
 
 ---
 

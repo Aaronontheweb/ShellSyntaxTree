@@ -1,3 +1,27 @@
+#### 0.4.0-beta.7 2026-10-02 ####
+
+This prerelease adds a command-words fact and reports more general path operands.
+
+## Added
+
+- Add `CommandOccurrence.CommandWords` and the closed `ShellCommandWords` family (#194). `Known.Words` gives the program word, then every later plain literal word. `gh -R o/r pr view 123` and `gh pr view 123 -R o/r` both give `gh pr view`.
+- Skip options, paths, globs, words with a digit, quoted or expanded words, and redirect targets. PowerShell parameter tokens are options.
+- Keep a plain word after an option, because the parser cannot tell an option value from a subcommand. `pgrep -x name` gives `pgrep name`.
+
+## Fixed
+
+- Report the bare operands `.` and `..` as paths for a program without a per-verb rule (#193). `df -h .` now reports `.` as a resolved path.
+- Report an unquoted glob such as `*` or `*.cs` as a path pattern for a Bash command or a PowerShell native command without a per-verb rule. `du -sh *` now reports `*` with `IsPath = true`.
+
+## Security and compatibility
+
+- `CommandWords` is `Unknown` when the occurrence is incomplete or its command name is dynamic.
+- `CommandWords` is a parser fact. It does not grant authority. A skipped quoted or expanded word can still carry meaning, so consumers must evaluate arguments separately.
+- A new glob path fact keeps `Kind = Glob`, `Resolved = null`, and an `Unknown` value. It adds no tree access and no loop pattern.
+- A quoted or escaped `*` stays data. Per-verb rules such as `grep` patterns and `curl` URLs still win.
+- After an unknown `cd` target, `.` becomes `DynamicSkip`, the same as `./x`.
+- The public API change is additive.
+
 #### 0.4.0-beta.6 2026-09-30 ####
 
 This prerelease accepts more than one bounded Bash assignment prefix before one external command.

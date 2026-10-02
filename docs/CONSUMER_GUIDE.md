@@ -908,6 +908,38 @@ commands so ordinary option placement does not create approval fatigue. Strict
 matching remains the safe fallback for commands whose grammar Netclaw does not
 yet understand.
 
+### Using command words
+
+`CommandOccurrence.CommandWords` is a third input. It gives an identity that
+does not change when the author moves an option. It uses general shell
+conventions only:
+
+```csharp
+static string? GetCommandWordKey(CommandOccurrence occurrence) =>
+    occurrence.CommandWords is ShellCommandWords.Known known
+        ? string.Join(" ", known.Words)
+        : null; // Unknown: prompt, do not reuse a grant.
+```
+
+| Source | `CommandWords` |
+|---|---|
+| `gh pr view 123 -R o/r` | `gh pr view` |
+| `gh -R o/r pr view 123` | `gh pr view` |
+| `git --no-pager log -1` | `git log` |
+| `git push origin feature-x` | `git push origin feature-x` |
+| `pgrep -x name` | `pgrep name` |
+| `df -h .` | `df` |
+| `Start-Sleep -Seconds 300` | `Start-Sleep` |
+
+The words skip options, paths, globs, words with a digit, quoted or expanded
+words, and redirect targets. A plain word after an option stays, because the
+parser cannot tell an option value from a subcommand. This rule can only make
+a key more specific.
+
+Caution: a skipped word can still change what the program does. For example,
+`git "push"` gives `git`. Evaluate the arguments, dynamic values, and paths of
+the occurrence before you reuse a grant that is keyed on the words.
+
 ## Evaluating arguments and paths
 
 An `Arg` carries several independent facts:
@@ -916,7 +948,9 @@ An `Arg` carries several independent facts:
 - `IsFlag` identifies option-shaped tokens;
 - `Kind` describes literal, environment-variable, glob, tilde, or dynamic
   content;
-- `IsPath` says the parser classified the argument position as a path;
+- `IsPath` says the parser classified the argument position as a path. For a
+  program without a per-verb rule, `.`, `..`, and an unquoted glob such as
+  `*` are paths. A glob keeps `Kind = Glob` and has no `Resolved` value;
 - `Resolved` carries a normalized path when static resolution was possible;
 - `IsCwdAttribution` marks derived working-directory context rather than a
   token written in that clause.

@@ -10,7 +10,16 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.6 multiple Bash assignment prefixes)
+## NOW (0.4.0-beta.7 command words and path operands)
+
+- [x] Add `CommandOccurrence.CommandWords` for Bash and PowerShell, independent of option order (#194).
+- [x] Report `.`, `..`, and unquoted globs as path operands for programs without a per-verb rule (#193).
+- [x] Keep unbounded globs unresolved and keep incomplete or dynamic occurrences `Unknown`.
+- [x] Complete Release tests, the public API comparison, the PII audit, and the header check.
+- [ ] Merge the PR after Linux and Windows CI and owner confirmation of the plain-word-after-option rule. Tag `0.4.0-beta.7` and verify NuGet publication.
+- [ ] Netclaw consumes `CommandWords` for shell approval grants. The Netclaw owner does this change.
+
+## Completed (0.4.0-beta.6 multiple Bash assignment prefixes)
 
 - [x] Accept one or more bounded Bash command-environment prefixes before one external command (#189).
 - [x] Keep dynamic values, repeated names, assignment-only lists, and all other unsupported forms fail closed.
