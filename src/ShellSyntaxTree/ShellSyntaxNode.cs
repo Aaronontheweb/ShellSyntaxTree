@@ -115,7 +115,30 @@ internal sealed record ShellAssignmentSyntax : ShellSyntaxNode
     private protected override object LibraryOwnership => this;
 
     internal ShellVariableAssignment Assignment { get; init; } = null!;
+
+    /// <summary>
+    /// The shell value of the right-hand side (#209). The state pass
+    /// evaluates it with the bindings and launch facts that are live at the
+    /// statement. Null for a value that the PowerShell parser publishes.
+    /// </summary>
+    internal BashAssignmentValue? Value { get; init; }
+
+    /// <summary>The command substitutions in the right-hand side.</summary>
+    internal IReadOnlyList<CommandSubstitutionSyntax> Substitutions { get; init; } =
+        Array.Empty<CommandSubstitutionSyntax>();
 }
+
+/// <summary>
+/// The decoded right-hand side of one Bash assignment word (#209).
+/// <paramref name="LeadingTilde"/> is true when an unquoted <c>~</c> or
+/// <c>~/</c> starts the value. Bash expands it from <c>HOME</c>, but the
+/// lexer keeps it as literal text.
+/// </summary>
+internal sealed record BashAssignmentValue(
+    Internal.Resolving.ShellValue Value,
+    bool LeadingTilde,
+    bool HasSubstitution,
+    ShellLaunchEnvironment? LaunchEnvironment);
 
 /// <summary>An ordered pipeline.</summary>
 public sealed record PipelineSyntax : ShellSyntaxNode

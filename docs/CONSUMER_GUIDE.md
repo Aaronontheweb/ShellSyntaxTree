@@ -363,7 +363,10 @@ can reach a process environment.
 A Bash `CommandEnvironment` assignment applies only to its occurrence. One
 occurrence can carry several of these facts, one for each prefix in source
 order. A Bash
-`ShellState` assignment appears on every later accepted occurrence. The narrow
+`ShellState` assignment appears on every later occurrence that it reaches on
+every path, one fact for each name (0.4.0-beta.12). A value that the parser
+cannot prove, such as `x=$(cmd)`, has an `Unknown` `EffectiveValue`, and the
+commands in the substitution are their own occurrences. The narrow
 PowerShell form appears on its one following command. Consumers must evaluate
 all assignment names and values before they reuse approval for the command.
 They must also apply their normal verb, argument, redirect, path, ancestry, and
