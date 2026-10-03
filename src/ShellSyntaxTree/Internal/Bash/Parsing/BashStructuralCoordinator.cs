@@ -193,6 +193,11 @@ internal static partial class BashCommandParser
         private int _position;
         private int _subshellDepth;
         private int _loopDepth;
+
+        // The nesting of `if` and `case` statements (#ISSUE). It shares the
+        // structural depth limit, so deep nesting fails closed before the
+        // recursive parse can exhaust the stack.
+        private int _compoundDepth;
         private bool _hasUnmodeledShellStateMutation;
         private bool _hasUnmodeledVariableStateMutation;
         private readonly HashSet<string> _boundedAssignmentNames;
@@ -730,7 +735,7 @@ internal static partial class BashCommandParser
                     innerCommand!,
                     innerOptions,
                     _bashCDepth + 1,
-                    _structuralDepth + _subshellDepth + _loopDepth + 1,
+                    _structuralDepth + _subshellDepth + _loopDepth + _compoundDepth + 1,
                     markBashCWrapped: true);
                 var inner = innerResult.Command;
                 if (inner.IsUnparseable)
@@ -951,7 +956,7 @@ internal static partial class BashCommandParser
                 return false;
             }
 
-            if (_structuralDepth + _subshellDepth + _loopDepth >=
+            if (_structuralDepth + _subshellDepth + _loopDepth + _compoundDepth >=
                 ShellAnalysisLimits.MaxStructuralNesting)
             {
                 error = "Bash structural nesting depth exceeded (>16)";
@@ -1248,6 +1253,24 @@ internal static partial class BashCommandParser
 
             var ifToken = _tokens[_position];
             var attribution = SnapshotAttribution();
+            _compoundDepth++;
+            try
+            {
+                return TryParseIfBody(ifToken, attribution, out command, out error);
+            }
+            finally
+            {
+                _compoundDepth--;
+            }
+        }
+
+        private bool TryParseIfBody(
+            BashToken ifToken,
+            (string? Cwd, bool IsDynamic) attribution,
+            out ShellSyntaxNode? command,
+            out string? error)
+        {
+            command = null;
             var branches = new List<ConditionalBranchSyntax>();
             ShellBlockSyntax? @else = null;
             while (true)
@@ -1368,6 +1391,25 @@ internal static partial class BashCommandParser
             _position++;
             SkipNewlines();
             var attribution = SnapshotAttribution();
+            _compoundDepth++;
+            try
+            {
+                return TryParseCaseItems(caseToken, subjectToken, attribution, out command, out error);
+            }
+            finally
+            {
+                _compoundDepth--;
+            }
+        }
+
+        private bool TryParseCaseItems(
+            BashToken caseToken,
+            BashToken subjectToken,
+            (string? Cwd, bool IsDynamic) attribution,
+            out ShellSyntaxNode? command,
+            out string? error)
+        {
+            command = null;
             var items = new List<CaseItemSyntax>();
             while (!IsWord("esac"))
             {
@@ -1467,6 +1509,7 @@ internal static partial class BashCommandParser
                 SourceStart = caseToken.SourceStart,
                 SourceLength = esacToken.SourceStart + esacToken.SourceLength - caseToken.SourceStart,
             };
+            error = null;
             return true;
         }
 
@@ -1545,7 +1588,7 @@ internal static partial class BashCommandParser
                 return false;
             }
 
-            if (_structuralDepth + _subshellDepth + _loopDepth >=
+            if (_structuralDepth + _subshellDepth + _loopDepth + _compoundDepth >=
                 ShellAnalysisLimits.MaxStructuralNesting)
             {
                 error = "Bash structural nesting depth exceeded (>16)";
@@ -1617,7 +1660,7 @@ internal static partial class BashCommandParser
             out ShellSyntaxNode? command,
             out string? error)
         {
-            if (_structuralDepth + _subshellDepth + _loopDepth >=
+            if (_structuralDepth + _subshellDepth + _loopDepth + _compoundDepth >=
                 ShellAnalysisLimits.MaxStructuralNesting)
             {
                 command = null;
@@ -2261,7 +2304,7 @@ internal static partial class BashCommandParser
                 return true;
             }
 
-            if (_structuralDepth + _subshellDepth + _loopDepth + 1 >
+            if (_structuralDepth + _subshellDepth + _loopDepth + _compoundDepth + 1 >
                 ShellAnalysisLimits.MaxStructuralNesting)
             {
                 substitutions = Array.Empty<CommandSubstitutionSyntax>();
@@ -2332,7 +2375,7 @@ internal static partial class BashCommandParser
                 shifted,
                 options,
                 _bashCDepth,
-                _structuralDepth + _subshellDepth + _loopDepth + 1,
+                _structuralDepth + _subshellDepth + _loopDepth + _compoundDepth + 1,
                 _markBashCWrapped,
                 sourceStart,
                 sourceLength,

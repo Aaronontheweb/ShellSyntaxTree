@@ -83,6 +83,40 @@ public class BashControlFlowTests
         Assert.IsType<ShellValueDomain.Unknown>(ls.WorkingDirectory);
     }
 
+    [Fact]
+    public void Until_body_runs_after_the_condition_fails()
+    {
+        var parsed = Parser.Parse("until cd /a; do ls; done");
+
+        var ls = parsed.Commands.Single(c => c.ImmediateRole == CommandOccurrenceRole.LoopBody);
+        Assert.Equal("/work", Assert.IsType<ShellValueDomain.Exact>(ls.WorkingDirectory).Value);
+    }
+
+    [Fact]
+    public void While_body_runs_after_the_condition_succeeds()
+    {
+        var parsed = Parser.Parse("while cd /a; do ls; done");
+
+        var ls = parsed.Commands.Single(c => c.ImmediateRole == CommandOccurrenceRole.LoopBody);
+        Assert.Equal("/a", Assert.IsType<ShellValueDomain.Exact>(ls.WorkingDirectory).Value);
+    }
+
+    [Fact]
+    public void Launch_variable_assignment_in_a_while_body_fails_closed()
+    {
+        var parser = new BashParser(new BashParserOptions
+        {
+            WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+            LaunchEnvironment = new ShellLaunchEnvironment(
+                new Dictionary<string, string> { ["SUB"] = "push" },
+                Array.Empty<string>()),
+        });
+
+        Assert.False(parser.Parse("while probe; do git \"$SUB\"; done").IsUnparseable);
+        Assert.True(parser.Parse("while probe; do git \"$SUB\"; SUB=pull; done").IsUnparseable);
+    }
+
     // ------------------------------------------------------------ if
 
     [Fact]
@@ -132,6 +166,24 @@ public class BashControlFlowTests
         Assert.Equal(CommandOccurrenceRole.Ordinary, cat.ImmediateRole);
         Assert.IsType<ShellValueDomain.Unknown>(cat.WorkingDirectory);
         Assert.Null(cat.Clause.Args.Single(a => !a.IsCwdAttribution).Resolved);
+    }
+
+    [Fact]
+    public void If_without_else_can_skip_the_branch()
+    {
+        var parsed = Parser.Parse("if probe; then cd /a; fi && ls");
+
+        var ls = parsed.Commands.Last();
+        Assert.IsType<ShellValueDomain.Unknown>(ls.WorkingDirectory);
+    }
+
+    [Fact]
+    public void Case_can_match_no_item()
+    {
+        var parsed = Parser.Parse("case x in a) cd /a;; esac && ls");
+
+        var ls = parsed.Commands.Last();
+        Assert.IsType<ShellValueDomain.Unknown>(ls.WorkingDirectory);
     }
 
     [Fact]
@@ -315,6 +367,28 @@ public class BashControlFlowTests
 
         Assert.True(parsed.IsUnparseable);
         Assert.Empty(parsed.Commands);
+    }
+
+    [Theory]
+    [InlineData("if true; then ", "ls", "; fi")]
+    [InlineData("case x in a) ", "ls", ";; esac")]
+    [InlineData("while true; do ", "ls", "; done")]
+    [InlineData("until true; do ", "ls", "; done")]
+    public void Deep_nesting_fails_closed_without_an_exception(
+        string open,
+        string inner,
+        string close)
+    {
+        var deep = string.Concat(Enumerable.Repeat(open, 3000)) + inner +
+                   string.Concat(Enumerable.Repeat(close, 3000));
+        var limit = string.Concat(Enumerable.Repeat(open, 17)) + inner +
+                    string.Concat(Enumerable.Repeat(close, 17));
+        var allowed = string.Concat(Enumerable.Repeat(open, 8)) + inner +
+                      string.Concat(Enumerable.Repeat(close, 8));
+
+        Assert.True(Parser.Parse(deep).IsUnparseable);
+        Assert.True(Parser.Parse(limit).IsUnparseable);
+        Assert.False(Parser.Parse(allowed).IsUnparseable);
     }
 
     [Theory]
