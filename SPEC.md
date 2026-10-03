@@ -409,14 +409,24 @@ Recognized variable-state mutation in the analyzed source invalidates isolated
 mode for every later region that can observe it. In particular, a decoded
 `bash -c` child after `export` is analyzed with unknown initial variable state;
 the option is not blindly copied into the child. Cwd-only state changes retain
-the caller's initial-variable assertion.
+the caller's initial-variable assertion. A bounded `export` and `set --` under
+`FreshNonInteractiveNoStartup` (v0.4.0-beta.16, #221) are modeled changes, not
+unmodeled mutation; see "Bounded `export` and `set --`" below.
 
 The same attribute-state proof governs every simple named-parameter
 dereference. With `BashInitialStateMode.Unknown`, `$name` and `${name}` are
 unparseable because an ambient nameref can evaluate an arithmetic array
 subscript and execute authored command text. In isolated mode, a fresh-process
 variable before reachable source mutation may remain an unknown value while
-still being proved free of recursive variable attributes. A modeled ordinary
+still being proved free of recursive variable attributes. From v0.4.0-beta.16
+(#221), `FreshNonInteractiveNoStartup` uses the same rule, because it is also
+a new non-interactive process with the same environment proof. Before, fresh
+mode rejected such a read. Now `rm -rf "$BUILD_DIR/out"` parses, and the
+argument value is `Unknown`. After an unmodeled variable change (`declare`,
+`typeset`, `local`, `unset`, `readonly`, `export -n`, and similar), the read
+fails closed as before. `$HOME` keeps its documented `~` rule (§8,
+"Env-var substitution"), so it expands from `HomeDirectory` or a live launch `HOME` in
+fresh mode too. A modeled ordinary
 loop binding retains its explicit proof. Positional and special parameters
 that cannot carry variable attributes keep their existing typed cardinality
 rules.
@@ -807,9 +817,11 @@ value in the state pass:
 - Literal text gives an exact value. `AuthoredValue` and `EffectiveValue` are
   both `Exact`.
 - `$name` reads an earlier bounded binding (an assignment or an active loop
-  binding) or a live launch value. A read of any other name fails the parse,
-  with the same gate as a command word. The effective value is exact when
-  every part is proved; otherwise it is `Unknown`.
+  binding) or a live launch value. From v0.4.0-beta.16 (#221), a read of any
+  other name gives `Unknown`, with the same gate as a command word. The
+  effective value is exact when every part is proved; otherwise it is
+  `Unknown`.
+- `$1` to `$9`, `$!`, and `$?` give `Unknown`.
 - A leading `~` expands from the live launch `HOME`. Without it, the value is
   `Unknown`.
 - A command substitution gives `Unknown`. Its commands are normal
@@ -839,9 +851,59 @@ For example, `JOBID=105906864793; gh api "repos/x/jobs/$JOBID/logs"` publishes
 `root=$(discover); inspect "$root/file"` gives the occurrences `discover`
 (role `Substitution`) and `inspect`, and the value of `root` is `Unknown`.
 `FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f x | tail` publishes the
-prefix on the first stage only. By contrast, `PATH=/other inspect item`,
-`root=$other; inspect item`, `root=a:~; inspect item`, `(x=1; inspect)`, and
-`x=1; wait -p y; cat "$x"` are unparseable and publish no commands.
+prefix on the first stage only. `root=$other; inspect item` gives `root` the
+value `Unknown` (v0.4.0-beta.16). By contrast, `PATH=/other inspect item`,
+`root=a:~; inspect item`, `(x=1; inspect)`, and `x=1; wait -p y; cat "$x"`
+are unparseable and publish no commands.
+
+Child process (v0.4.0-beta.16, #221). A decoded `bash -c` child is a new
+process. Its occurrences list only the `ShellState` assignments whose names
+every path to the child exports. A subshell keeps every assignment. Before
+this change, a child listed every assignment of its parent, which was wrong
+for an unexported name. A read in the child never uses a parent binding.
+
+| Source | Assignments of `cat` |
+|---|---|
+| `x=a; bash -c 'cat foo'` | none |
+| `x=a; export x; bash -c 'cat foo'` | `x` |
+| `if c; then export x=1; fi; bash -c 'cat foo'` | none |
+| `x=1; (cat foo)` | `x` |
+
+Bounded `export` and `set --` (v0.4.0-beta.16, #221). Under
+`FreshNonInteractiveNoStartup`, the parser models two more builtins. The
+structural coordinator accepts them, and the state pass owns their values.
+
+- `export` operands, in the top-level shell or a loop body of it, with no
+  redirect. Each `NAME=value` operand is a `ShellState` assignment with the
+  bounded rules above, in operand order, so `export A=1 B="$A/x"` gives `B`
+  the value `1/x`. Each plain `NAME` operand marks the name for export and
+  does not change its value. The name gate is the same as for an assignment.
+  `export -p` alone is a query and changes no state. The export command
+  itself is a normal occurrence.
+- An export in a pipeline stage or a background list runs in a subshell, so
+  its value does not reach a later command. An export on one path only does
+  not prove a later value.
+- An export of a supplied launch name revokes the launch fact. The later
+  read gets the new authored value, or `Unknown`, and never the launch value.
+- `set --` followed by words, with no redirect, replaces the positional
+  parameters. The parser does not track them, so a later `$1` is `Unknown`.
+
+The parser rejects every other `export` option (`-n`, `-f`, `--`), a
+shell-owned or loader name (`PATH`, `HOME`, `TMPDIR`, `CDPATH`, `LD_*`,
+`BASH_ENV`, `IFS`, `SHELLOPTS`, and the others above), an unbounded value, an
+export in a subshell, a substitution body, a compound command, or a decoded
+`bash -c` child, an export of an active loop binding, and every other `set`
+form (`set -e`, `set -o name`).
+
+| Source | Result |
+|---|---|
+| `export REPO_ROOT=/r; bash scripts/build.sh "$REPO_ROOT/out"` | `REPO_ROOT` is `/r`; the argument authored value is `/r/out` |
+| `export SUB=pull; git "$SUB" origin` (launch `SUB=push`) | argument value `Unknown`, authored `pull`; words `Unknown` |
+| `export SUB; git "$SUB" origin` (launch `SUB=push`) | words `git push origin` |
+| `set -- $line; pid=$1; kill "$pid"` | `pid` is `Unknown` |
+| `export TMPDIR=/etc && cat "$TMPDIR/notes.txt"` | unparseable |
+| `export PATH="$HOME/bin:$PATH"; tool` | unparseable |
+| `set -e; tool` | unparseable |
 
 The bounded PowerShell slice requires
 `PwshInitialStateMode.IsolatedNonInteractiveNoProfile`. It accepts one ordinary
@@ -1225,8 +1287,10 @@ A Bash expansion resolves only when it is `$NAME` or `${NAME}`, the name has
 a live value, and the fragment is exactly one value. An unquoted value that
 contains whitespace or a glob character, or an unquoted word whose value is
 empty, is not one proved word. The named-expansion gate accepts a command
-when every named expansion in its words reads a live value. A heredoc body
-with a named expansion is not accepted. A decoded `bash -c` child gets no
+when every named expansion in its words reads a live value. From
+v0.4.0-beta.16 (#221), fresh mode also accepts a read of an unsupplied name as
+an `Unknown` value. A heredoc body keeps its raw text; a launch value never
+goes into it. A decoded `bash -c` child gets no
 launch facts. A mix of a loop variable and a launch variable in one command
 stays fail closed.
 
@@ -1262,7 +1326,7 @@ Facts:
 | `"$TMPDIR/tool" arg` | command words `<TMPDIR>/tool arg` |
 | `git "$SUB" origin` with `SUB=push` | command words `git push origin` |
 | `cd src && make build` (start set, `CDPATH` unset) | `make` runs in `<start>/src` |
-| `cat "$FOO/x"` (`FOO` not supplied) | as before: unparseable |
+| `cat "$FOO/x"` (`FOO` not supplied) | argument value `Unknown` (v0.4.0-beta.16; unparseable before) |
 | `wait -p TMPDIR; cat "$TMPDIR/x"` | the value is unknown |
 | `tmp=/x; cat "$tmp"` (`tmp` supplied) | the assignment rules give `/x` |
 | `$SUB arg` (no `/`) | unparseable, as before |

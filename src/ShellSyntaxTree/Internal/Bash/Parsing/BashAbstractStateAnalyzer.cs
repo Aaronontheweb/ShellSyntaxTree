@@ -64,7 +64,8 @@ internal sealed class BashAbstractStateAnalyzer
             options.WorkingDirectory ?? Environment.CurrentDirectory,
             hasCompatibilityAttribution: false,
             new BashLoopBindingContext(),
-            assignments: null);
+            assignments: null,
+            exportedNames: null);
         analyzer.AnalyzeBlock(syntax, initial);
         if (!analyzer._isComplete)
         {
@@ -234,7 +235,9 @@ internal sealed class BashAbstractStateAnalyzer
 
         if (input.Bindings.HasBindings &&
             IsPotentialPersistentBindingMutation(simple.Clause) &&
-            !IsModeledRead(simple.Clause))
+            !IsModeledRead(simple.Clause) &&
+            _factsFactory(simple).Export is null &&
+            !IsModeledSetPositional(simple.Clause))
         {
             _isComplete = false;
             return new BashFlowResult(null, null);
@@ -245,6 +248,11 @@ internal sealed class BashAbstractStateAnalyzer
         if (TryAnalyzeRead(simple.Clause, input, out var readFlow))
         {
             return readFlow;
+        }
+
+        if (_factsFactory(simple).Export is { } export)
+        {
+            return AnalyzeExport(simple.Clause, export, input);
         }
 
         var cwdTransfer = AnalyzeEffectiveCwdTransfer(simple, input);
@@ -265,6 +273,34 @@ internal sealed class BashAbstractStateAnalyzer
             simple.Clause,
             ShellWorkingDirectoryEffectFacts.Unknown);
         return new BashFlowResult(success, input);
+    }
+
+    private bool IsModeledSetPositional(Clause clause) =>
+        _options.InitialStateMode == BashInitialStateMode.FreshNonInteractiveNoStartup &&
+        BashSetPositionalBuiltin.IsBounded(clause);
+
+    /// <summary>
+    /// A bounded <c>export</c> (#221) assigns each operand from left to
+    /// right in the current shell, like an assignment statement, and marks
+    /// the name for child processes. It succeeds.
+    /// </summary>
+    private BashFlowResult AnalyzeExport(
+        Clause clause,
+        BashExportFacts export,
+        BashAbstractState input)
+    {
+        var output = input;
+        foreach (var (assignment, value) in export.Assignments)
+        {
+            var domain = EvaluateAssignmentValue(value, output);
+            output = output
+                .WithBinding(assignment.Name, domain)
+                .WithAssignment(assignment with { EffectiveValue = ToAssignmentDomain(domain) });
+        }
+
+        output = output.WithExportedNames(export.Names);
+        RecordWorkingDirectoryEffect(clause, ShellWorkingDirectoryEffectFacts.Unchanged);
+        return BashFlowResult.Success(output);
     }
 
     private bool IsModeledRead(Clause clause) =>
@@ -557,7 +593,9 @@ internal sealed class BashAbstractStateAnalyzer
             : input;
         if (clearBindings)
         {
-            childInput = childInput.WithoutBindings();
+            // A decoded command string runs in a new Bash process. It gets
+            // only the exported assignments of its parent (#221).
+            childInput = childInput.ForChildProcess();
         }
 
         var inner = AnalyzeBlock(body, childInput);
@@ -1928,7 +1966,8 @@ internal sealed class BashAbstractStateAnalyzer
                 workingDirectory: null,
                 hasCompatibilityAttribution: true,
                 bindings: new BashLoopBindingContext(),
-                assignments: null);
+                assignments: null,
+                exportedNames: null);
         }
 
         var clause = RewriteClause(simple.Clause, input, sourceFacts.CwdPathDependencies);
@@ -2822,12 +2861,14 @@ internal sealed class BashAbstractStateAnalyzer
             string? workingDirectory,
             bool hasCompatibilityAttribution,
             BashLoopBindingContext bindings,
-            IReadOnlyList<ShellVariableAssignment>? assignments)
+            IReadOnlyList<ShellVariableAssignment>? assignments,
+            IReadOnlyCollection<string>? exportedNames)
         {
             WorkingDirectory = workingDirectory;
             HasCompatibilityAttribution = hasCompatibilityAttribution;
             Bindings = bindings;
             Assignments = assignments ?? Array.Empty<ShellVariableAssignment>();
+            ExportedNames = exportedNames ?? Array.Empty<string>();
         }
 
         internal string? WorkingDirectory { get; }
@@ -2842,8 +2883,15 @@ internal sealed class BashAbstractStateAnalyzer
         /// </summary>
         internal IReadOnlyList<ShellVariableAssignment> Assignments { get; }
 
+        /// <summary>
+        /// The names that a bounded <c>export</c> marked on every path to
+        /// this point (#221). A child process gets only these shell-state
+        /// assignments.
+        /// </summary>
+        internal IReadOnlyCollection<string> ExportedNames { get; }
+
         internal BashAbstractState WithUnknownCwd() =>
-            new(null, true, Bindings, Assignments);
+            new(null, true, Bindings, Assignments, ExportedNames);
 
         internal BashAbstractState WithBinding(
             string name,
@@ -2852,7 +2900,8 @@ internal sealed class BashAbstractStateAnalyzer
                 WorkingDirectory,
                 HasCompatibilityAttribution,
                 Bindings.WithBinding(name, domain),
-                Assignments);
+                Assignments,
+                ExportedNames);
 
         internal BashAbstractState WithAssignment(ShellVariableAssignment assignment)
         {
@@ -2866,23 +2915,46 @@ internal sealed class BashAbstractStateAnalyzer
             }
 
             assignments.Add(assignment);
-            return new(WorkingDirectory, HasCompatibilityAttribution, Bindings, assignments);
+            return new(WorkingDirectory, HasCompatibilityAttribution, Bindings, assignments, ExportedNames);
         }
 
-        internal BashAbstractState WithoutBindings() =>
-            new(
+        internal BashAbstractState WithExportedNames(IReadOnlyList<string> names)
+        {
+            var exported = new HashSet<string>(ExportedNames, StringComparer.Ordinal);
+            exported.UnionWith(names);
+            return new(WorkingDirectory, HasCompatibilityAttribution, Bindings, Assignments, exported);
+        }
+
+        /// <summary>
+        /// The state that a new Bash child process starts with. It keeps only
+        /// the exported shell-state assignments, and no binding.
+        /// </summary>
+        internal BashAbstractState ForChildProcess()
+        {
+            var assignments = new List<ShellVariableAssignment>();
+            foreach (var assignment in Assignments)
+            {
+                if (Contains(ExportedNames, assignment.Name))
+                {
+                    assignments.Add(assignment);
+                }
+            }
+
+            return new(
                 WorkingDirectory,
                 HasCompatibilityAttribution,
                 Bindings.WithoutBindings(),
-                Assignments);
+                assignments,
+                ExportedNames);
+        }
 
         internal BashAbstractState WithCwd(
             string? workingDirectory,
             bool hasCompatibilityAttribution) =>
-            new(workingDirectory, hasCompatibilityAttribution, Bindings, Assignments);
+            new(workingDirectory, hasCompatibilityAttribution, Bindings, Assignments, ExportedNames);
 
         internal BashAbstractState WithoutCompatibilityAttribution() =>
-            new(WorkingDirectory, WorkingDirectory is null, Bindings, Assignments);
+            new(WorkingDirectory, WorkingDirectory is null, Bindings, Assignments, ExportedNames);
 
         internal ShellValueDomainFacts ToDomain() =>
             WorkingDirectory is null
@@ -2897,7 +2969,8 @@ internal sealed class BashAbstractStateAnalyzer
             string.Equals(WorkingDirectory, other.WorkingDirectory, StringComparison.Ordinal) &&
             HasCompatibilityAttribution == other.HasCompatibilityAttribution &&
             Bindings.StateEquals(other.Bindings) &&
-            AssignmentsEqual(Assignments, other.Assignments);
+            AssignmentsEqual(Assignments, other.Assignments) &&
+            NamesEqual(ExportedNames, other.ExportedNames);
 
         internal static BashAbstractState Join(
             BashAbstractState left,
@@ -2910,7 +2983,8 @@ internal sealed class BashAbstractStateAnalyzer
                     : null,
                 left.HasCompatibilityAttribution || right.HasCompatibilityAttribution,
                 BashLoopBindingContext.JoinState(left.Bindings, right.Bindings),
-                JoinAssignments(left.Assignments, right.Assignments));
+                JoinAssignments(left.Assignments, right.Assignments),
+                IntersectNames(left.ExportedNames, right.ExportedNames));
 
         internal static BashAbstractState Widen(
             BashAbstractState left,
@@ -2923,7 +2997,66 @@ internal sealed class BashAbstractStateAnalyzer
                     : null,
                 left.HasCompatibilityAttribution || right.HasCompatibilityAttribution,
                 BashLoopBindingContext.WidenState(left.Bindings, right.Bindings),
-                JoinAssignments(left.Assignments, right.Assignments));
+                JoinAssignments(left.Assignments, right.Assignments),
+                IntersectNames(left.ExportedNames, right.ExportedNames));
+
+        private static bool Contains(IReadOnlyCollection<string> names, string name)
+        {
+            foreach (var candidate in names)
+            {
+                if (string.Equals(candidate, name, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool NamesEqual(
+            IReadOnlyCollection<string> left,
+            IReadOnlyCollection<string> right)
+        {
+            if (left.Count != right.Count)
+            {
+                return false;
+            }
+
+            foreach (var name in left)
+            {
+                if (!Contains(right, name))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Keeps a name only when both paths export it, because a child
+        /// process gets the assignment only on a path that exports it.
+        /// </summary>
+        private static IReadOnlyCollection<string> IntersectNames(
+            IReadOnlyCollection<string> left,
+            IReadOnlyCollection<string> right)
+        {
+            if (NamesEqual(left, right))
+            {
+                return left;
+            }
+
+            var joined = new List<string>();
+            foreach (var name in left)
+            {
+                if (Contains(right, name))
+                {
+                    joined.Add(name);
+                }
+            }
+
+            return joined;
+        }
 
         private static bool AssignmentsEqual(
             IReadOnlyList<ShellVariableAssignment> left,

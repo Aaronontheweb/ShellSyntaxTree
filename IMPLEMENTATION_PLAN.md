@@ -10,6 +10,12 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.16 export, set --, and unknown reads)
+
+- [x] Read an unassigned plain `$NAME` as an `Unknown` value under the fresh-process mode. Model a bounded `export` and `set --`. List only exported assignments in a decoded `bash -c` child (#221).
+- [x] Prove that only unparseable inputs change, and that no corpus replay row gets worse. Run manual mutants.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.16` and verify NuGet publication.
+
 ## Completed (0.4.0-beta.15 heredoc in a command substitution)
 
 - [x] Skip heredoc bodies in the command-substitution boundary scan, and shift heredoc spans of a substitution body into the submitted source (#217).
@@ -20,7 +26,7 @@ priorities.
 
 ## Next (Netclaw parse coverage, from #206)
 
-- Report leftovers: `export NAME=value`, unknown variable reads under the fresh-process mode, effective loop values under that mode, and command words from proved binding values.
+- Report leftovers: effective loop values under the fresh-process mode, and command words from proved binding values.
 
 ## Completed (0.4.0-beta.14 Bash background lists)
 

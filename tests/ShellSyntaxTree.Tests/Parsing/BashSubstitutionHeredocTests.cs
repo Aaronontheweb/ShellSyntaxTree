@@ -94,7 +94,6 @@ public class BashSubstitutionHeredocTests
     [InlineData("rm \"$(cat <<EOF\nvalue\n EOF\n)\"")]
     [InlineData("rm \"$(cat <<EOF\nvalue\nEOF\r\n)\"")]
     [InlineData("rm \"$(cat <<A <<B\na\nA\nb\nB\n)\"")]
-    [InlineData("rm \"$(cat <<EOF\n$unset_name\nEOF\n)\"")]
     [InlineData("rm \"$(cat <<\n)\"")]
     public void Unsupported_or_unterminated_heredoc_fails_closed(string source)
     {

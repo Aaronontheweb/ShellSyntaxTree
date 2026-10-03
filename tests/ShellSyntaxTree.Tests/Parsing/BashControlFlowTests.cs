@@ -359,7 +359,6 @@ public class BashControlFlowTests
     [InlineData("case a$(id) in a) echo a;; esac")]
     [InlineData("case \"$(id)\" in a) echo a;; esac")]
     [InlineData("case x in a$(id)) echo a;; esac")]
-    [InlineData("case \"$unset_name\" in a) echo a;; esac")]
     [InlineData("while read -r l; do echo hi; done < file.txt")]
     [InlineData("if true; then echo hi; fi > out.txt")]
     [InlineData("then echo hi")]
