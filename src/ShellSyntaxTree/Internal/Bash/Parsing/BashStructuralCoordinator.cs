@@ -3303,7 +3303,7 @@ internal static partial class BashCommandParser
         for (var index = 0; index < tokens.Count; index++)
         {
             var token = tokens[index];
-            // A heredoc in a substitution body (#ISSUE) keeps its body and
+            // A heredoc in a substitution body (#217) keeps its body and
             // end positions in the outer source, like the token itself.
             shifted[index] = token with
             {

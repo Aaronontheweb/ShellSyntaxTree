@@ -2460,6 +2460,15 @@ The lexer produces tokens consumed by the parser. Token kinds:
   Expanding-heredoc substitutions use the same opaque fragment semantics but
   remain attached to the delimiter token rather than entering the ordinary
   command-token stream.
+  A heredoc inside a `$(...)` (v0.4.0-beta.15, #217): the boundary scan
+  reads each `<<` or `<<-` delimiter on a line and, at the next unquoted
+  newline, skips each body in order to the line that is exactly its
+  delimiter (after leading tabs for `<<-`). A `)` or a quote in a body cannot
+  end the substitution. `<<<` is a here-string, not a heredoc. An
+  unterminated body, a delimiter line with other text (`EOF)` or `EOF\r`),
+  and a body without its delimiter fail closed. The substitution body then
+  parses with the top-level heredoc rules, and its heredoc spans point into
+  the submitted source. Bash assignment values use the same boundary scan.
 - **UNPARSEABLE_SENTINEL** — `$((expr))` or obsolete `$[expr]` arithmetic
   expansion, or any operator-bearing parameter expansion such as
   `${var:-$(cmd)}`, `${var//pat/repl}`, or `${var@P}`. The lexer skips past

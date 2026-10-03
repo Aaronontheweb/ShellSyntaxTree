@@ -755,7 +755,7 @@ internal static class BashLexer
             {
                 // A heredoc body starts after the newline that ends its
                 // command line. Each body ends at a line that is exactly its
-                // delimiter (#ISSUE). The body can hold `)` and quotes, so
+                // delimiter (#217). The body can hold `)` and quotes, so
                 // the scan skips it as raw text.
                 if (!TrySkipHeredocBodies(src, i + 1, pendingHeredocs, out var afterBodies))
                 {
@@ -1021,7 +1021,7 @@ internal static class BashLexer
 
     /// <summary>
     /// Finds the <c>)</c> that closes a <c>$(</c> with the lexer's own
-    /// substitution rules, including heredoc bodies (#ISSUE).
+    /// substitution rules, including heredoc bodies (#217).
     /// </summary>
     internal static bool TryFindCommandSubstitutionEnd(
         ReadOnlySpan<char> src,

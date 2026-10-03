@@ -9,7 +9,7 @@ using Xunit;
 namespace ShellSyntaxTree.Tests.Parsing;
 
 /// <summary>
-/// Pins a heredoc inside a Bash command substitution (#ISSUE). The scanner
+/// Pins a heredoc inside a Bash command substitution (#217). The scanner
 /// skips each body to its delimiter line, so a <c>)</c> or a quote in the
 /// body cannot end the substitution. The inner command is a normal
 /// <c>Substitution</c> occurrence with its heredoc analysis.
