@@ -997,14 +997,17 @@ public class BashStructuralProjectionTests
     [InlineData("id&evil")]
     [InlineData("echo \"$(id & evil)\"")]
     [InlineData("echo \"$(id&evil)\"")]
-    public void Background_lists_fail_closed_without_partial_projections(string source)
+    public void Background_list_keeps_every_command_visible(string source)
     {
         var result = Parse(source);
 
-        Assert.True(result.IsUnparseable);
-        Assert.Empty(result.Commands);
-        Assert.Empty(result.Clauses);
-        Assert.Contains("background", result.UnparseableReason!);
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        var id = Assert.Single(result.Commands, command => command.Clause.Verb.Tokens[0] == "id");
+        Assert.Contains(id.Ancestry, frame =>
+            frame.Ancestor is GroupSyntax { GroupKind: ShellGroupKind.Background });
+        var evil = Assert.Single(result.Commands, command => command.Clause.Verb.Tokens[0] == "evil");
+        Assert.DoesNotContain(evil.Ancestry, frame =>
+            frame.Ancestor is GroupSyntax { GroupKind: ShellGroupKind.Background });
     }
 
     [Theory]

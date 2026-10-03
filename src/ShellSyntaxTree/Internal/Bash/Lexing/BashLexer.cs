@@ -149,14 +149,11 @@ internal static class BashLexer
                     continue;
                 }
 
-                tokens.Add(new BashToken(
-                    BashTokenKind.UnparseableSentinel,
-                    src.Slice(i).ToString(),
-                    null,
-                    i,
-                    src.Length - i,
-                    "single-'&' background lists are not supported"));
-                return tokens;
+                // A single `&` ends an asynchronous and-or list (#215).
+                // The structural parser owns the list grouping.
+                tokens.Add(new BashToken(BashTokenKind.Operator, "", "&", i, 1, null));
+                i++;
+                continue;
             }
 
             // ---- quoted strings ----

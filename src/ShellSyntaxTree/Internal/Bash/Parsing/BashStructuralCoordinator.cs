@@ -333,6 +333,8 @@ internal static partial class BashCommandParser
                 return true;
             }
 
+            var andOrStart = 0;
+            var andOrAttribution = SnapshotAttribution();
             if (!TryParsePipeline(firstCompatibilityOperator, out var first, out error))
             {
                 return false;
@@ -362,6 +364,38 @@ internal static partial class BashCommandParser
                     return false;
                 }
 
+                if (IsOperator("&"))
+                {
+                    // `&` ends the and-or list that began after the last `;`,
+                    // newline, or `&`. That list runs in an asynchronous
+                    // subshell, so its `cd` does not change the next command.
+                    var ampersand = _tokens[_position++];
+                    WrapBackgroundList(items, andOrStart, ampersand);
+                    _attribution.Restore(andOrAttribution.Cwd, andOrAttribution.IsDynamic);
+                    andOrStart = items.Count;
+                    SkipNewlines();
+                    if (_position == _tokens.Count ||
+                        stopAtRightParen && IsOperator(")") ||
+                        IsAnyWord(stopWords) ||
+                        stopAtCaseTerminator && IsCaseTerminator())
+                    {
+                        break;
+                    }
+
+                    andOrAttribution = SnapshotAttribution();
+                    if (!TryParsePipeline(CompoundOperator.Sequence, out var afterBackground, out error))
+                    {
+                        return false;
+                    }
+
+                    items.Add(new CommandListItemSyntax
+                    {
+                        Operator = CompoundOperator.Sequence,
+                        Command = afterBackground!,
+                    });
+                    continue;
+                }
+
                 if (!TryReadListOperator(out var listOperator))
                 {
                     error = $"unexpected token at position {_tokens[_position].SourceStart}";
@@ -383,6 +417,12 @@ internal static partial class BashCommandParser
                     return false;
                 }
 
+                if (listOperator == CompoundOperator.Sequence)
+                {
+                    andOrStart = items.Count;
+                    andOrAttribution = SnapshotAttribution();
+                }
+
                 if (!TryParsePipeline(listOperator, out var next, out error))
                 {
                     return false;
@@ -397,7 +437,8 @@ internal static partial class BashCommandParser
 
             if (items.Count == 1)
             {
-                command = first;
+                // A background `&` can replace the first item with its group.
+                command = items[0].Command;
                 return true;
             }
 
@@ -1716,6 +1757,70 @@ internal static partial class BashCommandParser
             return true;
         }
 
+        /// <summary>
+        /// Replaces the items of one and-or list with one background group
+        /// (#215). The group keeps the operator that came before the list.
+        /// </summary>
+        private static void WrapBackgroundList(
+            List<CommandListItemSyntax> items,
+            int andOrStart,
+            BashToken ampersand)
+        {
+            var range = items.GetRange(andOrStart, items.Count - andOrStart);
+            var nodes = new List<ShellSyntaxNode>(range.Count);
+            foreach (var item in range)
+            {
+                nodes.Add(item.Command);
+            }
+
+            ShellSyntaxNode bodyCommand;
+            if (range.Count == 1)
+            {
+                bodyCommand = range[0].Command;
+            }
+            else
+            {
+                var inner = new List<CommandListItemSyntax>(range.Count);
+                for (var index = 0; index < range.Count; index++)
+                {
+                    inner.Add(index == 0
+                        ? range[index] with { Operator = CompoundOperator.None }
+                        : range[index]);
+                }
+
+                bodyCommand = new CommandListSyntax
+                {
+                    Items = inner,
+                    SourceStart = CombinedStart(nodes),
+                    SourceLength = CombinedLength(nodes),
+                };
+            }
+
+            var start = CombinedStart(nodes);
+            var length = CombinedLength(nodes);
+            var group = new GroupSyntax
+            {
+                GroupKind = ShellGroupKind.Background,
+                Body = new ShellBlockSyntax
+                {
+                    Statements = new[] { bodyCommand },
+                    SourceStart = start,
+                    SourceLength = length,
+                },
+                SourceStart = start,
+                SourceLength = start is int groupStart
+                    ? ampersand.SourceStart + ampersand.SourceLength - groupStart
+                    : null,
+            };
+            var precedingOperator = range[0].Operator;
+            items.RemoveRange(andOrStart, range.Count);
+            items.Add(new CommandListItemSyntax
+            {
+                Operator = precedingOperator,
+                Command = group,
+            });
+        }
+
         private bool TryReadListOperator(out CompoundOperator @operator)
         {
             @operator = CompoundOperator.None;
@@ -2209,6 +2314,14 @@ internal static partial class BashCommandParser
                 return true;
             }
 
+            // `$!` (the last background job) and `$?` (the last status) are
+            // always defined and run no code. Their value is unknown (#215).
+            if (next is '!' or '?')
+            {
+                index += 2;
+                return true;
+            }
+
             if (!IsBashIdentifierStart(next))
             {
                 return false;
@@ -2248,8 +2361,12 @@ internal static partial class BashCommandParser
                 }
 
                 if (fragment.Kind == ShellValueFragmentKind.Opaque &&
-                    fragment.OpaqueCause == ShellOpaqueCause.CommandSubstitution)
+                    fragment.OpaqueCause == ShellOpaqueCause.CommandSubstitution ||
+                    fragment.Kind == ShellValueFragmentKind.Expansion &&
+                    fragment.Expansion is { Kind: ShellExpansionKind.SpecialParameter, Name: "!" or "?" })
                 {
+                    // The parser cannot prove the value, so the binding is
+                    // unknown, as for a substitution.
                     hasSubstitution = true;
                     continue;
                 }
@@ -3221,11 +3338,11 @@ internal static partial class BashCommandParser
     private static bool IsStructuralBoundary(BashToken token) =>
         token.Kind == BashTokenKind.Whitespace ||
         token.Kind == BashTokenKind.Operator && token.OperatorText is
-            "(" or ")" or "&&" or "||" or ";" or "|";
+            "(" or ")" or "&&" or "||" or ";" or "|" or "&";
 
     private static bool IsListOperator(BashToken token) =>
         token.Kind == BashTokenKind.Whitespace ||
-        token.Kind == BashTokenKind.Operator && token.OperatorText is "&&" or "||" or ";";
+        token.Kind == BashTokenKind.Operator && token.OperatorText is "&&" or "||" or ";" or "&";
 
     private static bool IsExactStaticWrapper(IReadOnlyList<BashToken> tokens)
     {

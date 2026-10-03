@@ -1,0 +1,43 @@
+{
+  "name": "v0.4 background list in a substitution exposes each command",
+  "input": "echo \u0022$(id \u0026 evil)\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "id"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "Sequence",
+        "verb": [
+          "evil"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "echo"
+        ],
+        "args": [
+          {
+            "raw": "\u0022$(id \u0026 evil)\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "v0.4.0-beta.14: a single ampersand ends a background and-or list. The list runs in an asynchronous subshell (GroupSyntax with GroupKind Background). Every command stays visible. Before beta.14 this entry was unparseable.",
+  "oracleExpectation": "OutOfScope"
+}

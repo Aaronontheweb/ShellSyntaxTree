@@ -406,7 +406,7 @@ public class PublicContractSnapshotTests
     [Fact]
     public void Stable_v03_enums_match_the_locked_order()
     {
-        AssertEnum<ShellGroupKind>("Unknown", "CurrentScope", "IsolatedScope");
+        AssertEnum<ShellGroupKind>("Unknown", "CurrentScope", "IsolatedScope", "Background");
         AssertEnum<ExecutionRegionOrigin>(
             "Unknown", "DirectCall", "DotSource", "CommandArgument");
         AssertEnum<ExecutionRegionPhase>(

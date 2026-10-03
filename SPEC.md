@@ -2277,10 +2277,11 @@ quoted_string   := single-quoted | double-quoted
   prevents `2>&1` from being incorrectly resolved to `<cwd>/&1`.
 - Function definitions, assignments outside the bounded v0.4 slice, `select`,
   `[[`, C-style or implicit loops, arithmetic execution, process substitution,
-  a redirect on a compound command, and single-`&` background lists remain
-  unparseable because they can hide executable regions outside the bounded
-  grammar below. `while`, `until`, `if`, and `case` parse since
-  v0.4.0-beta.13 (see "Bash control flow").
+  and a redirect on a compound command remain unparseable because they can
+  hide executable regions outside the bounded grammar below. `while`, `until`,
+  `if`, and `case` parse since v0.4.0-beta.13 (see "Bash control flow").
+  Single-`&` background lists parse since v0.4.0-beta.14 (see "Bash
+  background lists").
 
 ### Bash control flow (v0.4.0-beta.13)
 
@@ -2337,6 +2338,33 @@ command substitution in a case subject or pattern, an unproved named
 expansion in them, a redirect after `done`, `fi`, or `esac`, and nesting
 deeper than the structural limit of 16. A case item body can be empty. These
 facts do not grant authority.
+
+### Bash background lists (v0.4.0-beta.14)
+
+A single `&` ends the and-or list that began after the last `;`, newline, or
+`&` (#215). That list runs in an asynchronous subshell. The parser wraps it in
+a `GroupSyntax` with `GroupKind = Background`. Every command in the list and
+after it is a normal occurrence. Its ancestry includes the background group
+with the `GroupBody` region, and the commands keep their nearer roles.
+
+| Source | Structure |
+|---|---|
+| `sleep 5 &` | one background group around `sleep` |
+| `a && b & c` | a background group around the list `a && b`, then `c` |
+| `a \| b &` | a background group around the pipeline |
+| `server & PID=$!; kill "$PID"` | a group around `server`; `PID` is `Unknown` |
+
+Owner and data. `BashStructuralCoordinator` owns the grouping, and the state
+pass owns the flow. The list's state changes (directory, assignments) do not
+reach the next command, and `&` gives exit status zero. Thus in
+`cd /tmp && make & ls`, `make` runs in `/tmp` and `ls` runs in the start
+directory. In the compatibility leaves, the command after `&` has the
+`Sequence` operator.
+
+`$!` and `$?` in an assignment value give an `Unknown` binding, as a command
+substitution does. An `&` in a wrong position, such as `x & ; y`,
+`x & && y`, `& x`, or `x | & y`, stays unparseable. These facts do not grant
+authority.
 
 ### v0.3 structured Bash grammar
 

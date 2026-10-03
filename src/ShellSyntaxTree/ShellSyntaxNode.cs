@@ -218,6 +218,13 @@ public enum ShellGroupKind
     Unknown,
     CurrentScope,
     IsolatedScope,
+
+    /// <summary>
+    /// A Bash and-or list that ends with <c>&amp;</c> (v0.4.0-beta.14). It runs
+    /// in an asynchronous subshell. Its state changes do not reach the next
+    /// command, and the list itself has exit status zero.
+    /// </summary>
+    Background,
 }
 
 /// <summary>A foreach-style loop with a shell-specific iterable spelling.</summary>

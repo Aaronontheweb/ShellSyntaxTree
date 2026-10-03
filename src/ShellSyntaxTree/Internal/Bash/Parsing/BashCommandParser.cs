@@ -379,7 +379,7 @@ internal static partial class BashCommandParser
         {
             if (t.Kind == BashTokenKind.Operator)
             {
-                nextIsVerbSlot = t.OperatorText is "&&" or "||" or ";" or "|" or "(";
+                nextIsVerbSlot = t.OperatorText is "&&" or "||" or ";" or "|" or "(" or "&";
                 continue;
             }
 
