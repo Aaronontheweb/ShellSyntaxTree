@@ -17,7 +17,9 @@ priorities.
 - [x] End the `bash`/`sh` command-string scan at the script operand. Keep `bash -c` decoding unchanged.
 - [x] Record why command words do not stop at a word that names a file: no shell fact proves it. The file system or the program grammar decides it.
 - [x] Prove that the output with no or an empty launch environment changes only for the script-operand rule, and for no corpus input. Run manual mutants.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.11` and verify NuGet publication.
+- [x] Merge PR #207 after Linux and Windows CI. Tag `0.4.0-beta.11` on merge
+      `45c8e9ad` and verify NuGet publication. Workflow run 37151283743
+      published the package and the GitHub prerelease.
 
 ## Next (Netclaw parse coverage, from #206)
 
