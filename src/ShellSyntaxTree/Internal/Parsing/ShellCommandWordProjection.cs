@@ -29,7 +29,8 @@ namespace ShellSyntaxTree.Internal.Parsing;
 ///   <c>/</c>;</item>
 ///   <item>dynamic: the shell expands the word before the program runs, so
 ///   the parser cannot prove the program's words. A bare glob is dynamic.
-///   The result is <see cref="ShellCommandWords.Unknown"/>;</item>
+///   In the verb slot, the result is <see cref="ShellCommandWords.Unknown"/>.
+///   After the verb slot, the word is skipped;</item>
 ///   <item>text: a static value that is empty or contains whitespace or a
 ///   quoted glob character;</item>
 ///   <item>value: a static value that contains an ASCII digit;</item>
@@ -38,19 +39,31 @@ namespace ShellSyntaxTree.Internal.Parsing;
 /// Only command words go into the result. A redirect target is never a word
 /// of the command, and assignment prefixes are not clause elements.
 /// </para>
+/// <para>
+/// Position rule (#197). The verb slot is the first command word after the
+/// program word. Until it is filled, the rules are strict: a dynamic word
+/// makes the result unknown, and a plain word after an option is kept,
+/// because it can be a subcommand after a valueless switch
+/// (<c>git -p filter-branch</c>). After the slot is filled, a dynamic word
+/// is skipped as an argument, and a plain word directly after an option is
+/// skipped as that option's value (<c>dotnet build -c Release</c>). A plain
+/// word that does not follow an option is still kept.
+/// </para>
+/// <para>
+/// Limit: after the verb slot, a sub-subcommand that follows an option is
+/// skipped. <c>git remote -v add evil url</c> gives <c>git remote</c>.
+/// Without the grammar of the program, a switch and a sub-subcommand look
+/// the same as an option and its value. The top-level verb stays protected.
+/// </para>
 /// </remarks>
 internal static class ShellCommandWordProjection
 {
     /// <summary>
-    /// Policy point (owner decision, #194). A plain word directly after an
-    /// option stays in the command words. Without the option grammar of the
-    /// program, the parser cannot tell an option value
-    /// (<c>pgrep -x name</c>) from a subcommand after a valueless switch
-    /// (<c>git -p filter-branch</c>). If the word were dropped, a subcommand
-    /// could hide behind a switch. If the word is kept, an option value can
-    /// only make a grant more specific.
+    /// Policy point (owner decision, #197). The verb slot is filled when the
+    /// result holds the program word and one more command word. Strict rules
+    /// apply only before this point.
     /// </summary>
-    internal static bool KeepsPlainWordAfterOption => true;
+    internal static bool IsVerbSlotFilled(int commandWordCount) => commandWordCount > 1;
 
     private enum WordClass
     {
@@ -106,13 +119,18 @@ internal static class ShellCommandWordProjection
             }
 
             var wordClass = Classify(element, language);
-            if (wordClass == WordClass.Dynamic)
+            var verbSlotFilled = IsVerbSlotFilled(words.Count);
+            if (wordClass == WordClass.Dynamic && !verbSlotFilled)
             {
+                // A dynamic word in the verb slot could be the subcommand.
                 return new ShellCommandWords.Unknown();
             }
 
+            // After the verb slot, a plain word directly after an option is
+            // that option's value. Before it, the word can be a subcommand
+            // after a valueless switch, so it is kept.
             if (wordClass == WordClass.CommandWord &&
-                (!followsOption || KeepsPlainWordAfterOption))
+                (!followsOption || !verbSlotFilled))
             {
                 words.Add(element.Value);
             }
@@ -131,12 +149,13 @@ internal static class ShellCommandWordProjection
                        element.Kind is ArgKind.Literal or ArgKind.DynamicSkip;
 
         // A word that can split into more than one word (an unquoted Bash
-        // expansion, a PowerShell array or splat) can add a word that no
-        // class here accounts for. That is true even inside an option or a
-        // path: with r='x push', `git --c=$r log` runs `git --c=x push log`.
-        // So such a word always makes the result unknown.
-        if (shape == WordShape.MaySplit &&
-            !(element.IsPath && element.Resolved is not null))
+        // expansion, a brace list, a PowerShell array or splat) can add a
+        // word that no class here accounts for. That is true even inside an
+        // option or a path: with r='x push', `git --c=$r log` runs
+        // `git --c=x push log`, and `git {push,a/b}` runs `git push a/b`.
+        // The parser can report a brace word as one resolved path, so a
+        // path fact never excuses a split word.
+        if (shape == WordShape.MaySplit)
         {
             return WordClass.Dynamic;
         }

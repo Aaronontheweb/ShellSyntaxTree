@@ -8,7 +8,7 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <VersionPrefix>0.4.0</VersionPrefix>
-    <VersionSuffix>beta.7</VersionSuffix>
+    <VersionSuffix>beta.8</VersionSuffix>
   </PropertyGroup>
   <PropertyGroup>
     <!-- Target framework matrix -->

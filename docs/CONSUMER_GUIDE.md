@@ -928,6 +928,9 @@ static string? GetCommandWordKey(CommandOccurrence occurrence) =>
 | `git --no-pager log -1` | `git log` |
 | `git push origin feature-x` | `git push origin feature-x` |
 | `pgrep -x name` | `pgrep name` |
+| `dotnet build -c Release` | `dotnet build` |
+| `git commit -m fix` | `git commit` |
+| `git add *` | `git add` |
 | `df -h .` | `df` |
 | `du -sh ./*` | `du` |
 | `du -sh *` | `Unknown` |
@@ -935,14 +938,17 @@ static string? GetCommandWordKey(CommandOccurrence occurrence) =>
 
 The words skip options, paths, globs that contain `/`, words with a digit, text with
 whitespace, and redirect targets. A quoted single word counts: `git "push"`
-gives `git push`. An expansion that is not inside an option or a path, such as
-`git $(cmd)` or `git {push,log}`, makes the result `Unknown`. A plain word
-after an option stays, because the parser cannot tell an option value from a
-subcommand. This rule can only make a key more specific.
+gives `git push`.
 
-A glob that contains `/` is skipped as a path pattern. A bare glob such as
-`*` makes the result `Unknown`, because the shell can replace it with any file
-name, for example `push`.
+The verb slot is the first word after the program. In the verb slot, the
+rules are strict: a plain word after an option stays (`git -p filter-branch`
+gives `git filter-branch`), and an expansion or a bare glob makes the result
+`Unknown` (`git $(cmd)`, `git *`). After the verb slot, a plain word directly
+after an option is skipped as its value, and expansions and bare globs are
+skipped as arguments. A glob that contains `/` is a path pattern everywhere.
+
+Limit: after the verb slot, a sub-subcommand that follows an option is
+skipped. `git remote -v add evil url` gives `git remote evil url`.
 
 ## Evaluating arguments and paths
 

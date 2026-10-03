@@ -10,7 +10,14 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.7 command words and path operands)
+## NOW (0.4.0-beta.8 command-word position rule)
+
+- [x] Add the verb slot to `CommandWords`: strict rules before it, and option values and dynamic arguments skipped after it (#197).
+- [x] Stop a split word from hiding as a resolved path (`git {push,a/b}`).
+- [x] Complete Release tests, slot-boundary mutants, and the header check.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.8` and verify NuGet publication.
+
+## Completed (0.4.0-beta.7 command words and path operands)
 
 - [x] Add `CommandOccurrence.CommandWords` for Bash and PowerShell, independent of option order (#194).
 - [x] Report `.`, `..`, and unquoted globs as path operands for programs without a per-verb rule (#193).
