@@ -10,12 +10,14 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.13 Bash control flow)
+## Completed (0.4.0-beta.13 Bash control flow)
 
 - [x] Parse `while`, `until`, `if`, and `case` into public nodes, with `Condition` and `Branch` roles and regions (#212).
 - [x] Join path facts in the state pass. Model the bounded `read` builtin and the lone `[` program word.
 - [x] Prove that only unparseable inputs and the lone `[` argument change, and that no corpus replay row gets worse. Run manual mutants.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.13` and verify NuGet publication.
+- [x] Merge PR #213 after Linux and Windows CI. Tag `0.4.0-beta.13` on merge
+      `9a15ad35` and verify NuGet publication. Workflow run 37158418202
+      published the package and the GitHub prerelease.
 
 ## Next (Netclaw parse coverage, from #206)
 
