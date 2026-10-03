@@ -15,7 +15,9 @@ priorities.
 - [x] Give a bare relative `cd` operand the computed directory as its resolved path when the launch facts prove that `CDPATH` is unset (#203).
 - [x] Keep the operand unresolved without the `CDPATH` proof, under the `Unknown` mode, without `WorkingDirectory`, and for `cd -`, `cd -P`, `cd -@`, and dynamic operands. PowerShell needs no change.
 - [x] Prove that the complete public output with no launch environment is identical to 0.4.0-beta.9. With launch facts, only `cd` operand resolved paths change. Run manual mutants on the new condition.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.10` and verify NuGet publication.
+- [x] Merge PR #204 after Linux and Windows CI. Tag `0.4.0-beta.10` on merge
+      `85d3f964` and verify NuGet publication. Workflow run 37107130244
+      published the package and the GitHub prerelease.
 
 ## Completed (0.4.0-beta.9 launcher-proved environment facts)
 
