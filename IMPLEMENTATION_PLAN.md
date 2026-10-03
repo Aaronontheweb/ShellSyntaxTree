@@ -10,11 +10,13 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.16 export, set --, and unknown reads)
+## Completed (0.4.0-beta.16 export, set --, and unknown reads)
 
 - [x] Read an unassigned plain `$NAME` as an `Unknown` value under the fresh-process mode. Model a bounded `export` and `set --`. List only exported assignments in a decoded `bash -c` child (#221).
 - [x] Prove that only unparseable inputs change, and that no corpus replay row gets worse. Run manual mutants.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.16` and verify NuGet publication.
+- [x] Merge PR #222 after Linux and Windows CI. Tag `0.4.0-beta.16` on merge
+      `c7a7bdbe` and verify NuGet publication. Workflow run 37163085495
+      published the package and the GitHub prerelease.
 
 ## Completed (0.4.0-beta.15 heredoc in a command substitution)
 
