@@ -455,7 +455,9 @@ Rules for consumers:
 - The parser uses the facts only under a startup-free initial-state mode.
   Under `Unknown`, it ignores them.
 - A relative `cd` resolves only when you set `WorkingDirectory` and list
-  `CDPATH` as unset.
+  `CDPATH` as unset. Then the operand also gets the target in
+  `Arg.Resolved`: in `cd src && make build`, `src` resolves to
+  `/work/repo/src`. Without that proof, `Arg.Resolved` stays empty.
 - After a statement that can change a variable, the parser stops trusting
   it. A variable that you did not supply behaves as before.
 - A resolved launch word keeps `ArgKind.EnvVar`. Read the path from

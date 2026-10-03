@@ -1386,7 +1386,8 @@ internal sealed class BashAbstractStateAnalyzer
                 clause,
                 out _,
                 out var target,
-                out var resolutionMustBeUnknown))
+                out var resolutionMustBeUnknown,
+                out var searchesCdPath))
         {
             if (resolutionMustBeUnknown)
             {
@@ -1402,7 +1403,7 @@ internal sealed class BashAbstractStateAnalyzer
             return true;
         }
 
-        if (resolutionMustBeUnknown)
+        if (resolutionMustBeUnknown || searchesCdPath)
         {
             success = input.WithUnknownCwd();
             return true;
@@ -1459,15 +1460,24 @@ internal sealed class BashAbstractStateAnalyzer
         return index < words.Count ? words[index] : null;
     }
 
+    /// <summary>
+    /// Finds the first <c>cd</c> operand. <paramref name="resolutionMustBeUnknown"/>
+    /// is true for a rule that needs runtime state: <c>-P</c>, <c>-@</c>, or
+    /// <c>cd -</c>. <paramref name="searchesCdPath"/> is true for a literal
+    /// operand that bash searches in <c>CDPATH</c> first. Only proof that
+    /// <c>CDPATH</c> is unset can make that operand exact.
+    /// </summary>
     private static bool TryGetCdOperand(
         Clause clause,
         out int argumentIndex,
         out Arg target,
-        out bool resolutionMustBeUnknown)
+        out bool resolutionMustBeUnknown,
+        out bool searchesCdPath)
     {
         argumentIndex = -1;
         target = null!;
         resolutionMustBeUnknown = false;
+        searchesCdPath = false;
         var optionsEnded = false;
         var physical = false;
         var current = 0;
@@ -1500,9 +1510,9 @@ internal sealed class BashAbstractStateAnalyzer
             argumentIndex = current;
             target = argument;
             var value = ArgumentValue(clause, argument);
-            resolutionMustBeUnknown = physical ||
-                value == "-" ||
-                target.Kind == ArgKind.Literal && IsCdPathSearchCandidate(value);
+            resolutionMustBeUnknown = physical || value == "-";
+            searchesCdPath = target.Kind == ArgKind.Literal &&
+                IsCdPathSearchCandidate(value);
             return true;
         }
 
@@ -1710,12 +1720,20 @@ internal sealed class BashAbstractStateAnalyzer
     {
         var parseWorkingDirectory = OriginalParseWorkingDirectory(clause, input);
         var directVerb = FirstVerb(clause);
+        // A relative operand such as `cd sub` gets the same resolved path as
+        // the cd transfer computes. That is true only when the transfer can
+        // prove that CDPATH is unset at this clause (#200, #203). Otherwise the
+        // operand can select a CDPATH entry, and the resolved path stays
+        // empty.
         var clearCdTargetIndex = directVerb is "cd" or "chdir" && TryGetCdOperand(
             clause,
             out var cdTargetIndex,
             out _,
-            out var cdResolutionMustBeUnknown) &&
-            cdResolutionMustBeUnknown
+            out var cdResolutionMustBeUnknown,
+            out var cdSearchesCdPath) &&
+            (cdResolutionMustBeUnknown ||
+             cdSearchesCdPath &&
+             !CanResolveRelativeCd(OptionsFor(input, LaunchFor(clause))))
             ? cdTargetIndex
             : -1;
         var authoredArgs = new List<Arg>(clause.Args.Count);
