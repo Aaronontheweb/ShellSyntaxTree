@@ -289,7 +289,18 @@ internal static class BashFiniteScopeAnalyzer
         }
 
         var source = parsed.Source.Substring(start, length);
-        var slice = new BashParser(options with { WorkingDirectory = directory }).Parse(source);
+        var sourceOccurrence = parsed.Commands.First(occurrence =>
+            ReferenceEquals(occurrence.Clause, simple.Clause));
+        var slice = new BashParser(options with
+        {
+            WorkingDirectory = directory,
+            // Only the facts that were live at this command (#200). Without
+            // a caller-supplied start directory, the first directory here is
+            // the process default, so a relative cd must stay unknown.
+            LaunchEnvironment = options.WorkingDirectory is null
+                ? sourceOccurrence.LaunchEnvironment?.Revoke("CDPATH")
+                : sourceOccurrence.LaunchEnvironment,
+        }).Parse(source);
         if (slice.IsUnparseable || slice.Commands.Count != 1 ||
             !slice.Commands[0].IsComplete ||
             slice.Commands[0].WorkingDirectory is not ShellValueDomain.Exact exact ||
@@ -301,8 +312,7 @@ internal static class BashFiniteScopeAnalyzer
 
         scoped = new BashScopedCommand
         {
-            SourceOccurrence = parsed.Commands.First(occurrence =>
-                ReferenceEquals(occurrence.Clause, simple.Clause)),
+            SourceOccurrence = sourceOccurrence,
             ScopedOccurrence = slice.Commands[0],
             Source = source,
             SourceStart = start,

@@ -118,6 +118,13 @@ public sealed record CommandOccurrence
     public ShellCommandWords CommandWords { get; internal init; } =
         new ShellCommandWords.Unknown();
 
+    /// <summary>
+    /// The launch facts that were live for this occurrence (#200). The finite
+    /// scope projection re-parses one slice with exactly these facts, so a
+    /// fact that an earlier statement revoked does not return.
+    /// </summary>
+    internal ShellLaunchEnvironment? LaunchEnvironment { get; init; }
+
     private int FindElementIndex(ClauseElement element)
     {
         for (var index = 0; index < Clause.Elements.Count; index++)

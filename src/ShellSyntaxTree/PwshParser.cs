@@ -34,6 +34,7 @@ public sealed class PwshParser : IShellParser
             throw new ArgumentNullException(nameof(options));
         }
 
+        Internal.Resolving.ShellLaunchFacts.ValidateForPwsh(options);
         _options = options;
     }
 

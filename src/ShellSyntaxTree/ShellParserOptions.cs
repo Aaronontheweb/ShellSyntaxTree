@@ -24,4 +24,15 @@ public abstract record ShellParserOptions
     /// resolution. Defaults to the daemon-process cwd.
     /// </summary>
     public string? WorkingDirectory { get; init; }
+
+    /// <summary>
+    /// Launcher-proved environment facts for the new shell process (#200).
+    /// Null, the default, keeps the earlier behavior. The parser uses the
+    /// facts only under an initial-state mode that excludes startup content.
+    /// A supplied Bash <c>HOME</c> must not be empty, and it must agree with
+    /// <see cref="HomeDirectory"/> when both are set. A relative Bash
+    /// <c>cd</c> resolves only when <see cref="WorkingDirectory"/> is set and
+    /// these facts prove that <c>CDPATH</c> is unset.
+    /// </summary>
+    public ShellLaunchEnvironment? LaunchEnvironment { get; init; }
 }

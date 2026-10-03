@@ -5535,6 +5535,22 @@ internal sealed class PwshForEachValueAnalyzer
                 continue;
             }
 
+            // A launcher-proved environment value (#200) is trusted under the
+            // same rule as $env:USERPROFILE: no earlier command can have
+            // changed process-wide state.
+            if (expansion.Kind == ShellExpansionKind.Variable &&
+                (fragment.AllowedTransforms & ShellLexicalTransform.Variable) != 0 &&
+                context.HomeEnvironmentAvailable &&
+                !context.ProcessWideStateInvalidated &&
+                ShellLaunchFacts.TryGetPwshEnvironmentValue(
+                    _options,
+                    expansion.Name,
+                    out var launchValue))
+            {
+                composed.Append(launchValue);
+                continue;
+            }
+
             var hasKnownHomeVariable =
                 PwshResolver.IsAutomaticHomeVariable(expansion.Name)
                     ? context.AutomaticHomeValueAvailable

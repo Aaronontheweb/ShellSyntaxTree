@@ -162,6 +162,13 @@ internal static class BashResolver
             }
 
             // `~` alone or `~/path` — expand.
+            if (IsHomeUnknown(options))
+            {
+                return treatAsPath
+                    ? (ArgKind.DynamicSkip, null, false)
+                    : (ArgKind.Tilde, null, false);
+            }
+
             var home = GetHomeDirectory(options);
             if (working.Length == 1)
             {
@@ -259,6 +266,7 @@ internal static class BashResolver
 
         var composed = new StringBuilder(value.Decoded.Length);
         var hadHomeExpansion = false;
+        var hadLaunchExpansion = false;
         var hasGlobExpansion = false;
         for (var fragmentIndex = 0; fragmentIndex < value.Fragments.Count; fragmentIndex++)
         {
@@ -281,9 +289,30 @@ internal static class BashResolver
                 case ShellExpansionKind.Variable:
                 case ShellExpansionKind.SpecialParameter:
                 case ShellExpansionKind.PositionalParameter:
+                    if (fragment.Cardinality == ShellValueCardinality.ExactlyOne
+                        && (fragment.AllowedTransforms & ShellLexicalTransform.Variable) != 0
+                        && expansion.Kind == ShellExpansionKind.Variable
+                        && !string.Equals(expansion.Name, "HOME", StringComparison.Ordinal)
+                        && ShellLaunchFacts.TryGetValue(options, expansion.Name, out var launchValue))
+                    {
+                        // A launcher-proved value (#200). An unquoted value
+                        // that can split or glob is not one proved word.
+                        if (!ShellLaunchFacts.IsSingleWordValue(
+                                launchValue,
+                                (fragment.AllowedTransforms & ShellLexicalTransform.FieldSplit) != 0))
+                        {
+                            return (ArgKind.DynamicSkip, null, false);
+                        }
+
+                        composed.Append(launchValue);
+                        hadLaunchExpansion = true;
+                        break;
+                    }
+
                     if (fragment.Cardinality != ShellValueCardinality.ExactlyOne
                         || !string.Equals(expansion.Name, "HOME", StringComparison.Ordinal)
-                        || (fragment.AllowedTransforms & ShellLexicalTransform.Variable) == 0)
+                        || (fragment.AllowedTransforms & ShellLexicalTransform.Variable) == 0
+                        || IsHomeUnknown(options))
                     {
                         return treatAsPath
                             ? (ArgKind.DynamicSkip, null, false)
@@ -309,7 +338,7 @@ internal static class BashResolver
                         break;
                     }
 
-                    if (tildeKind == BashTildeExpansionKind.Unknown)
+                    if (tildeKind == BashTildeExpansionKind.Unknown || IsHomeUnknown(options))
                     {
                         return treatAsPath
                             ? (ArgKind.DynamicSkip, null, false)
@@ -335,6 +364,40 @@ internal static class BashResolver
             return consumer == ShellResolutionConsumer.BashRedirect
                 ? (ArgKind.DynamicSkip, null, false)
                 : (ArgKind.Glob, null, treatAsPath);
+        }
+
+        if (hadLaunchExpansion)
+        {
+            // The word keeps EnvVar: it has a variable reference. Resolved
+            // carries the substituted path only for a path slot, and the
+            // substituted value only for a redirect target, as for $HOME.
+            if (composed.Length == 0)
+            {
+                return (ArgKind.DynamicSkip, null, false);
+            }
+
+            if (!treatAsPath)
+            {
+                return (ArgKind.EnvVar,
+                    consumer == ShellResolutionConsumer.BashRedirect
+                        ? composed.ToString()
+                        : null,
+                    false);
+            }
+
+            // A launch value must give an absolute path. The cwd rebase pass
+            // re-resolves the authored text of a relative path, and that
+            // text still holds the variable reference.
+            if (!IsRootedPath(composed.ToString()))
+            {
+                return (ArgKind.DynamicSkip, null, false);
+            }
+
+            var launchResolved = TryResolveAbsolutePath(
+                composed.ToString(), options, workingDirectoryUnknown);
+            return launchResolved is null
+                ? (ArgKind.DynamicSkip, null, false)
+                : (ArgKind.EnvVar, launchResolved, true);
         }
 
         if (!treatAsPath)
@@ -524,6 +587,20 @@ internal static class BashResolver
 
     internal static string GetHomeDirectory(BashParserOptions options)
     {
+        // A live launch HOME agrees with HomeDirectory when both are set
+        // (ShellLaunchFacts.ValidateForBash). After a statement that can
+        // change HOME, the home directory is unknown. It must not fall back
+        // to the configured or process default.
+        if (ShellLaunchFacts.TryGetValue(options, "HOME", out var launchHome))
+        {
+            return launchHome;
+        }
+
+        if (IsHomeUnknown(options))
+        {
+            return string.Empty;
+        }
+
         if (!string.IsNullOrEmpty(options.HomeDirectory))
         {
             return options.HomeDirectory!;
@@ -533,6 +610,33 @@ internal static class BashResolver
         // empty string in pathological environments — callers tolerate that
         // because downstream path joining and normalization handle it.
         return Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    }
+
+    /// <summary>
+    /// True when the caller supplied a launch <c>HOME</c>, but an earlier
+    /// statement can have changed it (#200).
+    /// </summary>
+    internal static bool IsHomeUnknown(BashParserOptions options) =>
+        ShellLaunchFacts.IsRevoked(options, "HOME");
+
+    /// <summary>
+    /// The home directory that <c>cd</c> with no operand uses: a live launch
+    /// <c>HOME</c>, else the explicit <see cref="ShellParserOptions.HomeDirectory"/>.
+    /// Null when neither is proved. It never uses the process default.
+    /// </summary>
+    internal static string? GetCdHomeDirectory(BashParserOptions options)
+    {
+        if (ShellLaunchFacts.TryGetValue(options, "HOME", out var launchHome))
+        {
+            return launchHome.Length == 0 ? null : launchHome;
+        }
+
+        if (IsHomeUnknown(options) || string.IsNullOrEmpty(options.HomeDirectory))
+        {
+            return null;
+        }
+
+        return options.HomeDirectory;
     }
 
     private static string GetWorkingDirectory(BashParserOptions options)
@@ -553,8 +657,10 @@ internal static class BashResolver
     private static string SubstituteHome(string input, BashParserOptions options, out bool hadHome)
     {
         hadHome = false;
-        if (input.Length == 0 || input.IndexOf('$') < 0)
+        if (input.Length == 0 || input.IndexOf('$') < 0 || IsHomeUnknown(options))
         {
+            // With an unknown home, `$HOME` stays a variable reference, so
+            // the caller classifies the token as dynamic.
             return input;
         }
 

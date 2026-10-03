@@ -123,8 +123,19 @@ public sealed class PwshParser : IShellParser
 }
 
 /// <summary>Shell-neutral resolver configuration shared by every parser
-/// (added v0.2.0). HomeDirectory / WorkingDirectory live here.</summary>
+/// (added v0.2.0). HomeDirectory / WorkingDirectory / LaunchEnvironment
+/// live here.</summary>
 public abstract record ShellParserOptions { ... }
+
+/// <summary>Launcher-proved environment facts (v0.4.0-beta.9, #200).</summary>
+public sealed class ShellLaunchEnvironment
+{
+    public ShellLaunchEnvironment(
+        IEnumerable<KeyValuePair<string, string>> exportedVariables,
+        IEnumerable<string> unsetVariables);
+    public IReadOnlyDictionary<string, string> ExportedVariables { get; }
+    public IReadOnlyList<string> UnsetVariables { get; }
+}
 
 /// <summary>Declares which ambient Bash variable facts the caller can prove.</summary>
 public enum BashInitialStateMode
@@ -187,6 +198,12 @@ public abstract record ShellParserOptions
     /// resolution. Defaults to the daemon-process cwd.
     /// </summary>
     public string? WorkingDirectory { get; init; }
+
+    /// <summary>
+    /// Launcher-proved environment facts (v0.4.0-beta.9). Null keeps the
+    /// earlier behavior. See §3 "Launcher-proved environment facts".
+    /// </summary>
+    public ShellLaunchEnvironment? LaunchEnvironment { get; init; }
 }
 
 // v0.2 compatibility leaves — see §3.
@@ -267,6 +284,10 @@ The assignment records and the fresh-process initial-state mode target
 `0.4.0-beta.4`. They expose parser facts only and grant no authority.
 `CommandOccurrence.CommandWords` and the `ShellCommandWords` family target
 `0.4.0-beta.7`. They expose a parser fact only and grant no authority.
+`ShellParserOptions.LaunchEnvironment` and `ShellLaunchEnvironment` target
+`0.4.0-beta.9`. They are caller inputs. They grant no authority. Unlike the
+result types, `ShellLaunchEnvironment` has a public constructor, because the
+caller creates it.
 
 That's the entire public API. **Everything else is internal.** The lexer,
 parser internals, verb tables, resolver — all implementation detail.
@@ -1061,6 +1082,95 @@ Known cost: a word with a digit is skipped. Branch names such as
 The bare-glob rule applies to the command words only. The glob is still a path
 fact on its element, as the path-operand fallback in §8 describes.
 
+#### Launcher-proved environment facts (v0.4.0-beta.9)
+
+A process launcher can prove some environment facts for the new shell. For
+example, Netclaw sets `TMPDIR`, `TMP`, `TEMP`, and `HOME`, and removes
+`CDPATH`, for each shell that it starts. The caller supplies these facts in
+`ShellParserOptions.LaunchEnvironment` (#200):
+
+- `ExportedVariables`: each name is set, exported, and a scalar, with exactly
+  this value, when the shell starts.
+- `UnsetVariables`: each name is not set when the shell starts.
+
+The constructor rejects a name that is not an ASCII shell identifier, a value
+with a NUL character, a repeated name, and a name that is both set and unset.
+`BashParser` also rejects a name that Bash owns or can change before the
+source runs. It applies the command-environment name gate from the bounded
+assignment slice, but it accepts the lookup names `HOME` and `TMPDIR`,
+because Bash does not assign them at startup when the environment supplies
+them. An unset name can also be `CDPATH`. `BashParser` rejects a supplied
+`HOME` that is empty or that disagrees with a non-empty `HomeDirectory`. When
+`HomeDirectory` is empty, a live supplied `HOME` becomes the home directory.
+`PwshParser` rejects names that differ only in case, `PATH`, `USERPROFILE`,
+and names that start with `PS` or `POWERSHELL`.
+
+Owner and data. `ShellLaunchFacts` owns every read and applies the mode gate.
+The structural pass owns revocation. Its live facts are call-local, and each
+occurrence records the facts that were live for it. Nothing is durable.
+
+Mode gate. Bash uses the facts only under `FreshNonInteractiveNoStartup` or
+`IsolatedNonInteractive`. PowerShell uses them only under
+`IsolatedNonInteractiveNoProfile`. Under any other mode, the parser ignores
+them, because startup content can change any variable.
+
+Schematic flow for one Bash simple command (it omits the existing gates):
+
+```
+live = options.LaunchEnvironment
+for each statement in source order:
+    if name assigned by a bounded shell-state assignment: live.Revoke(name)
+    if for-in binding name in live: live.Revoke(name)   # reject inside a loop
+    words  = expand(command, live)       # path facts, cd target, command words
+    record live on the occurrence
+    if unmodeled variable mutation or `wait` with an option:
+        live = live.RevokeAll()          # reject inside a loop while live
+```
+
+A Bash expansion resolves only when it is `$NAME` or `${NAME}`, the name has
+a live value, and the fragment is exactly one value. An unquoted value that
+contains whitespace or a glob character, or an unquoted word whose value is
+empty, is not one proved word. The named-expansion gate accepts a command
+when every named expansion in its words reads a live value. A heredoc body
+with a named expansion is not accepted. A decoded `bash -c` child gets no
+launch facts. A mix of a loop variable and a launch variable in one command
+stays fail closed.
+
+Facts:
+
+- Path facts: a word with a launch value keeps `ArgKind.EnvVar`. In a path
+  slot, `Arg.Resolved` holds the substituted path. The path must be
+  absolute, because the cwd rebase pass re-reads the authored text. The
+  effective `AnalyzedArgument.Value` is the exact expanded value. A redirect
+  target gets the exact path.
+- `cd`: the expanded operand goes through the `cd` rules in §9. A revoked
+  `HOME` makes `~`, `$HOME`, and `cd` with no operand unknown. It never falls
+  back to `HomeDirectory` or the process default.
+- Command words: an element made only of literal text and live launch
+  values counts as one static word with the expanded value. A program word
+  must expand to a value that contains `/`. Bash then runs that file and
+  never looks up a builtin, function, or alias.
+- PowerShell: `$env:NAME` and `${env:NAME}` resolve when the scope prefix
+  matches without case and the name matches exactly. The parser trusts the
+  value under the existing `$env:USERPROFILE` rule: no earlier command can
+  have changed process-wide state. The PowerShell parser does not model a
+  variable `Set-Location` target, so that effect stays `Unknown`.
+
+| Source (Bash, launch facts supplied) | Result |
+|---|---|
+| `cd "$TMPDIR/out" && sed -n 1,2p f` | `sed` runs in `<TMPDIR>/out` |
+| `cat "$HOME/x"` | path `<HOME>/x` |
+| `"$TMPDIR/tool" arg` | command words `<TMPDIR>/tool arg` |
+| `git "$SUB" origin` with `SUB=push` | command words `git push origin` |
+| `cd src && make build` (start set, `CDPATH` unset) | `make` runs in `<start>/src` |
+| `cat "$FOO/x"` (`FOO` not supplied) | as before: unparseable |
+| `wait -p TMPDIR; cat "$TMPDIR/x"` | the value is unknown |
+| `tmp=/x; cat "$tmp"` (`tmp` supplied) | the assignment rules give `/x` |
+| `$SUB arg` (no `/`) | unparseable, as before |
+| `cat $SPACED` with `SPACED="a b"` | the value is unknown |
+
+These facts do not grant authority.
+
 #### Finite Bash scope projection (v0.4.0-beta.3)
 
 `BashParser.TryProjectFiniteScopes` parses the full source and proves each
@@ -1828,7 +1938,11 @@ public enum ArgKind
 {
     /// <summary>Literal value (string, number, flag).</summary>
     Literal,
-    /// <summary>Token containing an unresolved env var reference.</summary>
+    /// <summary>
+    /// Token containing an env var reference. Resolved is null, except for
+    /// a path slot whose every reference has a live launcher-proved value
+    /// (v0.4.0-beta.9). Then Resolved holds the substituted absolute path.
+    /// </summary>
     EnvVar,
     /// <summary>Token containing glob metachars (* ? [).</summary>
     Glob,
@@ -2487,6 +2601,12 @@ a normalized absolute path. Resolution order:
    `$HOME` is the **only** exception — we treat it as equivalent to `~`
    and expand it from `BashParserOptions.HomeDirectory`.
 
+   v0.4.0-beta.9 adds caller-supplied launch facts. A live supplied value
+   expands under the rules in §3 "Launcher-proved environment facts". The
+   word keeps `Kind = EnvVar`, and `Resolved` holds the substituted absolute
+   path in a path slot. A supplied `HOME` gives the value of `~` and `$HOME`.
+   After a statement revokes it, both are `DynamicSkip`.
+
 3. **`filesystem::/path` prefix stripping.** Some tools emit
    `filesystem::/path/to/file`; strip the prefix. Become `/path/to/file`.
 
@@ -2613,6 +2733,21 @@ The agent's natural idiom is `cd /target && cmd1 && cmd2`. Bash semantics:
    The attribution is purely additive — the `cd` clause itself is still
    parsed normally, and subsequent clauses retain everything the user
    typed, plus the synthetic Arg.
+
+6. **A relative operand is searched in `CDPATH` first** (v0.4.0-beta.9).
+   An operand that does not start with `/`, `./`, or `../`, and is not `.`
+   or `..`, has an `Unknown` target. It resolves against the incoming
+   directory only when the caller set `WorkingDirectory` and the launch
+   facts prove that `CDPATH` is still unset. Then `cd src && make` gives
+   `<start>/src`, and `cd a && cd b` resolves each step. `cd -`, `cd -P`,
+   and `cd -@` stay `Unknown`. `cd` with no operand goes to a live launch
+   `HOME`, else to an explicit `HomeDirectory`. A failed `cd` keeps the
+   incoming directory. A `..` operand keeps the logical rule: it removes the
+   last component of the incoming path and does not resolve links. The
+   finite scope projection re-parses each slice with the facts that were
+   live for that command. When the caller set no `WorkingDirectory`, it
+   also drops the `CDPATH` fact, because its first directory is the process
+   default.
 
 ### Dynamic-cd attribution (locked interpretation #6)
 

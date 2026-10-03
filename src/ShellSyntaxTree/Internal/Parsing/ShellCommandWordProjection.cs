@@ -78,7 +78,22 @@ internal static class ShellCommandWordProjection
     internal static ShellCommandWords Project(
         Clause clause,
         bool occurrenceIsComplete,
-        ShellProjectionLanguage language)
+        ShellProjectionLanguage language) =>
+        Project(clause, occurrenceIsComplete, language, CommandOccurrenceFacts.EmptyLaunchWordValues);
+
+    /// <param name="clause">The authored clause.</param>
+    /// <param name="occurrenceIsComplete">Whether the occurrence is complete.</param>
+    /// <param name="language">The shell language.</param>
+    /// <param name="launchWordValues">
+    /// The exact single word for each element that has only literal text and
+    /// live launch variables (#200). Such an element is classified by that
+    /// word, the same as a static word.
+    /// </param>
+    internal static ShellCommandWords Project(
+        Clause clause,
+        bool occurrenceIsComplete,
+        ShellProjectionLanguage language,
+        IReadOnlyDictionary<int, string> launchWordValues)
     {
         if (!occurrenceIsComplete ||
             language is not (ShellProjectionLanguage.Bash or ShellProjectionLanguage.PowerShell) ||
@@ -93,16 +108,17 @@ internal static class ShellCommandWordProjection
         // with the verb chain, and must be one static value. `"git"` and
         // `\git` are static; an expanded program word is not.
         var program = clause.Elements[0];
+        var hasLaunchProgram = launchWordValues.TryGetValue(0, out var launchProgram);
         if (program.Role != ClauseElementRole.Verb ||
             !string.Equals(program.Value, clause.Verb.Tokens[0], StringComparison.Ordinal) ||
             program.Value.Length == 0 ||
             CountVerbElements(clause.Elements) != clause.Verb.Tokens.Count ||
-            ScanProgramWord(program.Raw, language) != WordShape.Static)
+            !hasLaunchProgram && ScanProgramWord(program.Raw, language) != WordShape.Static)
         {
             return new ShellCommandWords.Unknown();
         }
 
-        var words = new List<string> { program.Value };
+        var words = new List<string> { hasLaunchProgram ? launchProgram! : program.Value };
         var followsOption = false;
         for (var index = 1; index < clause.Elements.Count; index++)
         {
@@ -118,7 +134,11 @@ internal static class ShellCommandWordProjection
                     return new ShellCommandWords.Unknown();
             }
 
-            var wordClass = Classify(element, language);
+            var hasLaunchWord = launchWordValues.TryGetValue(index, out var launchWord);
+            var value = hasLaunchWord ? launchWord! : element.Value;
+            var wordClass = hasLaunchWord
+                ? ClassifyLaunchWord(element, launchWord!)
+                : Classify(element, language);
             var verbSlotFilled = IsVerbSlotFilled(words.Count);
             if (wordClass == WordClass.Dynamic && !verbSlotFilled)
             {
@@ -132,11 +152,11 @@ internal static class ShellCommandWordProjection
             if (wordClass == WordClass.CommandWord &&
                 (!followsOption || !verbSlotFilled))
             {
-                words.Add(element.Value);
+                words.Add(value);
             }
 
             followsOption = wordClass == WordClass.Option &&
-                            !HasInlineOptionValue(element.Value);
+                            !HasInlineOptionValue(value);
         }
 
         return new ShellCommandWords.Known(words);
@@ -203,6 +223,34 @@ internal static class ShellCommandWordProjection
         }
 
         if (IsPathShaped(element))
+        {
+            return WordClass.Path;
+        }
+
+        return ContainsAsciiDigit(value) ? WordClass.Value : WordClass.CommandWord;
+    }
+
+    /// <summary>
+    /// Classifies a word whose exact value comes from live launch variables
+    /// (#200). The program receives exactly this one word, so it gets the
+    /// static-word rules. A glob character in it is data: an unquoted value
+    /// with a glob character never reaches this point.
+    /// </summary>
+    private static WordClass ClassifyLaunchWord(ClauseElement element, string value)
+    {
+        if (StartsWithDash(value))
+        {
+            return WordClass.Option;
+        }
+
+        if (value.Length == 0 ||
+            ContainsWhitespace(value) ||
+            value.IndexOfAny(GlobCharacters) >= 0)
+        {
+            return WordClass.Text;
+        }
+
+        if (element.IsPath || BashResolver.LooksLikePathOperand(value, isGlobPattern: false))
         {
             return WordClass.Path;
         }

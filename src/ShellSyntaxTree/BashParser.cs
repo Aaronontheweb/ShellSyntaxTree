@@ -30,7 +30,8 @@ public sealed class BashParser : IShellParser
             throw new ArgumentNullException(nameof(options));
         }
 
-        _options = options;
+        Internal.Resolving.ShellLaunchFacts.ValidateForBash(options);
+        _options = Internal.Resolving.ShellLaunchFacts.NormalizeHome(options);
     }
 
     /// <inheritdoc />

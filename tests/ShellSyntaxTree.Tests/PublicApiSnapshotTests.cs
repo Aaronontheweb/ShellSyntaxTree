@@ -188,13 +188,51 @@ public class PublicApiSnapshotTests
 
         AssertInitProperty(t, "HomeDirectory", typeof(string), nullable: true);
         AssertInitProperty(t, "WorkingDirectory", typeof(string), nullable: true);
+        AssertInitProperty(t, "LaunchEnvironment", typeof(ShellLaunchEnvironment), nullable: true);
 
         var declaredProps = DeclaredInstanceProps(t)
             .Where(p => p.Name != "EqualityContract")
             .Select(p => p.Name)
             .OrderBy(n => n)
             .ToArray();
-        Assert.Equal(new[] { "HomeDirectory", "WorkingDirectory" }, declaredProps);
+        Assert.Equal(
+            new[] { "HomeDirectory", "LaunchEnvironment", "WorkingDirectory" },
+            declaredProps);
+    }
+
+    // -------- ShellLaunchEnvironment (0.4.0-beta.9, #200) --------
+
+    [Fact]
+    public void ShellLaunchEnvironment_has_expected_shape()
+    {
+        var t = typeof(ShellLaunchEnvironment);
+        Assert.True(t.IsPublic);
+        Assert.True(t.IsSealed);
+        Assert.True(t.IsClass);
+
+        var constructor = Assert.Single(t.GetConstructors());
+        Assert.Equal(
+            new[]
+            {
+                typeof(IEnumerable<KeyValuePair<string, string>>),
+                typeof(IEnumerable<string>),
+            },
+            constructor.GetParameters().Select(p => p.ParameterType).ToArray());
+
+        var properties = DeclaredInstanceProps(t)
+            .OrderBy(p => p.Name)
+            .Select(p => (p.Name, p.PropertyType, HasSetter: p.SetMethod is not null))
+            .ToArray();
+        Assert.Equal(
+            new[]
+            {
+                ("ExportedVariables", typeof(IReadOnlyDictionary<string, string>), false),
+                ("UnsetVariables", typeof(IReadOnlyList<string>), false),
+            },
+            properties);
+        Assert.All(
+            DeclaredPublicMethodNames(t),
+            name => Assert.StartsWith("get_", name, StringComparison.Ordinal));
     }
 
     // -------- BashParserOptions --------
@@ -658,6 +696,7 @@ public class PublicApiSnapshotTests
             nameof(ShellCommandWords),
             nameof(ShellGroupKind),
             nameof(ShellFileSystemTreeAccess),
+            nameof(ShellLaunchEnvironment),
             nameof(ShellParserOptions),
             nameof(ShellPathShape),
             nameof(ShellSourceFragment),

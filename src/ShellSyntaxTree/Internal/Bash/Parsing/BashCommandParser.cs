@@ -704,6 +704,15 @@ internal static partial class BashCommandParser
             return true;
         }
 
+        // A launcher-proved program path (#200). The value must contain `/`:
+        // Bash then runs that file and never looks up a builtin, function,
+        // or alias, so the authored word cannot hide `cd` or `eval`.
+        if (ShellLaunchFacts.TryExpandWord(token.ResolverValue, options, out var launchWord) &&
+            launchWord.IndexOf('/') >= 0)
+        {
+            return true;
+        }
+
         for (var index = 0; index < token.ResolverValue.Fragments.Count; index++)
         {
             var fragment = token.ResolverValue.Fragments[index];

@@ -174,7 +174,10 @@ internal static partial class BashCommandParser
 
         private readonly string _source;
         private readonly IReadOnlyList<BashToken> _tokens;
-        private readonly BashParserOptions _options;
+        // Not readonly: the live launch facts (#200) shrink as statements
+        // that can change a variable are parsed. Every option object built
+        // from this field carries the facts that are live at that point.
+        private BashParserOptions _options;
         private readonly int _bashCDepth;
         private readonly int _structuralDepth;
         private readonly bool _markBashCWrapped;
@@ -635,6 +638,11 @@ internal static partial class BashCommandParser
 
                 if (segmentTokens.Count == 1)
                 {
+                    // The assignment replaces a supplied launch value with the
+                    // same name. Later reads use the assignment rules only.
+                    // A command-environment prefix does not change the shell
+                    // variable, because Bash expands the command's words first.
+                    RevokeLaunchFact(assignments[0].Name);
                     _boundedAssignmentName = assignments[0].Name;
                     command = new ShellAssignmentSyntax
                     {
@@ -704,6 +712,10 @@ internal static partial class BashCommandParser
                     // receive its own caller assertion before it can publish authored-
                     // only loop facts.
                     PublishAuthoredSourceFacts = false,
+                    // The same holds for launch facts (#200). The outer
+                    // analysis does not carry them into decoded clauses, so
+                    // the child gets none and its variables stay unknown.
+                    LaunchEnvironment = null,
                 };
                 var innerResult = ParseInternal(
                     innerCommand!,
@@ -754,12 +766,9 @@ internal static partial class BashCommandParser
             var workingDirectoryUnknown = false;
             if (_attribution.HasAttribution && !_attribution.IsDynamic)
             {
-                effectiveOptions = new BashParserOptions
+                effectiveOptions = _options with
                 {
-                    HomeDirectory = _options.HomeDirectory,
                     WorkingDirectory = _attribution.ResolvedCwd,
-                    InitialStateMode = _options.InitialStateMode,
-                    PublishAuthoredSourceFacts = _options.PublishAuthoredSourceFacts,
                 };
             }
             else if (_attribution.IsDynamic)
@@ -826,7 +835,8 @@ internal static partial class BashCommandParser
                 (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive ||
                  _hasUnmodeledVariableStateMutation) &&
                 !CanPublishActiveLoopBindingFacts(segmentTokens) &&
-                !CanPublishBoundedAssignmentFacts(segmentTokens))
+                !CanPublishBoundedAssignmentFacts(segmentTokens) &&
+                !CanPublishLaunchFacts(segmentTokens))
             {
                 error = "Bash named parameter expansion requires proved variable-attribute state";
                 return false;
@@ -849,6 +859,11 @@ internal static partial class BashCommandParser
                 isPotentialStateMutation && !isModeledCwdTransfer;
             _hasUnmodeledVariableStateMutation |=
                 IsPotentialVariableStateMutation(emitted) && !isModeledCwdTransfer;
+            if ((_hasUnmodeledVariableStateMutation || IsWaitWithOption(emitted)) &&
+                !TryRevokeAllLaunchFacts(out error))
+            {
+                return false;
+            }
 
             if (!TryParseCommandSubstitutions(
                     substitutionFragments,
@@ -944,6 +959,20 @@ internal static partial class BashCommandParser
             {
                 error = "nested Bash for-in binding reuse requires state propagation";
                 return false;
+            }
+
+            // The loop assigns its binding, and the last value stays after
+            // the loop. A supplied launch value with that name is no longer
+            // trusted, including in the iterable words.
+            if (_options.LaunchEnvironment?.TryGetLiveValue(bindingToken.Value, out _) == true)
+            {
+                if (_loopDepth > 0)
+                {
+                    error = "a Bash launch variable binding inside a loop is not supported";
+                    return false;
+                }
+
+                RevokeLaunchFact(bindingToken.Value);
             }
 
             if (!IsWord("in"))
@@ -1231,13 +1260,7 @@ internal static partial class BashCommandParser
 
         private BashParserOptions CurrentOptions() =>
             _attribution.HasAttribution && !_attribution.IsDynamic
-                ? new BashParserOptions
-                {
-                    HomeDirectory = _options.HomeDirectory,
-                    WorkingDirectory = _attribution.ResolvedCwd,
-                    InitialStateMode = _options.InitialStateMode,
-                    PublishAuthoredSourceFacts = _options.PublishAuthoredSourceFacts,
-                }
+                ? _options with { WorkingDirectory = _attribution.ResolvedCwd }
                 : _options;
 
         private bool TryCollectCommandSubstitutions(
@@ -1635,6 +1658,7 @@ internal static partial class BashCommandParser
                 _source,
                 sourceTokens);
             var redirectIndex = 0;
+            Dictionary<int, string>? launchWordValues = null;
             for (var elementIndex = 0;
                  elementIndex < simple.Clause.Elements.Count;
                  elementIndex++)
@@ -1646,6 +1670,16 @@ internal static partial class BashCommandParser
                 if (!TryGetElementValue(element, sourceTokens, out var value))
                 {
                     continue;
+                }
+
+                // Only the program word and the arguments are words that the
+                // program receives. A redirect target is not a command word.
+                if ((element.Role == ClauseElementRole.Argument ||
+                     element.Role == ClauseElementRole.Verb && elementIndex == 0) &&
+                    ShellLaunchFacts.TryExpandWord(value, parseOptions, out var launchWord))
+                {
+                    launchWordValues ??= new Dictionary<int, string>();
+                    launchWordValues.Add(elementIndex, launchWord);
                 }
 
                 if (element.Role == ClauseElementRole.Argument)
@@ -1694,6 +1728,9 @@ internal static partial class BashCommandParser
                 IsComplete = simple.Clause.Verb.Tokens.Count > 0 &&
                     AreRedirectsComplete(redirectAnalysis) &&
                     !HasUnexpandedCommandString(simple.Clause),
+                LaunchEnvironment = parseOptions.LaunchEnvironment,
+                LaunchWordValues = launchWordValues ??
+                    CommandOccurrenceFacts.EmptyLaunchWordValues,
             });
         }
 
@@ -1947,6 +1984,123 @@ internal static partial class BashCommandParser
             }
 
             dependencies = Array.Empty<CwdPathDependency>();
+            return false;
+        }
+
+        private void RevokeLaunchFact(string name)
+        {
+            if (_options.LaunchEnvironment is { } launch)
+            {
+                _options = _options with { LaunchEnvironment = launch.Revoke(name) };
+            }
+        }
+
+        /// <summary>
+        /// Stops trust in every supplied launch fact after a statement that
+        /// can change a variable the parser does not model (#200). Inside a
+        /// loop, an earlier statement of the body runs again after the
+        /// change, so the input is rejected while a fact is still live.
+        /// </summary>
+        private bool TryRevokeAllLaunchFacts(out string? error)
+        {
+            error = null;
+            if (_options.LaunchEnvironment is not { } launch || !launch.HasLiveFacts)
+            {
+                return true;
+            }
+
+            if (_loopDepth > 0)
+            {
+                error = "a Bash variable change inside a loop with launch facts is not supported";
+                return false;
+            }
+
+            _options = _options with { LaunchEnvironment = launch.RevokeAll() };
+            return true;
+        }
+
+        /// <summary>
+        /// <c>wait -p name</c> unsets and then assigns <c>name</c>. The
+        /// mutation lists above do not model it, so any option revokes the
+        /// launch facts.
+        /// </summary>
+        private static bool IsWaitWithOption(Clause clause)
+        {
+            if (clause.Verb.Tokens.Count == 0 ||
+                !string.Equals(clause.Verb.Tokens[0], "wait", StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            foreach (var argument in clause.Args)
+            {
+                if (!argument.IsCwdAttribution &&
+                    (argument.Kind != ArgKind.Literal ||
+                     argument.Raw.StartsWith("-", StringComparison.Ordinal)))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// True when every named expansion in the command reads a live
+        /// launch value (#200). A heredoc body is data for the program, and
+        /// its expansions are not modeled here, so it is not accepted.
+        /// </summary>
+        private bool CanPublishLaunchFacts(IReadOnlyList<BashToken> tokens)
+        {
+            if (!ShellLaunchFacts.IsActive(_options))
+            {
+                return false;
+            }
+
+            var sawLaunchValue = false;
+            foreach (var token in tokens)
+            {
+                if (token.HeredocBodyValue is { } body && HasNamedExpansion(body))
+                {
+                    return false;
+                }
+
+                if (token.ResolverValue is not { } value)
+                {
+                    continue;
+                }
+
+                foreach (var fragment in value.Fragments)
+                {
+                    if (fragment.Kind != ShellValueFragmentKind.Expansion ||
+                        fragment.Expansion is not { Kind: ShellExpansionKind.Variable } expansion)
+                    {
+                        continue;
+                    }
+
+                    if (!ShellLaunchFacts.TryGetValue(_options, expansion.Name, out _))
+                    {
+                        return false;
+                    }
+
+                    sawLaunchValue = true;
+                }
+            }
+
+            return sawLaunchValue;
+        }
+
+        private static bool HasNamedExpansion(ShellValue value)
+        {
+            foreach (var fragment in value.Fragments)
+            {
+                if (fragment.Kind == ShellValueFragmentKind.Expansion &&
+                    fragment.Expansion is { Kind: ShellExpansionKind.Variable })
+                {
+                    return true;
+                }
+            }
+
             return false;
         }
 

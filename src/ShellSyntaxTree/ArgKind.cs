@@ -13,7 +13,11 @@ public enum ArgKind
     /// <summary>Literal value (string, number, flag).</summary>
     Literal,
 
-    /// <summary>Token containing an unresolved env var reference.</summary>
+    /// <summary>
+    /// Token containing an env var reference. Resolved is null, except for
+    /// a path slot whose every reference has a live launcher-proved value
+    /// (v0.4.0-beta.9). Then Resolved holds the substituted absolute path.
+    /// </summary>
     EnvVar,
 
     /// <summary>Token containing glob metachars (* ? [).</summary>

@@ -48,6 +48,24 @@ internal sealed class CommandOccurrenceFacts
     internal bool HasCompleteValueProvenance { get; init; }
 
     internal bool IsComplete { get; init; }
+
+    /// <summary>
+    /// The launch facts that are live for this command (#200). Null when the
+    /// caller supplied none. Consumers read them only through
+    /// <c>ShellLaunchFacts</c>, which applies the initial-state gate.
+    /// </summary>
+    internal ShellLaunchEnvironment? LaunchEnvironment { get; init; }
+
+    /// <summary>
+    /// The exact single word for each program or argument element that has
+    /// only literal text and live launch variables (#200), by clause element
+    /// index. Empty when no element qualifies.
+    /// </summary>
+    internal IReadOnlyDictionary<int, string> LaunchWordValues { get; init; } =
+        EmptyLaunchWordValues;
+
+    internal static readonly IReadOnlyDictionary<int, string> EmptyLaunchWordValues =
+        new Dictionary<int, string>();
 }
 
 internal enum ShellWorkingDirectoryEffectKind
@@ -774,7 +792,9 @@ internal static class ShellSyntaxProjection
                 CommandWords = ShellCommandWordProjection.Project(
                     simple.Clause,
                     isComplete,
-                    _language),
+                    _language,
+                    facts.LaunchWordValues),
+                LaunchEnvironment = facts.LaunchEnvironment,
             });
             _clauses.Add(simple.Clause);
 

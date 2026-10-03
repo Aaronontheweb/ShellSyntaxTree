@@ -124,6 +124,10 @@ public abstract record ShellParserOptions
     /// <summary>Working directory for relative-path resolution. Defaults to
     /// the daemon-process cwd.</summary>
     public string? WorkingDirectory { get; init; }
+
+    /// <summary>Launcher-proved environment facts (v0.4.0-beta.9). See
+    /// SPEC.md §3 "Launcher-proved environment facts".</summary>
+    public ShellLaunchEnvironment? LaunchEnvironment { get; init; }
 }
 
 /// <summary>Bash configuration. The v0.1 properties move to the base record;
@@ -1329,6 +1333,16 @@ with the PowerShell-specific steps below. Resolution order:
    Every other `$var` / `$env:NAME` / `${name}` reference → `DynamicSkip` in
    a path slot, `ArgKind.EnvVar` in a non-path slot. (Mirrors bash: only the
    home variables are privileged.)
+
+   v0.4.0-beta.9: under `IsolatedNonInteractiveNoProfile`, a `$env:NAME` or
+   `${env:NAME}` reference with a live caller-supplied launch value expands
+   to that value. The `env:` prefix matches without case. The name must
+   match the supplied name exactly, so `$env:temp` does not read `TEMP`. The
+   word keeps `ArgKind.EnvVar`, and a path slot needs an absolute value. The
+   effective value uses the `$env:USERPROFILE` rule: it is exact only while
+   no earlier command can have changed process-wide state. `PwshParser`
+   rejects launch names that differ only in case, `PATH`, `USERPROFILE`,
+   and names that start with `PS` or `POWERSHELL`.
 3. **Provider-qualifier stripping.** Strip a leading `FileSystem::` or
    `Microsoft.PowerShell.Core\FileSystem::` prefix (case-insensitive) and
    resolve the remainder. This generalizes the lowercase `filesystem::`
