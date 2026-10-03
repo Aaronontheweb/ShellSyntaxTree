@@ -149,7 +149,7 @@ internal static class BashLexer
                     continue;
                 }
 
-                // A single `&` ends an asynchronous and-or list (#ISSUE).
+                // A single `&` ends an asynchronous and-or list (#215).
                 // The structural parser owns the list grouping.
                 tokens.Add(new BashToken(BashTokenKind.Operator, "", "&", i, 1, null));
                 i++;

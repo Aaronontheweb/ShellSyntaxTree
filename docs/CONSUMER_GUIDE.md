@@ -529,6 +529,15 @@ directory. Treat `Unknown` as unproved. Your ancestry checks must accept the
 new node types (`ConditionLoopSyntax`, `ConditionalSyntax`, `CaseSyntax`)
 and the new `Condition` and `Branch` values, or fail closed on them.
 
+## Bash background lists
+
+Since 0.4.0-beta.14, `cmd &` parses. The parser wraps the and-or list before
+each `&` in a `GroupSyntax` with `GroupKind = Background`. The commands in it
+are in `Commands`, with their own facts. A command after the list does not
+see the list's directory changes or assignments. A background job can keep
+running after the command ends, for example a test server. Treat the
+background group as a fact for your policy; it is not authority.
+
 ## Display traversal is not authorization traversal
 
 `ParsedCommand.Syntax` preserves authored nesting for explainers, diagnostics,

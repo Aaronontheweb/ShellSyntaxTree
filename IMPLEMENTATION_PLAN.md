@@ -10,6 +10,17 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.14 Bash background lists)
+
+- [x] Parse a single `&` as the end of an asynchronous and-or list, wrapped in a `Background` group (#215).
+- [x] Keep the list's state changes out of the next command. Give `$!` and `$?` assignment values an `Unknown` binding.
+- [x] Prove that only unparseable inputs change, and that no corpus replay row gets worse. Run manual mutants.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.14` and verify NuGet publication.
+
+## Next (Netclaw parse coverage, from #206)
+
+- A heredoc inside `$(...)`.
+
 ## Completed (0.4.0-beta.13 Bash control flow)
 
 - [x] Parse `while`, `until`, `if`, and `case` into public nodes, with `Condition` and `Branch` roles and regions (#212).
@@ -18,11 +29,6 @@ priorities.
 - [x] Merge PR #213 after Linux and Windows CI. Tag `0.4.0-beta.13` on merge
       `9a15ad35` and verify NuGet publication. Workflow run 37158418202
       published the package and the GitHub prerelease.
-
-## Next (Netclaw parse coverage, from #206)
-
-- A background `&` job and `$!`.
-- A heredoc inside `$(...)`.
 
 ## Completed (0.4.0-beta.12 Bash assignment shapes)
 

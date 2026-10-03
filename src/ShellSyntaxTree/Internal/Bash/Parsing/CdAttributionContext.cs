@@ -118,7 +118,7 @@ internal sealed class CdAttributionContext
     /// <summary>
     /// Reinstate a saved attribution state. The parser uses it after a
     /// background list, whose <c>cd</c> runs in an asynchronous subshell
-    /// and cannot change the next command (#ISSUE).
+    /// and cannot change the next command (#215).
     /// </summary>
     public void Restore(string? resolvedCwd, bool isDynamic)
     {

@@ -401,7 +401,7 @@ internal sealed class BashAbstractStateAnalyzer
         {
             // The list runs in an asynchronous subshell. Its state changes do
             // not reach the next command, and `&` gives exit status zero
-            // (#ISSUE).
+            // (#215).
             AnalyzeBlock(group.Body, input);
             return BashFlowResult.Success(input);
         }

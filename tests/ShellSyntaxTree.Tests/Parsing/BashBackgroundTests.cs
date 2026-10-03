@@ -10,7 +10,7 @@ using Xunit;
 namespace ShellSyntaxTree.Tests.Parsing;
 
 /// <summary>
-/// Pins Bash background lists (#ISSUE). A single <c>&amp;</c> ends an and-or
+/// Pins Bash background lists (#215). A single <c>&amp;</c> ends an and-or
 /// list that runs in an asynchronous subshell. Every command stays a normal
 /// occurrence, and the list's state changes do not reach the next command.
 /// </summary>

@@ -1,3 +1,19 @@
+#### 0.4.0-beta.14 2026-10-03 ####
+
+This prerelease parses Bash background lists (#215). A single `&` no longer makes the whole source unparseable.
+
+## Added
+
+- A single `&` ends the and-or list before it. The parser wraps that list in a `GroupSyntax` with the new `ShellGroupKind.Background`. Every command in it and after it is a normal occurrence.
+- `$!` and `$?` in an assignment value give an `Unknown` binding. `server & PID=$!; kill "$PID"` now parses.
+
+## Security and compatibility
+
+- The background list runs in an asynchronous subshell. Its directory changes and assignments do not reach the next command, and the list has exit status zero.
+- An `&` in a wrong position stays unparseable.
+- Only inputs that were unparseable change. A replay of 6,912 complete Netclaw shell calls gives 9 more parsed rows (every background row) and no worse row.
+- The public API change is additive: `ShellGroupKind.Background`. A consumer that checks group kinds must accept it, or fail closed on it.
+
 #### 0.4.0-beta.13 2026-10-03 ####
 
 This prerelease parses Bash `while`, `until`, `if`, and `case` statements (#212). Each command inside them is a normal occurrence.

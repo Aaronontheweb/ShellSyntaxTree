@@ -1759,7 +1759,7 @@ internal static partial class BashCommandParser
 
         /// <summary>
         /// Replaces the items of one and-or list with one background group
-        /// (#ISSUE). The group keeps the operator that came before the list.
+        /// (#215). The group keeps the operator that came before the list.
         /// </summary>
         private static void WrapBackgroundList(
             List<CommandListItemSyntax> items,
@@ -2315,7 +2315,7 @@ internal static partial class BashCommandParser
             }
 
             // `$!` (the last background job) and `$?` (the last status) are
-            // always defined and run no code. Their value is unknown (#ISSUE).
+            // always defined and run no code. Their value is unknown (#215).
             if (next is '!' or '?')
             {
                 index += 2;
