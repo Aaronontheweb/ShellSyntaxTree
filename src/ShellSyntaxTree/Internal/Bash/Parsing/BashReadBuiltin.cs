@@ -9,7 +9,7 @@ using System.Collections.Generic;
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
 /// <summary>
-/// The bounded form of the Bash <c>read</c> builtin (#ISSUE). <c>read</c> is
+/// The bounded form of the Bash <c>read</c> builtin (#212). <c>read</c> is
 /// part of the shell. It assigns each named variable from its input, so the
 /// parser binds each name to an unknown value. It does not run other code.
 /// </summary>

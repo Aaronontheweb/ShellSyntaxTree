@@ -11,7 +11,7 @@ using Xunit;
 namespace ShellSyntaxTree.Tests.Parsing;
 
 /// <summary>
-/// Pins Bash <c>while</c>, <c>until</c>, <c>if</c>, and <c>case</c> (#ISSUE),
+/// Pins Bash <c>while</c>, <c>until</c>, <c>if</c>, and <c>case</c> (#212),
 /// and the bounded <c>read</c> builtin. Each inner command is a normal
 /// occurrence with its own role, ancestry, and facts.
 /// </summary>

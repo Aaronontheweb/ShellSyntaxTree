@@ -10,6 +10,18 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.13 Bash control flow)
+
+- [x] Parse `while`, `until`, `if`, and `case` into public nodes, with `Condition` and `Branch` roles and regions (#212).
+- [x] Join path facts in the state pass. Model the bounded `read` builtin and the lone `[` program word.
+- [x] Prove that only unparseable inputs and the lone `[` argument change, and that no corpus replay row gets worse. Run manual mutants.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.13` and verify NuGet publication.
+
+## Next (Netclaw parse coverage, from #206)
+
+- A background `&` job and `$!`.
+- A heredoc inside `$(...)`.
+
 ## Completed (0.4.0-beta.12 Bash assignment shapes)
 
 - [x] Accept upper-case shell-state names, more than one assignment, assignments in lists and `for` loop bodies, and expanded values (#209).
@@ -18,12 +30,6 @@ priorities.
 - [x] Merge PR #210 after Linux and Windows CI. Tag `0.4.0-beta.12` on merge
       `845ab891` and verify NuGet publication. Workflow run 37154939016
       published the package and the GitHub prerelease.
-
-## Next (Netclaw parse coverage, from #206)
-
-- `while`, `if`, and `case` with their inner commands as normal occurrences.
-- A background `&` job and `$!`.
-- A heredoc inside `$(...)`.
 
 ## Completed (0.4.0-beta.11 path-word facts)
 

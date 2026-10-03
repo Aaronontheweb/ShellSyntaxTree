@@ -324,7 +324,7 @@ internal static class ShellCommandWordProjection
     /// </summary>
     private static WordShape ScanBash(string raw)
     {
-        // A lone `[` has no closing `]`, so it is not a pattern (#ISSUE).
+        // A lone `[` has no closing `]`, so it is not a pattern (#212).
         if (raw == "[")
         {
             return WordShape.Static;

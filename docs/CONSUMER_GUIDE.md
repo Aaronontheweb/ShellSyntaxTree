@@ -512,6 +512,23 @@ Rules for consumers:
 - A `Glob` value of null, or an `Unknown` value, means that the parser did
   not prove the expansion. Fail closed.
 
+## Bash control flow
+
+Since 0.4.0-beta.13, `while`, `until`, `if`, and `case` statements parse.
+Every command inside them is in `Commands`, with its own facts. Use
+`ImmediateRole` to see where it runs:
+
+- `Condition`: in a loop or branch condition. It can run more than once
+  (in a loop) or decide which body runs.
+- `LoopBody`: in a `while` or `until` body.
+- `Branch`: in an `if` or `case` body. It can run once or not at all.
+
+The parser joins facts from each path. After
+`if test -f m; then cd /a; else cd /b; fi`, a later command has an `Unknown`
+directory. Treat `Unknown` as unproved. Your ancestry checks must accept the
+new node types (`ConditionLoopSyntax`, `ConditionalSyntax`, `CaseSyntax`)
+and the new `Condition` and `Branch` values, or fail closed on them.
+
 ## Display traversal is not authorization traversal
 
 `ParsedCommand.Syntax` preserves authored nesting for explainers, diagnostics,

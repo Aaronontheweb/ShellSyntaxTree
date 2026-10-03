@@ -895,7 +895,7 @@ internal static class ShellSyntaxProjection
         /// <summary>
         /// The condition commands of a <c>while</c> or <c>until</c> loop have
         /// the <c>Condition</c> role. The body has the <c>LoopBody</c> role
-        /// (#ISSUE).
+        /// (#212).
         /// </summary>
         private bool TryVisitConditionLoop(ConditionLoopSyntax loop, int structuralDepth) =>
             loop.LoopKind is ConditionLoopKind.While or ConditionLoopKind.Until &&
@@ -919,7 +919,7 @@ internal static class ShellSyntaxProjection
         /// <summary>
         /// Each branch condition has the <c>Condition</c> role, and each body
         /// has the <c>Branch</c> role. The <c>else</c> body has the branch
-        /// index after the last branch (#ISSUE).
+        /// index after the last branch (#212).
         /// </summary>
         private bool TryVisitConditional(
             ConditionalSyntax conditional,

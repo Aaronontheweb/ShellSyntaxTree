@@ -227,6 +227,12 @@ public sealed record CommandListSyntax : ShellSyntaxNode { ... }
 public sealed record CommandListItemSyntax { ... }
 public sealed record GroupSyntax : ShellSyntaxNode { ... }
 public sealed record ForEachSyntax : ShellSyntaxNode { ... }
+public sealed record ConditionLoopSyntax : ShellSyntaxNode { ... }      // v0.4.0-beta.13
+public enum ConditionLoopKind { ... }                                   // v0.4.0-beta.13
+public sealed record ConditionalSyntax : ShellSyntaxNode { ... }        // v0.4.0-beta.13
+public sealed record ConditionalBranchSyntax : ShellSyntaxNode { ... }  // v0.4.0-beta.13
+public sealed record CaseSyntax : ShellSyntaxNode { ... }               // v0.4.0-beta.13
+public sealed record CaseItemSyntax : ShellSyntaxNode { ... }           // v0.4.0-beta.13
 public sealed record ShellSourceFragment { ... }
 public sealed record CommandSubstitutionSyntax : ShellSyntaxNode { ... }
 public sealed record ExecutionRegionSyntax : ShellSyntaxNode { ... }
@@ -600,6 +606,40 @@ public sealed record ForEachSyntax : ShellSyntaxNode
     public ShellBlockSyntax Body { get; internal init; } = null!;
 }
 
+// v0.4.0-beta.13 Bash control flow
+public sealed record ConditionLoopSyntax : ShellSyntaxNode
+{
+    public ConditionLoopKind LoopKind { get; internal init; }
+    public ShellBlockSyntax Condition { get; internal init; }
+    public ShellBlockSyntax Body { get; internal init; }
+}
+
+public enum ConditionLoopKind { Unknown, While, Until }
+
+public sealed record ConditionalSyntax : ShellSyntaxNode
+{
+    public IReadOnlyList<ConditionalBranchSyntax> Branches { get; internal init; }
+    public ShellBlockSyntax? Else { get; internal init; }
+}
+
+public sealed record ConditionalBranchSyntax : ShellSyntaxNode
+{
+    public ShellBlockSyntax Condition { get; internal init; }
+    public ShellBlockSyntax Body { get; internal init; }
+}
+
+public sealed record CaseSyntax : ShellSyntaxNode
+{
+    public ShellSourceFragment Subject { get; internal init; }
+    public IReadOnlyList<CaseItemSyntax> Items { get; internal init; }
+}
+
+public sealed record CaseItemSyntax : ShellSyntaxNode
+{
+    public IReadOnlyList<ShellSourceFragment> Patterns { get; internal init; }
+    public ShellBlockSyntax Body { get; internal init; }
+}
+
 public sealed record ShellSourceFragment
 {
     internal ShellSourceFragment() { }
@@ -857,6 +897,8 @@ public enum CommandOccurrenceRole
     LoopBody,
     Substitution,
     ExecutionRegion,
+    Condition,        // v0.4.0-beta.13
+    Branch,           // v0.4.0-beta.13
 }
 
 public sealed record CommandAncestryFrame
@@ -878,6 +920,8 @@ public enum CommandAncestryRegion
     LoopBody,
     Substitution,
     ExecutionRegion,
+    Condition,        // v0.4.0-beta.13
+    Branch,           // v0.4.0-beta.13
 }
 
 public sealed record AnalyzedArgument
@@ -1423,8 +1467,13 @@ collection; for an iterator it is the containing iterator-command collection.
 Each ancestry frame references the actual `Ancestor` node and describes its
 relationship to the next node on the path. The root block uses `Root`; non-root blocks and command
 lists use `Statement`; pipelines use `PipelineStage`; groups use `GroupBody`;
-foreach nodes use `Iterator` or `LoopBody`; command substitutions use `Substitution`; and
-execution regions use `ExecutionRegion`.
+foreach nodes use `Iterator` or `LoopBody`; condition loops use `Condition` or
+`LoopBody`; conditionals use `Condition` or `Branch` with the branch index, and
+the `else` body uses the index after the last branch; case statements use
+`Branch` with the item index; command substitutions use `Substitution`; and
+execution regions use `ExecutionRegion`. A command in a condition has the
+`Condition` role, and a command in an `if` or `case` body has the `Branch`
+role (v0.4.0-beta.13).
 Repeated children use their zero-based authored index. Source ranges are read
 from the referenced ancestor. Blocks, command lists, and groups retain the
 incoming immediate role; pipeline stages, iterator/body regions,
@@ -2226,11 +2275,68 @@ quoted_string   := single-quoted | double-quoted
   NOT path-resolved. The parser carries the raw token (e.g. `&1`) on
   `Redirect.Target` and sets `Redirect.IsDynamicSkip = true`. This
   prevents `2>&1` from being incorrectly resolved to `<cwd>/&1`.
-- Function definitions, assignments outside the bounded v0.4 slice, `while` / `until`, `if` /
-  `elif` / `else`, `case`/`esac`, C-style or implicit loops, arithmetic
-  execution, process substitution, and single-`&` background lists remain
-  unparseable in stable v0.3 because they can hide executable regions outside
-  the bounded grammar below.
+- Function definitions, assignments outside the bounded v0.4 slice, `select`,
+  `[[`, C-style or implicit loops, arithmetic execution, process substitution,
+  a redirect on a compound command, and single-`&` background lists remain
+  unparseable because they can hide executable regions outside the bounded
+  grammar below. `while`, `until`, `if`, and `case` parse since
+  v0.4.0-beta.13 (see "Bash control flow").
+
+### Bash control flow (v0.4.0-beta.13)
+
+`while`, `until`, `if`, and `case` statements parse into public syntax nodes
+(#212). Each command inside them is a normal occurrence, with its own words,
+arguments, redirects, directory, and assignment facts.
+
+| Statement | Node | Command regions and roles |
+|---|---|---|
+| `while C; do B; done` | `ConditionLoopSyntax`, `While` | `C`: `Condition`; `B`: `LoopBody` |
+| `until C; do B; done` | `ConditionLoopSyntax`, `Until` | `C`: `Condition`; `B`: `LoopBody` |
+| `if C; then B; elif C2; then B2; else E; fi` | `ConditionalSyntax` | `C`, `C2`: `Condition` (index 0, 1); `B`, `B2`, `E`: `Branch` (index 0, 1, 2) |
+| `case W in (P1\|P2) B;; *) B2;; esac` | `CaseSyntax` | `B`, `B2`: `Branch` (index 0, 1) |
+
+Owner and data. `BashStructuralCoordinator` owns the grammar. The state pass
+(`BashAbstractStateAnalyzer`) owns the flow. All facts are call-local.
+
+Flow (schematic):
+
+```
+if:    pending = input
+       for each branch: cond = run(C, pending); run(B, cond.success)
+                        pending = cond.failure        # elif runs only after failure
+       else: run(E, pending)   no else: pending reaches the end (status 0)
+case:  each item body runs from the input; no match reaches the end
+while: head = input; repeat: cond = run(C, head)
+                             exit += cond.failure (while) / cond.success (until)
+                             body = run(B, cond.success / cond.failure)
+                             head = join(head, body) until stable, then widen
+```
+
+A directory or binding that differs on two paths joins to `Unknown`. For
+example, `if test -f m; then cd /a; else cd /b; fi; cat f` gives `cat` an
+`Unknown` directory, and `cd /a && if true; then cat f; fi` gives `cat` the
+directory `/a`.
+
+`[` alone is a static program word, because a `[` without a closing `]` is
+not a pattern. `[ -d /x ]` therefore parses as the `[` builtin. `[[` stays
+unparseable.
+
+Bounded `read`. Under `FreshNonInteractiveNoStartup`, a direct `read` in the
+top-level shell binds each name to an `Unknown` value and publishes a
+`ShellState` assignment with `Unknown` values. Its options are `-r`, `-s`, and
+`-d`, `-n`, `-N`, `-t`, `-u` with a static value. Each name passes the
+assignment name gate. `read -a`, `-e`, `-i`, `-p`, a dynamic name, a prefix
+such as `IFS= read`, a loop binding, and a live launch name inside a loop
+fail closed. Thus `grep -rln x src | while read f; do echo "== $f"; done`
+gives the occurrences `grep`, `read` (`Condition`), and `echo` (`LoopBody`),
+and the value of `f` is `Unknown`.
+
+The parser rejects a missing or stray keyword, an empty condition or
+`if`/`while` body, a case item without `)`, the `;&` and `;;&` terminators, a
+command substitution in a case subject or pattern, an unproved named
+expansion in them, a redirect after `done`, `fi`, or `esac`, and nesting
+deeper than the structural limit of 16. A case item body can be empty. These
+facts do not grant authority.
 
 ### v0.3 structured Bash grammar
 
@@ -3039,8 +3145,10 @@ Conditions that produce `IsUnparseable = true`:
 
 - Unbalanced quotes (`"foo` with no closing `"`).
 - Unbalanced parens (`(cmd && cmd2`).
-- Unrecognized control-flow keywords (`for`, `while`, `do`, `done`,
-  `then`, `fi`, `case`, `esac`).
+- Unsupported control-flow keywords (`select`, `function`) and a stray
+  keyword such as `then`, `fi`, or `esac` without its statement.
+  `for`, `while`, `until`, `if`, and `case` statements parse; a malformed one
+  is unparseable.
 - Function definitions (`name() { ... }`).
 - Process substitution (`<(cmd)`, `>(cmd)`).
 - Arithmetic expansion `$((expr))` (per §1 non-goal; lexer emits an

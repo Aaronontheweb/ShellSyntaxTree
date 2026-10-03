@@ -194,7 +194,7 @@ internal static partial class BashCommandParser
         private int _subshellDepth;
         private int _loopDepth;
 
-        // The nesting of `if` and `case` statements (#ISSUE). It shares the
+        // The nesting of `if` and `case` statements (#212). It shares the
         // structural depth limit, so deep nesting fails closed before the
         // recursive parse can exhaust the stack.
         private int _compoundDepth;
@@ -1176,7 +1176,7 @@ internal static partial class BashCommandParser
 
         /// <summary>
         /// Parses <c>while COND; do BODY; done</c> and the <c>until</c> form
-        /// (#ISSUE). The condition and the body both repeat, so both parse at
+        /// (#212). The condition and the body both repeat, so both parse at
         /// loop depth.
         /// </summary>
         private bool TryParseConditionLoop(
@@ -1239,7 +1239,7 @@ internal static partial class BashCommandParser
 
         /// <summary>
         /// Parses <c>if COND; then BODY; [elif COND; then BODY;]... [else
-        /// BODY;] fi</c> (#ISSUE).
+        /// BODY;] fi</c> (#212).
         /// </summary>
         private bool TryParseIf(
             out ShellSyntaxNode? command,
@@ -1354,7 +1354,7 @@ internal static partial class BashCommandParser
 
         /// <summary>
         /// Parses <c>case WORD in [(]PATTERN[|PATTERN]...) LIST ;; ... esac</c>
-        /// (#ISSUE). The subject and the patterns are words without a command
+        /// (#212). The subject and the patterns are words without a command
         /// substitution. A named expansion in them uses the same gate as a
         /// command word. Only the <c>;;</c> item terminator is supported.
         /// </summary>
@@ -1544,7 +1544,7 @@ internal static partial class BashCommandParser
         }
 
         /// <summary>
-        /// True for a direct, bounded <c>read</c> (#ISSUE) in the top-level
+        /// True for a direct, bounded <c>read</c> (#212) in the top-level
         /// shell under the fresh-process mode. The state pass binds each name
         /// to an unknown value.
         /// </summary>

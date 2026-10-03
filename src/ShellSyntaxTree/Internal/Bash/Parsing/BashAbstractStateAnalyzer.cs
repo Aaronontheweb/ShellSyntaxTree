@@ -272,7 +272,7 @@ internal sealed class BashAbstractStateAnalyzer
         BashReadBuiltin.IsBoundedRead(clause);
 
     /// <summary>
-    /// A bounded <c>read</c> (#ISSUE) assigns each name from its input, also
+    /// A bounded <c>read</c> (#212) assigns each name from its input, also
     /// when it fails at the end of the input. Each name is bound to an
     /// unknown value on both paths.
     /// </summary>
@@ -561,7 +561,7 @@ internal sealed class BashAbstractStateAnalyzer
     /// Bash tries each condition in order. A later condition runs only when
     /// every earlier condition failed. The first successful condition runs its
     /// body. With no successful condition and no <c>else</c>, the statement
-    /// succeeds (#ISSUE).
+    /// succeeds (#212).
     /// </summary>
     private BashFlowResult AnalyzeConditional(
         ConditionalSyntax conditional,
@@ -607,7 +607,7 @@ internal sealed class BashAbstractStateAnalyzer
 
     /// <summary>
     /// The parser cannot prove which pattern matches. Any one item body, or
-    /// none, can run. With no match, the statement succeeds (#ISSUE).
+    /// none, can run. With no match, the statement succeeds (#212).
     /// </summary>
     private BashFlowResult AnalyzeCase(CaseSyntax caseSyntax, BashAbstractState input)
     {
@@ -624,7 +624,7 @@ internal sealed class BashAbstractStateAnalyzer
     }
 
     /// <summary>
-    /// A <c>while</c> or <c>until</c> loop (#ISSUE). The head state joins the
+    /// A <c>while</c> or <c>until</c> loop (#212). The head state joins the
     /// loop entry and every body exit until it is stable. The loop ends when
     /// the condition fails (<c>while</c>) or succeeds (<c>until</c>). The exit
     /// status of the loop can be zero or not, so both paths get the exit
