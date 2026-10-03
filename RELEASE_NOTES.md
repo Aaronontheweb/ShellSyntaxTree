@@ -1,3 +1,26 @@
+#### 0.4.0-beta.8 2026-10-03 ####
+
+This prerelease adds a position rule to `CommandWords`, so option values no longer become command words.
+
+## Changed
+
+- Add the verb slot: the first command word after the program word (#197). Until it is filled, the beta.7 rules apply.
+- After the verb slot, skip a plain word directly after an option as that option's value. `dotnet build -c Release` gives `dotnet build`, and `git commit -m fix` gives `git commit`.
+- After the verb slot, skip expansions, split words, brace lists, and bare globs as arguments. `git add *` gives `git add`.
+- Plain words that do not follow an option stay. `git push origin feature-x` is unchanged.
+
+## Fixed
+
+- A brace list that the parser reports as a resolved path no longer hides a verb. In 0.4.0-beta.7, `git {push,a/b}` gave `git`, but Bash runs `git push a/b`. It now gives `Unknown`.
+
+## Security and compatibility
+
+- The verb slot keeps the strict rules: `git -p filter-branch`, `git $SUB`, `git *`, `git {push,log}`, and `git "push"` give the same results as in beta.7.
+- Limit: after the verb slot, a sub-subcommand that follows an option is skipped. `git remote -v add evil url` gives `git remote evil url`. The top-level verb stays protected.
+- `git log --oneline main` gives `git log`, because `main` follows an option after the verb slot.
+- `rm -f {a,b}.txt` and `du -sh *` give `Unknown`, because the verb slot is still empty.
+- The public API does not change.
+
 #### 0.4.0-beta.7 2026-10-02 ####
 
 This prerelease adds a command-words fact and reports more general path operands.

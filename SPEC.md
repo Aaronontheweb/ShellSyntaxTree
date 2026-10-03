@@ -943,7 +943,7 @@ destination. Any other domain, malformed set, over-limit join, or missing fact
 makes the whole public effect `Unknown`. A target does not prove existence,
 accessibility, authorization, or runtime success.
 
-#### Command words (v0.4.0-beta.7)
+#### Command words (v0.4.0-beta.7, position rule v0.4.0-beta.8)
 
 `CommandWords` gives the ordered command words of one occurrence. The fact
 uses general shell conventions only. It does not use the option grammar or
@@ -967,17 +967,17 @@ change the word. Each later verb or argument element then gets one class:
 |---|---|---|
 | option | starts with `-`, including `--name=value`, bare `--`, and PowerShell `-Name` | skipped |
 | path | a path, `.`, `..`, or a glob that contains `/` | skipped |
-| dynamic | an expansion that is not in an option or a path, or a bare glob | whole result `Unknown` |
-| split | a word that can become more than one word | whole result `Unknown` |
+| dynamic | an expansion that is not in an option or a path, or a bare glob | verb slot: `Unknown`; later: skipped |
+| split | a word that can become more than one word | verb slot: `Unknown`; later: skipped |
 | text | a static value that is empty or has whitespace or a quoted glob character | skipped |
 | value | a static value with an ASCII digit | skipped |
-| command word | any other static value, quoted or not | kept |
+| command word | any other static value, quoted or not | kept, except an option value after the verb slot |
 
 - A quoted single word is a command word. `git "push"`, `git 'push'`,
   `git "pu"sh`, and `git \push` all give `git push`.
 - An expansion is a variable, a command or arithmetic substitution, or a
-  Bash brace list. `git {push,log}`, `git "$x"`, and `git $(cmd)` give
-  `Unknown`.
+  Bash brace list. In the verb slot, `git {push,log}`, `git "$x"`, and
+  `git $(cmd)` give `Unknown`.
 - An expansion inside an option, such as `--repo="$r"`, or inside a path,
   such as `"$r/x"`, is skipped. The value stays one option word or one path
   word, so it cannot become a command word.
@@ -992,28 +992,60 @@ change the word. Each later verb or argument element then gets one class:
 - A split word is an unquoted Bash expansion, a Bash brace list, or a
   PowerShell array, splat, or subexpression. It gives `Unknown` even inside an
   option or a path. With `r='x push'`, `git --c=$r log` runs
-  `git --c=x push log`.
+  `git --c=x push log`. A path fact never excuses a split word: the parser
+  reports `{push,a/b}` as one resolved path, but `git {push,a/b}` runs
+  `git push a/b`.
 - The parser rejects many expansions before this fact exists. For example,
   `git $SUB`, ``git `cmd` ``, `git $((1+1))`, and `git $'push'` are
   unparseable.
 
 Only command words follow the program word. Redirect targets are not words of
-the command. Bash assignment prefixes are not clause elements. Option order
-does not change the result.
+the command. Bash assignment prefixes are not clause elements.
 
-A plain word directly after an option stays a command word. The parser cannot
-tell an option value from a subcommand after a valueless switch. If the word
-were dropped, a subcommand could hide behind a switch. If the word is kept,
-an option value can only make the list more specific. This choice is one
-named policy point, `KeepsPlainWordAfterOption`.
+Position rule (v0.4.0-beta.8, #197). The verb slot is the first command word
+after the program word. `IsVerbSlotFilled` is the one policy point.
+
+```
+schematic, per element after the program word:
+  class = Classify(element)
+  if class is dynamic or split:
+      if verb slot empty: return Unknown      // could be the verb
+      else: skip                               // an argument
+  if class is command word:
+      if verb slot filled and previous element is an option without
+         an inline value: skip                 // the option's value
+      else: keep                               // fills the slot first
+```
+
+- Until the slot is filled, a plain word after an option stays, because it
+  can be a subcommand after a valueless switch: `git -p filter-branch` gives
+  `git filter-branch`.
+- After the slot is filled, a plain word directly after an option is that
+  option's value: `dotnet build -c Release` gives `dotnet build`, and
+  `git log --oneline main` gives `git log`.
+- After the slot is filled, a dynamic or split word is an argument:
+  `git add *` gives `git add`, and `gh pr update-branch $n` gives
+  `gh pr update-branch`.
+- A plain word that does not follow an option stays everywhere:
+  `git push origin feature-x` keeps all its words.
+- Option order before the verb slot and option order after the verb chain do
+  not change the result.
+
+Limit: after the verb slot, a sub-subcommand that follows an option is
+skipped. `git remote -v add evil url` gives `git remote evil url`. Without
+the grammar of the program, a switch and a sub-subcommand look the same as an
+option and its value. The top-level verb stays protected.
 
 | Source | `CommandWords` |
 |---|---|
 | `gh -R o/r pr view 123` | `gh pr view` |
 | `gh pr view 123 -R o/r` | `gh pr view` |
 | `git push origin v0.4.0` | `git push origin` |
-| `git -p filter-branch --force HEAD` | `git filter-branch HEAD` |
+| `git -p filter-branch --force HEAD` | `git filter-branch` |
 | `pgrep -x name` | `pgrep name` |
+| `dotnet build -c Release` | `dotnet build` |
+| `gh pr view 1 --json state,url` | `gh pr view` |
+| `git add *` | `git add` |
 | `git commit -m "fix the bug"` | `git commit` |
 | `du -sh ./*` | `du` |
 | `du -sh *` | `Unknown` |

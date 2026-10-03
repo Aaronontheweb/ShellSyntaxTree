@@ -36,17 +36,129 @@ public class CommandWordsTests
     [InlineData("echo \"hello world\"", "echo")]
     [InlineData("make build", "make build")]
     [InlineData("git -p filter-branch", "git filter-branch")]
-    [InlineData("git -p filter-branch --force HEAD", "git filter-branch HEAD")]
+    [InlineData("git -p filter-branch --force HEAD", "git filter-branch")]
     [InlineData("git \"push\" --force", "git push")]
     public void Bash_owner_table(string source, string expected) =>
         AssertBashWords(source, expected);
 
-    [Fact]
-    public void Plain_word_after_an_option_is_kept_by_policy()
+    // ------------------------------------------------------------ position rule (#197)
+
+    [Theory]
+    [InlineData(1, false)]
+    [InlineData(2, true)]
+    [InlineData(3, true)]
+    public void Verb_slot_is_filled_by_the_first_word_after_the_program(
+        int commandWordCount,
+        bool filled)
     {
-        Assert.True(ShellCommandWordProjection.KeepsPlainWordAfterOption);
-        AssertBashWords("pgrep -x name", "pgrep name");
+        Assert.Equal(filled, ShellCommandWordProjection.IsVerbSlotFilled(commandWordCount));
     }
+
+    [Theory]
+    // Strict until the verb slot is filled: these must not hide the verb.
+    [InlineData("git -p filter-branch", "git filter-branch")]
+    [InlineData("git --no-pager log", "git log")]
+    [InlineData("git -c x=y push", "git x=y push")]
+    [InlineData("gh --debug auth logout", "gh auth logout")]
+    [InlineData("git \"push\"", "git push")]
+    [InlineData("git \\push", "git push")]
+    [InlineData("pgrep -x name", "pgrep name")]
+    public void Bash_verb_slot_keeps_a_plain_word_after_an_option(
+        string source,
+        string expected) =>
+        AssertBashWords(source, expected);
+
+    [Theory]
+    [InlineData("git *")]
+    [InlineData("git p?sh")]
+    [InlineData("git {push,log}")]
+    [InlineData("git {push,a/b}")]
+    [InlineData("git -p {push,log}")]
+    [InlineData("git -p *")]
+    [InlineData("r=push; git $r")]
+    [InlineData("r=push; git -p \"$r\"")]
+    [InlineData("du -sh *")]
+    [InlineData("rm -f {a,b}.txt")]
+    public void Bash_verb_slot_dynamic_word_makes_words_unknown(string source)
+    {
+        Assert.IsType<ShellCommandWords.Unknown>(
+            ParseBash(source).Commands.Last().CommandWords);
+    }
+
+    [Theory]
+    [InlineData("git $SUB")]
+    public void Bash_unproved_verb_slot_expansion_is_unparseable(string source)
+    {
+        Assert.True(ParseBashRaw(source).IsUnparseable);
+    }
+
+    [Theory]
+    // After the verb slot: a plain word directly after an option is that
+    // option's value, and dynamic words are arguments.
+    [InlineData("dotnet build -c Release", "dotnet build")]
+    [InlineData("dotnet test -c Release --filter X", "dotnet test")]
+    [InlineData("gh pr view 1 --json state,url --jq .x", "gh pr view")]
+    [InlineData("git commit -m fix", "git commit")]
+    [InlineData("git commit -m \"fix it\"", "git commit")]
+    [InlineData("gh pr list --state open", "gh pr list")]
+    [InlineData("n=5; gh pr update-branch $n", "gh pr update-branch")]
+    [InlineData("git add *", "git add")]
+    [InlineData("git add ./*", "git add")]
+    [InlineData("git add p?sh", "git add")]
+    [InlineData("git push {a,b}", "git push")]
+    [InlineData("git push $(cmd)", "git push")]
+    [InlineData("r=push; git push \"$r\"", "git push")]
+    // `main` follows an option, so it is skipped as that option's value.
+    [InlineData("git log --oneline main", "git log")]
+    [InlineData("git -p filter-branch --force HEAD", "git filter-branch")]
+    // Plain words that do not follow an option are kept.
+    [InlineData("git push origin feature-x", "git push origin feature-x")]
+    [InlineData("make build", "make build")]
+    [InlineData("git worktree add dev", "git worktree add dev")]
+    [InlineData("git push -f origin main", "git push main")]
+    public void Bash_after_verb_slot_skips_option_values_and_arguments(
+        string source,
+        string expected)
+    {
+        Assert.Equal(expected, Words(ParseBash(source).Commands.Last()));
+    }
+
+    [Fact]
+    public void Bash_loop_body_occurrence_skips_the_loop_value_after_the_slot()
+    {
+        var result = new BashParser(new BashParserOptions
+        {
+            WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
+        }).Parse("for n in 1 2; do gh pr view $n; done");
+
+        Assert.False(result.IsUnparseable, result.UnparseableReason);
+        Assert.NotEmpty(result.Commands);
+        Assert.All(result.Commands, command => Assert.Equal("gh pr view", Words(command)));
+    }
+
+    [Fact]
+    public void Documented_limit_sub_subcommand_after_an_option_is_skipped()
+    {
+        // `add` follows `-v` after the verb slot, so it is skipped as an
+        // option value. `evil` and `url` do not follow an option, so they
+        // stay. The top-level verb `remote` stays protected.
+        AssertBashWords("git remote -v add evil url", "git remote evil url");
+    }
+
+    [Theory]
+    [InlineData("Get-Process -Name foo", "Get-Process foo")]
+    [InlineData("gh --debug auth logout", "gh auth logout")]
+    [InlineData("dotnet build -c Release", "dotnet build")]
+    [InlineData("git commit -m fix", "git commit")]
+    [InlineData("gh pr list --state open", "gh pr list")]
+    [InlineData("gh pr view 1 -R o/r", "gh pr view")]
+    [InlineData("git add *", "git add")]
+    [InlineData("git push $remote", "git push")]
+    [InlineData("git push origin feature-x", "git push origin feature-x")]
+    [InlineData("Remove-Item x.txt -Force", "Remove-Item")]
+    public void PowerShell_position_rule(string source, string expected) =>
+        AssertPwshWords(source, expected);
 
     // ------------------------------------------------------------ quoting
 
@@ -109,13 +221,10 @@ public class CommandWordsTests
     [Theory]
     [InlineData("git {push,log}")]
     [InlineData("git {push,log} origin")]
-    [InlineData("git push {a,b}")]
     [InlineData("git {a..c}")]
     [InlineData("git $(echo push)")]
-    [InlineData("git push $(cmd)")]
     [InlineData("git \"$(cmd)\"")]
     [InlineData("r=push; git \"$r\"")]
-    [InlineData("r=push; git push \"$r\"")]
     [InlineData("r=push; git $r")]
     // Unquoted expansion in an option can split into more words.
     [InlineData("r='x push'; git --c=$r log")]
@@ -163,7 +272,6 @@ public class CommandWordsTests
 
     [Theory]
     [InlineData("git $sub")]
-    [InlineData("git push $remote")]
     [InlineData("git \"$sub\"")]
     [InlineData("git $(Get-Sub)")]
     [InlineData("git push,log")]
@@ -236,7 +344,6 @@ public class CommandWordsTests
     [InlineData("git p?sh")]
     [InlineData("git [ab]*")]
     [InlineData("git **")]
-    [InlineData("git push *")]
     [InlineData("du -sh *")]
     [InlineData("tool *.cs")]
     [InlineData("tool ?")]
@@ -397,10 +504,11 @@ public class CommandWordsTests
     public static IEnumerable<object[]> SeededOptionOrders()
     {
         // The repository has no property-test library, so a seeded table
-        // stands in for one. Each option is valueless, carries an inline
-        // value, or has a value that is a path or has a digit, so no option
-        // value is a plain word.
-        var options = new[]
+        // stands in for one. Before the verb slot, an option value must not
+        // be a plain word, because a plain word there is kept. After the
+        // verb chain, plain option values, digits, and bare globs may appear
+        // in any order.
+        var prefix = new[]
         {
             new[] { "-R", "o/r" },
             new[] { "--web" },
@@ -409,18 +517,30 @@ public class CommandWordsTests
             new[] { "--repo=o/r" },
             new[] { "-q" },
         };
-        var verb = new[] { "pr", "view" };
-        var random = new Random(194);
+        var suffix = prefix.Concat(new[]
+        {
+            new[] { "--state", "open" },
+            new[] { "-c", "Release" },
+            new[] { "--json", "state,url" },
+            new[] { "123" },
+            new[] { "*" },
+        }).ToArray();
+        var random = new Random(197);
         for (var sample = 0; sample < 40; sample++)
         {
-            var chosen = options.OrderBy(_ => random.Next()).Take(random.Next(1, options.Length + 1));
-            var words = new List<string>(verb);
-            foreach (var option in chosen)
+            var words = new List<string>();
+            foreach (var option in prefix.OrderBy(_ => random.Next()).Take(random.Next(0, 3)))
             {
-                words.InsertRange(random.Next(0, words.Count + 1), option);
+                words.AddRange(option);
             }
 
-            words.Insert(random.Next(0, words.Count + 1), "123");
+            words.Add("pr");
+            words.Add("view");
+            foreach (var option in suffix.OrderBy(_ => random.Next()).Take(random.Next(1, suffix.Length + 1)))
+            {
+                words.AddRange(option);
+            }
+
             yield return new object[] { "gh " + string.Join(" ", words) };
         }
     }
