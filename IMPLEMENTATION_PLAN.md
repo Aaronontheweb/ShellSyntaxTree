@@ -10,7 +10,14 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.9 launcher-proved environment facts)
+## NOW (0.4.0-beta.10 relative cd operand resolved path)
+
+- [x] Give a bare relative `cd` operand the computed directory as its resolved path when the launch facts prove that `CDPATH` is unset (#203).
+- [x] Keep the operand unresolved without the `CDPATH` proof, under the `Unknown` mode, without `WorkingDirectory`, and for `cd -`, `cd -P`, `cd -@`, and dynamic operands. PowerShell needs no change.
+- [x] Prove that the complete public output with no launch environment is identical to 0.4.0-beta.9. With launch facts, only `cd` operand resolved paths change. Run manual mutants on the new condition.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.10` and verify NuGet publication.
+
+## Completed (0.4.0-beta.9 launcher-proved environment facts)
 
 - [x] Add `ShellParserOptions.LaunchEnvironment` and `ShellLaunchEnvironment` (#200). Resolve supplied Bash variables, `$HOME`, and `~` in path facts, `cd` targets, redirect targets, and command words.
 - [x] Resolve a relative Bash `cd` when the caller supplies the start directory and proves that `CDPATH` is unset.

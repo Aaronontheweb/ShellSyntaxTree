@@ -2747,7 +2747,10 @@ The agent's natural idiom is `cd /target && cmd1 && cmd2`. Bash semantics:
    finite scope projection re-parses each slice with the facts that were
    live for that command. When the caller set no `WorkingDirectory`, it
    also drops the `CDPATH` fact, because its first directory is the process
-   default.
+   default. When the target resolves under this rule, the operand gets the
+   same path in `Arg.Resolved` and `ClauseElement.Resolved` (v0.4.0-beta.10,
+   #203). In `cd sub && cat f`, `sub` resolves to `<start>/sub`. When the
+   rule does not apply, the operand has no resolved path.
 
 ### Dynamic-cd attribution (locked interpretation #6)
 

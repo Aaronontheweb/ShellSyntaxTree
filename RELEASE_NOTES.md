@@ -1,3 +1,19 @@
+#### 0.4.0-beta.10 2026-10-03 ####
+
+This prerelease fixes the resolved path of a relative Bash `cd` operand.
+
+## Fixed
+
+- A bare relative `cd` operand now gets a resolved path when the launch facts prove that `CDPATH` is unset (#203). In 0.4.0-beta.9, `cd sub && cat f` gave the correct directory `<cwd>/sub`, but `Arg.Resolved` on `sub` was empty. `sub` now resolves to the same path as the computed directory. `cd a && cd b` resolves `b` to `<cwd>/a/b`.
+
+## Security and compatibility
+
+- With no `LaunchEnvironment`, the output is identical to 0.4.0-beta.9. A comparison of the complete public output for all corpus inputs shows no change.
+- With launch facts, only the resolved path of the `cd` operand changes. The working directories and all other facts stay the same.
+- The operand stays unresolved when `CDPATH` is not proved unset, when a statement can change `CDPATH`, under the `Unknown` initial-state mode, and with no `WorkingDirectory`. `cd -`, `cd -P`, `cd -@`, dynamic operands, and a decoded `bash -c` child also stay unresolved.
+- PowerShell has no `CDPATH` search. `Set-Location sub` already gave a resolved path, so PowerShell does not change.
+- There is no public API change.
+
 #### 0.4.0-beta.9 2026-10-03 ####
 
 This prerelease lets a caller supply environment facts that its process launcher proves. With them, the parser resolves more real commands.

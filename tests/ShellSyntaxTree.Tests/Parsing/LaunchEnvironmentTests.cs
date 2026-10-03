@@ -165,6 +165,61 @@ public class LaunchEnvironmentTests
             projection!.Commands.Select(c => (c.Source, c.WorkingDirectory)).ToArray());
     }
 
+    [Theory]
+    [InlineData("cd sub && cat f", BashInitialStateMode.FreshNonInteractiveNoStartup)]
+    [InlineData("cd sub && cat f", BashInitialStateMode.IsolatedNonInteractive)]
+    [InlineData("cd sub; cat f", BashInitialStateMode.FreshNonInteractiveNoStartup)]
+    [InlineData("cd -- sub && cat f", BashInitialStateMode.FreshNonInteractiveNoStartup)]
+    [InlineData("cd -e sub && cat f", BashInitialStateMode.FreshNonInteractiveNoStartup)]
+    public void Relative_cd_operand_gets_the_computed_directory_as_its_resolved_path(
+        string source,
+        BashInitialStateMode mode)
+    {
+        // #203: before the fix the directory was exact, but the operand
+        // `sub` had an empty resolved path, so a consumer saw it as unknown.
+        var parsed = Bash(mode: mode).Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var cd = parsed.Commands[0];
+        Assert.Equal(Start + "/sub", ExactTarget(cd.WorkingDirectoryEffect));
+        Assert.Equal(Start + "/sub", CdOperand(cd, "sub").Resolved);
+        Assert.Equal(Start + "/sub", CdOperandElement(cd, "sub").Resolved);
+    }
+
+    [Theory]
+    [InlineData("cd a/b && ls", new[] { "a/b" }, new[] { Start + "/a/b" })]
+    [InlineData("cd a && cd b && ls", new[] { "a", "b" }, new[] { Start + "/a", Start + "/a/b" })]
+    [InlineData("cd a && cd b/c; ls", new[] { "a", "b/c" }, new[] { Start + "/a", Start + "/a/b/c" })]
+    [InlineData("cd /abs && cd rel && ls", new[] { "/abs", "rel" }, new[] { "/abs", "/abs/rel" })]
+    public void Each_relative_cd_operand_in_a_chain_resolves_against_its_input_directory(
+        string source,
+        string[] operands,
+        string[] expected)
+    {
+        var parsed = Bash().Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        for (var index = 0; index < operands.Length; index++)
+        {
+            var cd = parsed.Commands[index];
+            Assert.Equal(expected[index], ExactTarget(cd.WorkingDirectoryEffect));
+            Assert.Equal(expected[index], CdOperand(cd, operands[index]).Resolved);
+            Assert.Equal(expected[index], CdOperandElement(cd, operands[index]).Resolved);
+        }
+    }
+
+    [Fact]
+    public void Relative_cd_operand_resolves_in_the_finite_projection_slice()
+    {
+        Assert.True(Bash(publishAuthored: true).TryProjectFiniteScopes(
+            "cd a && cd b && ls",
+            out var projection));
+
+        var cdB = projection!.Commands.Single(c => c.Source == "cd b");
+        Assert.Equal(Start + "/a", cdB.WorkingDirectory);
+        Assert.Equal(Start + "/a/b", CdOperand(cdB.ScopedOccurrence, "b").Resolved);
+    }
+
     [Fact]
     public void Cd_without_operand_goes_to_the_launch_home()
     {
@@ -360,6 +415,117 @@ public class LaunchEnvironmentTests
         Assert.IsType<ShellValueDomain.Unknown>(parsed.Commands[1].WorkingDirectory);
     }
 
+    [Fact]
+    public void Relative_cd_operand_without_a_proved_unset_cdpath_has_no_resolved_path()
+    {
+        var parsed = Bash(launch: LaunchWithoutCdPath).Parse("cd sub && cat f");
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.Null(CdOperand(parsed.Commands[0], "sub").Resolved);
+        Assert.Null(CdOperandElement(parsed.Commands[0], "sub").Resolved);
+    }
+
+    [Theory]
+    [InlineData("cd sub && cat f")]
+    [InlineData("cd sub; cat f")]
+    [InlineData("cd a && cd b && ls")]
+    public void Relative_cd_operand_without_launch_facts_has_no_resolved_path(string source)
+    {
+        var parsed = Bash(launch: null).Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var cd = parsed.Commands[0];
+        Assert.Null(cd.Clause.Args.First(arg => !arg.IsCwdAttribution).Resolved);
+        Assert.Null(cd.Clause.Elements.First(e => e.Role == ClauseElementRole.Argument).Resolved);
+    }
+
+    [Theory]
+    [InlineData(BashInitialStateMode.Unknown, Start)]
+    [InlineData(BashInitialStateMode.FreshNonInteractiveNoStartup, null)]
+    public void Relative_cd_operand_without_a_startup_free_mode_or_start_directory_has_no_resolved_path(
+        BashInitialStateMode mode,
+        string? workingDirectory)
+    {
+        var parsed = Bash(mode: mode, workingDirectory: workingDirectory).Parse("cd sub && cat f");
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.Null(CdOperand(parsed.Commands[0], "sub").Resolved);
+    }
+
+    [Theory]
+    [InlineData(BashInitialStateMode.FreshNonInteractiveNoStartup)]
+    [InlineData(BashInitialStateMode.IsolatedNonInteractive)]
+    public void Cdpath_change_before_cd_keeps_the_operand_unresolved(BashInitialStateMode mode)
+    {
+        // `wait -p` can assign CDPATH, so the launch fact is revoked.
+        var parsed = Bash(mode: mode).Parse("wait -p CDPATH; cd sub && cat f");
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var cd = parsed.Commands[1];
+        Assert.IsType<ShellValueDomain.Unknown>(
+            Assert.IsType<ShellWorkingDirectoryEffect.ChangesOnSuccess>(cd.WorkingDirectoryEffect).Target);
+        Assert.Null(CdOperand(cd, "sub").Resolved);
+        Assert.Null(CdOperandElement(cd, "sub").Resolved);
+    }
+
+    [Theory]
+    [InlineData("CDPATH=/x; cd sub && cat f")]
+    [InlineData("CDPATH=/x cd sub && cat f")]
+    [InlineData("export CDPATH=/x; cd sub && cat f")]
+    public void Cdpath_assignment_in_the_command_never_resolves_the_operand(string source)
+    {
+        var parsed = Bash(mode: BashInitialStateMode.IsolatedNonInteractive).Parse(source);
+
+        if (parsed.IsUnparseable)
+        {
+            return;
+        }
+
+        foreach (var command in parsed.Commands)
+        {
+            foreach (var argument in command.Clause.Args.Where(arg => arg.Raw == "sub"))
+            {
+                Assert.Null(argument.Resolved);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData("cd -P sub && cat f", "sub")]
+    [InlineData("cd -@ sub && cat f", "sub")]
+    [InlineData("cd - && cat f", "-")]
+    [InlineData("bash -c 'cd sub && cat f'", "sub")]
+    public void Cd_operand_that_needs_runtime_state_has_no_resolved_path(string source, string operand)
+    {
+        var parsed = Bash().Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.Null(CdOperand(parsed.Commands[0], operand).Resolved);
+    }
+
+    [Fact]
+    public void Dynamic_cd_operand_has_no_resolved_path()
+    {
+        var parsed = Bash(mode: BashInitialStateMode.IsolatedNonInteractive)
+            .Parse("cd \"$FOO\" && cat f");
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.Null(parsed.Commands[0].Clause.Args.First(arg => !arg.IsCwdAttribution).Resolved);
+        Assert.IsType<ShellValueDomain.Unknown>(parsed.Commands[1].WorkingDirectory);
+    }
+
+    [Fact]
+    public void Cd_without_operand_and_unknown_home_stays_unknown()
+    {
+        var parsed = Bash(
+            launch: LaunchWithoutCdPath,
+            BashInitialStateMode.FreshNonInteractiveNoStartup,
+            homeDirectory: null).Parse("cd && cat f");
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.IsType<ShellValueDomain.Unknown>(parsed.Commands[1].WorkingDirectory);
+    }
+
     [Theory]
     [InlineData("cd - && ls")]
     [InlineData("cd -P src && ls")]
@@ -388,6 +554,23 @@ public class LaunchEnvironmentTests
         Assert.Equal(
             ExactValue(withoutLaunch.Commands[1].WorkingDirectory),
             ExactValue(withLaunch.Commands[1].WorkingDirectory));
+
+        // These operands never search CDPATH, so they resolve with or
+        // without launch facts (#203).
+        Assert.Equal(expected, FirstOperand(withoutLaunch.Commands[0]).Resolved);
+        Assert.Equal(expected, FirstOperand(withLaunch.Commands[0]).Resolved);
+    }
+
+    [Fact]
+    public void Tilde_cd_operand_does_not_need_a_cdpath_fact()
+    {
+        // Bash expands `~/x` to an absolute path before the CDPATH search,
+        // so the operand resolves with or without the CDPATH fact (#203).
+        var withoutCdPathFact = Bash(launch: LaunchWithoutCdPath).Parse("cd ~/x && ls");
+        var withoutLaunch = Bash(launch: null).Parse("cd ~/x && ls");
+
+        Assert.Equal(Home + "/x", CdOperand(withoutCdPathFact.Commands[0], "~/x").Resolved);
+        Assert.Equal(Home + "/x", CdOperand(withoutLaunch.Commands[0], "~/x").Resolved);
     }
 
     [Fact]
@@ -668,6 +851,16 @@ public class LaunchEnvironmentTests
         effect is ShellWorkingDirectoryEffect.ChangesOnSuccess change
             ? ExactValue(change.Target)
             : null;
+
+    private static Arg CdOperand(CommandOccurrence occurrence, string raw) =>
+        occurrence.Clause.Args.Single(arg => !arg.IsCwdAttribution && arg.Raw == raw);
+
+    private static ClauseElement CdOperandElement(CommandOccurrence occurrence, string raw) =>
+        occurrence.Clause.Elements.Single(element =>
+            element.Role == ClauseElementRole.Argument && element.Raw == raw);
+
+    private static Arg FirstOperand(CommandOccurrence occurrence) =>
+        occurrence.Clause.Args.First(arg => !arg.IsCwdAttribution);
 
     private static string Words(CommandOccurrence occurrence) =>
         occurrence.CommandWords is ShellCommandWords.Known known
