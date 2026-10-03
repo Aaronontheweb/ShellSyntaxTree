@@ -471,6 +471,44 @@ Rules for consumers:
 
 These facts are parser inputs. They do not grant authority.
 
+With launch facts, a leading `~` in the program word also expands
+(0.4.0-beta.11): `~/.dotnet/tools/ilspycmd -h` gives the command words
+`/home/agent/.dotnet/tools/ilspycmd`.
+
+## Reading glob words
+
+Under `FreshNonInteractiveNoStartup` with live launch facts, a Bash glob
+argument or glob file-redirect target gets a `PathPattern` value with a
+`Glob` fact (0.4.0-beta.11). The parser does not list the matches. It proves
+where every match is:
+
+```csharp
+var parsed = parser.Parse("ls -d ~/repositories/*/akka*");
+var value = parsed.Commands[0].Arguments[1].Value;
+if (value is ShellValueDomain.PathPattern { Glob: { } glob } pattern)
+{
+    // pattern.CoveringDirectory == "/home/agent/repositories"
+    // glob.SegmentDepth == 2: each match is two levels below it
+    // glob.Segments[i].MayMatchDotEntry: false, so no hidden entry
+    // glob.MayStartWithDash: false, the word starts with a directory
+}
+```
+
+Rules for consumers:
+
+- Treat the pattern as a reference to every path in the covering directory
+  down to `SegmentDepth` levels. When no entry matches, the word stays the
+  pattern text, which is also a path at that depth.
+- Check protected paths against that whole subtree. Use
+  `MayMatchDotEntry` to skip hidden entries only for a segment where it is
+  false.
+- The parser does not follow links. A link inside the subtree can point
+  outside it. Check links before you treat the subtree as contained.
+- When `MayStartWithDash` is true (for example `*.cs`), a matched name can
+  start with `-`, and the program can read it as an option.
+- A `Glob` value of null, or an `Unknown` value, means that the parser did
+  not prove the expansion. Fail closed.
+
 ## Display traversal is not authorization traversal
 
 `ParsedCommand.Syntax` preserves authored nesting for explainers, diagnostics,

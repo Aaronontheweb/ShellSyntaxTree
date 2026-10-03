@@ -1,3 +1,28 @@
+#### 0.4.0-beta.11 2026-10-03 ####
+
+This prerelease lets a consumer read more real commands: a tilde program word, a glob word, and a `bash script.sh` call (#206).
+
+## Added
+
+- A leading `~` or `~/` in a Bash program word expands from a live launch `HOME`. `~/.dotnet/tools/ilspycmd -h` gives the command words `<HOME>/.dotnet/tools/ilspycmd`. `~user`, `~+`, a quoted tilde, and a revoked `HOME` do not expand.
+- Pathname-expansion facts. Each Bash glob argument and each glob file-redirect target gets a `ShellValueDomain.PathPattern` value with the new `Glob` fact (`ShellGlobExpansion`). The fact gives the covering directory (with `~` expanded from the live `HOME`), the segments below it (`ShellGlobSegment`), the segment depth, a dot fact for each segment, and `MayStartWithDash`. `ls -d ~/repositories/*/akka*` gives covering directory `<HOME>/repositories` and depth 2. A glob redirect target is now complete, so `echo hi > /tmp/x/*.log` has known command words.
+
+## Fixed
+
+- The script operand of `bash` or `sh` ends the command-string scan. `bash scripts/audit.sh --repo-root ~/repositories` is now complete, with the command words `bash`. In 0.4.0-beta.10, each later word could select command-string mode, so the occurrence was incomplete. `-o`, `-O`, `+o`, `+O`, `--rcfile`, and `--init-file` take the next word as a value. `bash -c '...'` decoding does not change.
+
+## Not changed
+
+- Command words do not stop at a word that names a file. `git show dev:Directory.Build.props` keeps `dev:Directory.Build.props` as a command word. No shell fact proves that a word with a dot or a colon names a file. The file system or the program grammar decides that. A dot rule would also drop operands that are not files, such as `nginx.service` or `host.example.com`, and widen the grants that use them.
+
+## Security and compatibility
+
+- The glob facts need `FreshNonInteractiveNoStartup` and a `LaunchEnvironment` with at least one live fact. That contract fixes the shell options: `globstar`, `dotglob`, `nullglob`, `failglob`, `nocaseglob`, and `extglob` are off, and `globskipdots` is on. The source cannot change them: `set`, a mutating `shopt`, `source`, and `eval` fail the parse. A decoded `bash -c` child gets no glob facts.
+- A glob word stays unresolved when it has a `..` segment, an empty or `.` segment after the first pattern segment, a variable, a command substitution, a brace, a quoted or escaped wildcard, or a backslash. A relative glob needs the caller `WorkingDirectory`. The parser does not read the file system.
+- With no `LaunchEnvironment` or an empty one, the only output change is the script-operand rule. No corpus input changes.
+- A consumer that adopts the glob facts must check protected paths against the whole covering subtree to the segment depth. For example, `cat ~/.netclaw/*/tool-approvals.json` has covering directory `~/.netclaw` and depth 2.
+- The public API change is additive: `ShellValueDomain.PathPattern.Glob`, `ShellGlobExpansion`, and `ShellGlobSegment`.
+
 #### 0.4.0-beta.10 2026-10-03 ####
 
 This prerelease fixes the resolved path of a relative Bash `cd` operand.

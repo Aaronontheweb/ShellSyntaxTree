@@ -535,7 +535,15 @@ internal sealed class BashAbstractStateAnalyzer
 
             if (!hasStateDependentValue)
             {
-                if (TryAnalyzeParserKnownValue(
+                if (BashGlobPatternAnalysis.TryAnalyze(
+                        provenance.Value,
+                        clauseOptions,
+                        GlobWorkingDirectory(input),
+                        out var globPattern))
+                {
+                    domain = globPattern;
+                }
+                else if (TryAnalyzeParserKnownValue(
                         provenance.Value,
                         clauseOptions,
                         out var knownValue))
@@ -1639,7 +1647,9 @@ internal sealed class BashAbstractStateAnalyzer
             sourceFacts.RedirectTargetProvenance,
             input.Bindings,
             clause,
-            allowBindingValues: !PublishesAuthoredFactsOnly);
+            allowBindingValues: !PublishesAuthoredFactsOnly,
+            OptionsFor(input, sourceFacts.LaunchEnvironment),
+            GlobWorkingDirectory(input));
         facts.Add(clause, new CommandOccurrenceFacts
         {
             EffectiveArguments = CreateEffectiveArguments(simple.Clause),
@@ -1652,7 +1662,8 @@ internal sealed class BashAbstractStateAnalyzer
             RedirectTargetProvenance = sourceFacts.RedirectTargetProvenance,
             CwdPathDependencies = sourceFacts.CwdPathDependencies,
             ValueProvenance = sourceFacts.ValueProvenance,
-            IsComplete = sourceFacts.IsComplete && AreRedirectsComplete(redirects),
+            IsComplete = (sourceFacts.IsComplete || sourceFacts.IsCompleteExceptRedirects) &&
+                AreRedirectsComplete(redirects),
             LaunchEnvironment = sourceFacts.LaunchEnvironment,
             LaunchWordValues = sourceFacts.LaunchWordValues,
         });
@@ -1912,7 +1923,9 @@ internal sealed class BashAbstractStateAnalyzer
         IReadOnlyList<RedirectTargetProvenance> provenance,
         BashLoopBindingContext bindings,
         Clause clause,
-        bool allowBindingValues)
+        bool allowBindingValues,
+        BashParserOptions clauseOptions,
+        string? globWorkingDirectory)
     {
         if (source.Count == 0)
         {
@@ -1945,6 +1958,26 @@ internal sealed class BashAbstractStateAnalyzer
             }
 
             var redirect = clause.Redirects[fact.RedirectIndex];
+            if (redirect.IsDynamicSkip &&
+                TryAnalyzeGlobRedirectTarget(
+                    fact,
+                    provenance,
+                    clauseOptions,
+                    globWorkingDirectory,
+                    out var globTarget))
+            {
+                // Bash expands a redirect word to one existing match, or keeps
+                // the pattern text when nothing matches. More than one match
+                // is an ambiguous-redirect error, and the command does not
+                // run. Each case names a path that the pattern describes.
+                rewritten[index] = fact with
+                {
+                    Target = globTarget,
+                    IsComplete = fact.Source.Kind != RedirectSourceKind.Unknown,
+                };
+                continue;
+            }
+
             rewritten[index] = fact with
             {
                 Target = redirect.IsDynamicSkip
@@ -1959,6 +1992,39 @@ internal sealed class BashAbstractStateAnalyzer
         }
 
         return rewritten;
+    }
+
+    private static bool TryAnalyzeGlobRedirectTarget(
+        RedirectAnalysisFacts fact,
+        IReadOnlyList<RedirectTargetProvenance> provenance,
+        BashParserOptions clauseOptions,
+        string? globWorkingDirectory,
+        out ShellValueDomainFacts target)
+    {
+        target = ShellValueDomainFacts.Unknown;
+        if (fact.Operation is not (
+                RedirectOperation.FileInput or
+                RedirectOperation.FileOutput or
+                RedirectOperation.FileAppend or
+                RedirectOperation.CombinedOutput or
+                RedirectOperation.CombinedOutputAppend))
+        {
+            return false;
+        }
+
+        foreach (var candidate in provenance)
+        {
+            if (candidate.RedirectIndex == fact.RedirectIndex)
+            {
+                return BashGlobPatternAnalysis.TryAnalyze(
+                    candidate.Value,
+                    clauseOptions,
+                    globWorkingDirectory,
+                    out target);
+            }
+        }
+
+        return false;
     }
 
     private static ShellValueDomainFacts RewriteHereStringTarget(
@@ -2229,6 +2295,14 @@ internal sealed class BashAbstractStateAnalyzer
     private bool CanResolveRelativeCd(BashParserOptions clauseOptions) =>
         _options.WorkingDirectory is not null &&
         ShellLaunchFacts.IsUnset(clauseOptions, "CDPATH");
+
+    /// <summary>
+    /// The directory that a relative glob word expands in (#206). It is
+    /// proved only when the caller supplied the start directory, the same
+    /// rule as a relative <c>cd</c>.
+    /// </summary>
+    private string? GlobWorkingDirectory(BashAbstractState state) =>
+        _options.WorkingDirectory is null ? null : state.WorkingDirectory;
 
     private bool PublishesAuthoredFactsOnly =>
         _options.PublishAuthoredSourceFacts &&

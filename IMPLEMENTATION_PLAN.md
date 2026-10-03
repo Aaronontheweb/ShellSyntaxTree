@@ -10,7 +10,23 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.10 relative cd operand resolved path)
+## NOW (0.4.0-beta.11 path-word facts)
+
+- [x] Expand a leading `~` in a Bash program word from a live launch `HOME` (#206).
+- [x] Publish pathname-expansion facts (`PathPattern.Glob`) for glob arguments and glob file-redirect targets under `FreshNonInteractiveNoStartup` with live launch facts. Keep `..`, mixed expansions, and quoted wildcards unresolved.
+- [x] End the `bash`/`sh` command-string scan at the script operand. Keep `bash -c` decoding unchanged.
+- [x] Record why command words do not stop at a word that names a file: no shell fact proves it. The file system or the program grammar decides it.
+- [x] Prove that the output with no or an empty launch environment changes only for the script-operand rule, and for no corpus input. Run manual mutants.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.11` and verify NuGet publication.
+
+## Next (Netclaw parse coverage, from #206)
+
+- Assignment shapes: upper-case names and a command-environment prefix inside a pipeline or an `&&` list.
+- `while`, `if`, and `case` with their inner commands as normal occurrences.
+- A background `&` job and `$!`.
+- A heredoc inside `$(...)`.
+
+## Completed (0.4.0-beta.10 relative cd operand resolved path)
 
 - [x] Give a bare relative `cd` operand the computed directory as its resolved path when the launch facts prove that `CDPATH` is unset (#203).
 - [x] Keep the operand unresolved without the `CDPATH` proof, under the `Unknown` mode, without `WorkingDirectory`, and for `cd -`, `cd -P`, `cd -@`, and dynamic operands. PowerShell needs no change.
