@@ -50,6 +50,13 @@ internal sealed class CommandOccurrenceFacts
     internal bool IsComplete { get; init; }
 
     /// <summary>
+    /// True when the structural pass found the command complete apart from
+    /// its redirects (#206). The state pass can complete a redirect, for
+    /// example a glob target, and then recomputes <see cref="IsComplete"/>.
+    /// </summary>
+    internal bool IsCompleteExceptRedirects { get; init; }
+
+    /// <summary>
     /// The launch facts that are live for this command (#200). Null when the
     /// caller supplied none. Consumers read them only through
     /// <c>ShellLaunchFacts</c>, which applies the initial-state gate.
@@ -342,6 +349,13 @@ internal sealed record ShellValueDomainFacts
 
     internal string? CoveringDirectory { get; init; }
 
+    /// <summary>
+    /// The Bash pathname-expansion facts of a pattern domain (#206). Null
+    /// for every other kind and for a pattern whose shell options are not
+    /// proved.
+    /// </summary>
+    internal ShellGlobExpansion? Glob { get; init; }
+
     internal long MinimumInclusive { get; init; }
 
     internal long MaximumInclusive { get; init; }
@@ -457,6 +471,30 @@ internal sealed record ShellValueDomainFacts
         };
     }
 
+    private static bool GlobEquals(ShellGlobExpansion? left, ShellGlobExpansion? right)
+    {
+        if (left is null || right is null)
+        {
+            return left is null && right is null;
+        }
+
+        if (left.MayStartWithDash != right.MayStartWithDash ||
+            left.Segments.Count != right.Segments.Count)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < left.Segments.Count; index++)
+        {
+            if (!Equals(left.Segments[index], right.Segments[index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     private static bool HasDistinctNonNullValues(IReadOnlyList<string> values)
     {
         var distinct = new HashSet<string>(StringComparer.Ordinal);
@@ -483,6 +521,7 @@ internal sealed record ShellValueDomainFacts
                 left.CoveringDirectory,
                 right.CoveringDirectory,
                 StringComparison.Ordinal) ||
+            !GlobEquals(left.Glob, right.Glob) ||
             left.Values.Count != right.Values.Count ||
             left.Parts.Count != right.Parts.Count)
         {
@@ -1425,7 +1464,8 @@ internal static class ShellSyntaxProjection
                 ShellValueDomainKind.FiniteSet => new ShellValueDomain.FiniteSet(domain.Values),
                 ShellValueDomainKind.Pattern => new ShellValueDomain.PathPattern(
                     domain.Pattern!,
-                    domain.CoveringDirectory!),
+                    domain.CoveringDirectory!,
+                    domain.Glob),
                 ShellValueDomainKind.IntegerRange => new ShellValueDomain.IntegerRange(
                     domain.MinimumInclusive,
                     domain.MaximumInclusive),
@@ -1610,7 +1650,11 @@ internal static class ShellSyntaxProjection
             if (domain.Values is null ||
                 domain.Parts is null ||
                 ContainsNull(domain.Values) ||
-                ContainsNull(domain.Parts))
+                ContainsNull(domain.Parts) ||
+                domain.Glob is not null &&
+                (domain.Kind != ShellValueDomainKind.Pattern ||
+                 domain.Glob.Segments.Count == 0 ||
+                 ContainsNull(domain.Glob.Segments)))
             {
                 return false;
             }

@@ -124,10 +124,12 @@ internal static class ShellLaunchFacts
     }
 
     /// <summary>
-    /// Expands one Bash word made only of literal text and live launch
-    /// variables. The result is the exact single word that the program
-    /// receives. False for any other expansion, for a value that can split
-    /// or glob, for an empty word, or for a word with no launch variable.
+    /// Expands one Bash word made only of literal text, live launch
+    /// variables, and a leading tilde. The result is the exact single word
+    /// that the program receives. A leading <c>~</c> or <c>~/</c> expands
+    /// from the live launch <c>HOME</c> (#206). False for any other
+    /// expansion, for <c>~user</c>, for a value that can split or glob, for
+    /// an empty word, or for a word with no launch value.
     /// </summary>
     internal static bool TryExpandWord(
         ShellValue value,
@@ -137,12 +139,38 @@ internal static class ShellLaunchFacts
         expanded = string.Empty;
         var builder = new System.Text.StringBuilder(value.Decoded.Length);
         var usedLaunchValue = false;
-        foreach (var fragment in value.Fragments)
+        for (var index = 0; index < value.Fragments.Count; index++)
         {
+            var fragment = value.Fragments[index];
             if (fragment.Kind == ShellValueFragmentKind.Literal &&
                 fragment.Cardinality == ShellValueCardinality.ExactlyOne)
             {
                 builder.Append(fragment.Value);
+                continue;
+            }
+
+            // Bash expands a leading tilde from HOME. The tilde word of a
+            // revoked HOME, of `~user`, or of `~+` is not proved.
+            if (fragment.Kind == ShellValueFragmentKind.Expansion &&
+                fragment.Expansion is { Kind: ShellExpansionKind.Tilde } &&
+                fragment.Cardinality == ShellValueCardinality.ExactlyOne)
+            {
+                var tildeKind = BashResolver.ClassifyTildeExpansion(value, index);
+                if (tildeKind == BashTildeExpansionKind.Literal)
+                {
+                    builder.Append(fragment.Value);
+                    continue;
+                }
+
+                if (tildeKind != BashTildeExpansionKind.Home ||
+                    !TryGetValue(options, "HOME", out var home) ||
+                    home.Length == 0)
+                {
+                    return false;
+                }
+
+                builder.Append(home);
+                usedLaunchValue = true;
                 continue;
             }
 

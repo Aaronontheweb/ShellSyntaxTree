@@ -1689,6 +1689,27 @@ internal static partial class BashCommandParser
                         value));
                 }
 
+                // A file redirect target with a wildcard keeps its shell value,
+                // so the state pass can prove its pathname expansion (#206).
+                if (currentRedirectIndex >= 0 &&
+                    currentRedirectIndex < redirectAnalysis.Count &&
+                    redirectAnalysis[currentRedirectIndex].IsPathRelevant &&
+                    !redirectAnalysis[currentRedirectIndex].IsComplete &&
+                    currentRedirectIndex < simple.Clause.Redirects.Count &&
+                    TryGetElementValue(
+                        element,
+                        sourceTokens,
+                        out var targetValue,
+                        skipLeadingOperator: true) &&
+                    HasGlobFragment(targetValue))
+                {
+                    redirectProvenance.Add(new RedirectTargetProvenance(
+                        currentRedirectIndex,
+                        elementIndex,
+                        targetValue,
+                        InvocationScopeDepth: 0));
+                }
+
                 if (currentRedirectIndex >= 0 &&
                     currentRedirectIndex < redirectAnalysis.Count &&
                     redirectAnalysis[currentRedirectIndex].Operation ==
@@ -1728,6 +1749,8 @@ internal static partial class BashCommandParser
                 IsComplete = simple.Clause.Verb.Tokens.Count > 0 &&
                     AreRedirectsComplete(redirectAnalysis) &&
                     !HasUnexpandedCommandString(simple.Clause),
+                IsCompleteExceptRedirects = simple.Clause.Verb.Tokens.Count > 0 &&
+                    !HasUnexpandedCommandString(simple.Clause),
                 LaunchEnvironment = parseOptions.LaunchEnvironment,
                 LaunchWordValues = launchWordValues ??
                     CommandOccurrenceFacts.EmptyLaunchWordValues,
@@ -1748,10 +1771,24 @@ internal static partial class BashCommandParser
             return true;
         }
 
+        private static bool HasGlobFragment(ShellValue value)
+        {
+            foreach (var fragment in value.Fragments)
+            {
+                if (fragment.Expansion is { Kind: ShellExpansionKind.Glob })
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         private static bool TryGetElementValue(
             ClauseElement element,
             IReadOnlyList<BashToken> sourceTokens,
-            out ShellValue value)
+            out ShellValue value,
+            bool skipLeadingOperator = false)
         {
             value = ShellValue.Literal(string.Empty);
             if (element.SourceStart is null || element.SourceLength is null)
@@ -1764,11 +1801,23 @@ internal static partial class BashCommandParser
             var values = new List<ShellValue>();
             var coveredStart = -1;
             var coveredEnd = -1;
+            var skippedOperator = false;
             foreach (var token in sourceTokens)
             {
                 var tokenEnd = token.SourceStart + token.SourceLength;
                 if (token.SourceStart < elementStart || tokenEnd > elementEnd)
                 {
+                    continue;
+                }
+
+                // A redirect element starts with its operator. The target
+                // word starts after it, so a leading tilde stays at index 0.
+                if (skipLeadingOperator &&
+                    values.Count == 0 &&
+                    token.Kind == BashTokenKind.Operator &&
+                    token.SourceStart == elementStart)
+                {
+                    skippedOperator = true;
                     continue;
                 }
 
@@ -1779,7 +1828,7 @@ internal static partial class BashCommandParser
             }
 
             if (values.Count == 0 ||
-                coveredStart != elementStart ||
+                coveredStart != elementStart && !skippedOperator ||
                 coveredEnd != elementEnd)
             {
                 return false;
@@ -2444,12 +2493,24 @@ internal static partial class BashCommandParser
             return false;
         }
 
+        // Bash and sh parse their own options only up to the first operand.
+        // Without -c, that operand is the script file, and every later word
+        // is a script argument: `bash x.sh -c y` runs x.sh with $1 = -c
+        // (#206). An option value is not the operand: -o and -O (also in a
+        // cluster, and with +) and --rcfile and --init-file take the next
+        // word.
+        var pendingOptionValues = 0;
         for (var index = 0; index < clause.Elements.Count; index++)
         {
             var element = clause.Elements[index];
             if (element.Role != ClauseElementRole.Argument)
             {
                 continue;
+            }
+
+            if (pendingOptionValues == 0 && IsScriptOperand(element))
+            {
+                return false;
             }
 
             if (element.Kind != ArgKind.Literal)
@@ -2466,9 +2527,68 @@ internal static partial class BashCommandParser
             {
                 return true;
             }
+
+            if (pendingOptionValues > 0)
+            {
+                pendingOptionValues--;
+                continue;
+            }
+
+            pendingOptionValues = CountOptionValues(element.Value);
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// True when the word is the script operand of a shell invoker. The word
+    /// must not start with <c>-</c> or <c>+</c>, and it must not be able to
+    /// expand to such a word. A literal word qualifies. A tilde word
+    /// qualifies when its resolved path is absolute.
+    /// </summary>
+    private static bool IsScriptOperand(ClauseElement element)
+    {
+        var value = element.Kind switch
+        {
+            ArgKind.Literal => element.Value,
+            ArgKind.Tilde => element.Resolved,
+            _ => null,
+        };
+        return value is { Length: > 0 } &&
+               value[0] != '-' &&
+               value[0] != '+' &&
+               (element.Kind == ArgKind.Literal || value[0] == '/');
+    }
+
+    /// <summary>
+    /// Counts the words that a shell option takes as its values. Each
+    /// <c>o</c> or <c>O</c> in a <c>-</c> or <c>+</c> cluster takes one word.
+    /// </summary>
+    private static int CountOptionValues(string value)
+    {
+        if (string.Equals(value, "--rcfile", StringComparison.Ordinal) ||
+            string.Equals(value, "--init-file", StringComparison.Ordinal))
+        {
+            return 1;
+        }
+
+        if (value.Length < 2 ||
+            value[0] is not ('-' or '+') ||
+            value[1] == '-')
+        {
+            return 0;
+        }
+
+        var count = 0;
+        for (var index = 1; index < value.Length; index++)
+        {
+            if (value[index] is 'o' or 'O')
+            {
+                count++;
+            }
+        }
+
+        return count;
     }
 
     private static bool IsCommandStringOption(string value)

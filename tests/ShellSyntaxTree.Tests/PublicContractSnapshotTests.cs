@@ -180,7 +180,19 @@ public class PublicContractSnapshotTests
         AssertResultRecordAccessors(
             typeof(ShellValueDomain.PathPattern),
             (nameof(ShellValueDomain.PathPattern.Pattern), typeof(string), false),
-            (nameof(ShellValueDomain.PathPattern.CoveringDirectory), typeof(string), false));
+            (nameof(ShellValueDomain.PathPattern.CoveringDirectory), typeof(string), false),
+            (nameof(ShellValueDomain.PathPattern.Glob), typeof(ShellGlobExpansion), false));
+        AssertResultRecordAccessors(
+            typeof(ShellGlobExpansion),
+            (nameof(ShellGlobExpansion.Segments),
+                typeof(IReadOnlyList<ShellGlobSegment>), false),
+            (nameof(ShellGlobExpansion.SegmentDepth), typeof(int), false),
+            (nameof(ShellGlobExpansion.MayStartWithDash), typeof(bool), false));
+        AssertResultRecordAccessors(
+            typeof(ShellGlobSegment),
+            (nameof(ShellGlobSegment.Text), typeof(string), false),
+            (nameof(ShellGlobSegment.IsPattern), typeof(bool), false),
+            (nameof(ShellGlobSegment.MayMatchDotEntry), typeof(bool), false));
         AssertResultRecordAccessors(
             typeof(ShellValueDomain.IntegerRange),
             (nameof(ShellValueDomain.IntegerRange.MinimumInclusive), typeof(long), false),

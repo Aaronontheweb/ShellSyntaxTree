@@ -568,9 +568,18 @@ public abstract record ShellValueDomain
     public sealed record PathPattern : ShellValueDomain
     {
         internal PathPattern(string pattern, string coveringDirectory)
+            : this(pattern, coveringDirectory, glob: null)
+        {
+        }
+
+        internal PathPattern(
+            string pattern,
+            string coveringDirectory,
+            ShellGlobExpansion? glob)
         {
             Pattern = pattern;
             CoveringDirectory = coveringDirectory;
+            Glob = glob;
         }
 
         private protected override object LibraryOwnership => this;
@@ -586,7 +595,97 @@ public abstract record ShellValueDomain
 
         /// <summary>Gets the conservative covering directory.</summary>
         public new string CoveringDirectory { get; }
+
+        /// <summary>
+        /// Gets the Bash pathname-expansion facts for an authored glob word.
+        /// Null when the parser did not prove the shell options that control
+        /// the expansion, for example for a loop iterable or a PowerShell
+        /// wildcard.
+        /// </summary>
+        public ShellGlobExpansion? Glob { get; }
     }
+}
+
+/// <summary>
+/// Lexical facts about one Bash pathname expansion (#206). The parser does not
+/// read the file system. It publishes these facts only for Bash under
+/// <see cref="BashInitialStateMode.FreshNonInteractiveNoStartup"/> with live
+/// <see cref="ShellParserOptions.LaunchEnvironment"/> facts. That contract
+/// fixes the shell options: <c>globstar</c>, <c>dotglob</c>,
+/// <c>nullglob</c>, <c>failglob</c>, <c>nocaseglob</c>, and <c>extglob</c>
+/// are off, and <c>globskipdots</c> is on.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Each word that the expansion gives names an entry exactly
+/// <see cref="SegmentDepth"/> levels below
+/// <see cref="ShellValueDomain.PathPattern.CoveringDirectory"/>. When no entry
+/// matches, the shell keeps the pattern text as one word. That word also names
+/// a path at the same depth. A match is never <c>.</c> or <c>..</c>, and
+/// <c>**</c> matches the same names as <c>*</c>.
+/// </para>
+/// <para>
+/// The parser keeps the word unresolved when a segment is <c>..</c>, when a
+/// segment after the first pattern segment is <c>.</c> or empty, or when the
+/// word also has a variable, a command substitution, a brace, a quoted or
+/// escaped glob character, or a backslash. These facts do not grant authority.
+/// </para>
+/// </remarks>
+public sealed record ShellGlobExpansion
+{
+    internal ShellGlobExpansion(
+        IEnumerable<ShellGlobSegment> segments,
+        bool mayStartWithDash)
+    {
+        Segments = PublicCollection.Copy(segments);
+        MayStartWithDash = mayStartWithDash;
+    }
+
+    /// <summary>
+    /// Gets the path segments below the covering directory, in order. At
+    /// least one segment is a pattern. A trailing <c>/</c> of the pattern is
+    /// not a segment.
+    /// </summary>
+    public IReadOnlyList<ShellGlobSegment> Segments { get; }
+
+    /// <summary>Gets the number of segments below the covering directory.</summary>
+    public int SegmentDepth => Segments.Count;
+
+    /// <summary>
+    /// Gets whether a word that the expansion gives can start with
+    /// <c>-</c>. This is true when the authored word has no directory part
+    /// and starts with a wildcard, for example <c>*.cs</c>. A program can then
+    /// read a matched name as an option.
+    /// </summary>
+    public bool MayStartWithDash { get; }
+}
+
+/// <summary>One path segment of a Bash pathname-expansion pattern.</summary>
+public sealed record ShellGlobSegment
+{
+    internal ShellGlobSegment(string text, bool isPattern, bool mayMatchDotEntry)
+    {
+        Text = text;
+        IsPattern = isPattern;
+        MayMatchDotEntry = mayMatchDotEntry;
+    }
+
+    /// <summary>
+    /// Gets the segment text in Bash pattern syntax. Every <c>*</c>,
+    /// <c>?</c>, and <c>[</c> in the text is an active wildcard.
+    /// </summary>
+    public string Text { get; }
+
+    /// <summary>Gets whether the segment has an active wildcard.</summary>
+    public bool IsPattern { get; }
+
+    /// <summary>
+    /// Gets whether a name that this segment matches can start with
+    /// <c>.</c>. A pattern segment matches a dot entry only when its text
+    /// starts with <c>.</c>, because <c>dotglob</c> is off. The parser also
+    /// reports true for a segment that starts with a bracket expression.
+    /// </summary>
+    public bool MayMatchDotEntry { get; }
 }
 
 internal enum ShellValueDomainKind

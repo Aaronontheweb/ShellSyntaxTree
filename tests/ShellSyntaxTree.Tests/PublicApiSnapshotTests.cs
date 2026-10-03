@@ -696,6 +696,8 @@ public class PublicApiSnapshotTests
             nameof(ShellCommandWords),
             nameof(ShellGroupKind),
             nameof(ShellFileSystemTreeAccess),
+            nameof(ShellGlobExpansion),
+            nameof(ShellGlobSegment),
             nameof(ShellLaunchEnvironment),
             nameof(ShellParserOptions),
             nameof(ShellPathShape),

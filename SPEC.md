@@ -243,6 +243,8 @@ public enum ShellVariableAssignmentScope { ... }
 public sealed record CommandAncestryFrame { ... }
 public sealed record AnalyzedArgument { ... }
 public abstract record ShellValueDomain { ... }
+public sealed record ShellGlobExpansion { ... }   // v0.4.0-beta.11
+public sealed record ShellGlobSegment { ... }     // v0.4.0-beta.11
 public enum ShellPathShape { ... }
 public abstract record RedirectAnalysis { ... }
 public sealed record HereDocumentAnalysis { ... }
@@ -911,7 +913,22 @@ public abstract record ShellValueDomain
     {
         public string Pattern { get; }
         public string CoveringDirectory { get; }
+        public ShellGlobExpansion? Glob { get; }   // v0.4.0-beta.11
     }
+}
+
+public sealed record ShellGlobExpansion
+{
+    public IReadOnlyList<ShellGlobSegment> Segments { get; }
+    public int SegmentDepth { get; }
+    public bool MayStartWithDash { get; }
+}
+
+public sealed record ShellGlobSegment
+{
+    public string Text { get; }
+    public bool IsPattern { get; }
+    public bool MayMatchDotEntry { get; }
 }
 ```
 
@@ -1149,7 +1166,12 @@ Facts:
 - Command words: an element made only of literal text and live launch
   values counts as one static word with the expanded value. A program word
   must expand to a value that contains `/`. Bash then runs that file and
-  never looks up a builtin, function, or alias.
+  never looks up a builtin, function, or alias. A leading `~` or `~/`
+  expands from a live `HOME` (v0.4.0-beta.11, #206):
+  `~/.dotnet/tools/ilspycmd -h` gives the words
+  `<HOME>/.dotnet/tools/ilspycmd`. `~user`, `~+`, a quoted tilde, and a
+  revoked `HOME` do not expand. Without launch facts, a tilde program word
+  gives `Unknown` words, as before.
 - PowerShell: `$env:NAME` and `${env:NAME}` resolve when the scope prefix
   matches without case and the name matches exactly. The parser trusts the
   value under the existing `$env:USERPROFILE` rule: no earlier command can
@@ -1170,6 +1192,95 @@ Facts:
 | `cat $SPACED` with `SPACED="a b"` | the value is unknown |
 
 These facts do not grant authority.
+
+#### Pathname-expansion facts (v0.4.0-beta.11)
+
+Bash replaces an unquoted glob word with the names of matching entries. The
+parser does not read the file system, so it cannot list the matches. It can
+prove where every match is. For each Bash glob argument and each glob file
+redirect target, it publishes a `PathPattern` value with a `Glob` fact
+(#206):
+
+- `CoveringDirectory`: the literal directory before the first segment with a
+  wildcard. A leading `~` expands from the live launch `HOME`. A relative
+  word starts at the occurrence's proved directory.
+- `Pattern`: the absolute pattern, `CoveringDirectory` followed by the
+  segments. A trailing `/` stays in the pattern.
+- `Glob.Segments`: the segments below the covering directory. `Text` is in
+  Bash pattern syntax, and every `*`, `?`, and `[` in it is a wildcard.
+  `IsPattern` is true for a segment with a wildcard. `MayMatchDotEntry` is
+  true when the segment starts with `.`, or with a bracket expression.
+- `Glob.SegmentDepth`: the number of segments. Each match names an entry
+  exactly this many levels below the covering directory.
+- `Glob.MayStartWithDash`: true when the word has no directory part and
+  starts with a wildcard. A matched name can then start with `-`, and a
+  program can read it as an option.
+
+Fixed shell options. The facts are valid only under
+`FreshNonInteractiveNoStartup`. That contract removes `BASHOPTS`,
+`SHELLOPTS`, and `GLOBIGNORE`, passes no option flag, and runs GNU Bash 5.2
+or 5.3. Thus `globstar`, `dotglob`, `nullglob`, `failglob`, `nocaseglob`, and
+`extglob` are off, and `globskipdots` is on:
+
+- `**` matches the same names as `*`;
+- a wildcard does not match a leading `.`, and a match is never `.` or `..`;
+- when nothing matches, the word stays the pattern text. That text names a
+  path at the same depth in the same covering directory;
+- a redirect word expands to its one match or to the pattern text. Two or
+  more matches are an "ambiguous redirect" error, and the command does not
+  run.
+
+The source cannot change these options. `set`, a mutating `shopt`, `source`,
+`.`, `eval`, and assignments to `BASHOPTS`, `SHELLOPTS`, or `GLOBIGNORE` fail
+the parse. A decoded `bash -c` child gets no launch facts, so it gets no
+pattern facts.
+
+Owner and data. `BashGlobPatternAnalysis` owns the rule. The state pass calls
+it for each visit of an argument and once for each redirect target, with the
+live launch facts and the proved directory of that command. The facts are
+call-local. Nothing is durable.
+
+Opt-in and liveness. The caller opts in with a `LaunchEnvironment` that has
+at least one live fact. The pattern facts follow the launch-fact liveness
+rules: after a statement that revokes all launch facts, such as `wait -p`, a
+later glob gets no fact. With no `LaunchEnvironment`, an empty one, or a mode
+other than `FreshNonInteractiveNoStartup`, the output is the same as in
+0.4.0-beta.10.
+
+Schematic flow for one word (it omits the projection gates):
+
+```
+if mode != FreshNonInteractiveNoStartup or no live launch fact: Unknown
+text = expand(word)       # literal text, wildcards, a leading ~ from live HOME
+                          # anything else (variable, substitution, brace,
+                          # quoted or escaped wildcard, backslash): Unknown
+if text starts with "-": Unknown
+root = "/" if absolute else proved command directory (caller WorkingDirectory
+       required); else Unknown
+split text on "/"; first = first segment with a wildcard
+covering = normalize(root + segments before first)   # ".." anywhere: Unknown
+for each later segment: ".", "..", or empty: Unknown
+publish PathPattern(covering + segments, covering, Glob(segments, dash))
+```
+
+When two visits of one argument give different patterns, for example in a
+loop body after a `cd`, the joined value is `Unknown`.
+
+| Source (Bash, launch `HOME=/home/a`, start `/work`) | Result |
+|---|---|
+| `ls -d ~/repositories/*/akka*` | covering `/home/a/repositories`, depth 2 |
+| `grep -rn x src/**/*.csproj` | covering `/work/src`, depth 2 |
+| `ls *.cs` | covering `/work`, depth 1, `MayStartWithDash` |
+| `du -sh ~/r/.*` | depth 1, the segment may match a dot entry |
+| `echo hi > /tmp/x/*.log` | complete redirect, target covering `/tmp/x` |
+| `ls src/../*` | `Unknown` (`..`) |
+| `ls "$TMPDIR"/*` | `Unknown` (a variable and a wildcard) |
+| `ls "a*"/*` | `Unknown` (a quoted wildcard) |
+| `shopt -s dotglob; ls *` | unparseable, as before |
+
+`Arg.Kind` stays `Glob`, and `Arg.Resolved` stays null. When an argument has
+no authored-value fact, `AuthoredValue` repeats the effective value, as for
+every argument. These facts do not grant authority.
 
 #### Finite Bash scope projection (v0.4.0-beta.3)
 
@@ -2850,6 +2961,26 @@ the quoted body must each have literal, exactly-one outer-shell provenance;
 token kind or decoded spelling alone is insufficient. A proved `--` ends this
 conservative option scan. The parser does not claim to have discovered a
 dynamic or otherwise unsupported command-string body.
+
+The script operand also ends the scan (v0.4.0-beta.11, #206). Bash and sh
+parse their own options only up to the first operand. Without `-c`, that
+operand is the script file, and each later word is a script argument:
+`bash x.sh -c y` runs `x.sh` with `$1` set to `-c`. The operand is the first
+argument that is not an option and not an option value. It must be a literal
+word, or a tilde word with an absolute resolved path, that does not start
+with `-` or `+`. These options take the next word as a value: `-o`, `-O`,
+`+o`, and `+O` (also inside a cluster such as `-eo`), `--rcfile`, and
+`--init-file`. The scan still checks every word up to and including the
+operand. Examples:
+
+- `bash scripts/audit.sh --repo-root ~/repositories`: complete, command
+  words `bash`.
+- `bash -o pipefail x.sh -c y`: complete. `pipefail` is the value of `-o`.
+- `bash --rcfile r -c y` and `bash -O -c y`: incomplete, as before. `r` and
+  `-c` are option values, so no operand comes before `-c`.
+- `bash $(printf -- -c) y`: incomplete, as before. A dynamic word can expand
+  to an option.
+- `bash -c '...'` decoding does not change.
 
 **Recursion limit:** parse `bash -c "bash -c ..."` chains up to depth 5.
 Deeper nesting → set the outer `ParsedCommand.IsUnparseable = true` with
