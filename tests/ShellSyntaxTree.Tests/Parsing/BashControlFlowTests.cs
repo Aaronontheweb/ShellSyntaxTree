@@ -166,6 +166,9 @@ public class BashControlFlowTests
         Assert.Equal(CommandOccurrenceRole.Ordinary, cat.ImmediateRole);
         Assert.IsType<ShellValueDomain.Unknown>(cat.WorkingDirectory);
         Assert.Null(cat.Clause.Args.Single(a => !a.IsCwdAttribution).Resolved);
+
+        // The compatibility attribution after the statement is dynamic.
+        Assert.Equal(ArgKind.DynamicSkip, cat.Clause.Args.Single(a => a.IsCwdAttribution).Kind);
     }
 
     [Fact]
@@ -353,6 +356,9 @@ public class BashControlFlowTests
     [InlineData("case x in y esac")]
     [InlineData("case $(id) in a) echo a;; esac")]
     [InlineData("case x in $(id)) echo a;; esac")]
+    [InlineData("case a$(id) in a) echo a;; esac")]
+    [InlineData("case \"$(id)\" in a) echo a;; esac")]
+    [InlineData("case x in a$(id)) echo a;; esac")]
     [InlineData("case \"$unset_name\" in a) echo a;; esac")]
     [InlineData("while read -r l; do echo hi; done < file.txt")]
     [InlineData("if true; then echo hi; fi > out.txt")]
@@ -367,6 +373,19 @@ public class BashControlFlowTests
 
         Assert.True(parsed.IsUnparseable);
         Assert.Empty(parsed.Commands);
+    }
+
+    [Theory]
+    [InlineData("while true; do done")]
+    [InlineData("while do ls; done")]
+    [InlineData("if true; then fi")]
+    [InlineData("if true; then ls; else fi")]
+    public void Empty_condition_or_body_is_rejected_by_the_grammar(string source)
+    {
+        var parsed = Parser.Parse(source);
+
+        Assert.True(parsed.IsUnparseable);
+        Assert.Contains("cannot be empty", parsed.UnparseableReason);
     }
 
     [Theory]
@@ -386,8 +405,12 @@ public class BashControlFlowTests
         var allowed = string.Concat(Enumerable.Repeat(open, 8)) + inner +
                       string.Concat(Enumerable.Repeat(close, 8));
 
-        Assert.True(Parser.Parse(deep).IsUnparseable);
-        Assert.True(Parser.Parse(limit).IsUnparseable);
+        var deepResult = Parser.Parse(deep);
+        Assert.True(deepResult.IsUnparseable);
+        Assert.Contains("nesting depth", deepResult.UnparseableReason);
+        var limitResult = Parser.Parse(limit);
+        Assert.True(limitResult.IsUnparseable);
+        Assert.Contains("nesting depth", limitResult.UnparseableReason);
         Assert.False(Parser.Parse(allowed).IsUnparseable);
     }
 
