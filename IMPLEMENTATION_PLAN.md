@@ -10,12 +10,14 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.12 Bash assignment shapes)
+## Completed (0.4.0-beta.12 Bash assignment shapes)
 
 - [x] Accept upper-case shell-state names, more than one assignment, assignments in lists and `for` loop bodies, and expanded values (#209).
 - [x] Accept command-environment prefixes on pipeline stages, list items, and commands in nested scopes.
 - [x] Prove that only unparseable inputs change, and that no corpus replay row gets worse. Run manual mutants.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.12` and verify NuGet publication.
+- [x] Merge PR #210 after Linux and Windows CI. Tag `0.4.0-beta.12` on merge
+      `845ab891` and verify NuGet publication. Workflow run 37154939016
+      published the package and the GitHub prerelease.
 
 ## Next (Netclaw parse coverage, from #206)
 
