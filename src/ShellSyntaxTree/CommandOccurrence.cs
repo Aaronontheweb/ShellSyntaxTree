@@ -289,6 +289,18 @@ public enum CommandOccurrenceRole
     LoopBody,
     Substitution,
     ExecutionRegion,
+
+    /// <summary>
+    /// The command is in the condition of an <c>if</c>, <c>elif</c>,
+    /// <c>while</c>, or <c>until</c> (v0.4.0-beta.13).
+    /// </summary>
+    Condition,
+
+    /// <summary>
+    /// The command is in a branch body of an <c>if</c> or <c>case</c>
+    /// statement. The body can run once or not at all (v0.4.0-beta.13).
+    /// </summary>
+    Branch,
 }
 
 /// <summary>One compositional structural ancestor of a command occurrence.</summary>
@@ -326,6 +338,21 @@ public enum CommandAncestryRegion
     LoopBody,
     Substitution,
     ExecutionRegion,
+
+    /// <summary>
+    /// The condition of a <c>while</c> or <c>until</c> loop, or of an
+    /// <c>if</c> or <c>elif</c> branch. <see cref="CommandAncestryFrame.ChildIndex"/>
+    /// is the branch index for a conditional (v0.4.0-beta.13).
+    /// </summary>
+    Condition,
+
+    /// <summary>
+    /// A branch body of an <c>if</c> or <c>case</c> statement.
+    /// <see cref="CommandAncestryFrame.ChildIndex"/> is the branch or item
+    /// index. The <c>else</c> body has the index after the last branch
+    /// (v0.4.0-beta.13).
+    /// </summary>
+    Branch,
 }
 
 /// <summary>One parser-owned join between a compatibility argument and its source.</summary>

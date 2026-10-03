@@ -29,6 +29,11 @@ public abstract record ShellSyntaxNode
         CommandSubstitutionSyntax => ShellSyntaxKind.CommandSubstitution,
         ExecutionRegionSyntax => ShellSyntaxKind.ExecutionRegion,
         ShellAssignmentSyntax => ShellSyntaxKind.Assignment,
+        ConditionLoopSyntax => ShellSyntaxKind.ConditionLoop,
+        ConditionalSyntax => ShellSyntaxKind.Conditional,
+        ConditionalBranchSyntax => ShellSyntaxKind.ConditionalBranch,
+        CaseSyntax => ShellSyntaxKind.Case,
+        CaseItemSyntax => ShellSyntaxKind.CaseItem,
         _ => ShellSyntaxKind.Unknown,
     };
 
@@ -49,6 +54,11 @@ internal enum ShellSyntaxKind
     CommandSubstitution,
     ExecutionRegion,
     Assignment,
+    ConditionLoop,
+    Conditional,
+    ConditionalBranch,
+    Case,
+    CaseItem,
 }
 
 /// <summary>An ordered block of authored statements.</summary>

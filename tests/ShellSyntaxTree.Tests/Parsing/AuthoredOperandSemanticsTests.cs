@@ -444,7 +444,7 @@ public class AuthoredOperandSemanticsTests
 
     [Theory]
     [InlineData("cat README |")]
-    [InlineData("if cat README; then echo ok; fi")]
+    [InlineData("if cat README; then echo ok")]
     public void Incomplete_or_unsupported_control_flow_publishes_no_filesystem_fact(
         string source)
     {

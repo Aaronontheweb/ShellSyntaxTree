@@ -1,0 +1,9 @@
+{
+  "name": "case statement with one empty item",
+  "input": "case x in a) ;; esac",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": []
+  },
+  "notes": "v0.4.0-beta.13: case statements parse. An item body can be empty, so this statement has no command. Before beta.13 the control-flow keyword detector rejected it."
+}

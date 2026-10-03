@@ -280,7 +280,7 @@ internal static partial class BashCommandParser
 
             if (!TryParseList(
                     stopAtRightParen: false,
-                    stopWord: null,
+                    stopWords: null,
                     CompoundOperator.None,
                     out var command,
                     out error) ||
@@ -311,17 +311,19 @@ internal static partial class BashCommandParser
 
         private bool TryParseList(
             bool stopAtRightParen,
-            string? stopWord,
+            string[]? stopWords,
             CompoundOperator firstCompatibilityOperator,
             out ShellSyntaxNode? command,
-            out string? error)
+            out string? error,
+            bool stopAtCaseTerminator = false)
         {
             command = null;
             error = null;
             SkipNewlines();
             if (_position == _tokens.Count ||
                 stopAtRightParen && IsOperator(")") ||
-                stopWord is not null && IsWord(stopWord))
+                IsAnyWord(stopWords) ||
+                stopAtCaseTerminator && IsCaseTerminator())
             {
                 return true;
             }
@@ -343,7 +345,8 @@ internal static partial class BashCommandParser
                     break;
                 }
 
-                if (stopWord is not null && IsWord(stopWord))
+                if (IsAnyWord(stopWords) ||
+                    stopAtCaseTerminator && IsCaseTerminator())
                 {
                     break;
                 }
@@ -363,7 +366,8 @@ internal static partial class BashCommandParser
                 SkipNewlines();
                 if (_position == _tokens.Count ||
                     stopAtRightParen && IsOperator(")") ||
-                    stopWord is not null && IsWord(stopWord))
+                    IsAnyWord(stopWords) ||
+                    stopAtCaseTerminator && IsCaseTerminator())
                 {
                     if (listOperator == CompoundOperator.Sequence)
                     {
@@ -488,7 +492,22 @@ internal static partial class BashCommandParser
                 return TryParseForIn(out command, out error);
             }
 
-            if (IsWord("do") || IsWord("done"))
+            if (IsWord("while") || IsWord("until"))
+            {
+                return TryParseConditionLoop(out command, out error);
+            }
+
+            if (IsWord("if"))
+            {
+                return TryParseIf(out command, out error);
+            }
+
+            if (IsWord("case"))
+            {
+                return TryParseCase(out command, out error);
+            }
+
+            if (IsAnyWord(StrayKeywords))
             {
                 error = $"stray Bash control-flow keyword '{_tokens[_position].Value}'";
                 return false;
@@ -796,6 +815,17 @@ internal static partial class BashCommandParser
             }
             var executionBoundary =
                 BashCwdInvocationGrammar.ClassifyExecutionBoundary(emitted);
+            if (executionBoundary == BashExecutionBoundaryKind.ExecutionBearingBuiltin &&
+                IsModeledRead(emitted))
+            {
+                if (!TryAcceptReadNames(emitted, out error))
+                {
+                    return false;
+                }
+
+                executionBoundary = BashExecutionBoundaryKind.Allowed;
+            }
+
             if (executionBoundary == BashExecutionBoundaryKind.ExecutionBearingBuiltin)
             {
                 error = "Bash execution-bearing builtin requires structure-aware state analysis";
@@ -835,7 +865,8 @@ internal static partial class BashCommandParser
             var dispatchKind = BashCwdInvocationGrammar.Classify(
                 emitted,
                 out _);
-            var isPotentialStateMutation = IsPotentialBindingMutation(emitted);
+            var isPotentialStateMutation = IsPotentialBindingMutation(emitted) &&
+                !IsModeledRead(emitted);
             var isModeledCwdTransfer = dispatchKind == BashDispatchKind.CwdTransfer;
             if (_activeLoopBindings.Count > 0 &&
                 isPotentialStateMutation &&
@@ -848,7 +879,8 @@ internal static partial class BashCommandParser
             _hasUnmodeledShellStateMutation |=
                 isPotentialStateMutation && !isModeledCwdTransfer;
             _hasUnmodeledVariableStateMutation |=
-                IsPotentialVariableStateMutation(emitted) && !isModeledCwdTransfer;
+                IsPotentialVariableStateMutation(emitted) && !isModeledCwdTransfer &&
+                !IsModeledRead(emitted);
             if ((_hasUnmodeledVariableStateMutation || IsWaitWithOption(emitted)) &&
                 !TryRevokeAllLaunchFacts(out error))
             {
@@ -1077,7 +1109,7 @@ internal static partial class BashCommandParser
             _loopDepth++;
             var parsedBody = TryParseList(
                 stopAtRightParen: false,
-                stopWord: "done",
+                stopWords: DoneWord,
                 CompoundOperator.None,
                 out var bodyCommand,
                 out error);
@@ -1137,6 +1169,449 @@ internal static partial class BashCommandParser
             return true;
         }
 
+        /// <summary>
+        /// Parses <c>while COND; do BODY; done</c> and the <c>until</c> form
+        /// (#ISSUE). The condition and the body both repeat, so both parse at
+        /// loop depth.
+        /// </summary>
+        private bool TryParseConditionLoop(
+            out ShellSyntaxNode? command,
+            out string? error)
+        {
+            command = null;
+            if (!TryEnterCompound(out error))
+            {
+                return false;
+            }
+
+            var keyword = _tokens[_position++];
+            var kind = keyword.Value == "while" ? ConditionLoopKind.While : ConditionLoopKind.Until;
+            var attribution = SnapshotAttribution();
+            _loopDepth++;
+            var conditionStart = keyword.SourceStart + keyword.SourceLength;
+            var parsed = TryParseRequiredList(DoWord, "condition", out var condition, out error);
+            if (parsed && !IsWord("do"))
+            {
+                error = "Bash condition loop is missing 'do'";
+                parsed = false;
+            }
+
+            BashToken? doToken = null;
+            ShellSyntaxNode? body = null;
+            if (parsed)
+            {
+                doToken = _tokens[_position++];
+                parsed = TryParseRequiredList(DoneWord, "body", out body, out error);
+                if (parsed && !IsWord("done"))
+                {
+                    error = "Bash condition loop is missing 'done'";
+                    parsed = false;
+                }
+            }
+
+            _loopDepth--;
+            if (!parsed)
+            {
+                return false;
+            }
+
+            var doneToken = _tokens[_position++];
+            var doWord = doToken!.Value;
+            RestoreAttribution(attribution);
+            command = new ConditionLoopSyntax
+            {
+                LoopKind = kind,
+                Condition = Block(condition!, conditionStart, doWord.SourceStart),
+                Body = Block(
+                    body!,
+                    doWord.SourceStart + doWord.SourceLength,
+                    doneToken.SourceStart),
+                SourceStart = keyword.SourceStart,
+                SourceLength = doneToken.SourceStart + doneToken.SourceLength - keyword.SourceStart,
+            };
+            return true;
+        }
+
+        /// <summary>
+        /// Parses <c>if COND; then BODY; [elif COND; then BODY;]... [else
+        /// BODY;] fi</c> (#ISSUE).
+        /// </summary>
+        private bool TryParseIf(
+            out ShellSyntaxNode? command,
+            out string? error)
+        {
+            command = null;
+            if (!TryEnterCompound(out error))
+            {
+                return false;
+            }
+
+            var ifToken = _tokens[_position];
+            var attribution = SnapshotAttribution();
+            var branches = new List<ConditionalBranchSyntax>();
+            ShellBlockSyntax? @else = null;
+            while (true)
+            {
+                var branchKeyword = _tokens[_position++];
+                var conditionStart = branchKeyword.SourceStart + branchKeyword.SourceLength;
+                if (!TryParseRequiredList(ThenWord, "condition", out var condition, out error))
+                {
+                    return false;
+                }
+
+                if (!IsWord("then"))
+                {
+                    error = "Bash if statement is missing 'then'";
+                    return false;
+                }
+
+                var thenToken = _tokens[_position++];
+                if (!TryParseRequiredList(BranchEndWords, "body", out var body, out error))
+                {
+                    return false;
+                }
+
+                if (_position == _tokens.Count)
+                {
+                    error = "Bash if statement is missing 'fi'";
+                    return false;
+                }
+
+                var bodyEnd = _tokens[_position].SourceStart;
+                branches.Add(new ConditionalBranchSyntax
+                {
+                    Condition = Block(condition!, conditionStart, thenToken.SourceStart),
+                    Body = Block(body!, thenToken.SourceStart + thenToken.SourceLength, bodyEnd),
+                    SourceStart = branchKeyword.SourceStart,
+                    SourceLength = bodyEnd - branchKeyword.SourceStart,
+                });
+                if (!IsWord("elif"))
+                {
+                    break;
+                }
+            }
+
+            if (IsWord("else"))
+            {
+                var elseToken = _tokens[_position++];
+                if (!TryParseRequiredList(FiWord, "body", out var elseBody, out error))
+                {
+                    return false;
+                }
+
+                if (_position == _tokens.Count)
+                {
+                    error = "Bash if statement is missing 'fi'";
+                    return false;
+                }
+
+                @else = Block(
+                    elseBody!,
+                    elseToken.SourceStart + elseToken.SourceLength,
+                    _tokens[_position].SourceStart);
+            }
+
+            if (!IsWord("fi"))
+            {
+                error = "Bash if statement is missing 'fi'";
+                return false;
+            }
+
+            var fiToken = _tokens[_position++];
+            RestoreAttribution(attribution);
+            command = new ConditionalSyntax
+            {
+                Branches = branches,
+                Else = @else,
+                SourceStart = ifToken.SourceStart,
+                SourceLength = fiToken.SourceStart + fiToken.SourceLength - ifToken.SourceStart,
+            };
+            return true;
+        }
+
+        /// <summary>
+        /// Parses <c>case WORD in [(]PATTERN[|PATTERN]...) LIST ;; ... esac</c>
+        /// (#ISSUE). The subject and the patterns are words without a command
+        /// substitution. A named expansion in them uses the same gate as a
+        /// command word. Only the <c>;;</c> item terminator is supported.
+        /// </summary>
+        private bool TryParseCase(
+            out ShellSyntaxNode? command,
+            out string? error)
+        {
+            command = null;
+            if (!TryEnterCompound(out error))
+            {
+                return false;
+            }
+
+            var caseToken = _tokens[_position++];
+            if (_position == _tokens.Count ||
+                _tokens[_position].Kind is not (BashTokenKind.Word or BashTokenKind.QuotedString))
+            {
+                error = "Bash case statement requires one subject word";
+                return false;
+            }
+
+            var subjectToken = _tokens[_position++];
+            if (!TryAcceptCaseWord(subjectToken, out error))
+            {
+                return false;
+            }
+
+            if (!IsWord("in"))
+            {
+                error = "Bash case statement is missing 'in'";
+                return false;
+            }
+
+            _position++;
+            SkipNewlines();
+            var attribution = SnapshotAttribution();
+            var items = new List<CaseItemSyntax>();
+            while (!IsWord("esac"))
+            {
+                if (_position == _tokens.Count)
+                {
+                    error = "Bash case statement is missing 'esac'";
+                    return false;
+                }
+
+                var itemStart = _tokens[_position].SourceStart;
+                if (IsOperator("("))
+                {
+                    _position++;
+                }
+
+                var patterns = new List<ShellSourceFragment>();
+                while (true)
+                {
+                    if (_position == _tokens.Count ||
+                        _tokens[_position].Kind is not (BashTokenKind.Word or BashTokenKind.QuotedString))
+                    {
+                        error = "Bash case item requires a pattern word";
+                        return false;
+                    }
+
+                    var pattern = _tokens[_position++];
+                    if (!TryAcceptCaseWord(pattern, out error))
+                    {
+                        return false;
+                    }
+
+                    patterns.Add(Fragment(pattern));
+                    if (IsOperator("|"))
+                    {
+                        _position++;
+                        continue;
+                    }
+
+                    break;
+                }
+
+                if (!IsOperator(")"))
+                {
+                    error = "Bash case item is missing ')'";
+                    return false;
+                }
+
+                var closeToken = _tokens[_position++];
+                if (!TryParseList(
+                        stopAtRightParen: false,
+                        EsacWord,
+                        CompoundOperator.None,
+                        out var body,
+                        out error,
+                        stopAtCaseTerminator: true))
+                {
+                    return false;
+                }
+
+                var bodyEnd = _position < _tokens.Count
+                    ? _tokens[_position].SourceStart
+                    : _sourceStart + _sourceLength;
+                var bodyStart = closeToken.SourceStart + closeToken.SourceLength;
+                items.Add(new CaseItemSyntax
+                {
+                    Patterns = patterns,
+                    Body = body is null
+                        ? new ShellBlockSyntax
+                        {
+                            SourceStart = bodyStart,
+                            SourceLength = bodyEnd - bodyStart,
+                        }
+                        : Block(body, bodyStart, bodyEnd),
+                    SourceStart = itemStart,
+                    SourceLength = bodyEnd - itemStart,
+                });
+                if (IsCaseTerminator())
+                {
+                    _position += 2;
+                    SkipNewlines();
+                    continue;
+                }
+
+                if (!IsWord("esac"))
+                {
+                    error = "Bash case item must end with ';;' or 'esac'";
+                    return false;
+                }
+            }
+
+            var esacToken = _tokens[_position++];
+            RestoreAttribution(attribution);
+            command = new CaseSyntax
+            {
+                Subject = Fragment(subjectToken),
+                Items = items,
+                SourceStart = caseToken.SourceStart,
+                SourceLength = esacToken.SourceStart + esacToken.SourceLength - caseToken.SourceStart,
+            };
+            return true;
+        }
+
+        private bool TryAcceptCaseWord(BashToken token, out string? error)
+        {
+            foreach (var value in TokenValues(new[] { token }))
+            {
+                foreach (var fragment in value.Fragments)
+                {
+                    if (fragment.Kind == ShellValueFragmentKind.Opaque)
+                    {
+                        error = "a command substitution in a Bash case word is not supported";
+                        return false;
+                    }
+                }
+            }
+
+            var tokens = new[] { token };
+            if (ContainsNamedParameterExpansion(tokens) &&
+                (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive ||
+                 _hasUnmodeledVariableStateMutation) &&
+                !CanPublishActiveLoopBindingFacts(tokens) &&
+                !CanPublishBoundedAssignmentFacts(tokens) &&
+                !CanPublishLaunchFacts(tokens))
+            {
+                error = "Bash named parameter expansion requires proved variable-attribute state";
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
+
+        /// <summary>
+        /// True for a direct, bounded <c>read</c> (#ISSUE) in the top-level
+        /// shell under the fresh-process mode. The state pass binds each name
+        /// to an unknown value.
+        /// </summary>
+        private bool IsModeledRead(Clause clause) =>
+            _bashCDepth == 0 &&
+            _options.InitialStateMode == BashInitialStateMode.FreshNonInteractiveNoStartup &&
+            !_hasUnmodeledVariableStateMutation &&
+            BashReadBuiltin.IsBoundedRead(clause);
+
+        private bool TryAcceptReadNames(Clause clause, out string? error)
+        {
+            BashReadBuiltin.TryGetNames(clause, out var names);
+            foreach (var (name, _) in names)
+            {
+                if (_activeLoopBindings.Contains(name))
+                {
+                    error = "a Bash loop binding cannot be reassigned in its loop";
+                    return false;
+                }
+
+                if (_loopDepth > 0 &&
+                    _options.LaunchEnvironment?.TryGetLiveValue(name, out _) == true)
+                {
+                    error = "a Bash launch variable assignment inside a loop is not supported";
+                    return false;
+                }
+
+                RevokeLaunchFact(name);
+                _boundedAssignmentNames.Add(name);
+            }
+
+            error = null;
+            return true;
+        }
+
+        private bool TryEnterCompound(out string? error)
+        {
+            if (_hasUnmodeledShellStateMutation)
+            {
+                error = "a Bash compound command after prior shell-state mutation requires structure-aware state analysis";
+                return false;
+            }
+
+            if (_structuralDepth + _subshellDepth + _loopDepth >=
+                ShellAnalysisLimits.MaxStructuralNesting)
+            {
+                error = "Bash structural nesting depth exceeded (>16)";
+                return false;
+            }
+
+            error = null;
+            return true;
+        }
+
+        private bool TryParseRequiredList(
+            string[] stopWords,
+            string part,
+            out ShellSyntaxNode? command,
+            out string? error)
+        {
+            if (!TryParseList(
+                    stopAtRightParen: false,
+                    stopWords,
+                    CompoundOperator.None,
+                    out command,
+                    out error))
+            {
+                return false;
+            }
+
+            if (command is null)
+            {
+                error = $"Bash compound command {part} cannot be empty";
+                return false;
+            }
+
+            return true;
+        }
+
+        private static ShellBlockSyntax Block(ShellSyntaxNode statement, int start, int end) =>
+            new()
+            {
+                Statements = new[] { statement },
+                SourceStart = start,
+                SourceLength = Math.Max(0, end - start),
+            };
+
+        private ShellSourceFragment Fragment(BashToken token) =>
+            new()
+            {
+                Raw = SourceSlice(_source, token),
+                SourceStart = token.SourceStart,
+                SourceLength = token.SourceLength,
+            };
+
+        // A `cd` inside a branch or a loop can run or not. The compatibility
+        // attribution after the compound is then not proved. The state pass
+        // owns the exact directory facts.
+        private (string? Cwd, bool IsDynamic) SnapshotAttribution() =>
+            (_attribution.ResolvedCwd, _attribution.IsDynamic);
+
+        private void RestoreAttribution((string? Cwd, bool IsDynamic) before)
+        {
+            if (!string.Equals(before.Cwd, _attribution.ResolvedCwd, StringComparison.Ordinal) ||
+                before.IsDynamic != _attribution.IsDynamic)
+            {
+                _attribution.SetDynamicAttribution();
+            }
+        }
+
         private bool TryParseSubshell(
             CompoundOperator compatibilityOperator,
             out ShellSyntaxNode? command,
@@ -1157,7 +1632,7 @@ internal static partial class BashCommandParser
             _subshellDepth++;
             var parsed = TryParseList(
                 stopAtRightParen: true,
-                stopWord: null,
+                stopWords: null,
                 compatibilityOperator,
                 out var bodyCommand,
                 out error);
@@ -1258,6 +1733,42 @@ internal static partial class BashCommandParser
                 value,
                 StringComparison.Ordinal) &&
             string.Equals(_tokens[_position].Value, value, StringComparison.Ordinal);
+
+        private static readonly string[] DoneWord = { "done" };
+        private static readonly string[] DoWord = { "do" };
+        private static readonly string[] ThenWord = { "then" };
+        private static readonly string[] BranchEndWords = { "elif", "else", "fi" };
+        private static readonly string[] FiWord = { "fi" };
+        private static readonly string[] EsacWord = { "esac" };
+        private static readonly string[] StrayKeywords =
+            { "do", "done", "then", "elif", "else", "fi", "esac" };
+
+        // `;;` ends a case item. The lexer gives two adjacent `;` operators.
+        private bool IsCaseTerminator() =>
+            IsOperator(";") &&
+            _position + 1 < _tokens.Count &&
+            _tokens[_position + 1].Kind == BashTokenKind.Operator &&
+            _tokens[_position + 1].OperatorText == ";" &&
+            _tokens[_position + 1].SourceStart ==
+                _tokens[_position].SourceStart + _tokens[_position].SourceLength;
+
+        private bool IsAnyWord(string[]? words)
+        {
+            if (words is null)
+            {
+                return false;
+            }
+
+            foreach (var word in words)
+            {
+                if (IsWord(word))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
 
         private bool IsListTerminator() =>
             IsOperator(";") ||

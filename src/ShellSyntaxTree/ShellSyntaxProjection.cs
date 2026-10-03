@@ -737,6 +737,9 @@ internal static class ShellSyntaxProjection
                         nextDepth,
                         isAttachedExecutionRegion),
                 ShellAssignmentSyntax assignment => TryVisitAssignment(assignment, nextDepth),
+                ConditionLoopSyntax loop => TryVisitConditionLoop(loop, nextDepth),
+                ConditionalSyntax conditional => TryVisitConditional(conditional, nextDepth),
+                CaseSyntax caseSyntax => TryVisitCase(caseSyntax, nextDepth),
                 _ => false,
             };
 
@@ -881,6 +884,127 @@ internal static class ShellSyntaxProjection
                         CommandOccurrenceRole.Substitution,
                         structuralDepth,
                         nestedCollectionChildIndex: index))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// The condition commands of a <c>while</c> or <c>until</c> loop have
+        /// the <c>Condition</c> role. The body has the <c>LoopBody</c> role
+        /// (#ISSUE).
+        /// </summary>
+        private bool TryVisitConditionLoop(ConditionLoopSyntax loop, int structuralDepth) =>
+            loop.LoopKind is ConditionLoopKind.While or ConditionLoopKind.Until &&
+            loop.Condition is not null &&
+            loop.Body is not null &&
+            TryVisitChild(
+                loop,
+                loop.Condition,
+                CommandAncestryRegion.Condition,
+                childIndex: null,
+                CommandOccurrenceRole.Condition,
+                structuralDepth) &&
+            TryVisitChild(
+                loop,
+                loop.Body,
+                CommandAncestryRegion.LoopBody,
+                childIndex: null,
+                CommandOccurrenceRole.LoopBody,
+                structuralDepth);
+
+        /// <summary>
+        /// Each branch condition has the <c>Condition</c> role, and each body
+        /// has the <c>Branch</c> role. The <c>else</c> body has the branch
+        /// index after the last branch (#ISSUE).
+        /// </summary>
+        private bool TryVisitConditional(
+            ConditionalSyntax conditional,
+            int structuralDepth)
+        {
+            if (conditional.Branches is null || conditional.Branches.Count == 0)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < conditional.Branches.Count; index++)
+            {
+                var branch = conditional.Branches[index];
+                if (branch is null ||
+                    branch.Condition is null ||
+                    branch.Body is null ||
+                    !IsValidSpan(branch.SourceStart, branch.SourceLength) ||
+                    !TryVisitChild(
+                        conditional,
+                        branch.Condition,
+                        CommandAncestryRegion.Condition,
+                        index,
+                        CommandOccurrenceRole.Condition,
+                        structuralDepth) ||
+                    !TryVisitChild(
+                        conditional,
+                        branch.Body,
+                        CommandAncestryRegion.Branch,
+                        index,
+                        CommandOccurrenceRole.Branch,
+                        structuralDepth))
+                {
+                    return false;
+                }
+            }
+
+            return conditional.Else is null ||
+                   TryVisitChild(
+                       conditional,
+                       conditional.Else,
+                       CommandAncestryRegion.Branch,
+                       conditional.Branches.Count,
+                       CommandOccurrenceRole.Branch,
+                       structuralDepth);
+        }
+
+        private bool TryVisitCase(
+            CaseSyntax caseSyntax,
+            int structuralDepth)
+        {
+            if (caseSyntax.Items is null ||
+                caseSyntax.Subject is null ||
+                !IsValidSourceFragment(caseSyntax.Subject))
+            {
+                return false;
+            }
+
+            for (var index = 0; index < caseSyntax.Items.Count; index++)
+            {
+                var item = caseSyntax.Items[index];
+                if (item is null ||
+                    item.Body is null ||
+                    item.Patterns is null ||
+                    item.Patterns.Count == 0 ||
+                    !IsValidSpan(item.SourceStart, item.SourceLength) ||
+                    ContainsNull(item.Patterns))
+                {
+                    return false;
+                }
+
+                foreach (var pattern in item.Patterns)
+                {
+                    if (!IsValidSourceFragment(pattern))
+                    {
+                        return false;
+                    }
+                }
+
+                if (!TryVisitChild(
+                        caseSyntax,
+                        item.Body,
+                        CommandAncestryRegion.Branch,
+                        index,
+                        CommandOccurrenceRole.Branch,
+                        structuralDepth))
                 {
                     return false;
                 }
@@ -1044,6 +1168,9 @@ internal static class ShellSyntaxProjection
 
         private static bool CountsTowardStructuralDepth(ShellSyntaxNode node) =>
             node is ForEachSyntax or
+                ConditionLoopSyntax or
+                ConditionalSyntax or
+                CaseSyntax or
                 GroupSyntax or
                 CommandSubstitutionSyntax or
                 ExecutionRegionSyntax;
