@@ -358,7 +358,8 @@ public class CorpusRunnerTests
         BashToken token)
     {
         if (node is ForEachSyntax forEach &&
-            IsForEachStructuralToken(forEach, token))
+            IsForEachStructuralToken(forEach, token) ||
+            IsCompoundStructuralToken(node, token))
         {
             return true;
         }
@@ -393,8 +394,47 @@ public class CorpusRunnerTests
                 IsBashForEachStructuralToken(substitution.Body, token),
             ExecutionRegionSyntax executionRegion =>
                 IsBashForEachStructuralToken(executionRegion.Body, token),
+            CaseSyntax caseSyntax => caseSyntax.Items.Any(
+                item => IsBashForEachStructuralToken(item.Body, token)),
+            ShellAssignmentSyntax assignment => assignment.Substitutions.Any(
+                child => IsBashForEachStructuralToken(child, token)),
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// A keyword, a case subject, or a case pattern of a while, until, if, or
+    /// case statement is structure. It is in the statement span but in no
+    /// condition or body block (v0.4.0-beta.13).
+    /// </summary>
+    private static bool IsCompoundStructuralToken(ShellSyntaxNode node, BashToken token)
+    {
+        var blocks = node switch
+        {
+            ConditionLoopSyntax loop => new[] { loop.Condition, loop.Body },
+            ConditionalSyntax conditional => conditional.Branches
+                .SelectMany(branch => new[] { branch.Condition, branch.Body })
+                .Concat(conditional.Else is null ? Array.Empty<ShellBlockSyntax>() : new[] { conditional.Else })
+                .ToArray(),
+            CaseSyntax caseSyntax => caseSyntax.Items.Select(item => item.Body).ToArray(),
+            _ => null,
+        };
+        if (blocks is null || node.SourceStart is not int start || node.SourceLength is not int length)
+        {
+            return false;
+        }
+
+        var tokenEnd = token.SourceStart + token.SourceLength;
+        if (token.SourceStart < start || tokenEnd > start + length)
+        {
+            return false;
+        }
+
+        return !blocks.Any(block =>
+            block.SourceStart is int blockStart &&
+            block.SourceLength is int blockLength &&
+            token.SourceStart >= blockStart &&
+            tokenEnd <= blockStart + blockLength);
     }
 
     private static bool IsForEachStructuralToken(

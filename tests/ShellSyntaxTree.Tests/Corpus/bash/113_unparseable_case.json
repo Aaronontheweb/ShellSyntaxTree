@@ -3,7 +3,7 @@
   "input": "case x in y esac",
   "expected": {
     "isUnparseable": true,
-    "unparseableReasonContains": "'case'"
+    "unparseableReasonContains": "case item is missing ')'"
   },
-  "notes": "SPEC §11: case/esac control-flow is not supported in v0.1. The case keyword as first verb fires BashVerbs.ControlFlowKeywords detection."
+  "notes": "v0.4.0-beta.13: case statements parse, but this one is malformed. The item pattern y has no closing parenthesis, so the parse fails closed. Before beta.13 the control-flow keyword detector rejected every case statement."
 }

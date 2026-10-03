@@ -1197,6 +1197,16 @@ internal static class BashLexer
         }
 
         var resolverValue = value.Build();
+
+        // A word that is only `[` has no closing `]`, so Bash does not treat
+        // it as a pattern. It names the `[` test builtin (#212).
+        if (resolverValue.Fragments.Count == 1 &&
+            resolverValue.Decoded == "[" &&
+            resolverValue.Fragments[0].Expansion is { Kind: ShellExpansionKind.Glob })
+        {
+            resolverValue = ShellValue.Literal("[", start, 1);
+        }
+
         if (resolverValue.Decoded.Length == 0)
         {
             // Defensive: caller should not invoke ReadWord on a position

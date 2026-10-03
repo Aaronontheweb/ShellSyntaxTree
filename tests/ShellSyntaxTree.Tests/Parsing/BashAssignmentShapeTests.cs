@@ -321,7 +321,7 @@ public class BashAssignmentShapeTests
 
     [Theory]
     [InlineData("x=1; wait -p y; cat \"$x\"")]
-    [InlineData("x=1; read x; cat \"$x\"")]
+    [InlineData("x=1; read -a x; cat \"$x\"")]
     [InlineData("x=1; export x; cat \"$x\"")]
     [InlineData("x=1; unset x; cat \"$x\"")]
     [InlineData("x=1; for x in a b; do cat \"$x\"; done")]

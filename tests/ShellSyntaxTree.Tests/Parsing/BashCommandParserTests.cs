@@ -529,11 +529,11 @@ public class BashCommandParserTests
     }
 
     [Fact]
-    public void Control_flow_while_keyword_marks_outer_unparseable()
+    public void Control_flow_select_keyword_marks_outer_unparseable()
     {
-        var result = Parse("while true; do echo hi; done");
+        var result = Parse("select x in a b; do echo hi; done");
         Assert.True(result.IsUnparseable);
-        Assert.Contains("'while'", result.UnparseableReason!);
+        Assert.Contains("'select'", result.UnparseableReason!);
     }
 
     [Fact]

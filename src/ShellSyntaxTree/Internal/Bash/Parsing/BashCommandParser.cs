@@ -396,7 +396,9 @@ internal static partial class BashCommandParser
             if (nextIsVerbSlot
                 && t.Kind == BashTokenKind.Word
                 && BashVerbs.ControlFlowKeywords.Contains(t.Value)
-                && t.Value is not ("for" or "do" or "done"))
+                && t.Value is not ("for" or "do" or "done" or
+                    "while" or "until" or "if" or "then" or "elif" or "else" or "fi" or
+                    "case" or "esac"))
             {
                 reason = $"control-flow keyword '{t.Value}' is not supported in v0.1";
                 return true;

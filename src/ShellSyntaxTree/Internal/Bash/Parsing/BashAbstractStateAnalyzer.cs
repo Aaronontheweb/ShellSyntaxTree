@@ -105,8 +105,9 @@ internal sealed class BashAbstractStateAnalyzer
                 resetCompatibilityAttribution: true,
                 clearBindings: false),
             ForEachSyntax forEach => AnalyzeForEach(forEach, input),
-            ConditionLoopSyntax => BashFlowResult.Both(input.WithUnknownCwd()),
+            ConditionLoopSyntax loop => AnalyzeConditionLoop(loop, input),
             ConditionalSyntax conditional => AnalyzeConditional(conditional, input),
+            CaseSyntax caseSyntax => AnalyzeCase(caseSyntax, input),
             ConditionalBranchSyntax branch => AnalyzeBranch(branch, input),
             ShellAssignmentSyntax assignment => AnalyzeAssignment(assignment, input),
             _ => BashFlowResult.Both(input.WithUnknownCwd()),
@@ -232,7 +233,8 @@ internal sealed class BashAbstractStateAnalyzer
         }
 
         if (input.Bindings.HasBindings &&
-            IsPotentialPersistentBindingMutation(simple.Clause))
+            IsPotentialPersistentBindingMutation(simple.Clause) &&
+            !IsModeledRead(simple.Clause))
         {
             _isComplete = false;
             return new BashFlowResult(null, null);
@@ -240,6 +242,11 @@ internal sealed class BashAbstractStateAnalyzer
 
         RecordInput(simple.Clause, input);
         RecordEffectiveArguments(simple, input);
+        if (TryAnalyzeRead(simple.Clause, input, out var readFlow))
+        {
+            return readFlow;
+        }
+
         var cwdTransfer = AnalyzeEffectiveCwdTransfer(simple, input);
         if (cwdTransfer is BashFlowResult effectiveFlow)
         {
@@ -258,6 +265,55 @@ internal sealed class BashAbstractStateAnalyzer
             simple.Clause,
             ShellWorkingDirectoryEffectFacts.Unknown);
         return new BashFlowResult(success, input);
+    }
+
+    private bool IsModeledRead(Clause clause) =>
+        _options.InitialStateMode == BashInitialStateMode.FreshNonInteractiveNoStartup &&
+        BashReadBuiltin.IsBoundedRead(clause);
+
+    /// <summary>
+    /// A bounded <c>read</c> (#212) assigns each name from its input, also
+    /// when it fails at the end of the input. Each name is bound to an
+    /// unknown value on both paths.
+    /// </summary>
+    private bool TryAnalyzeRead(Clause clause, BashAbstractState input, out BashFlowResult flow)
+    {
+        flow = default;
+        if (!IsModeledRead(clause) ||
+            !BashReadBuiltin.TryGetNames(clause, out var names))
+        {
+            return false;
+        }
+
+        var output = input;
+        foreach (var (name, elementIndex) in names)
+        {
+            var element = clause.Elements[elementIndex];
+            if (element.SourceStart is not int start ||
+                element.SourceLength is not int length ||
+                length <= 0)
+            {
+                _isComplete = false;
+                return false;
+            }
+
+            output = output
+                .WithBinding(name, ShellValueDomainFacts.Unknown)
+                .WithAssignment(new ShellVariableAssignment
+                {
+                    Name = name,
+                    AuthoredValue = new ShellValueDomain.Unknown(),
+                    EffectiveValue = new ShellValueDomain.Unknown(),
+                    Scope = ShellVariableAssignmentScope.ShellState,
+                    MayAffectProcessEnvironment = true,
+                    SourceStart = start,
+                    SourceLength = length,
+                });
+        }
+
+        RecordWorkingDirectoryEffect(clause, ShellWorkingDirectoryEffectFacts.Unchanged);
+        flow = BashFlowResult.Both(output);
+        return true;
     }
 
     private BashFlowResult AnalyzeList(CommandListSyntax list, BashAbstractState input)
@@ -501,32 +557,138 @@ internal sealed class BashAbstractStateAnalyzer
             inner.OnFailure is null ? null : input);
     }
 
+    /// <summary>
+    /// Bash tries each condition in order. A later condition runs only when
+    /// every earlier condition failed. The first successful condition runs its
+    /// body. With no successful condition and no <c>else</c>, the statement
+    /// succeeds (#212).
+    /// </summary>
     private BashFlowResult AnalyzeConditional(
         ConditionalSyntax conditional,
         BashAbstractState input)
     {
         BashAbstractState? success = null;
-        BashAbstractState? failure = input;
+        BashAbstractState? failure = null;
+        BashAbstractState? pending = input;
         foreach (var branch in conditional.Branches)
         {
-            if (failure is null)
+            if (pending is null)
             {
                 break;
             }
 
-            var branchFlow = AnalyzeBranch(branch, failure.Value);
-            success = BashAbstractState.JoinNullable(success, branchFlow.OnSuccess);
-            failure = branchFlow.OnFailure;
+            var condition = AnalyzeBlock(branch.Condition, pending.Value);
+            if (condition.OnSuccess is BashAbstractState taken)
+            {
+                var body = AnalyzeBlock(branch.Body, taken);
+                success = BashAbstractState.JoinNullable(success, body.OnSuccess);
+                failure = BashAbstractState.JoinNullable(failure, body.OnFailure);
+            }
+
+            pending = condition.OnFailure;
         }
 
-        if (conditional.Else is not null && failure is not null)
+        if (pending is BashAbstractState unmatched)
         {
-            var elseFlow = AnalyzeBlock(conditional.Else, failure.Value);
-            success = BashAbstractState.JoinNullable(success, elseFlow.OnSuccess);
-            failure = elseFlow.OnFailure;
+            if (conditional.Else is not null)
+            {
+                var elseFlow = AnalyzeBlock(conditional.Else, unmatched);
+                success = BashAbstractState.JoinNullable(success, elseFlow.OnSuccess);
+                failure = BashAbstractState.JoinNullable(failure, elseFlow.OnFailure);
+            }
+            else
+            {
+                success = BashAbstractState.JoinNullable(success, unmatched);
+            }
         }
 
         return new BashFlowResult(success, failure);
+    }
+
+    /// <summary>
+    /// The parser cannot prove which pattern matches. Any one item body, or
+    /// none, can run. With no match, the statement succeeds (#212).
+    /// </summary>
+    private BashFlowResult AnalyzeCase(CaseSyntax caseSyntax, BashAbstractState input)
+    {
+        BashAbstractState? success = input;
+        BashAbstractState? failure = null;
+        foreach (var item in caseSyntax.Items)
+        {
+            var body = AnalyzeBlock(item.Body, input);
+            success = BashAbstractState.JoinNullable(success, body.OnSuccess);
+            failure = BashAbstractState.JoinNullable(failure, body.OnFailure);
+        }
+
+        return new BashFlowResult(success, failure);
+    }
+
+    /// <summary>
+    /// A <c>while</c> or <c>until</c> loop (#212). The head state joins the
+    /// loop entry and every body exit until it is stable. The loop ends when
+    /// the condition fails (<c>while</c>) or succeeds (<c>until</c>). The exit
+    /// status of the loop can be zero or not, so both paths get the exit
+    /// state.
+    /// </summary>
+    private BashFlowResult AnalyzeConditionLoop(
+        ConditionLoopSyntax loop,
+        BashAbstractState input)
+    {
+        if (loop.LoopKind is not (ConditionLoopKind.While or ConditionLoopKind.Until))
+        {
+            _isComplete = false;
+            return new BashFlowResult(null, null);
+        }
+
+        BashAbstractState? exit = null;
+        var head = input;
+        var wideningBase = input;
+        for (var iteration = 0;
+             iteration <= ShellAnalysisLimits.MaxValueCandidates + 1;
+             iteration++)
+        {
+            if (!TryConsumeLoopAnalysisTransition())
+            {
+                return new BashFlowResult(null, null);
+            }
+
+            if (iteration == ShellAnalysisLimits.MaxValueCandidates + 1)
+            {
+                // Widen disagreement after the finite-domain budget, then run
+                // the loop once more so occurrence facts reflect the widened
+                // head state.
+                head = BashAbstractState.Widen(wideningBase, head);
+            }
+
+            var condition = AnalyzeBlock(loop.Condition, head);
+            var (stay, leave) = loop.LoopKind == ConditionLoopKind.While
+                ? (condition.OnSuccess, condition.OnFailure)
+                : (condition.OnFailure, condition.OnSuccess);
+            exit = BashAbstractState.JoinNullable(exit, leave);
+            if (stay is not BashAbstractState bodyInput)
+            {
+                break;
+            }
+
+            var body = AnalyzeBlock(loop.Body, bodyInput);
+            if (body.JoinedState is not BashAbstractState bodyExit)
+            {
+                break;
+            }
+
+            var nextHead = BashAbstractState.Join(head, bodyExit);
+            if (head.StateEquals(nextHead))
+            {
+                break;
+            }
+
+            wideningBase = head;
+            head = nextHead;
+        }
+
+        return exit is BashAbstractState state
+            ? BashFlowResult.Both(state)
+            : new BashFlowResult(null, null);
     }
 
     private BashFlowResult AnalyzeBranch(
@@ -973,6 +1135,20 @@ internal sealed class BashAbstractStateAnalyzer
             case ConditionalBranchSyntax branch:
                 RecordUnvisitedBindingArguments(branch.Condition, bindingName);
                 RecordUnvisitedBindingArguments(branch.Body, bindingName);
+                break;
+            case CaseSyntax caseSyntax:
+                foreach (var item in caseSyntax.Items)
+                {
+                    RecordUnvisitedBindingArguments(item.Body, bindingName);
+                }
+
+                break;
+            case ShellAssignmentSyntax assignment:
+                foreach (var substitution in assignment.Substitutions)
+                {
+                    RecordUnvisitedBindingArguments(substitution.Body, bindingName);
+                }
+
                 break;
             case CommandSubstitutionSyntax substitution:
                 RecordUnvisitedBindingArguments(substitution.Body, bindingName);
@@ -1660,8 +1836,25 @@ internal sealed class BashAbstractStateAnalyzer
                 Body = RewriteBlock(substitution.Body, facts),
             },
             ShellAssignmentSyntax assignment => RewriteAssignment(assignment, facts),
+            CaseSyntax caseSyntax => caseSyntax with
+            {
+                Items = RewriteCaseItems(caseSyntax.Items, facts),
+            },
             _ => node,
         };
+
+    private IReadOnlyList<CaseItemSyntax> RewriteCaseItems(
+        IReadOnlyList<CaseItemSyntax> items,
+        Dictionary<Clause, CommandOccurrenceFacts> facts)
+    {
+        var rewritten = new CaseItemSyntax[items.Count];
+        for (var index = 0; index < rewritten.Length; index++)
+        {
+            rewritten[index] = items[index] with { Body = RewriteBlock(items[index].Body, facts) };
+        }
+
+        return rewritten;
+    }
 
     private ShellAssignmentSyntax RewriteAssignment(
         ShellAssignmentSyntax assignment,

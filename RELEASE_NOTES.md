@@ -1,3 +1,22 @@
+#### 0.4.0-beta.13 2026-10-03 ####
+
+This prerelease parses Bash `while`, `until`, `if`, and `case` statements (#212). Each command inside them is a normal occurrence.
+
+## Added
+
+- Public syntax nodes `ConditionLoopSyntax` (with `ConditionLoopKind`), `ConditionalSyntax`, `ConditionalBranchSyntax`, `CaseSyntax`, and `CaseItemSyntax`.
+- The occurrence role `Condition` for a command in a loop or branch condition, and `Branch` for a command in an `if` or `case` body. The ancestry regions `Condition` and `Branch` carry the branch or item index.
+- A bounded `read` builtin under `FreshNonInteractiveNoStartup`: each name gets an `Unknown` value and a `ShellState` assignment fact. `grep x f | while read l; do echo "$l"; done` now parses.
+- A lone `[` is a static program word, so `[ -d /x ]` parses as the test builtin.
+
+## Security and compatibility
+
+- The state pass joins the facts of each path. A directory or a binding that differs between branches or loop iterations is `Unknown`. An `elif` condition runs only after the earlier condition fails, and an `if` without `else` or a `case` with no match can skip every body.
+- These forms stay unparseable: a malformed statement, `select`, `[[`, a redirect after `done`, `fi`, or `esac`, the `;&` and `;;&` case terminators, a substitution in a case subject or pattern, `read -a`, `-e`, `-i`, `-p`, `IFS= read`, and nesting past the structural limit of 16. Deep nesting fails closed without recursion past the limit.
+- `echo [` now gives a literal `[` argument (`Kind=Literal`, `IsPath=false`) instead of a glob. No other parsed record changes.
+- A consumer that checks ancestry node types must add the new node types and the new role and region values. An unknown type or value must fail closed, as before.
+- The public API change is additive.
+
 #### 0.4.0-beta.12 2026-10-03 ####
 
 This prerelease accepts more Bash assignment shapes as bounded facts (#209). Each command in them is a normal occurrence, and a value that the parser cannot prove is `Unknown`.

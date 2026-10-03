@@ -670,6 +670,7 @@
     },
     {
       "id": "bash-while-command-condition",
+      "compatibilityProjectionLanded": true,
       "concern": "Executable condition and loop body",
       "input": "while curl https://example.invalid/ready; do rm /tmp/marker; done",
       "current": { "isUnparseable": true, "reasonContains": "'while'" },
@@ -692,6 +693,7 @@
     },
     {
       "id": "bash-if-branch-cwd-join",
+      "compatibilityProjectionLanded": true,
       "concern": "Divergent branch working directory",
       "input": "if test -f marker; then cd /a; else cd /b; fi; cat file.txt",
       "current": { "isUnparseable": true, "reasonContains": "'if'" },

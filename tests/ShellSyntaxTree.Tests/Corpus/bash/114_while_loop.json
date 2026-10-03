@@ -1,0 +1,27 @@
+{
+  "name": "while loop exposes its condition and body commands",
+  "input": "while true; do echo hi; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "true"
+        ],
+        "args": [],
+        "redirects": []
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "echo",
+          "hi"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "v0.4.0-beta.13: while/until loops parse. The condition command and the body command are normal occurrences with the Condition and LoopBody roles. Before beta.13 this entry was unparseable."
+}

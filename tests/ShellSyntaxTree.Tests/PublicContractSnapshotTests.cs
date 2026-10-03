@@ -23,10 +23,6 @@ public class PublicContractSnapshotTests
         {
             "ShellSyntaxTree.ShellSyntaxKind",
             "ShellSyntaxTree.LoopBindingSyntax",
-            "ShellSyntaxTree.ConditionLoopSyntax",
-            "ShellSyntaxTree.ConditionLoopKind",
-            "ShellSyntaxTree.ConditionalSyntax",
-            "ShellSyntaxTree.ConditionalBranchSyntax",
             "ShellSyntaxTree.EffectiveArgument",
             "ShellSyntaxTree.ShellValueDomainKind",
             "ShellSyntaxTree.RedirectOperation",
@@ -79,6 +75,28 @@ public class PublicContractSnapshotTests
             (nameof(ForEachSyntax.Iterable), typeof(ShellSourceFragment)),
             (nameof(ForEachSyntax.IteratorCommands), typeof(ShellBlockSyntax)),
             (nameof(ForEachSyntax.Body), typeof(ShellBlockSyntax)));
+        AssertResultRecord(
+            typeof(ConditionLoopSyntax),
+            (nameof(ConditionLoopSyntax.LoopKind), typeof(ConditionLoopKind)),
+            (nameof(ConditionLoopSyntax.Condition), typeof(ShellBlockSyntax)),
+            (nameof(ConditionLoopSyntax.Body), typeof(ShellBlockSyntax)));
+        AssertEnum<ConditionLoopKind>("Unknown", "While", "Until");
+        AssertResultRecord(
+            typeof(ConditionalSyntax),
+            (nameof(ConditionalSyntax.Branches), typeof(IReadOnlyList<ConditionalBranchSyntax>)),
+            (nameof(ConditionalSyntax.Else), typeof(ShellBlockSyntax)));
+        AssertResultRecord(
+            typeof(ConditionalBranchSyntax),
+            (nameof(ConditionalBranchSyntax.Condition), typeof(ShellBlockSyntax)),
+            (nameof(ConditionalBranchSyntax.Body), typeof(ShellBlockSyntax)));
+        AssertResultRecord(
+            typeof(CaseSyntax),
+            (nameof(CaseSyntax.Subject), typeof(ShellSourceFragment)),
+            (nameof(CaseSyntax.Items), typeof(IReadOnlyList<CaseItemSyntax>)));
+        AssertResultRecord(
+            typeof(CaseItemSyntax),
+            (nameof(CaseItemSyntax.Patterns), typeof(IReadOnlyList<ShellSourceFragment>)),
+            (nameof(CaseItemSyntax.Body), typeof(ShellBlockSyntax)));
         AssertResultRecord(
             typeof(ShellSourceFragment),
             (nameof(ShellSourceFragment.Raw), typeof(string)),
@@ -155,10 +173,11 @@ public class PublicContractSnapshotTests
 
         AssertEnum<CommandOccurrenceRole>(
             "Unknown", "Ordinary", "PipelineStage", "Iterator", "LoopBody",
-            "Substitution", "ExecutionRegion");
+            "Substitution", "ExecutionRegion", "Condition", "Branch");
         AssertEnum<CommandAncestryRegion>(
             "Unknown", "Root", "Statement", "PipelineStage", "GroupBody",
-            "Iterator", "LoopBody", "Substitution", "ExecutionRegion");
+            "Iterator", "LoopBody", "Substitution", "ExecutionRegion",
+            "Condition", "Branch");
     }
 
     [Fact]
