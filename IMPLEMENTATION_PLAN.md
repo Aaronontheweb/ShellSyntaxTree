@@ -17,7 +17,9 @@ priorities.
 - [x] Resolve supplied PowerShell `$env:NAME` values under the existing process-wide state rule.
 - [x] Revoke a supplied value after a statement that can change it. Keep unsupplied names, startup-capable modes, decoded child shells, and heredoc bodies fail closed.
 - [x] Prove that the corpus output with no caller option and with an empty launch environment is identical to 0.4.0-beta.8. Kill 23 manual mutants.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.9` and verify NuGet publication.
+- [x] Merge PR #201 after Linux and Windows CI. Tag `0.4.0-beta.9` on merge
+      `155bae2e` and verify NuGet publication. Workflow run 37097596601
+      published the package and the GitHub prerelease.
 - [ ] Netclaw supplies its launcher facts. The Netclaw owner does this change.
 
 ## Parked (from #200)
