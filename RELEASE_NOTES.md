@@ -1,3 +1,26 @@
+#### 0.4.0-beta.16 2026-10-03 ####
+
+This prerelease parses `export`, `set --`, and reads of unassigned variables under `FreshNonInteractiveNoStartup` (#221).
+
+## Added
+
+- A read of an unassigned plain `$NAME` or `${NAME}` in fresh mode is an `Unknown` value, as in isolated mode. `rm -rf "$BUILD_DIR/out"` now parses. After an unmodeled variable change (`declare`, `local`, `unset`, `readonly`, `export -n`), the read fails closed as before. `Unknown` mode does not change.
+- A bounded `export` in the top-level shell: each `NAME=value` operand is a `ShellState` assignment with the bounded assignment rules, in operand order. A plain `NAME` operand marks the name for export. `export -p` alone is a query. `export REPO_ROOT=/r; bash scripts/build.sh` now parses.
+- `set --` followed by words replaces the positional parameters. `$1` to `$9` in an assignment value give `Unknown`. `set -- $line; pid=$1; kill "$pid"` now parses.
+
+## Fixed
+
+- A decoded `bash -c` child now lists only the `ShellState` assignments that every path to it exports. Before, it listed every assignment of its parent, but a child process does not get an unexported variable. A subshell still lists every assignment.
+
+## Security and compatibility
+
+- An export of a shell-owned or loader name (`PATH`, `HOME`, `TMPDIR`, `CDPATH`, `LD_*`, `BASH_ENV`, `IFS`, `SHELLOPTS`, and the others that the assignment rule rejects) stays unparseable. Every other `export` option and every other `set` form (`set -e`, `set -o name`) stay unparseable.
+- An export of a supplied launch name revokes the launch fact. The later read gets the new authored value, or `Unknown`, and never the launch value.
+- An export in a pipeline stage or a background list runs in a subshell, so its value does not reach a later command.
+- A consumer that relied on fresh mode to reject an unassigned read must now check for `Unknown` values. `$HOME` keeps its documented `~` rule.
+- Only inputs that were unparseable change, apart from the `bash -c` assignment list above. A replay of 6,912 complete Netclaw shell calls gives 16 more parsed rows and no worse row.
+- There is no public API change.
+
 #### 0.4.0-beta.15 2026-10-03 ####
 
 This prerelease parses a heredoc inside a command substitution (#217).

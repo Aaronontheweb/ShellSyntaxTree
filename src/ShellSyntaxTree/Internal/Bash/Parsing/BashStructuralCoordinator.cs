@@ -871,6 +871,24 @@ internal static partial class BashCommandParser
                 executionBoundary = BashExecutionBoundaryKind.Allowed;
             }
 
+            BashExportFacts? exports = null;
+            if (executionBoundary == BashExecutionBoundaryKind.ExecutionBearingBuiltin &&
+                IsModeledExportCandidate(emitted, segmentTokens))
+            {
+                if (!TryAcceptExport(segmentTokens, out exports, out error))
+                {
+                    return false;
+                }
+
+                executionBoundary = BashExecutionBoundaryKind.Allowed;
+            }
+
+            if (executionBoundary == BashExecutionBoundaryKind.ExecutionBearingBuiltin &&
+                IsModeledSetPositional(emitted))
+            {
+                executionBoundary = BashExecutionBoundaryKind.Allowed;
+            }
+
             if (executionBoundary == BashExecutionBoundaryKind.ExecutionBearingBuiltin)
             {
                 error = "Bash execution-bearing builtin requires structure-aware state analysis";
@@ -897,8 +915,7 @@ internal static partial class BashCommandParser
             }
 
             if (ContainsNamedParameterExpansion(segmentTokens) &&
-                (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive ||
-                 _hasUnmodeledVariableStateMutation) &&
+                !AllowsUnknownNamedReads &&
                 !CanPublishActiveLoopBindingFacts(segmentTokens) &&
                 !CanPublishBoundedAssignmentFacts(segmentTokens) &&
                 !CanPublishLaunchFacts(segmentTokens))
@@ -910,8 +927,10 @@ internal static partial class BashCommandParser
             var dispatchKind = BashCwdInvocationGrammar.Classify(
                 emitted,
                 out _);
+            var isModeledBuiltin = IsModeledRead(emitted) || exports is not null ||
+                IsModeledSetPositional(emitted);
             var isPotentialStateMutation = IsPotentialBindingMutation(emitted) &&
-                !IsModeledRead(emitted);
+                !isModeledBuiltin;
             var isModeledCwdTransfer = dispatchKind == BashDispatchKind.CwdTransfer;
             if (_activeLoopBindings.Count > 0 &&
                 isPotentialStateMutation &&
@@ -925,7 +944,7 @@ internal static partial class BashCommandParser
                 isPotentialStateMutation && !isModeledCwdTransfer;
             _hasUnmodeledVariableStateMutation |=
                 IsPotentialVariableStateMutation(emitted) && !isModeledCwdTransfer &&
-                !IsModeledRead(emitted);
+                !isModeledBuiltin;
             if ((_hasUnmodeledVariableStateMutation || IsWaitWithOption(emitted)) &&
                 !TryRevokeAllLaunchFacts(out error))
             {
@@ -979,7 +998,8 @@ internal static partial class BashCommandParser
                 segmentTokens,
                 parsed.PathResolutions,
                 effectiveOptions,
-                assignmentValues);
+                assignmentValues,
+                exports);
             command = simple;
             return true;
         }
@@ -1569,8 +1589,7 @@ internal static partial class BashCommandParser
 
             var tokens = new[] { token };
             if (ContainsNamedParameterExpansion(tokens) &&
-                (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive ||
-                 _hasUnmodeledVariableStateMutation) &&
+                !AllowsUnknownNamedReads &&
                 !CanPublishActiveLoopBindingFacts(tokens) &&
                 !CanPublishBoundedAssignmentFacts(tokens) &&
                 !CanPublishLaunchFacts(tokens))
@@ -1588,6 +1607,120 @@ internal static partial class BashCommandParser
         /// shell under the fresh-process mode. The state pass binds each name
         /// to an unknown value.
         /// </summary>
+        /// <summary>
+        /// True when a named expansion of any name is safe to read as an
+        /// unknown value (#221). A new non-interactive process imports each
+        /// environment entry as an exported scalar, so no ambient nameref or
+        /// array attribute can run code. The isolated and fresh-process modes
+        /// both prove this until the source makes an unmodeled variable
+        /// change.
+        /// </summary>
+        private bool AllowsUnknownNamedReads =>
+            _options.InitialStateMode is BashInitialStateMode.IsolatedNonInteractive or
+                BashInitialStateMode.FreshNonInteractiveNoStartup &&
+            !_hasUnmodeledVariableStateMutation;
+
+        private bool IsModeledSetPositional(Clause clause) =>
+            _options.InitialStateMode == BashInitialStateMode.FreshNonInteractiveNoStartup &&
+            BashSetPositionalBuiltin.IsBounded(clause);
+
+        /// <summary>
+        /// A direct <c>export</c> in the top-level shell or a loop body of it,
+        /// under the fresh-process mode, with no redirect (#221).
+        /// </summary>
+        private bool IsModeledExportCandidate(Clause clause, IReadOnlyList<BashToken> tokens) =>
+            _options.InitialStateMode == BashInitialStateMode.FreshNonInteractiveNoStartup &&
+            _bashCDepth == 0 && _structuralDepth == 0 && _subshellDepth == 0 &&
+            !_hasUnmodeledShellStateMutation && !_hasUnmodeledVariableStateMutation &&
+            !clause.Verb.IsDynamic &&
+            clause.Verb.Tokens.Count > 0 &&
+            string.Equals(clause.Verb.Tokens[0], "export", StringComparison.Ordinal) &&
+            tokens.Count > 0 &&
+            tokens[0].Kind == BashTokenKind.Word &&
+            string.Equals(SourceSlice(_source, tokens[0]), "export", StringComparison.Ordinal) &&
+            clause.Redirects.Count == 0;
+
+        /// <summary>
+        /// Accepts <c>export NAME=value...</c> and <c>export NAME...</c>
+        /// (#221). Each assignment uses the bounded assignment rules and is
+        /// a shell-state assignment that can reach a child process. An option
+        /// other than a lone <c>-p</c> query fails closed.
+        /// </summary>
+        private bool TryAcceptExport(
+            IReadOnlyList<BashToken> tokens,
+            out BashExportFacts? exports,
+            out string? error)
+        {
+            exports = null;
+            var assignments = new List<(ShellVariableAssignment Assignment, BashAssignmentValue Value)>();
+            var names = new List<string>();
+            error = null;
+            if (tokens.Count == 2 &&
+                tokens[1].Kind == BashTokenKind.Word &&
+                string.Equals(SourceSlice(_source, tokens[1]), "-p", StringComparison.Ordinal))
+            {
+                exports = new BashExportFacts(assignments, names);
+                return true;
+            }
+
+            for (var index = 1; index < tokens.Count; index++)
+            {
+                var token = tokens[index];
+                if (token.Kind == BashTokenKind.Word && IsAssignmentWord(token))
+                {
+                    if (!TryCreateBoundedAssignment(
+                            token,
+                            ShellVariableAssignmentScope.ShellState,
+                            out var assignment,
+                            out var value,
+                            out error))
+                    {
+                        return false;
+                    }
+
+                    assignments.Add((assignment!, value!));
+                    names.Add(assignment!.Name);
+                    continue;
+                }
+
+                if (token.Kind != BashTokenKind.Word ||
+                    !HasExactLiteralValue(token) ||
+                    !string.Equals(SourceSlice(_source, token), token.Value, StringComparison.Ordinal) ||
+                    !BashVariableAssignmentGrammar.IsEligibleCommandEnvironmentName(token.Value))
+                {
+                    error = "Bash export accepts only bounded names and assignments";
+                    return false;
+                }
+
+                names.Add(token.Value);
+            }
+
+            foreach (var (assignment, _) in assignments)
+            {
+                if (_activeLoopBindings.Contains(assignment.Name))
+                {
+                    error = "a Bash loop binding cannot be reassigned in its loop";
+                    return false;
+                }
+
+                if (_loopDepth > 0 &&
+                    _options.LaunchEnvironment?.TryGetLiveValue(assignment.Name, out _) == true)
+                {
+                    error = "a Bash launch variable assignment inside a loop is not supported";
+                    return false;
+                }
+            }
+
+            foreach (var (assignment, _) in assignments)
+            {
+                RevokeLaunchFact(assignment.Name);
+                _boundedAssignmentNames.Add(assignment.Name);
+            }
+
+            exports = new BashExportFacts(assignments, names);
+            return true;
+        }
+
         private bool IsModeledRead(Clause clause) =>
             _bashCDepth == 0 &&
             _options.InitialStateMode == BashInitialStateMode.FreshNonInteractiveNoStartup &&
@@ -2168,6 +2301,7 @@ internal static partial class BashCommandParser
             // A named expansion in the value reads a bounded binding or a
             // live launch value, with the same gate as a command word.
             if (hasNamedExpansion &&
+                !AllowsUnknownNamedReads &&
                 !CanReadBoundedNames(new[] { rightHandSide }) &&
                 !CanReadLaunchNames(new[] { rightHandSide }))
             {
@@ -2312,9 +2446,10 @@ internal static partial class BashCommandParser
                 return true;
             }
 
-            // `$!` (the last background job) and `$?` (the last status) are
-            // always defined and run no code. Their value is unknown (#215).
-            if (next is '!' or '?')
+            // `$!` (the last background job), `$?` (the last status), and a
+            // positional parameter `$1`..`$9` are always defined and run no
+            // code. Their value is unknown (#215).
+            if (next is '!' or '?' or >= '1' and <= '9')
             {
                 index += 2;
                 return true;
@@ -2361,7 +2496,8 @@ internal static partial class BashCommandParser
                 if (fragment.Kind == ShellValueFragmentKind.Opaque &&
                     fragment.OpaqueCause == ShellOpaqueCause.CommandSubstitution ||
                     fragment.Kind == ShellValueFragmentKind.Expansion &&
-                    fragment.Expansion is { Kind: ShellExpansionKind.SpecialParameter, Name: "!" or "?" })
+                    (fragment.Expansion is { Kind: ShellExpansionKind.SpecialParameter, Name: "!" or "?" } ||
+                     fragment.Expansion is { Kind: ShellExpansionKind.PositionalParameter, Name.Length: 1 }))
                 {
                     // The parser cannot prove the value, so the binding is
                     // unknown, as for a substitution.
@@ -2512,7 +2648,8 @@ internal static partial class BashCommandParser
             IReadOnlyList<BashToken> sourceTokens,
             IReadOnlyList<BashPathResolutionSeed> pathResolutions,
             BashParserOptions parseOptions,
-            IReadOnlyList<BashAssignmentValue?> environmentAssignmentValues)
+            IReadOnlyList<BashAssignmentValue?> environmentAssignmentValues,
+            BashExportFacts? exports)
         {
             var valueProvenance = new List<ShellValueElementProvenance>();
             var redirectProvenance = new List<RedirectTargetProvenance>();
@@ -2617,6 +2754,7 @@ internal static partial class BashCommandParser
                     !HasUnexpandedCommandString(simple.Clause),
                 LaunchEnvironment = parseOptions.LaunchEnvironment,
                 EnvironmentAssignmentValues = environmentAssignmentValues,
+                Export = exports,
                 LaunchWordValues = launchWordValues ??
                     CommandOccurrenceFacts.EmptyLaunchWordValues,
             });

@@ -364,7 +364,10 @@ A Bash `CommandEnvironment` assignment applies only to its occurrence. One
 occurrence can carry several of these facts, one for each prefix in source
 order. A Bash
 `ShellState` assignment appears on every later occurrence that it reaches on
-every path, one fact for each name (0.4.0-beta.12). A value that the parser
+every path, one fact for each name (0.4.0-beta.12). A bounded `export
+NAME=value` gives the same `ShellState` fact (0.4.0-beta.16). A decoded
+`bash -c` child lists only the assignments that every path to it exports.
+A read of an unassigned name gives an `Unknown` value. A value that the parser
 cannot prove, such as `x=$(cmd)`, has an `Unknown` `EffectiveValue`, and the
 commands in the substitution are their own occurrences. The narrow
 PowerShell form appears on its one following command. Consumers must evaluate
@@ -462,7 +465,13 @@ Rules for consumers:
   `Arg.Resolved`: in `cd src && make build`, `src` resolves to
   `/work/repo/src`. Without that proof, `Arg.Resolved` stays empty.
 - After a statement that can change a variable, the parser stops trusting
-  it. A variable that you did not supply behaves as before.
+  it. A bounded `export NAME=value` of a supplied name revokes its launch
+  fact: a later read gets the new authored value or `Unknown`, never the
+  launch value. An export of `HOME`, `TMPDIR`, `CDPATH`, `PATH`, or another
+  shell-owned or loader name is unparseable.
+- A variable that you did not supply is an `Unknown` value from
+  0.4.0-beta.16. Before, it made the source unparseable. Treat an `Unknown`
+  path argument or redirect target as unproved.
 - A resolved launch word keeps `ArgKind.EnvVar`. Read the path from
   `Arg.Resolved` or from `AnalyzedArgument.Value`.
 - The constructor and the parser throw `ArgumentException` for a fact that

@@ -135,3 +135,42 @@ internal static class BashReadBuiltin
         string.Equals(element.Raw, element.Value, StringComparison.Ordinal) &&
         string.Equals(element.Value, expected, StringComparison.Ordinal);
 }
+
+/// <summary>
+/// The bounded <c>set --</c> form (#221). It replaces the positional
+/// parameters and changes no option or variable. The parser does not track
+/// positional values, so a later <c>$1</c> stays unknown.
+/// </summary>
+internal static class BashSetPositionalBuiltin
+{
+    internal static bool IsBounded(Clause clause)
+    {
+        if (clause.Verb.IsDynamic ||
+            clause.Verb.Tokens.Count == 0 ||
+            !string.Equals(clause.Verb.Tokens[0], "set", StringComparison.Ordinal) ||
+            clause.Elements.Count < 2 ||
+            clause.Elements[0].Role != ClauseElementRole.Verb ||
+            !string.Equals(clause.Elements[0].Raw, "set", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var first = clause.Elements[1];
+        if (first.Role == ClauseElementRole.Redirect ||
+            first.Kind != ArgKind.Literal ||
+            !string.Equals(first.Raw, "--", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        foreach (var element in clause.Elements)
+        {
+            if (element.Role == ClauseElementRole.Redirect)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+}

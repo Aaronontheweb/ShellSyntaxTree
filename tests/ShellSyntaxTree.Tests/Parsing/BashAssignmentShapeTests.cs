@@ -237,8 +237,6 @@ public class BashAssignmentShapeTests
     }
 
     [Theory]
-    [InlineData("root=$other; inspect item")]
-    [InlineData("root=\"$other\"; inspect item")]
     [InlineData("root=foo:~; inspect item")]
     [InlineData("root=~root; inspect item")]
     [InlineData("root=`id`; inspect item")]
@@ -248,9 +246,7 @@ public class BashAssignmentShapeTests
     [InlineData("root=*; inspect item")]
     [InlineData("root={a,b}; inspect item")]
     [InlineData("root=$'a'; inspect item")]
-    [InlineData("root=$(cat \"$root\"); inspect item")]
     [InlineData("root=\"a\\b\"; inspect item")]
-    [InlineData("x=1; inspect \"$root\"")]
     public void Unproved_value_fails_closed(string source)
     {
         Assert.True(Parser.Parse(source).IsUnparseable);
@@ -322,7 +318,6 @@ public class BashAssignmentShapeTests
     [Theory]
     [InlineData("x=1; wait -p y; cat \"$x\"")]
     [InlineData("x=1; read -a x; cat \"$x\"")]
-    [InlineData("x=1; export x; cat \"$x\"")]
     [InlineData("x=1; unset x; cat \"$x\"")]
     [InlineData("x=1; for x in a b; do cat \"$x\"; done")]
     [InlineData("for i in a b; do i=2; done")]
@@ -331,7 +326,6 @@ public class BashAssignmentShapeTests
     [InlineData("echo \"$(x=1; cat \"$x\")\"")]
     [InlineData("x=1 | cat")]
     [InlineData("inspect item | x=1")]
-    [InlineData("x='a'; bash -c 'cat $x'")]
     public void Unmodeled_state_change_or_scope_fails_closed(string source)
     {
         Assert.True(LoopParser.Parse(source).IsUnparseable);

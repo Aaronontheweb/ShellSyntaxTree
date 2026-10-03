@@ -86,10 +86,35 @@ public class CommandWordsTests
     }
 
     [Theory]
-    [InlineData("git $SUB")]
-    public void Bash_unproved_verb_slot_expansion_is_unparseable(string source)
+    [InlineData("git $SUB", null)]
+    [InlineData("git ${SUB}", null)]
+    [InlineData("git \"$X\"", null)]
+    [InlineData("git push $REMOTE", "git push")]
+    public void Bash_unknown_variable_read_follows_the_dynamic_word_rule(string source, string? expected)
     {
-        Assert.True(ParseBashRaw(source).IsUnparseable);
+        // An unassigned variable is an unknown value in fresh mode (#221).
+        // In the verb slot it makes the words unknown. After the slot it is
+        // skipped as an argument.
+        var parsed = ParseBashRaw(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var words = parsed.Commands.Single().CommandWords;
+        if (expected is null)
+        {
+            Assert.IsType<ShellCommandWords.Unknown>(words);
+        }
+        else
+        {
+            Assert.Equal(expected, string.Join(" ", Assert.IsType<ShellCommandWords.Known>(words).Words));
+        }
+    }
+
+    [Theory]
+    [InlineData("git $SUB")]
+    [InlineData("git push $REMOTE")]
+    public void Bash_unproved_expansion_fails_closed_in_unknown_mode(string source)
+    {
+        Assert.True(new BashParser().Parse(source).IsUnparseable);
     }
 
     [Theory]
@@ -241,10 +266,6 @@ public class CommandWordsTests
     }
 
     [Theory]
-    [InlineData("git $SUB")]
-    [InlineData("git push $REMOTE")]
-    [InlineData("git ${SUB}")]
-    [InlineData("git \"$X\"")]
     [InlineData("git `cmd`")]
     [InlineData("git push `cmd`")]
     [InlineData("git $((1+1))")]

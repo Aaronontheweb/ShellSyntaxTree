@@ -251,8 +251,6 @@ public class LaunchEnvironmentTests
     // ------------------------------------------------------------ fail closed
 
     [Theory]
-    [InlineData("cat \"$FOO/x\"")]
-    [InlineData("cd \"$FOO\" && ls")]
     [InlineData("TMPDIR=/x; cd \"$TMPDIR\"")]
     [InlineData("unset TMPDIR; cd \"$TMPDIR\"")]
     [InlineData("read TMPDIR; cd \"$TMPDIR\"")]
@@ -260,14 +258,8 @@ public class LaunchEnvironmentTests
     [InlineData("declare TMPDIR=/x; cd \"$TMPDIR\"")]
     [InlineData("local TMPDIR=/x; cd \"$TMPDIR\"")]
     [InlineData("for TMPDIR in a; do cd \"$TMPDIR\"; done")]
-    [InlineData("cat \"$TMPDIR/x\" \"$FOO\"")]
-    [InlineData("cd \"$CDPATH\" && ls")]
     [InlineData("cat \"${TMPDIR:-/x}\"")]
-    [InlineData("bash -c 'cat \"$TMPDIR/x\"'")]
-    [InlineData("cat <<EOF\n$TMPDIR\nEOF")]
-    [InlineData("cat \"$TMPDIR/x\" - <<EOF\n$FOO\nEOF")]
-    [InlineData("wait -p TMPDIR; cat \"$TMPDIR/x\"")]
-    public void Unsupplied_or_changed_variables_behave_as_without_launch_facts(string source)
+    public void Unmodeled_variable_changes_behave_as_without_launch_facts(string source)
     {
         var withLaunch = Bash().Parse(source);
         var withoutLaunch = Bash(launch: null).Parse(source);
@@ -275,6 +267,52 @@ public class LaunchEnvironmentTests
         Assert.True(withoutLaunch.IsUnparseable);
         Assert.True(withLaunch.IsUnparseable);
         Assert.Equal(withoutLaunch.UnparseableReason, withLaunch.UnparseableReason);
+    }
+
+    [Theory]
+    [InlineData("cat \"$FOO/x\"", "\"$FOO/x\"")]
+    [InlineData("cat \"$TMPDIR/x\" \"$FOO\"", "\"$FOO\"")]
+    [InlineData("wait -p TMPDIR; cat \"$TMPDIR/x\"", "\"$TMPDIR/x\"")]
+    [InlineData("bash -c 'cat \"$TMPDIR/x\"'", "\"$TMPDIR/x\"")]
+    public void Unsupplied_or_changed_variable_is_an_unknown_value(string source, string raw)
+    {
+        // Fresh mode reads an unsupplied or revoked name as an unknown value
+        // (#221). A launch fact never gives it a value.
+        foreach (var parsed in new[] { Bash().Parse(source), Bash(launch: null).Parse(source) })
+        {
+            Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+            var argument = parsed.Commands[^1].Arguments.Single(a => a.Argument.Raw == raw);
+            Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
+            Assert.Null(argument.Argument.Resolved);
+        }
+    }
+
+    [Theory]
+    [InlineData("cd \"$FOO\" && ls")]
+    [InlineData("cd \"$CDPATH\" && ls")]
+    public void Directory_change_to_an_unknown_value_gives_an_unknown_directory(string source)
+    {
+        foreach (var parsed in new[] { Bash().Parse(source), Bash(launch: null).Parse(source) })
+        {
+            Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+            Assert.IsType<ShellValueDomain.Unknown>(parsed.Commands[^1].WorkingDirectory);
+        }
+    }
+
+    [Theory]
+    [InlineData("cat <<EOF\n$TMPDIR\nEOF")]
+    [InlineData("cat \"$TMPDIR/x\" - <<EOF\n$FOO\nEOF")]
+    public void Expanding_heredoc_body_keeps_its_raw_text(string source)
+    {
+        // A launch value never goes into the body. The consumer gets the
+        // raw body and the expansion mode, as before.
+        foreach (var parsed in new[] { Bash().Parse(source), Bash(launch: null).Parse(source) })
+        {
+            Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+            var heredoc = Assert.IsType<HereDocumentRedirectAnalysis>(parsed.Commands.Single().Redirects.Single());
+            Assert.Equal(HereDocumentExpansionMode.Expand, heredoc.Document.ExpansionMode);
+            Assert.StartsWith("$", heredoc.Document.Body.Raw);
+        }
     }
 
     [Fact]
@@ -626,7 +664,6 @@ public class LaunchEnvironmentTests
     [Theory]
     [InlineData("cd src && make build")]
     [InlineData("cd \"$TMPDIR/ilspy_out\"; sed -n '1,2p' f")]
-    [InlineData("cat \"$HOME/x\"")]
     [InlineData("\"$TMPDIR/tool\" arg")]
     public void Without_launch_facts_the_result_is_unchanged(string source)
     {
@@ -640,6 +677,22 @@ public class LaunchEnvironmentTests
         }
 
         Assert.IsType<ShellValueDomain.Unknown>(parsed.Commands[^1].WorkingDirectory);
+    }
+
+    [Fact]
+    public void Without_launch_facts_a_home_read_follows_the_tilde_rule()
+    {
+        // `$HOME` is the documented exception: it expands like `~` from the
+        // HomeDirectory option. Fresh mode now reads it, as isolated mode
+        // did before (#221).
+        var home = Bash(launch: null).Parse("cat \"$HOME/x\"");
+        var tilde = Bash(launch: null).Parse("cat ~/x");
+
+        Assert.False(home.IsUnparseable, home.UnparseableReason);
+        Assert.Equal(Home + "/x", ExactValue(home.Commands.Single().Arguments.Single()));
+        Assert.Equal(
+            ExactValue(tilde.Commands.Single().Arguments.Single()),
+            ExactValue(home.Commands.Single().Arguments.Single()));
     }
 
     // ------------------------------------------------------------ PowerShell

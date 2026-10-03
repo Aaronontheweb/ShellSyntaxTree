@@ -15,6 +15,14 @@ namespace ShellSyntaxTree;
 /// Parser-owned analysis that is joined to a simple-command leaf while its
 /// structural projections are built.
 /// </summary>
+/// <summary>
+/// The operands of a bounded Bash <c>export</c> (#221): the assignments in
+/// operand order, and every name that the command marks for export.
+/// </summary>
+internal sealed record BashExportFacts(
+    IReadOnlyList<(ShellVariableAssignment Assignment, BashAssignmentValue Value)> Assignments,
+    IReadOnlyList<string> Names);
+
 internal sealed class CommandOccurrenceFacts
 {
     internal IReadOnlyList<EffectiveArgumentFacts> EffectiveArguments { get; init; } =
@@ -78,6 +86,12 @@ internal sealed class CommandOccurrenceFacts
     /// </summary>
     internal IReadOnlyList<BashAssignmentValue?> EnvironmentAssignmentValues { get; init; } =
         Array.Empty<BashAssignmentValue?>();
+
+    /// <summary>
+    /// The operands of a bounded Bash <c>export</c> (#221). Null for every
+    /// other command.
+    /// </summary>
+    internal BashExportFacts? Export { get; init; }
 
     internal static readonly IReadOnlyDictionary<int, string> EmptyLaunchWordValues =
         new Dictionary<int, string>();
