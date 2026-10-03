@@ -153,14 +153,9 @@ public class BashAssignmentFactsTests
     }
 
     [Theory]
-    [InlineData("X=$(id) Y=2 ls")]
-    [InlineData("X=1 Y=$(id) ls")]
-    [InlineData("X=1 Y=2 Z=$(id) ls")]
     [InlineData("X=1 Y=`id` ls")]
     [InlineData("X=1 Y=$other ls")]
     [InlineData("X=1 Y=\"$other\" ls")]
-    [InlineData("A=1 B=\"two words\" C='x' ls")]
-    [InlineData("X=1 Y=~ ls")]
     [InlineData("X=1 Y=$'a' ls")]
     [InlineData("X=1 Y=* ls")]
     [InlineData("X=1 Y+=2 ls")]
@@ -180,10 +175,6 @@ public class BashAssignmentFactsTests
     [InlineData("X=1 Y=2 cd /work")]
     [InlineData("X=1 Y=2 bash -c 'inspect item'")]
     [InlineData("X=1 Y=2 inspect \"$X\"")]
-    [InlineData("X=1 Y=2 inspect item | inspect next")]
-    [InlineData("X=1 Y=2 inspect item && inspect next")]
-    [InlineData("(X=1 Y=2 inspect item)")]
-    [InlineData("inspect \"$(X=1 Y=2 inspect item)\"")]
     public void Unsafe_multiple_prefix_forms_fail_closed(string source)
     {
         var result = Parser.Parse(source);
@@ -234,22 +225,12 @@ public class BashAssignmentFactsTests
     }
 
     [Theory]
-    [InlineData("root='/one'; root='/two'; inspect \"$root/file\"")]
-    [InlineData("root='/work'")]
-    [InlineData("root='/work' && inspect \"$root/file\"")]
     [InlineData("root='/work' | inspect item")]
     [InlineData("(root='/work'; inspect item)")]
     [InlineData("root='/work' > marker; inspect item")]
-    [InlineData("root=$(discover); inspect \"$root/file\"")]
     [InlineData("root=$other; inspect \"$root/file\"")]
     [InlineData("root[0]=value; inspect item")]
     [InlineData("root+=value; inspect item")]
-    [InlineData("root='/work'; printf '%s' item")]
-    [InlineData("root='/work'; inspect one | inspect two")]
-    [InlineData("root='/work'; inspect one && inspect two")]
-    [InlineData("root='/work'; inspect $(discover)")]
-    [InlineData("root='/work'; bash -c 'inspect item'")]
-    [InlineData("root=~; inspect item")]
     [InlineData("root=foo:~; inspect item")]
     [InlineData("root=~root; inspect item")]
     [InlineData("root=$'a\\n'; inspect item")]
@@ -285,7 +266,6 @@ public class BashAssignmentFactsTests
     [InlineData("PROMPT_FUTURE=value inspect item")]
     [InlineData("PROMPTFUTURE=value inspect item")]
     [InlineData("PS9=value inspect item")]
-    [InlineData("MODE=~ inspect item")]
     [InlineData("MODE=foo:~ inspect item")]
     [InlineData("MODE=~root inspect item")]
     [InlineData("MODE=$'a\\n' inspect item")]
@@ -296,9 +276,6 @@ public class BashAssignmentFactsTests
     [InlineData("MODE=fast printf '%s' item")]
     [InlineData("MODE=fast cd /work")]
     [InlineData("MODE=fast bash -c 'inspect item'")]
-    [InlineData("MODE=fast inspect item | inspect next")]
-    [InlineData("MODE=fast inspect item && inspect next")]
-    [InlineData("MODE=fast inspect item || inspect next")]
     public void Unsafe_command_environment_prefix_fails_closed(string source)
     {
         var result = Parser.Parse(source);

@@ -1,3 +1,23 @@
+#### 0.4.0-beta.12 2026-10-03 ####
+
+This prerelease accepts more Bash assignment shapes as bounded facts (#209). Each command in them is a normal occurrence, and a value that the parser cannot prove is `Unknown`.
+
+## Added
+
+- A shell-state assignment can use an upper-case name. The name gate is the same as for a prefix: shell-owned, command-resolution, startup, and loader names stay rejected.
+- More than one shell-state assignment, a reassignment, and assignments anywhere in a `;`, `&&`, or `||` list, at the top level and in a `for` loop body. A later occurrence lists every live assignment, one for each name.
+- A value can have double quotes, `$name` of a bound or launch variable, a leading `~` from the live launch `HOME`, and `$(...)`. `x=$(cmd)` gives the occurrence `cmd` with the role `Substitution`, and `x` is `Unknown`.
+- A command-environment prefix can be on a pipeline stage, a list item, or a command in a loop body, a subshell, or a substitution.
+
+## Security and compatibility
+
+- The shapes need `FreshNonInteractiveNoStartup`, as before.
+- The parser still rejects: a read of an unproved name; `~` after the start of a value and `~user`; backticks, escapes, ANSI-C and locale quotes, arithmetic, and complex parameter expansion; an assignment-only statement in a pipeline, subshell, substitution, or decoded `bash -c` child; a prefix in a decoded child; an assignment to a loop binding or to a live launch name inside a loop; a `for` binding that reuses an assigned name; and `wait` with an option after an assignment.
+- A binding follows the control flow. After `probe || x=1`, `x` is not proved. A `for` loop joins the values of each iteration.
+- `ShellVariableAssignment.AuthoredValue` and `EffectiveValue` can now be `Unknown`. A consumer that expected only `Exact` must handle `Unknown`.
+- Only inputs that were unparseable change. A replay of 6,912 complete Netclaw shell calls gives 79 more parsed rows and no worse row.
+- There is no public API change.
+
 #### 0.4.0-beta.11 2026-10-03 ####
 
 This prerelease lets a consumer read more real commands: a tilde program word, a glob word, and a `bash script.sh` call (#206).

@@ -739,36 +739,69 @@ sets it to true because the prefix supplies the value to that command. All
 names remain visible because any executable can interpret an environment
 entry. These parser facts do not grant authority.
 
-The bounded Bash slice accepts one exact lowercase ordinary shell-state name.
-An assignment-only statement can precede later commands through `;` or a
-newline. One or more direct assignment prefixes can precede a non-builtin
-external command. Each prefix must pass the same name and value gates. A
-prefix name can use uppercase letters when it does not match a shell-owned,
-command-resolution, startup, or loader name. The parser rejects more than one
-assignment-only word, a repeated prefix name, dynamic values, substitutions,
-arrays, `+=`, redirects before the command name, pipelines, subshells,
-condition operators, and all builtin prefixes. It also rejects assignment after unmodeled shell-state
-or variable-state mutation. Shell-sensitive names include `_`, `PATH`,
+The bounded Bash slice (v0.4.0-beta.12, #209) accepts these shapes under
+`FreshNonInteractiveNoStartup`:
+
+- An assignment-only statement (`ShellState`) at the top level or in a `for`
+  loop body of the top-level shell. It can appear anywhere in a `;`, `&&`, or
+  `||` list, and more than one can occur. A later assignment to the same name
+  replaces the earlier one.
+- One or more direct assignment prefixes (`CommandEnvironment`) before a
+  non-builtin external command. The command can be a pipeline stage, a list
+  item, a loop body command, or a command in a subshell or a substitution.
+
+Each name, for both scopes, must not match a shell-owned, command-resolution,
+startup, or loader name. Shell-sensitive names include `_`, `PATH`,
 `BASH_ENV`, `ENV`, `SHELLOPTS`, `BASHOPTS`, `CDPATH`, `GLOBIGNORE`, `IFS`,
 loader-variable families, imported-function spellings, exact Bash special
 names, and guarded `BASH*`, `COMP*`, `HIST*`, `READLINE_*`, `LC_*`, `PROMPT*`,
-and `PS` plus digits families.
+and `PS` plus digits families. Upper-case names that pass this gate are
+accepted.
 
-An accepted Bash right-hand side is one complete single-quoted scalar or an
-unquoted ASCII scalar from the parser's fixed safe character set. The parser
-rejects tilde expansion, ANSI-C `$'...'` quotes, locale `$"..."` quotes,
-joined quote forms, parameter and arithmetic expansion, command and process
-substitution, backticks, escapes, braces, and glob syntax. It never publishes
-the authored spelling as an effective value when Bash can transform it.
+An accepted right-hand side is made of unquoted characters from the parser's
+fixed safe set, single-quoted text, double-quoted text, `$name` and `${name}`,
+and `$(...)` command substitutions. A leading `~` or `~/` is also accepted.
+Bash does not split or glob an assignment value. The parser computes the
+value in the state pass:
 
-For example, `root=/work/tree; inspect "$root/file"` publishes `root` as an
-exact shell-state assignment and resolves the later argument only under the
-fresh-process mode. `MODE=fast inspect item` publishes one command-environment
-assignment on `inspect`. `A=1 B='two words' inspect item` publishes `A` and
-then `B` on `inspect`. By contrast, `PATH=/other inspect item`,
-`root=$(discover); inspect "$root/file"`, `A=1 B=$(id) inspect item`,
-`A=1 A=2 inspect item`, `A=1 B=2`, and `root=/work > marker` are unparseable
-and publish no commands.
+- Literal text gives an exact value. `AuthoredValue` and `EffectiveValue` are
+  both `Exact`.
+- `$name` reads an earlier bounded binding (an assignment or an active loop
+  binding) or a live launch value. A read of any other name fails the parse,
+  with the same gate as a command word. The effective value is exact when
+  every part is proved; otherwise it is `Unknown`.
+- A leading `~` expands from the live launch `HOME`. Without it, the value is
+  `Unknown`.
+- A command substitution gives `Unknown`. Its commands are normal
+  occurrences with the `Substitution` role, and they run before the
+  assignment takes effect.
+- `AuthoredValue` is `Unknown` for any value that is not only literal text.
+
+The parser rejects a tilde anywhere else (`a:~`, `~user`), ANSI-C `$'...'`
+and locale `$"..."` quotes, backticks, escapes, arithmetic, complex parameter
+expansion, unquoted whitespace, glob, and brace characters, arrays, `+=`, and
+redirects on an assignment-only statement. It also rejects an assignment-only
+statement in a pipeline stage, in a subshell, in a substitution body, or in a
+decoded `bash -c` child, and any prefix in a decoded child. Inside a loop, it
+rejects an assignment to the loop binding and to a name with a live launch
+value. It rejects a `for` binding that reuses an assigned name, `wait` with an
+option after an assignment, and an assignment after unmodeled shell-state or
+variable-state mutation.
+
+Flow. The state pass owns the values. A binding and its assignment fact
+follow the control flow: after `probe || root=/x`, `root` is not proved. A
+`for` loop joins the values of each iteration. A loop that can run zero times
+does not prove its assignments. Each later occurrence lists every live
+`ShellState` assignment, one for each name, then its own prefixes.
+
+For example, `JOBID=105906864793; gh api "repos/x/jobs/$JOBID/logs"` publishes
+`JOBID` as an exact shell-state assignment and resolves the argument.
+`root=$(discover); inspect "$root/file"` gives the occurrences `discover`
+(role `Substitution`) and `inspect`, and the value of `root` is `Unknown`.
+`FILTER_BRANCH_SQUELCH_WARNING=1 git filter-branch -f x | tail` publishes the
+prefix on the first stage only. By contrast, `PATH=/other inspect item`,
+`root=$other; inspect item`, `root=a:~; inspect item`, `(x=1; inspect)`, and
+`x=1; wait -p y; cat "$x"` are unparseable and publish no commands.
 
 The bounded PowerShell slice requires
 `PwshInitialStateMode.IsolatedNonInteractiveNoProfile`. It accepts one ordinary

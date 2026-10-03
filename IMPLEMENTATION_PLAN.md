@@ -10,7 +10,20 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.11 path-word facts)
+## NOW (0.4.0-beta.12 Bash assignment shapes)
+
+- [x] Accept upper-case shell-state names, more than one assignment, assignments in lists and `for` loop bodies, and expanded values (#209).
+- [x] Accept command-environment prefixes on pipeline stages, list items, and commands in nested scopes.
+- [x] Prove that only unparseable inputs change, and that no corpus replay row gets worse. Run manual mutants.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.12` and verify NuGet publication.
+
+## Next (Netclaw parse coverage, from #206)
+
+- `while`, `if`, and `case` with their inner commands as normal occurrences.
+- A background `&` job and `$!`.
+- A heredoc inside `$(...)`.
+
+## Completed (0.4.0-beta.11 path-word facts)
 
 - [x] Expand a leading `~` in a Bash program word from a live launch `HOME` (#206).
 - [x] Publish pathname-expansion facts (`PathPattern.Glob`) for glob arguments and glob file-redirect targets under `FreshNonInteractiveNoStartup` with live launch facts. Keep `..`, mixed expansions, and quoted wildcards unresolved.
@@ -20,13 +33,6 @@ priorities.
 - [x] Merge PR #207 after Linux and Windows CI. Tag `0.4.0-beta.11` on merge
       `45c8e9ad` and verify NuGet publication. Workflow run 37151283743
       published the package and the GitHub prerelease.
-
-## Next (Netclaw parse coverage, from #206)
-
-- Assignment shapes: upper-case names and a command-environment prefix inside a pipeline or an `&&` list.
-- `while`, `if`, and `case` with their inner commands as normal occurrences.
-- A background `&` job and `$!`.
-- A heredoc inside `$(...)`.
 
 ## Completed (0.4.0-beta.10 relative cd operand resolved path)
 

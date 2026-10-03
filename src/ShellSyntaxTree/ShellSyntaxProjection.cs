@@ -71,6 +71,14 @@ internal sealed class CommandOccurrenceFacts
     internal IReadOnlyDictionary<int, string> LaunchWordValues { get; init; } =
         EmptyLaunchWordValues;
 
+    /// <summary>
+    /// The Bash right-hand side of each command-environment prefix, in the
+    /// order of the simple command's prefixes (#209). The state pass
+    /// evaluates an expanded value with the live bindings.
+    /// </summary>
+    internal IReadOnlyList<BashAssignmentValue?> EnvironmentAssignmentValues { get; init; } =
+        Array.Empty<BashAssignmentValue?>();
+
     internal static readonly IReadOnlyDictionary<int, string> EmptyLaunchWordValues =
         new Dictionary<int, string>();
 }
@@ -728,7 +736,7 @@ internal static class ShellSyntaxProjection
                         nestedCollectionChildIndex,
                         nextDepth,
                         isAttachedExecutionRegion),
-                ShellAssignmentSyntax assignment => IsValidAssignment(assignment.Assignment),
+                ShellAssignmentSyntax assignment => TryVisitAssignment(assignment, nextDepth),
                 _ => false,
             };
 
@@ -845,6 +853,34 @@ internal static class ShellSyntaxProjection
                         structuralDepth,
                         nestedCollectionChildIndex: index,
                         isAttachedExecutionRegion: true))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// An assignment-only statement has no occurrence of its own. The
+        /// commands in its substitutions are normal occurrences (#209).
+        /// </summary>
+        private bool TryVisitAssignment(ShellAssignmentSyntax assignment, int structuralDepth)
+        {
+            if (!IsValidAssignment(assignment.Assignment) || assignment.Substitutions is null)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < assignment.Substitutions.Count; index++)
+            {
+                var substitution = assignment.Substitutions[index];
+                if (substitution is null ||
+                    !TryVisit(
+                        substitution,
+                        CommandOccurrenceRole.Substitution,
+                        structuralDepth,
+                        nestedCollectionChildIndex: index))
                 {
                     return false;
                 }
@@ -1152,8 +1188,8 @@ internal static class ShellSyntaxProjection
                         ShellVariableAssignmentScope.CommandEnvironment) ||
                     assignment.Scope == ShellVariableAssignmentScope.CommandEnvironment &&
                     !assignment.MayAffectProcessEnvironment ||
-                    assignment.AuthoredValue is not ShellValueDomain.Exact ||
-                    assignment.EffectiveValue is not ShellValueDomain.Exact)
+                    assignment.AuthoredValue is not (ShellValueDomain.Exact or ShellValueDomain.Unknown) ||
+                    assignment.EffectiveValue is not (ShellValueDomain.Exact or ShellValueDomain.Unknown))
                 {
                     return false;
                 }
