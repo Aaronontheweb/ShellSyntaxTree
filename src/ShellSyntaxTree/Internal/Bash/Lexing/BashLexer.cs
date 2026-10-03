@@ -746,10 +746,31 @@ internal static class BashLexer
         resumeDoubleQuote.Push(false);
         var inDoubleQuote = false;
         var atWordBoundary = true;
+        var pendingHeredocs = new List<(string Delimiter, bool StripTabs)>();
         var i = openParen + 1;
         while (i < src.Length)
         {
             var c = src[i];
+            if (!inDoubleQuote && c == '\n' && pendingHeredocs.Count > 0)
+            {
+                // A heredoc body starts after the newline that ends its
+                // command line. Each body ends at a line that is exactly its
+                // delimiter (#217). The body can hold `)` and quotes, so
+                // the scan skips it as raw text.
+                if (!TrySkipHeredocBodies(src, i + 1, pendingHeredocs, out var afterBodies))
+                {
+                    return new CommandSubstitutionScan(
+                        src.Length,
+                        false,
+                        "unterminated heredoc inside command substitution");
+                }
+
+                pendingHeredocs.Clear();
+                atWordBoundary = true;
+                i = afterBodies;
+                continue;
+            }
+
             if (inDoubleQuote)
             {
                 if (c == '\\' && i + 1 < src.Length)
@@ -859,10 +880,39 @@ internal static class BashLexer
 
             if (c == '<' && i + 1 < src.Length && src[i + 1] == '<')
             {
-                return new CommandSubstitutionScan(
-                    src.Length,
-                    false,
-                    "heredocs inside command substitution are not supported");
+                if (i + 2 < src.Length && src[i + 2] == '<')
+                {
+                    // A here-string. Its word is ordinary text.
+                    atWordBoundary = true;
+                    i += 3;
+                    continue;
+                }
+
+                var stripTabs = i + 2 < src.Length && src[i + 2] == '-';
+                i += stripTabs ? 3 : 2;
+                while (i < src.Length && src[i] is ' ' or '\t')
+                {
+                    i++;
+                }
+
+                if (!TryReadHeredocDelimiter(
+                        src,
+                        i,
+                        out var afterDelimiter,
+                        out var delimiter,
+                        out _,
+                        out var delimiterError))
+                {
+                    return new CommandSubstitutionScan(
+                        src.Length,
+                        false,
+                        delimiterError ?? "heredoc inside command substitution is missing its delimiter");
+                }
+
+                pendingHeredocs.Add((delimiter, stripTabs));
+                atWordBoundary = false;
+                i = afterDelimiter;
+                continue;
             }
 
             if (c == '$' && i + 1 < src.Length && src[i + 1] == '(')
@@ -910,6 +960,77 @@ internal static class BashLexer
         }
 
         return new CommandSubstitutionScan(src.Length, false, null);
+    }
+
+    /// <summary>
+    /// Skips the bodies of the pending heredocs, in order. Each body ends at
+    /// a line that is exactly its delimiter, after leading tabs for
+    /// <c>&lt;&lt;-</c>. A body without its delimiter line fails closed.
+    /// </summary>
+    private static bool TrySkipHeredocBodies(
+        ReadOnlySpan<char> src,
+        int start,
+        IReadOnlyList<(string Delimiter, bool StripTabs)> heredocs,
+        out int end)
+    {
+        var position = start;
+        foreach (var (delimiter, stripTabs) in heredocs)
+        {
+            var found = false;
+            while (position <= src.Length)
+            {
+                var lineEnd = position;
+                while (lineEnd < src.Length && src[lineEnd] != '\n')
+                {
+                    lineEnd++;
+                }
+
+                var lineStart = position;
+                if (stripTabs)
+                {
+                    while (lineStart < lineEnd && src[lineStart] == '\t')
+                    {
+                        lineStart++;
+                    }
+                }
+
+                var line = src.Slice(lineStart, lineEnd - lineStart);
+                position = lineEnd + 1;
+                if (line.SequenceEqual(delimiter.AsSpan()))
+                {
+                    found = true;
+                    break;
+                }
+
+                if (lineEnd >= src.Length)
+                {
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                end = src.Length;
+                return false;
+            }
+        }
+
+        end = Math.Min(position, src.Length);
+        return true;
+    }
+
+    /// <summary>
+    /// Finds the <c>)</c> that closes a <c>$(</c> with the lexer's own
+    /// substitution rules, including heredoc bodies (#217).
+    /// </summary>
+    internal static bool TryFindCommandSubstitutionEnd(
+        ReadOnlySpan<char> src,
+        int openParen,
+        out int closeParen)
+    {
+        var scan = ScanCommandSubstitution(src, openParen);
+        closeParen = scan.EndIndex;
+        return scan.Closed && scan.Error is null;
     }
 
     private static CommandSubstitutionScan StructuralNestingOverflow(int endIndex) =>

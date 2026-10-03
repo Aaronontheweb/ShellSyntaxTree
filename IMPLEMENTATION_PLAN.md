@@ -10,6 +10,16 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.15 heredoc in a command substitution)
+
+- [x] Skip heredoc bodies in the command-substitution boundary scan, and shift heredoc spans of a substitution body into the submitted source (#217).
+- [x] Prove that only unparseable inputs change, and that no corpus replay row gets worse. Run manual mutants.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.15` and verify NuGet publication.
+
+## Next (Netclaw parse coverage, from #206)
+
+- Report leftovers: `export NAME=value`, unknown variable reads under the fresh-process mode, effective loop values under that mode, and command words from proved binding values.
+
 ## Completed (0.4.0-beta.14 Bash background lists)
 
 - [x] Parse a single `&` as the end of an asynchronous and-or list, wrapped in a `Background` group (#215).
@@ -18,10 +28,6 @@ priorities.
 - [x] Merge PR #216 after Linux and Windows CI. Tag `0.4.0-beta.14` on merge
       `571c472c` and verify NuGet publication. Workflow run 37159497798
       published the package and the GitHub prerelease.
-
-## Next (Netclaw parse coverage, from #206)
-
-- A heredoc inside `$(...)`.
 
 ## Completed (0.4.0-beta.13 Bash control flow)
 

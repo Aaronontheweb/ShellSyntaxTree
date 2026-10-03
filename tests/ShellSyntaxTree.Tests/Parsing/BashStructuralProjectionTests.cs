@@ -1071,7 +1071,8 @@ public class BashStructuralProjectionTests
     [InlineData("rm \"$(echo ok &&)\"")]
     [InlineData("rm \"$(diff <(id))\"")]
     [InlineData("rm \"$(echo `id`)\"")]
-    [InlineData("rm \"$(cat <<EOF\nvalue\nEOF\n)\"")]
+    [InlineData("rm \"$(cat <<EOF\nvalue\nEOF)\"")]
+    [InlineData("rm \"$(cat <<EOF\nvalue\n)\"")]
     public void Unsupported_substitution_interior_fails_the_whole_result(string source)
     {
         var result = Parse(source);

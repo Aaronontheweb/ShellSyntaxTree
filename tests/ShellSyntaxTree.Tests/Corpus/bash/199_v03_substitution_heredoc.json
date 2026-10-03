@@ -1,0 +1,40 @@
+{
+  "name": "v0.4 heredoc inside a command substitution exposes its command",
+  "input": "rm \u0022$(cat \u003C\u003CEOF\nvalue\nEOF\n)\u0022",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cat"
+        ],
+        "args": [],
+        "redirects": [
+          {
+            "direction": "In",
+            "target": "\u003C\u003CEOF\u003E"
+          }
+        ]
+      },
+      {
+        "operator": "None",
+        "verb": [
+          "rm"
+        ],
+        "args": [
+          {
+            "raw": "\u0022$(cat \u003C\u003CEOF\nvalue\nEOF\n)\u0022",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "v0.4.0-beta.15: the substitution scanner skips a heredoc body to its delimiter line, so a ')' or a quote in the body cannot end the substitution. The cat command is a normal Substitution occurrence with its heredoc analysis. Before beta.15 this entry was unparseable.",
+  "oracleExpectation": "OutOfScope"
+}

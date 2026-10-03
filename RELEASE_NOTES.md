@@ -1,3 +1,22 @@
+#### 0.4.0-beta.15 2026-10-03 ####
+
+This prerelease parses a heredoc inside a command substitution (#217).
+
+## Added
+
+- `gh pr create --body "$(cat <<'EOF' ... EOF )"` now parses. The scanner skips each heredoc body to its exact delimiter line, so a `)` or a quote in the body cannot end the substitution. The `cat` command is a normal `Substitution` occurrence with its heredoc analysis.
+- A command substitution inside an expanding heredoc body is a visible occurrence, as at the top level.
+
+## Fixed
+
+- The heredoc spans of a command in a substitution body now point into the submitted source.
+
+## Security and compatibility
+
+- An unterminated body, a delimiter line with other text, and the heredoc forms that the top level rejects (for example two heredocs on one command) stay unparseable.
+- Only inputs that were unparseable change. A replay of 6,912 complete Netclaw shell calls gives 1 more parsed row and no worse row.
+- There is no public API change.
+
 #### 0.4.0-beta.14 2026-10-03 ####
 
 This prerelease parses Bash background lists (#215). A single `&` no longer makes the whole source unparseable.

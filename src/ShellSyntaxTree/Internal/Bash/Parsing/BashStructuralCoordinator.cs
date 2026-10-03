@@ -7,7 +7,6 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using ShellSyntaxTree.Internal.Bash.Lexing;
-using ShellSyntaxTree.Internal.Lexing;
 using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Resolving;
 
@@ -2292,13 +2291,12 @@ internal static partial class BashCommandParser
                     return false;
                 }
 
-                var scan = OpaqueRegionScanner.Scan(value.AsSpan(), index + 1, '(', ')');
-                if (!scan.Closed)
+                if (!BashLexer.TryFindCommandSubstitutionEnd(value.AsSpan(), index + 1, out var close))
                 {
                     return false;
                 }
 
-                index = scan.EndIndex + 1;
+                index = close + 1;
                 return true;
             }
 
@@ -3305,10 +3303,15 @@ internal static partial class BashCommandParser
         for (var index = 0; index < tokens.Count; index++)
         {
             var token = tokens[index];
+            // A heredoc in a substitution body (#217) keeps its body and
+            // end positions in the outer source, like the token itself.
             shifted[index] = token with
             {
                 SourceStart = token.SourceStart + sourceOffset,
                 ResolverValue = ShiftValue(token.ResolverValue, sourceOffset),
+                HeredocBodyValue = ShiftValue(token.HeredocBodyValue, sourceOffset),
+                HeredocBodyStart = token.HeredocBodyStart + sourceOffset,
+                HeredocSourceEnd = token.HeredocSourceEnd + sourceOffset,
             };
         }
 
