@@ -10,11 +10,13 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.15 heredoc in a command substitution)
+## Completed (0.4.0-beta.15 heredoc in a command substitution)
 
 - [x] Skip heredoc bodies in the command-substitution boundary scan, and shift heredoc spans of a substitution body into the submitted source (#217).
 - [x] Prove that only unparseable inputs change, and that no corpus replay row gets worse. Run manual mutants.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.15` and verify NuGet publication.
+- [x] Merge PR #219 after Linux and Windows CI. Tag `0.4.0-beta.15` on merge
+      `e7f07c49` and verify NuGet publication. Workflow run 37160241836
+      published the package and the GitHub prerelease.
 
 ## Next (Netclaw parse coverage, from #206)
 
