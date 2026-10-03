@@ -1,3 +1,27 @@
+#### 0.4.0-beta.9 2026-10-03 ####
+
+This prerelease lets a caller supply environment facts that its process launcher proves. With them, the parser resolves more real commands.
+
+## Added
+
+- Add `ShellParserOptions.LaunchEnvironment` and the `ShellLaunchEnvironment` class (#200). The caller states which variables are set, exported, and scalar, with exact values, and which variables are unset.
+- Resolve a supplied Bash variable in `$NAME`, `${NAME}`, and `"$NAME/x"` forms. The value goes into path facts, `cd` targets, the working directory after `cd`, redirect targets, and command words. `cd "$TMPDIR/out" && sed -n 1,2p f` runs `sed` in `<TMPDIR>/out`.
+- Resolve `$HOME`, `~`, and `cd` with no operand from a supplied `HOME`.
+- Resolve a relative Bash `cd` when the caller sets `WorkingDirectory` and proves that `CDPATH` is unset. `cd src && make build` runs `make` in `<cwd>/src`. `cd a && cd b` resolves each step.
+- Resolve a program path from a supplied value. `"$TMPDIR/tool" arg` gives the command words `<TMPDIR>/tool arg`. The value must contain `/`.
+- Resolve a supplied PowerShell `$env:NAME` or `${env:NAME}` value. The parser uses the existing rule for `$env:USERPROFILE`: no earlier command can have changed process-wide state.
+
+## Security and compatibility
+
+- With no caller option, the output is identical to 0.4.0-beta.8. The complete corpus projection gives the same result with no option and with an empty launch environment.
+- The parser uses the facts only under `FreshNonInteractiveNoStartup` or `IsolatedNonInteractive` for Bash, and `IsolatedNonInteractiveNoProfile` for PowerShell. Startup content can change any variable.
+- A statement that can change a variable revokes the supplied facts: an unmodeled variable mutation, `wait` with an option, a shell-state assignment, or a `for` binding with the same name. A revoked `HOME` makes `~` unknown. It does not fall back to a default.
+- A variable that the caller did not supply behaves as before. A decoded `bash -c` child and a heredoc body get no launch facts.
+- An unquoted value that can split or glob is not one proved word. A path from a launch value must be absolute.
+- The parser rejects names that the shell owns or can change at startup, such as `PATH`, `PWD`, `IFS`, `BASH_ENV`, and `PSModulePath`. It also rejects a supplied `HOME` that is empty or that disagrees with `HomeDirectory`.
+- A resolved launch word keeps `ArgKind.EnvVar`. `Arg.Resolved` holds the substituted path.
+- The public API change is additive. The facts grant no authority.
+
 #### 0.4.0-beta.8 2026-10-03 ####
 
 This prerelease adds a position rule to `CommandWords`, so option values no longer become command words.

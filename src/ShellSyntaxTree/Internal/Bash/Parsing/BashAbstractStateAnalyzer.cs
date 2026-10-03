@@ -301,7 +301,9 @@ internal sealed class BashAbstractStateAnalyzer
 
         var plan = loopInput.Value.Bindings.AnalyzeIterationPlan(
             sourcePlan.Words,
-            OptionsFor(loopInput.Value),
+            // The iteration plan does not expand `~` or launch variables, so
+            // it needs no launch facts (#200).
+            OptionsFor(loopInput.Value, launchEnvironment: null),
             workingDirectoryUnknown: loopInput.Value.WorkingDirectory is null);
         if (plan.Cardinality == BashIterationCardinality.Never)
         {
@@ -500,13 +502,16 @@ internal sealed class BashAbstractStateAnalyzer
 
         Dictionary<int, ShellValueDomainFacts>? accumulated = null;
         var evaluator = input.Bindings;
+        var clauseOptions = OptionsFor(input, sourceFacts.LaunchEnvironment);
         foreach (var provenance in sourceFacts.ValueProvenance)
         {
             var dependsOnTrackedBinding =
                 input.Bindings.ReferencesTrackedBinding(provenance.Value);
             if (_options.PublishAuthoredSourceFacts && dependsOnTrackedBinding)
             {
-                var authoredValue = NormalizeAuthoredParserKnownFragments(provenance.Value);
+                var authoredValue = NormalizeAuthoredParserKnownFragments(
+                    provenance.Value,
+                    clauseOptions);
                 evaluator.TryAnalyzeAuthoredValue(authoredValue, out var authoredDomain);
                 AccumulateArgumentDomain(
                     _authoredArguments,
@@ -530,7 +535,10 @@ internal sealed class BashAbstractStateAnalyzer
 
             if (!hasStateDependentValue)
             {
-                if (TryAnalyzeParserKnownValue(provenance.Value, out var knownValue))
+                if (TryAnalyzeParserKnownValue(
+                        provenance.Value,
+                        clauseOptions,
+                        out var knownValue))
                 {
                     domain = knownValue;
                 }
@@ -548,9 +556,11 @@ internal sealed class BashAbstractStateAnalyzer
         }
     }
 
-    private ShellValue NormalizeAuthoredParserKnownFragments(ShellValue value)
+    private static ShellValue NormalizeAuthoredParserKnownFragments(
+        ShellValue value,
+        BashParserOptions options)
     {
-        var homeDirectory = BashResolver.GetHomeDirectory(_options);
+        var homeDirectory = BashResolver.GetHomeDirectory(options);
         var builder = new ShellValueBuilder();
         for (var index = 0; index < value.Fragments.Count; index++)
         {
@@ -652,11 +662,12 @@ internal sealed class BashAbstractStateAnalyzer
         return element.IsPath && HasProviderQualifier(provenance.Value.Decoded);
     }
 
-    private bool TryAnalyzeParserKnownValue(
+    private static bool TryAnalyzeParserKnownValue(
         ShellValue value,
+        BashParserOptions options,
         out ShellValueDomainFacts domain)
     {
-        var homeDirectory = BashResolver.GetHomeDirectory(_options);
+        var homeDirectory = BashResolver.GetHomeDirectory(options);
         var literal = new StringBuilder(value.Decoded.Length);
         var parts = new List<ShellValueDomainFacts>();
         for (var fragmentIndex = 0;
@@ -708,6 +719,26 @@ internal sealed class BashAbstractStateAnalyzer
             {
                 FlushLiteralPart(literal, parts);
                 parts.Add(ShellValueDomainFacts.IntegerRange(0, 255));
+                continue;
+            }
+
+            if (expansion.Kind == ShellExpansionKind.Variable &&
+                !string.Equals(expansion.Name, "HOME", StringComparison.Ordinal) &&
+                fragment.Cardinality == ShellValueCardinality.ExactlyOne &&
+                (fragment.AllowedTransforms & ShellLexicalTransform.Variable) != 0 &&
+                ShellLaunchFacts.TryGetValue(options, expansion.Name, out var launchValue))
+            {
+                // A launcher-proved value (#200). An unquoted value that can
+                // split or glob is not one exact value.
+                if (!ShellLaunchFacts.IsSingleWordValue(
+                        launchValue,
+                        (fragment.AllowedTransforms & ShellLexicalTransform.FieldSplit) != 0))
+                {
+                    domain = ShellValueDomainFacts.Unknown;
+                    return false;
+                }
+
+                literal.Append(launchValue);
                 continue;
             }
 
@@ -989,6 +1020,7 @@ internal sealed class BashAbstractStateAnalyzer
                 argumentElementIndices,
                 argumentValues,
                 input,
+                simple.Clause,
                 out var arguments);
 
             BashFlowResult visit;
@@ -1082,8 +1114,10 @@ internal sealed class BashAbstractStateAnalyzer
         IReadOnlyList<int> argumentElementIndices,
         IReadOnlyList<ShellValue> argumentValues,
         BashAbstractState input,
+        Clause clause,
         out IReadOnlyList<EffectiveCwdArgument>? arguments)
     {
+        var clauseOptions = OptionsFor(input, LaunchFor(clause));
         var exact = new List<EffectiveCwdArgument>(argumentElementIndices.Count);
         for (var index = 0; index < argumentElementIndices.Count; index++)
         {
@@ -1096,12 +1130,25 @@ internal sealed class BashAbstractStateAnalyzer
             }
 
             if (domain.Kind != ShellValueDomainKind.Exact &&
-                TryResolveKnownHomeWord(argumentValues[index], input, out var homeWord))
+                TryResolveKnownHomeWord(argumentValues[index], input, clauseOptions, out var homeWord))
             {
                 domain = new ShellValueDomainFacts
                 {
                     Kind = ShellValueDomainKind.Exact,
                     Values = new[] { homeWord },
+                };
+            }
+
+            // A launcher-proved word (#200) keeps its expanded spelling, so
+            // the cd rules below still see a relative operand and apply the
+            // CDPATH rule to it.
+            if (domain.Kind != ShellValueDomainKind.Exact &&
+                ShellLaunchFacts.TryExpandWord(argumentValues[index], clauseOptions, out var launchWord))
+            {
+                domain = new ShellValueDomainFacts
+                {
+                    Kind = ShellValueDomainKind.Exact,
+                    Values = new[] { launchWord },
                 };
             }
 
@@ -1119,15 +1166,16 @@ internal sealed class BashAbstractStateAnalyzer
         arguments = exact;
     }
 
-    private bool TryResolveKnownHomeWord(
+    private static bool TryResolveKnownHomeWord(
         ShellValue value,
         BashAbstractState input,
+        BashParserOptions clauseOptions,
         out string resolvedValue)
     {
         var resolved = BashResolver.Resolve(
             value,
             treatAsPath: true,
-            OptionsFor(input),
+            clauseOptions,
             workingDirectoryUnknown: input.WorkingDirectory is null,
             consumer: ShellResolutionConsumer.BashArgument);
         if (resolved.Kind == ArgKind.Tilde && resolved.Resolved is not null)
@@ -1201,17 +1249,20 @@ internal sealed class BashAbstractStateAnalyzer
             }
         }
 
+        var clauseOptions = OptionsFor(input, LaunchFor(clause));
         if (operand is null)
         {
-            var home = physical || string.IsNullOrEmpty(_options.HomeDirectory)
+            var homeDirectory = BashResolver.GetCdHomeDirectory(clauseOptions);
+            var home = physical || homeDirectory is null
                 ? input.WithUnknownCwd()
-                : input.WithCwd(_options.HomeDirectory, true);
+                : input.WithCwd(homeDirectory, true);
             return new BashFlowResult(home, input);
         }
 
         if (physical ||
             operand.Value.Value == "-" ||
-            IsCdPathSearchCandidate(operand.Value.Value))
+            IsCdPathSearchCandidate(operand.Value.Value) &&
+            !CanResolveRelativeCd(clauseOptions))
         {
             return new BashFlowResult(input.WithUnknownCwd(), input);
         }
@@ -1219,7 +1270,7 @@ internal sealed class BashAbstractStateAnalyzer
         var resolved = BashResolver.Resolve(
             operand.Value.Value,
             treatAsPath: true,
-            OptionsFor(input),
+            clauseOptions,
             workingDirectoryUnknown: input.WorkingDirectory is null,
             isLiteralBytes: true);
         var success = resolved.Resolved is null
@@ -1343,9 +1394,11 @@ internal sealed class BashAbstractStateAnalyzer
                 return true;
             }
 
-            success = string.IsNullOrEmpty(_options.HomeDirectory)
+            var homeDirectory = BashResolver.GetCdHomeDirectory(
+                OptionsFor(input, LaunchFor(clause)));
+            success = homeDirectory is null
                 ? input.WithUnknownCwd()
-                : input.WithCwd(_options.HomeDirectory, true);
+                : input.WithCwd(homeDirectory, true);
             return true;
         }
 
@@ -1368,7 +1421,7 @@ internal sealed class BashAbstractStateAnalyzer
         }
 
         var value = ArgumentValue(clause, target);
-        var options = OptionsFor(input);
+        var options = OptionsFor(input, LaunchFor(clause));
         var resolved = BashResolver.Resolve(
             value,
             treatAsPath: true,
@@ -1590,6 +1643,8 @@ internal sealed class BashAbstractStateAnalyzer
             CwdPathDependencies = sourceFacts.CwdPathDependencies,
             ValueProvenance = sourceFacts.ValueProvenance,
             IsComplete = sourceFacts.IsComplete && AreRedirectsComplete(redirects),
+            LaunchEnvironment = sourceFacts.LaunchEnvironment,
+            LaunchWordValues = sourceFacts.LaunchWordValues,
         });
         return simple with
         {
@@ -1979,7 +2034,7 @@ internal sealed class BashAbstractStateAnalyzer
             return BashResolver.Resolve(
                 authored,
                 treatAsPath: true,
-                OptionsFor(input),
+                OptionsFor(input, launchEnvironment: null),
                 workingDirectoryUnknown: false,
                 isLiteralBytes: true).Resolved;
         }
@@ -2017,7 +2072,7 @@ internal sealed class BashAbstractStateAnalyzer
         return BashResolver.Resolve(
             hasRelativeSuffix ? suffix : authored,
             treatAsPath: true,
-            OptionsFor(input),
+            OptionsFor(input, launchEnvironment: null),
             workingDirectoryUnknown: false,
             isLiteralBytes: true).Resolved;
     }
@@ -2132,13 +2187,30 @@ internal sealed class BashAbstractStateAnalyzer
         return false;
     }
 
-    private BashParserOptions OptionsFor(BashAbstractState state) => new()
+    private BashParserOptions OptionsFor(
+        BashAbstractState state,
+        ShellLaunchEnvironment? launchEnvironment) => _options with
     {
-        HomeDirectory = _options.HomeDirectory,
         WorkingDirectory = state.WorkingDirectory ?? _options.WorkingDirectory,
-        InitialStateMode = _options.InitialStateMode,
-        PublishAuthoredSourceFacts = _options.PublishAuthoredSourceFacts,
+        LaunchEnvironment = launchEnvironment,
     };
+
+    /// <summary>
+    /// The launch facts that the structural pass recorded as live for this
+    /// clause (#200). Null when none were supplied or recorded.
+    /// </summary>
+    private ShellLaunchEnvironment? LaunchFor(Clause clause) =>
+        _factsFactory(new SimpleCommandSyntax { Clause = clause }).LaunchEnvironment;
+
+    /// <summary>
+    /// A relative <c>cd</c> operand is searched in <c>CDPATH</c> first. The
+    /// parser resolves it against the current directory only when the caller
+    /// supplied the start directory and the launch facts prove that
+    /// <c>CDPATH</c> is still unset (#200).
+    /// </summary>
+    private bool CanResolveRelativeCd(BashParserOptions clauseOptions) =>
+        _options.WorkingDirectory is not null &&
+        ShellLaunchFacts.IsUnset(clauseOptions, "CDPATH");
 
     private bool PublishesAuthoredFactsOnly =>
         _options.PublishAuthoredSourceFacts &&

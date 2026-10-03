@@ -417,6 +417,58 @@ serialization. Consumers that persist results should map them to a
 consumer-owned, versioned DTO and reject unknown enum values or runtime
 alternatives when reading it.
 
+## Supplying launcher-proved environment facts
+
+A caller that starts the shell process can prove some environment values. Use
+`ShellParserOptions.LaunchEnvironment` to give them to the parser (0.4.0-beta.9).
+Supply only facts that your launcher sets or removes for every shell that it
+starts. The parser does not read the environment of the current process.
+
+```csharp
+var launch = new ShellLaunchEnvironment(
+    exportedVariables: new Dictionary<string, string>
+    {
+        ["TMPDIR"] = "/tmp/session-7",
+        ["HOME"] = "/home/agent",
+    },
+    unsetVariables: new[] { "CDPATH" });
+
+var parser = new BashParser(new BashParserOptions
+{
+    WorkingDirectory = "/work/repo",
+    InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+    LaunchEnvironment = launch,
+});
+```
+
+With these facts:
+
+| Source | Fact |
+|---|---|
+| `cd "$TMPDIR/out" && sed -n 1,2p f` | `sed` runs in `/tmp/session-7/out` |
+| `cat "$HOME/x"` | path `/home/agent/x` |
+| `cd src && make build` | `make` runs in `/work/repo/src` |
+| `"$TMPDIR/tool" arg` | command words `/tmp/session-7/tool arg` |
+
+Rules for consumers:
+
+- The parser uses the facts only under a startup-free initial-state mode.
+  Under `Unknown`, it ignores them.
+- A relative `cd` resolves only when you set `WorkingDirectory` and list
+  `CDPATH` as unset.
+- After a statement that can change a variable, the parser stops trusting
+  it. A variable that you did not supply behaves as before.
+- A resolved launch word keeps `ArgKind.EnvVar`. Read the path from
+  `Arg.Resolved` or from `AnalyzedArgument.Value`.
+- The constructor and the parser throw `ArgumentException` for a fact that
+  the shell can change before the source runs, such as `PATH` or `PWD`, and
+  for a `HOME` that is empty or that disagrees with `HomeDirectory`.
+- With `;`, a failed `cd` keeps the start directory. The occurrence after it
+  then has an `Unknown` directory. Use `TryProjectFiniteScopes` to get one
+  exact slice for each directory.
+
+These facts are parser inputs. They do not grant authority.
+
 ## Display traversal is not authorization traversal
 
 `ParsedCommand.Syntax` preserves authored nesting for explainers, diagnostics,

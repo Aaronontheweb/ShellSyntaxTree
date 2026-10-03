@@ -170,6 +170,7 @@ internal static class PwshResolver
 
         var composed = new StringBuilder(value.Decoded.Length);
         var hadHomeish = false;
+        var hadLaunchValue = false;
         var hasLexicalGlob = false;
         var expandableStringContextProven = false;
         for (var fragmentIndex = 0; fragmentIndex < value.Fragments.Count; fragmentIndex++)
@@ -202,6 +203,20 @@ internal static class PwshResolver
                 case ShellExpansionKind.Variable:
                 case ShellExpansionKind.SpecialParameter:
                 case ShellExpansionKind.PositionalParameter:
+                    if (expansion.Kind == ShellExpansionKind.Variable
+                        && (fragment.AllowedTransforms & ShellLexicalTransform.Variable) != 0
+                        && ShellLaunchFacts.TryGetPwshEnvironmentValue(
+                            options,
+                            expansion.Name,
+                            out var launchValue))
+                    {
+                        // A launcher-proved environment value (#200).
+                        // PowerShell does not split a variable into words.
+                        composed.Append(launchValue);
+                        hadLaunchValue = true;
+                        break;
+                    }
+
                     if (!IsHomeVariable(expansion.Name)
                         || (fragment.AllowedTransforms & ShellLexicalTransform.Variable) == 0)
                     {
@@ -322,6 +337,29 @@ internal static class PwshResolver
             && hasLexicalGlob)
         {
             return (ArgKind.Glob, null, treatAsPath);
+        }
+
+        if (hadLaunchValue)
+        {
+            // The word keeps EnvVar: it has a variable reference. A launch
+            // value must give an absolute path, because a rebase of a
+            // relative path re-reads the authored text, which still holds
+            // the variable reference.
+            if (!treatAsPath)
+            {
+                return (ArgKind.EnvVar, null, false);
+            }
+
+            if (working.Length == 0 || !IsRootedPath(working))
+            {
+                return (ArgKind.DynamicSkip, null, false);
+            }
+
+            var launchResolved = TryResolveAbsolutePath(
+                working, options, workingDirectoryUnknown);
+            return launchResolved is null
+                ? (ArgKind.DynamicSkip, null, false)
+                : (ArgKind.EnvVar, launchResolved, true);
         }
 
         if (!treatAsPath)

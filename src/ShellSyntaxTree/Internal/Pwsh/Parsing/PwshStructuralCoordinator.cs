@@ -1005,12 +1005,9 @@ internal static partial class PwshCommandParser
             var workingDirectoryUnknown = false;
             if (_attribution.HasAttribution && !_attribution.IsDynamic)
             {
-                effectiveOptions = new PwshParserOptions
+                effectiveOptions = _options with
                 {
-                    HomeDirectory = _options.HomeDirectory,
                     WorkingDirectory = _attribution.ResolvedCwd,
-                    InitialStateMode = _options.InitialStateMode,
-                    Dialect = _options.Dialect,
                 };
             }
             else if (_attribution.IsDynamic)

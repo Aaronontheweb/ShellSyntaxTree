@@ -10,7 +10,23 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.8 command-word position rule)
+## NOW (0.4.0-beta.9 launcher-proved environment facts)
+
+- [x] Add `ShellParserOptions.LaunchEnvironment` and `ShellLaunchEnvironment` (#200). Resolve supplied Bash variables, `$HOME`, and `~` in path facts, `cd` targets, redirect targets, and command words.
+- [x] Resolve a relative Bash `cd` when the caller supplies the start directory and proves that `CDPATH` is unset.
+- [x] Resolve supplied PowerShell `$env:NAME` values under the existing process-wide state rule.
+- [x] Revoke a supplied value after a statement that can change it. Keep unsupplied names, startup-capable modes, decoded child shells, and heredoc bodies fail closed.
+- [x] Prove that the corpus output with no caller option and with an empty launch environment is identical to 0.4.0-beta.8. Kill 23 manual mutants.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.9` and verify NuGet publication.
+- [ ] Netclaw supplies its launcher facts. The Netclaw owner does this change.
+
+## Parked (from #200)
+
+- A background `&` job and `$!`. This needs a new public operator or group kind for asynchronous execution. It is a new syntax shape, not a fact.
+- Command words for each iteration of a `for` loop. One occurrence has one word list, and SPEC.md gives one occurrence for each authored command. This needs a new public shape.
+- A Bash command that mixes a loop variable and a launch variable, and a launch variable in a decoded `bash -c` child. Both stay fail closed.
+
+## Completed (0.4.0-beta.8 command-word position rule)
 
 - [x] Add the verb slot to `CommandWords`: strict rules before it, and option values and dynamic arguments skipped after it (#197).
 - [x] Stop a split word from hiding as a resolved path (`git {push,a/b}`).
