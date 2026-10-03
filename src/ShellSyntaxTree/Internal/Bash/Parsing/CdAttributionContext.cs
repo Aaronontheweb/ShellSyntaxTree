@@ -115,6 +115,17 @@ internal sealed class CdAttributionContext
         IsDynamic = frame.IsDynamic;
     }
 
+    /// <summary>
+    /// Reinstate a saved attribution state. The parser uses it after a
+    /// background list, whose <c>cd</c> runs in an asynchronous subshell
+    /// and cannot change the next command (#ISSUE).
+    /// </summary>
+    public void Restore(string? resolvedCwd, bool isDynamic)
+    {
+        ResolvedCwd = resolvedCwd;
+        IsDynamic = isDynamic;
+    }
+
     private readonly struct Frame
     {
         public Frame(string? resolvedCwd, bool isDynamic)

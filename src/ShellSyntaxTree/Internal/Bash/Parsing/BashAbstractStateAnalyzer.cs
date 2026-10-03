@@ -397,6 +397,15 @@ internal sealed class BashAbstractStateAnalyzer
             return AnalyzeBlock(group.Body, input);
         }
 
+        if (group.GroupKind == ShellGroupKind.Background)
+        {
+            // The list runs in an asynchronous subshell. Its state changes do
+            // not reach the next command, and `&` gives exit status zero
+            // (#ISSUE).
+            AnalyzeBlock(group.Body, input);
+            return BashFlowResult.Success(input);
+        }
+
         return AnalyzeIsolatedBody(
             group.Body,
             input,

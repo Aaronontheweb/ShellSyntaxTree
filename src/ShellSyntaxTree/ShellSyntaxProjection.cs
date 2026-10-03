@@ -715,7 +715,9 @@ internal static class ShellSyntaxProjection
                 PipelineSyntax pipeline => TryVisitPipeline(pipeline, nextDepth),
                 CommandListSyntax list => TryVisitCommandList(list, role, nextDepth),
                 GroupSyntax group =>
-                    group.GroupKind is ShellGroupKind.CurrentScope or ShellGroupKind.IsolatedScope &&
+                    group.GroupKind is ShellGroupKind.CurrentScope or
+                        ShellGroupKind.IsolatedScope or
+                        ShellGroupKind.Background &&
                     group.Body is not null &&
                     TryVisitChild(
                         group,
