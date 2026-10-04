@@ -672,6 +672,22 @@ internal sealed class BashLoopBindingContext
         return null;
     }
 
+    /// <summary>
+    /// Gets the value of a binding whose domain is one exact value.
+    /// </summary>
+    internal bool TryGetExactValue(string name, out string value)
+    {
+        var binding = FindExactBinding(name);
+        if (binding?.Domain is { Kind: ShellValueDomainKind.Exact, Values.Count: 1 } domain)
+        {
+            value = domain.Values[0];
+            return true;
+        }
+
+        value = string.Empty;
+        return false;
+    }
+
     private BindingFrame? FindExactBinding(string name)
     {
         for (var index = _bindings.Count - 1; index >= 0; index--)

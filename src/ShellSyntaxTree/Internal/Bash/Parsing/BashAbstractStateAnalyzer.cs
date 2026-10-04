@@ -1282,8 +1282,23 @@ internal sealed class BashAbstractStateAnalyzer
             if (input.Bindings.ReferencesTrackedBinding(argumentValue) &&
                 !HasProvedSingleWordCardinality(argumentValue))
             {
-                _isComplete = false;
-                return new BashFlowResult(null, null);
+                // A binding expansion that can split or glob gives an
+                // unproved operand list. Without the authored-facts opt-in,
+                // the analysis fails atomically. With it, the occurrence is
+                // published and `cd` changes to an unknown directory or fails
+                // without a change, as under the authored-only rule (#224).
+                if (!_options.PublishAuthoredSourceFacts)
+                {
+                    _isComplete = false;
+                    return new BashFlowResult(null, null);
+                }
+
+                RecordCwdResolutionSanitization(simple.Clause, argumentElementIndices);
+                RecordWorkingDirectoryEffect(
+                    simple.Clause,
+                    ShellWorkingDirectoryEffectFacts.ChangesOnSuccess(
+                        ShellValueDomainFacts.Unknown));
+                return new BashFlowResult(input.WithUnknownCwd(), input);
             }
         }
 
@@ -1997,13 +2012,100 @@ internal sealed class BashAbstractStateAnalyzer
             IsComplete = (sourceFacts.IsComplete || sourceFacts.IsCompleteExceptRedirects) &&
                 AreRedirectsComplete(redirects),
             LaunchEnvironment = sourceFacts.LaunchEnvironment,
-            LaunchWordValues = sourceFacts.LaunchWordValues,
+            LaunchWordValues = PublishesAuthoredFactsOnly
+                ? sourceFacts.LaunchWordValues
+                : AddBindingWords(sourceFacts, simple.Clause, input.Bindings),
         });
         return simple with
         {
             Clause = clause,
             Substitutions = substitutions,
         };
+    }
+
+    /// <summary>
+    /// Adds the exact single word of each argument made only of literal text
+    /// and expansions of exactly bound names (#224). The command-word
+    /// projection then treats the word like a static word, as for a launch
+    /// value. An expansion that can split, or a binding with more than one
+    /// value, gives no word.
+    /// </summary>
+    private static IReadOnlyDictionary<int, string> AddBindingWords(
+        CommandOccurrenceFacts sourceFacts,
+        Clause clause,
+        BashLoopBindingContext bindings)
+    {
+        if (!bindings.HasBindings)
+        {
+            return sourceFacts.LaunchWordValues;
+        }
+
+        Dictionary<int, string>? words = null;
+        foreach (var provenance in sourceFacts.ValueProvenance)
+        {
+            var index = provenance.ClauseElementIndex;
+            if (index < 0 ||
+                index >= clause.Elements.Count ||
+                clause.Elements[index].Role != ClauseElementRole.Argument ||
+                sourceFacts.LaunchWordValues.ContainsKey(index) ||
+                !TryExpandBindingWord(provenance.Value, bindings, out var word))
+            {
+                continue;
+            }
+
+            if (words is null)
+            {
+                words = new Dictionary<int, string>();
+                foreach (var launchWord in sourceFacts.LaunchWordValues)
+                {
+                    words.Add(launchWord.Key, launchWord.Value);
+                }
+            }
+
+            words[index] = word;
+        }
+
+        return words ?? sourceFacts.LaunchWordValues;
+    }
+
+    private static bool TryExpandBindingWord(
+        ShellValue value,
+        BashLoopBindingContext bindings,
+        out string word)
+    {
+        word = string.Empty;
+        var builder = new StringBuilder(value.Decoded.Length);
+        var usedBinding = false;
+        foreach (var fragment in value.Fragments)
+        {
+            if (fragment.Kind == ShellValueFragmentKind.Literal &&
+                fragment.Cardinality == ShellValueCardinality.ExactlyOne)
+            {
+                builder.Append(fragment.Value);
+                continue;
+            }
+
+            if (fragment.Kind != ShellValueFragmentKind.Expansion ||
+                fragment.Expansion is not { Kind: ShellExpansionKind.Variable, Name: { } name } ||
+                fragment.Cardinality != ShellValueCardinality.ExactlyOne ||
+                (fragment.AllowedTransforms & ShellLexicalTransform.Variable) == 0 ||
+                (fragment.AllowedTransforms & ShellLexicalTransform.FieldSplit) != 0 ||
+                !bindings.TryGetExactValue(name, out var bound))
+            {
+                return false;
+            }
+
+            builder.Append(bound);
+            usedBinding = true;
+        }
+
+        if (!usedBinding || builder.Length == 0)
+        {
+            return false;
+        }
+
+        word = builder.ToString();
+        return true;
     }
 
     private IReadOnlyList<ShellVariableAssignment> CreateAssignments(
@@ -2647,9 +2749,15 @@ internal sealed class BashAbstractStateAnalyzer
     private string? GlobWorkingDirectory(BashAbstractState state) =>
         _options.WorkingDirectory is null ? null : state.WorkingDirectory;
 
+    /// <summary>
+    /// True when the caller asked for authored facts but the initial state
+    /// does not prove the effective value. The isolated and fresh-process
+    /// modes both prove it, so they publish effective values too (#224).
+    /// </summary>
     private bool PublishesAuthoredFactsOnly =>
         _options.PublishAuthoredSourceFacts &&
-        _options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive;
+        _options.InitialStateMode is not (BashInitialStateMode.IsolatedNonInteractive or
+            BashInitialStateMode.FreshNonInteractiveNoStartup);
 
     private static Arg CreateAttribution(BashAbstractState state) =>
         state.WorkingDirectory is null

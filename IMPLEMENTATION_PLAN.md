@@ -10,6 +10,12 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.17 effective values in fresh mode)
+
+- [x] Publish effective values under the fresh-process mode with or without the authored-facts option. Give a quoted exact binding its command word (#224).
+- [x] Prove that only effective values, resolved paths, and command words change, and that no corpus replay row gets worse. Run manual mutants.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.17` and verify NuGet publication.
+
 ## Completed (0.4.0-beta.16 export, set --, and unknown reads)
 
 - [x] Read an unassigned plain `$NAME` as an `Unknown` value under the fresh-process mode. Model a bounded `export` and `set --`. List only exported assignments in a decoded `bash -c` child (#221).
@@ -28,7 +34,7 @@ priorities.
 
 ## Next (Netclaw parse coverage, from #206)
 
-- Report leftovers: effective loop values under the fresh-process mode, and command words from proved binding values.
+- Report leftovers: compound-command redirects, arithmetic expansion, complex parameter expansion, process substitution, and function definitions.
 
 ## Completed (0.4.0-beta.14 Bash background lists)
 

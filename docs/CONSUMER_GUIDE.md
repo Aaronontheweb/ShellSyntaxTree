@@ -795,6 +795,17 @@ explicit source attribute mutation, redirects, and unsupported control flow
 stay strict. With the default `false`, the same loop retains the 0.3.0 result:
 `IsUnparseable=true` with empty `Commands` and `Clauses`.
 
+The example above uses the default `Unknown` initial state. Under
+`IsolatedNonInteractive` or, from 0.4.0-beta.17, `FreshNonInteractiveNoStartup`,
+the parser proves the variable state. It then also publishes the effective
+`Value` when the word cannot split: `cat "/work/$f"` gives
+`Value: FiniteSet("/work/src/A.cs", "/work/src/B.cs")`. An unquoted `$f` keeps
+`Value: Unknown`. A quoted read of a name with one exact value is also a
+command word: `r=push; git "$r"` gives `git push`. Before 0.4.0-beta.17, fresh
+mode with this option published `Value: Unknown` for every binding read, so a
+consumer that checks `Value` now sees more proved paths. Check each one with
+your path policy, as for a literal path.
+
 Do not hand `AuthoredValue` directly to filesystem policy. It is intentionally
 pre-field-splitting and pre-pathname-expansion. For example:
 

@@ -76,7 +76,6 @@ public class CommandWordsTests
     [InlineData("git -p {push,log}")]
     [InlineData("git -p *")]
     [InlineData("r=push; git $r")]
-    [InlineData("r=push; git -p \"$r\"")]
     [InlineData("du -sh *")]
     [InlineData("rm -f {a,b}.txt")]
     public void Bash_verb_slot_dynamic_word_makes_words_unknown(string source)
@@ -132,7 +131,7 @@ public class CommandWordsTests
     [InlineData("git add p?sh", "git add")]
     [InlineData("git push {a,b}", "git push")]
     [InlineData("git push $(cmd)", "git push")]
-    [InlineData("r=push; git push \"$r\"", "git push")]
+    [InlineData("r=$(cmd); git push \"$r\"", "git push")]
     // `main` follows an option, so it is skipped as that option's value.
     [InlineData("git log --oneline main", "git log")]
     [InlineData("git -p filter-branch --force HEAD", "git filter-branch")]
@@ -249,8 +248,12 @@ public class CommandWordsTests
     [InlineData("git {a..c}")]
     [InlineData("git $(echo push)")]
     [InlineData("git \"$(cmd)\"")]
-    [InlineData("r=push; git \"$r\"")]
     [InlineData("r=push; git $r")]
+    [InlineData("r=$(cmd); git \"$r\"")]
+    [InlineData("r=push; git \"$r\"*")]
+    // An empty value gives no word, as for an empty launch value.
+    [InlineData("r=''; git \"$r\"")]
+    [InlineData("for s in push pull; do git \"$s\"; done")]
     // Unquoted expansion in an option can split into more words.
     [InlineData("r='x push'; git --c=$r log")]
     // Unquoted expansion in a path can split too.
@@ -263,6 +266,21 @@ public class CommandWordsTests
         var git = ParseBash(source).Commands.Last();
 
         Assert.IsType<ShellCommandWords.Unknown>(git.CommandWords);
+    }
+
+    [Theory]
+    [InlineData("r=push; git \"$r\"", "git push")]
+    [InlineData("r=push; git -p \"$r\"", "git push")]
+    [InlineData("r=push; git push \"$r\"", "git push push")]
+    [InlineData("r=push; git \"$r\"-x origin", "git push-x origin")]
+    [InlineData("x=-p; git \"$x\" log", "git log")]
+    [InlineData("for s in push pull; do :; done; git \"$s\"", "git pull")]
+    [InlineData("r=/tmp; ls \"$r/x\"", "ls")]
+    public void Bash_quoted_exact_binding_gives_its_value_as_a_word(string source, string expected)
+    {
+        // A quoted expansion of a name with one exact value is one word that
+        // the program receives (#224). It gets the static-word rules.
+        Assert.Equal(expected, Words(ParseBash(source).Commands.Last()));
     }
 
     [Theory]

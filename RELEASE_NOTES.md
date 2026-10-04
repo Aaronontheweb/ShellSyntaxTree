@@ -1,3 +1,21 @@
+#### 0.4.0-beta.17 2026-10-04 ####
+
+This prerelease publishes effective values and binding command words under `FreshNonInteractiveNoStartup` (#224).
+
+## Added
+
+- Fresh mode publishes the effective `Value` of a word that reads a binding, with or without `PublishAuthoredSourceFacts`, as isolated mode does. Before, fresh mode with that option published `Value=Unknown`. `x=/etc/passwd; cat "$x"` now gives `Value=/etc/passwd`, and `for f in a b; do cat "/w/$f"; done` gives `Value={/w/a,/w/b}`.
+- A `for-in` loop parses under fresh mode without the option.
+- A quoted expansion of a name with one exact value is a command word with the static-word rules. `r=push; git "$r" origin` gives `git push origin`.
+
+## Security and compatibility
+
+- `Unknown` mode with the option stays authored-only: `Value=Unknown` and no binding word.
+- An unquoted expansion, a binding with more than one value, an unknown value, and a mix with a launch variable give no binding word. The program word never comes from a binding.
+- With the option, an unquoted loop `cd $f` that can split gives an unknown directory, as before in fresh mode. Without the option, it fails atomically, as before (corpus entries 249 and 250). Isolated mode with the option now parses this form too.
+- Only effective values, resolved paths after a proved `cd`, and command words change. Each changed fresh-mode record now equals the isolated-mode result or the fresh-mode result without the option. A replay of 6,912 complete Netclaw shell calls gives 193 more proved argument values in 115 rows and 12 fewer `Unknown` word lists, with no worse row.
+- There is no public API change.
+
 #### 0.4.0-beta.16 2026-10-03 ####
 
 This prerelease parses `export`, `set --`, and reads of unassigned variables under `FreshNonInteractiveNoStartup` (#221).
