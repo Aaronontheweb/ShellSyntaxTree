@@ -1038,7 +1038,8 @@ internal static partial class BashCommandParser
             }
 
             var bindingToken = _tokens[_position++];
-            if (_options.InitialStateMode != BashInitialStateMode.IsolatedNonInteractive &&
+            if (_options.InitialStateMode is not (BashInitialStateMode.IsolatedNonInteractive or
+                    BashInitialStateMode.FreshNonInteractiveNoStartup) &&
                 !_options.PublishAuthoredSourceFacts)
             {
                 error = "Bash for-in requires a proved isolated non-interactive initial state";

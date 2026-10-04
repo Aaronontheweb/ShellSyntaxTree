@@ -228,24 +228,27 @@ public class BashExportAndReadTests
     public void Export_of_a_launch_name_revokes_the_launch_value(string source, string? authored)
     {
         // The launch value never survives an assignment to its name. The
-        // new value is the authored value. On a path that may skip the
-        // export, the value is unknown.
+        // new value is the assigned value (#224). On a path that may skip
+        // the export, the value is unknown.
         var parsed = LaunchParser.Parse(source);
 
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
         var git = parsed.Commands[^1];
         var argument = git.Arguments.Single(a => a.Argument.Raw == "\"$SUB\"");
-        Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
         if (authored is null)
         {
+            Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
             Assert.IsType<ShellValueDomain.Unknown>(argument.AuthoredValue);
+            Assert.IsType<ShellCommandWords.Unknown>(git.CommandWords);
         }
         else
         {
+            Assert.Equal(authored, Exact(argument.Value));
             Assert.Equal(authored, Exact(argument.AuthoredValue));
+            Assert.Equal(
+                "git " + authored + " origin",
+                string.Join(" ", Assert.IsType<ShellCommandWords.Known>(git.CommandWords).Words));
         }
-
-        Assert.IsType<ShellCommandWords.Unknown>(git.CommandWords);
     }
 
     [Theory]
@@ -257,7 +260,7 @@ public class BashExportAndReadTests
 
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
         var argument = parsed.Commands[^1].Arguments.Single();
-        Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
+        Assert.Equal("/etc/notes.txt", Exact(argument.Value));
         Assert.Equal("/etc/notes.txt", Exact(argument.AuthoredValue));
         Assert.DoesNotContain("/launch/tmp", argument.Argument.Resolved ?? string.Empty);
     }

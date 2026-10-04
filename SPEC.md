@@ -1173,8 +1173,19 @@ change the word. Each later verb or argument element then gets one class:
   reports `{push,a/b}` as one resolved path, but `git {push,a/b}` runs
   `git push a/b`.
 - The parser rejects many expansions before this fact exists. For example,
-  `git $SUB`, ``git `cmd` ``, `git $((1+1))`, and `git $'push'` are
-  unparseable.
+  ``git `cmd` ``, `git $((1+1))`, and `git $'push'` are unparseable. Under
+  `FreshNonInteractiveNoStartup`, `git $SUB` with an unassigned `SUB` parses
+  with `Unknown` words (v0.4.0-beta.16).
+- Binding word (v0.4.0-beta.17, #224). An argument made only of literal text
+  and quoted expansions of names with one exact effective value is one word
+  with that value. It gets the static-word rules, as a launch value does:
+  `r=push; git "$r" origin` gives `git push origin`, and
+  `for s in push; do git "$s"; done` gives `git push`. An unquoted expansion
+  (`git $r`), a binding with more than one value
+  (`for s in push pull; do git "$s"; done`), an unknown value
+  (`r=$(cmd); git "$r"`), a mix with a launch variable, a tilde, or a glob,
+  and the authored-only rule below give no binding word. The program word
+  never comes from a binding.
 
 Only command words follow the program word. Redirect targets are not words of
 the command. Bash assignment prefixes are not clause elements.
@@ -1614,7 +1625,29 @@ effective `Value=Unknown` and a finite `AuthoredValue`. Explicit attribute
 mutation, hidden execution, dynamic identity, command substitution, runtime
 iteration, redirects, and unsupported control flow remain strict. The
 `IsolatedNonInteractive` mode retains its existing effective proof and does not
-require the option. The opt-in applies only to the source submitted to that
+require the option. From v0.4.0-beta.17 (#224),
+`FreshNonInteractiveNoStartup` does the same: it proves the same variable
+state, so it publishes effective values with or without the option, and a
+`for-in` loop parses without the option. Before, fresh mode with the option
+published `Value=Unknown`. The authored-only rule now applies only to
+`Unknown` mode.
+
+Unproved `cd` operand count (v0.4.0-beta.17, #224). An unquoted loop binding
+in a `cd` operand can split or glob into more operands. Without the option,
+the analysis fails atomically, as before. With the option, under the isolated
+or fresh-process mode, the occurrence is published, and `cd` changes to an
+unknown directory on success and keeps the directory on failure. This is the
+result that the authored-only rule gave.
+
+| Source (fresh mode, option set) | beta.16 | beta.17 |
+|---|---|---|
+| `x=/etc/passwd; cat "$x"` | `Value=Unknown` | `Value=/etc/passwd` |
+| `for f in a b; do cat "/w/$f"; done` | `Value=Unknown` | `Value={/w/a,/w/b}` |
+| `for d in /a; do cd "$d" && cat f; done` | `cat` in an unknown directory | `cat` in `/a`, path `/a/f` |
+| `for f in 'a b'; do cd $f && pwd; done` | `pwd` in an unknown directory | the same |
+| the same, option not set | unparseable | unparseable |
+
+The opt-in applies only to the source submitted to that
 `Parse` call. It does not cross into a decoded `bash -c` or `sh -c` child;
 without an independently asserted isolated state, a static loop in that child
 remains unparseable.
