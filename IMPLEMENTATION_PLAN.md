@@ -10,11 +10,13 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.17 effective values in fresh mode)
+## Completed (0.4.0-beta.17 effective values in fresh mode)
 
 - [x] Publish effective values under the fresh-process mode with or without the authored-facts option. Give a quoted exact binding its command word (#224).
 - [x] Prove that only effective values, resolved paths, and command words change, and that no corpus replay row gets worse. Run manual mutants.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.17` and verify NuGet publication.
+- [x] Merge PR #225 after Linux and Windows CI. Tag `0.4.0-beta.17` on merge
+      `dd4fc651` and verify NuGet publication. Workflow run 37164852714
+      published the package and the GitHub prerelease.
 
 ## Completed (0.4.0-beta.16 export, set --, and unknown reads)
 
