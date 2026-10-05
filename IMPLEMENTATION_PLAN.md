@@ -10,12 +10,14 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.19 ANSI-C quotes and expansion facts)
+## Completed (0.4.0-beta.19 ANSI-C quotes and expansion facts)
 
 - [x] Decode `$'…'` exactly for ASCII escapes. Fail closed on other escapes and on `$"…"` (#232).
 - [x] Publish `MayPathnameExpand` and `MayFieldSplit` for each argument.
 - [x] Prove that only inputs with `$'` or `$"` change apart from the new facts. Run manual mutants and the Netclaw call replay.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.19` and verify NuGet publication.
+- [x] Merge PR #233 after Linux and Windows CI. Tag `0.4.0-beta.19` on merge
+      `2e657c57` and verify NuGet publication. Workflow run 37311462750
+      published the package and the GitHub prerelease.
 
 ## Completed (0.4.0-beta.18 arithmetic, loop transfers, and brace words)
 
