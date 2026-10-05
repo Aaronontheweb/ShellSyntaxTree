@@ -1124,7 +1124,7 @@ destination. Any other domain, malformed set, over-limit join, or missing fact
 makes the whole public effect `Unknown`. A target does not prove existence,
 accessibility, authorization, or runtime success.
 
-#### Command words (v0.4.0-beta.7, position rule v0.4.0-beta.8)
+#### Command words (v0.4.0-beta.7, position rule v0.4.0-beta.8 and v0.4.0-beta.20)
 
 `CommandWords` gives the ordered command words of one occurrence. The fact
 uses general shell conventions only. It does not use the option grammar or
@@ -1152,7 +1152,7 @@ change the word. Each later verb or argument element then gets one class:
 | split | a word that can become more than one word | verb slot: `Unknown`; later: skipped |
 | text | a static value that is empty or has whitespace or a quoted glob character | skipped |
 | value | a static value with an ASCII digit | skipped |
-| command word | any other static value, quoted or not | kept, except an option value after the verb slot |
+| command word | any other static value, quoted or not | kept, except an option value |
 
 - A quoted single word is a command word. `git "push"`, `git 'push'`,
   `git "pu"sh`, and `git \push` all give `git push`.
@@ -1197,8 +1197,9 @@ change the word. Each later verb or argument element then gets one class:
 Only command words follow the program word. Redirect targets are not words of
 the command. Bash assignment prefixes are not clause elements.
 
-Position rule (v0.4.0-beta.8, #197). The verb slot is the first command word
-after the program word. `IsVerbSlotFilled` is the one policy point.
+Position rule (v0.4.0-beta.8, #197; option values v0.4.0-beta.20, #237). The
+verb slot is the first command word after the program word.
+`IsVerbSlotFilled` is the one policy point.
 
 ```
 schematic, per element after the program word:
@@ -1207,44 +1208,62 @@ schematic, per element after the program word:
       if verb slot empty: return Unknown      // could be the verb
       else: skip                               // an argument
   if class is command word:
-      if verb slot filled and previous element is an option without
-         an inline value: skip                 // the option's value
+      if previous element is an option without an inline value,
+         and that option is not a bare `--` in the verb slot:
+          skip                                 // the option's value
       else: keep                               // fills the slot first
 ```
 
-- Until the slot is filled, a plain word after an option stays, because it
-  can be a subcommand after a valueless switch: `git -p filter-branch` gives
-  `git filter-branch`.
-- After the slot is filled, a plain word directly after an option is that
-  option's value: `dotnet build -c Release` gives `dotnet build`, and
-  `git log --oneline main` gives `git log`.
-- After the slot is filled, a dynamic or split word is an argument:
-  `git add *` gives `git add`, and `gh pr update-branch $n` gives
-  `gh pr update-branch`.
+- Everywhere, a plain word directly after an option is that option's value.
+  The next plain word after the option and its value is the verb:
+  `ilspycmd -t A.B /p/x.dll` gives `ilspycmd`, `kubectl -n prod get pods`
+  gives `kubectl get pods`, and `dotnet build -c Release` gives
+  `dotnet build`. Before v0.4.0-beta.20, the verb slot kept the plain word
+  after an option, so `ilspycmd -t A.B /p/x.dll` gave `ilspycmd A.B`.
+- An option with an inline value (`--repo=o/r`, PowerShell `-Name:x`) takes no
+  next word: `cmd --flag=value sub` gives `cmd sub`.
+- A value, a path, or text after an option does not fill the verb slot:
+  `gh -R o/r pr view` gives `gh pr view`, and `git -C ~/repo log` gives
+  `git log`.
+- Bare `--` ends the options and takes no value in the verb slot:
+  `git -- push` gives `git push`. After the verb slot, the word after `--` is
+  still skipped: `git checkout -- main` gives `git checkout`.
+- A dynamic or split word in the verb slot gives `Unknown`, also after an
+  option: `cmd -x $v sub` and `cmd -x * sub` give `Unknown`. After the slot is
+  filled, it is an argument: `git add *` gives `git add`.
+- An option whose value comes from one exact binding or launch value is a
+  static option: `o=-x; cmd "$o" value sub` gives `cmd sub`. A word with an
+  unproved value that does not start with `-` is dynamic. In the verb slot it
+  gives `Unknown`: `cmd "$o" value sub` with an unknown `o`.
 - A plain word that does not follow an option stays everywhere:
   `git push origin feature-x` keeps all its words.
 - Option order before the verb slot and option order after the verb chain do
-  not change the result.
+  not change the result when each option before the verb slot has a value.
 
-Limit: after the verb slot, a sub-subcommand that follows an option is
-skipped. `git remote -v add evil url` gives `git remote evil url`. Without
-the grammar of the program, a switch and a sub-subcommand look the same as an
-option and its value. The top-level verb stays protected.
+Limit (owner decision, #237): the rules do not know which options take a
+value. A switch without a value hides the plain word after it. `docker --debug
+run` gives `docker`, `git --no-pager log` gives `git`, `gh --debug auth logout`
+gives `gh logout`, and `git remote -v add evil url` gives `git remote evil
+url`. A wrapper program is affected too: `xargs -0 rm` gives `xargs`, and
+`env -i rm` gives `env`. A consumer that keys a grant on the words must treat a
+wrapper as a separate risk.
 
 | Source | `CommandWords` |
 |---|---|
 | `gh -R o/r pr view 123` | `gh pr view` |
 | `gh pr view 123 -R o/r` | `gh pr view` |
 | `git push origin v0.4.0` | `git push origin` |
-| `git -p filter-branch --force HEAD` | `git filter-branch` |
-| `pgrep -x name` | `pgrep name` |
+| `git -p filter-branch --force HEAD` | `git` |
+| `pgrep -x name` | `pgrep` |
+| `ilspycmd -t A.B /p/x.dll` | `ilspycmd` |
+| `kubectl -n prod get pods` | `kubectl get pods` |
 | `dotnet build -c Release` | `dotnet build` |
 | `gh pr view 1 --json state,url` | `gh pr view` |
 | `git add *` | `git add` |
 | `git commit -m "fix the bug"` | `git commit` |
 | `du -sh ./*` | `du` |
 | `du -sh *` | `Unknown` |
-| `Get-Process -Name foo` | `Get-Process foo` |
+| `Get-Process -Name foo` | `Get-Process` |
 | `git {push,log}` | `Unknown` |
 
 The value is also `Unknown` when `IsComplete` is false, when the command name

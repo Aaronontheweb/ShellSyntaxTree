@@ -13,10 +13,10 @@ Hand-rolled, AOT-trim friendly, zero native dependencies. Multi-targets
 
 ```bash
 # Current package
-dotnet add package ShellSyntaxTree --version 0.4.0-beta.19
+dotnet add package ShellSyntaxTree --version 0.4.0-beta.20
 ```
 
-Version `0.4.0-beta.19` includes Bash ANSI-C quote decoding, per-argument pathname-expansion and field-splitting facts, bounded Bash arithmetic expansion, bounded loop `break` and `continue`, unresolved brace words, effective values and binding command words under the fresh-process mode, bounded Bash `export` and `set --`, unknown variable reads under the fresh-process mode, heredocs in command substitutions, Bash background lists, Bash control-flow statements, wider Bash assignment facts, pathname-expansion facts, launcher-proved environment facts, command-word facts, bounded Bash and PowerShell assignment facts,
+Version `0.4.0-beta.20` includes the option-value rule for the command-word verb slot, Bash ANSI-C quote decoding, per-argument pathname-expansion and field-splitting facts, bounded Bash arithmetic expansion, bounded loop `break` and `continue`, unresolved brace words, effective values and binding command words under the fresh-process mode, bounded Bash `export` and `set --`, unknown variable reads under the fresh-process mode, heredocs in command substitutions, Bash background lists, Bash control-flow statements, wider Bash assignment facts, pathname-expansion facts, launcher-proved environment facts, command-word facts, bounded Bash and PowerShell assignment facts,
 bounded PowerShell collection facts, shell-neutral filesystem tree-access
 effects, and fail-closed approval diagnostics alongside the typed syntax tree,
 command-occurrence API, bounded authored-value analysis, audited filesystem and
