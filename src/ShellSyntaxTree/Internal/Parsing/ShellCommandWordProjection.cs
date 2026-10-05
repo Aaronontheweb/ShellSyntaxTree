@@ -40,28 +40,30 @@ namespace ShellSyntaxTree.Internal.Parsing;
 /// of the command, and assignment prefixes are not clause elements.
 /// </para>
 /// <para>
-/// Position rule (#197). The verb slot is the first command word after the
-/// program word. Until it is filled, the rules are strict: a dynamic word
-/// makes the result unknown, and a plain word after an option is kept,
-/// because it can be a subcommand after a valueless switch
-/// (<c>git -p filter-branch</c>). After the slot is filled, a dynamic word
-/// is skipped as an argument, and a plain word directly after an option is
-/// skipped as that option's value (<c>dotnet build -c Release</c>). A plain
-/// word that does not follow an option is still kept.
+/// Position rule (#197, #237). The verb slot is the first command word after
+/// the program word. Until it is filled, a dynamic word makes the result
+/// unknown, because it can be the verb. After the slot is filled, a dynamic
+/// word is skipped as an argument. Everywhere, a plain word directly after an
+/// option without an inline value is skipped as that option's value
+/// (<c>ilspycmd -t A.B</c>, <c>dotnet build -c Release</c>). A plain word
+/// that does not follow an option is kept. Bare <c>--</c> takes no value in
+/// the verb slot: <c>git -- push</c> gives <c>git push</c>.
 /// </para>
 /// <para>
-/// Limit: after the verb slot, a sub-subcommand that follows an option is
-/// skipped. <c>git remote -v add evil url</c> gives <c>git remote</c>.
-/// Without the grammar of the program, a switch and a sub-subcommand look
-/// the same as an option and its value. The top-level verb stays protected.
+/// Limit (owner decision, #237): a switch without a value hides the plain
+/// word after it. <c>docker --debug run</c> gives <c>docker</c>, and
+/// <c>git remote -v add evil url</c> gives <c>git remote evil url</c>.
+/// Without the grammar of the program, a switch and a subcommand look the
+/// same as an option and its value.
 /// </para>
 /// </remarks>
 internal static class ShellCommandWordProjection
 {
     /// <summary>
     /// Policy point (owner decision, #197). The verb slot is filled when the
-    /// result holds the program word and one more command word. Strict rules
-    /// apply only before this point.
+    /// result holds the program word and one more command word. Before this
+    /// point, a dynamic word makes the result unknown and bare <c>--</c>
+    /// takes no value.
     /// </summary>
     internal static bool IsVerbSlotFilled(int commandWordCount) => commandWordCount > 1;
 
@@ -146,17 +148,16 @@ internal static class ShellCommandWordProjection
                 return new ShellCommandWords.Unknown();
             }
 
-            // After the verb slot, a plain word directly after an option is
-            // that option's value. Before it, the word can be a subcommand
-            // after a valueless switch, so it is kept.
-            if (wordClass == WordClass.CommandWord &&
-                (!followsOption || !verbSlotFilled))
+            // Owner rule (#237): a plain word directly after an option is
+            // that option's value, also in the verb slot.
+            if (wordClass == WordClass.CommandWord && !followsOption)
             {
                 words.Add(value);
             }
 
             followsOption = wordClass == WordClass.Option &&
-                            !HasInlineOptionValue(value);
+                            !HasInlineOptionValue(value) &&
+                            !(IsEndOfOptions(value) && !verbSlotFilled);
         }
 
         return new ShellCommandWords.Known(words);
@@ -535,6 +536,12 @@ internal static class ShellCommandWordProjection
     // the next word is not that option's value.
     private static bool HasInlineOptionValue(string value) =>
         value.IndexOf('=') >= 0 || value.IndexOf(':') >= 0;
+
+    // Bare `--` ends the options and takes no value. In the verb slot, the
+    // next plain word is the verb: `git -- push` runs `git push`. After the
+    // verb slot, the word after `--` keeps the option-value rule (#237 scope).
+    private static bool IsEndOfOptions(string value) =>
+        string.Equals(value, "--", StringComparison.Ordinal);
 
     private static bool ContainsWhitespace(string value)
     {

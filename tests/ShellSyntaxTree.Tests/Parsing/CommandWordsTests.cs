@@ -25,18 +25,19 @@ public class CommandWordsTests
     [InlineData("gh pr view 123 -R o/r", "gh pr view")]
     [InlineData("gh -R o/r pr view 123", "gh pr view")]
     [InlineData("gh --repo=o/r pr view --web 123", "gh pr view")]
-    [InlineData("git --no-pager log -1", "git log")]
+    // #237: a plain word after a switch is skipped as its value.
+    [InlineData("git --no-pager log -1", "git")]
     [InlineData("git show b42bf5a", "git show")]
     [InlineData("git push origin v0.4.0", "git push origin")]
     [InlineData("git push origin feature-x", "git push origin feature-x")]
-    [InlineData("pgrep -x name", "pgrep name")]
+    [InlineData("pgrep -x name", "pgrep")]
     [InlineData("df -h .", "df")]
     [InlineData("du -sh ./*", "du")]
     [InlineData("ls -la ../x", "ls")]
     [InlineData("echo \"hello world\"", "echo")]
     [InlineData("make build", "make build")]
-    [InlineData("git -p filter-branch", "git filter-branch")]
-    [InlineData("git -p filter-branch --force HEAD", "git filter-branch")]
+    [InlineData("git -p filter-branch", "git")]
+    [InlineData("git -p filter-branch --force HEAD", "git")]
     [InlineData("git \"push\" --force", "git push")]
     public void Bash_owner_table(string source, string expected) =>
         AssertBashWords(source, expected);
@@ -55,18 +56,106 @@ public class CommandWordsTests
     }
 
     [Theory]
-    // Strict until the verb slot is filled: these must not hide the verb.
-    [InlineData("git -p filter-branch", "git filter-branch")]
-    [InlineData("git --no-pager log", "git log")]
-    [InlineData("git -c x=y push", "git x=y push")]
-    [InlineData("gh --debug auth logout", "gh auth logout")]
+    // #237: in the verb slot too, a plain word after an option is the
+    // option's value. Before #237 these kept the word after the option.
+    [InlineData("git -p filter-branch", "git")]
+    [InlineData("git --no-pager log", "git")]
+    [InlineData("git -c x=y push", "git push")]
+    [InlineData("gh --debug auth logout", "gh logout")]
     [InlineData("git \"push\"", "git push")]
     [InlineData("git \\push", "git push")]
-    [InlineData("pgrep -x name", "pgrep name")]
-    public void Bash_verb_slot_keeps_a_plain_word_after_an_option(
+    [InlineData("pgrep -x name", "pgrep")]
+    public void Bash_verb_slot_skips_a_plain_word_after_an_option(
         string source,
         string expected) =>
         AssertBashWords(source, expected);
+
+    // ------------------------------------------------------------ option value in the verb slot (#237)
+
+    [Theory]
+    // Owner rule (#237): a plain word directly after an option is that
+    // option's value, also in the verb slot. The next plain word is the verb.
+    [InlineData("ilspycmd -t Mattermost.MattermostClient /p/x.dll", "ilspycmd")]
+    // `x.dll` does not follow an option, so it stays. A consumer can drop a
+    // file word.
+    [InlineData("ilspycmd -t A.B -o out x.dll", "ilspycmd x.dll")]
+    [InlineData("gh -R owner/repo pr view 12", "gh pr view")]
+    [InlineData("gh --repo owner/repo pr view", "gh pr view")]
+    [InlineData("git -C ~/repo log --oneline", "git log")]
+    [InlineData("git -c user.name=x commit -m msg", "git commit")]
+    [InlineData("dotnet --verbosity q build Foo.sln", "dotnet build Foo.sln")]
+    [InlineData("kubectl -n prod get pods", "kubectl get pods")]
+    [InlineData("git -C repo push", "git push")]
+    // An attached value is part of the option word, so `sub` is the verb.
+    [InlineData("cmd --flag=value sub", "cmd sub")]
+    // Bare `--` ends the options and takes no value, so `sub` is the verb.
+    [InlineData("cmd -- sub", "cmd sub")]
+    [InlineData("git --no-pager -- push origin", "git push origin")]
+    // A value or a path after an option does not use up the verb slot.
+    [InlineData("cmd -x 5 sub", "cmd sub")]
+    [InlineData("cmd -x ./* sub", "cmd sub")]
+    // No option before the verb: no change.
+    [InlineData("git push origin main", "git push origin main")]
+    [InlineData("gh pr view", "gh pr view")]
+    [InlineData("ilspycmd x.dll", "ilspycmd x.dll")]
+    public void Bash_verb_slot_skips_an_option_value(string source, string expected) =>
+        AssertBashWords(source, expected);
+
+    [Theory]
+    // Accepted trade-off (#237): the projection does not know which options
+    // take a value. A switch without a value, followed by a subcommand,
+    // hides that subcommand. The next plain word becomes the verb.
+    [InlineData("docker --debug run", "docker")]
+    [InlineData("docker --debug run img", "docker img")]
+    [InlineData("git --no-pager log -1", "git")]
+    [InlineData("git -p filter-branch --force HEAD", "git")]
+    [InlineData("gh --debug auth logout", "gh logout")]
+    public void Accepted_trade_off_a_switch_hides_the_subcommand_after_it(
+        string source,
+        string expected) =>
+        AssertBashWords(source, expected);
+
+    [Theory]
+    [InlineData("ilspycmd -t A.B /p/x.dll", "ilspycmd")]
+    [InlineData("gh --repo owner/repo pr view", "gh pr view")]
+    [InlineData("kubectl -n prod get pods", "kubectl get pods")]
+    [InlineData("Get-Process -Name foo", "Get-Process")]
+    [InlineData("cmd -- sub", "cmd sub")]
+    // Accepted trade-off, as in Bash.
+    [InlineData("docker --debug run", "docker")]
+    [InlineData("git --no-pager log -1", "git")]
+    [InlineData("gh --debug auth logout", "gh logout")]
+    public void PowerShell_verb_slot_skips_an_option_value(string source, string expected) =>
+        AssertPwshWords(source, expected);
+
+    [Fact]
+    public void Bash_exact_option_binding_skips_its_value_in_the_verb_slot()
+    {
+        // `"$o"` has one exact value, `-x`, so it is a static option word.
+        Assert.Equal("cmd sub", Words(ParseBash("o=-x; cmd \"$o\" value sub").Commands.Last()));
+    }
+
+    [Theory]
+    // Fail closed: a dynamic word or a bare glob in the verb slot gives
+    // Unknown, also when it follows an option.
+    [InlineData("cmd -x $v sub")]
+    [InlineData("cmd -x \"$v\" sub")]
+    [InlineData("cmd -x * sub")]
+    [InlineData("cmd $opt value sub")]
+    [InlineData("cmd \"$opt\" value sub")]
+    [InlineData("o='-x y'; cmd $o sub")]
+    public void Bash_dynamic_word_in_the_verb_slot_stays_unknown_after_an_option(string source)
+    {
+        Assert.IsType<ShellCommandWords.Unknown>(ParseBash(source).Commands.Last().CommandWords);
+    }
+
+    [Fact]
+    public void Bash_bare_double_dash_after_the_verb_slot_keeps_its_rule()
+    {
+        // Out of scope for #237: after the verb slot, the word after `--`
+        // is still skipped as an option value.
+        AssertBashWords("git checkout -- main", "git checkout");
+    }
 
     [Theory]
     [InlineData("git *")]
@@ -134,7 +223,7 @@ public class CommandWordsTests
     [InlineData("r=$(cmd); git push \"$r\"", "git push")]
     // `main` follows an option, so it is skipped as that option's value.
     [InlineData("git log --oneline main", "git log")]
-    [InlineData("git -p filter-branch --force HEAD", "git filter-branch")]
+    [InlineData("git filter-branch --force HEAD", "git filter-branch")]
     // Plain words that do not follow an option are kept.
     [InlineData("git push origin feature-x", "git push origin feature-x")]
     [InlineData("make build", "make build")]
@@ -171,8 +260,8 @@ public class CommandWordsTests
     }
 
     [Theory]
-    [InlineData("Get-Process -Name foo", "Get-Process foo")]
-    [InlineData("gh --debug auth logout", "gh auth logout")]
+    [InlineData("Get-Process -Name foo", "Get-Process")]
+    [InlineData("gh --debug auth logout", "gh logout")]
     [InlineData("dotnet build -c Release", "dotnet build")]
     [InlineData("git commit -m fix", "git commit")]
     [InlineData("gh pr list --state open", "gh pr list")]
@@ -204,10 +293,9 @@ public class CommandWordsTests
     [InlineData("git 'filter-branch'", "git filter-branch")]
     [InlineData("git filter\"-branch\"", "git filter-branch")]
     [InlineData("git \\filter-branch", "git filter-branch")]
-    [InlineData("git -c x=y push", "git x=y push")]
+    [InlineData("git -c x=y push", "git push")]
     [InlineData("git --git-dir=. push", "git push")]
     [InlineData("git -C repo push", "git push")]
-    [InlineData("gh --debug auth logout", "gh auth logout")]
     // `env` and `command` are the program words. The real verb follows them.
     [InlineData("env git push", "env git push")]
     [InlineData("command git push", "command git push")]
@@ -253,8 +341,7 @@ public class CommandWordsTests
     [InlineData("git \"push\"", "git push")]
     [InlineData("git 'log'", "git log")]
     [InlineData("git -- push", "git push")]
-    [InlineData("git --no-pager log -1", "git log")]
-    [InlineData("gh --debug auth logout", "gh auth logout")]
+    [InlineData("git -c x=y push", "git push")]
     public void PowerShell_hiding_attempts_keep_the_real_verb(string source, string expected) =>
         AssertPwshWords(source, expected);
 
@@ -288,10 +375,14 @@ public class CommandWordsTests
 
     [Theory]
     [InlineData("r=push; git \"$r\"", "git push")]
-    [InlineData("r=push; git -p \"$r\"", "git push")]
+    // #237: the binding word is static, so it is the value of `-p`.
+    [InlineData("r=push; git -p \"$r\"", "git")]
+    [InlineData("r=push; git -C . \"$r\"", "git push")]
     [InlineData("r=push; git push \"$r\"", "git push push")]
     [InlineData("r=push; git \"$r\"-x origin", "git push-x origin")]
-    [InlineData("x=-p; git \"$x\" log", "git log")]
+    // The binding word `-p` is an option, so `log` is its value (#237).
+    [InlineData("x=-p; git \"$x\" log", "git")]
+    [InlineData("x=-p; git \"$x\" -- log", "git log")]
     [InlineData("for s in push pull; do :; done; git \"$s\"", "git pull")]
     [InlineData("r=/tmp; ls \"$r/x\"", "ls")]
     public void Bash_quoted_exact_binding_gives_its_value_as_a_word(string source, string expected)
@@ -488,7 +579,7 @@ public class CommandWordsTests
 
     [Theory]
     [InlineData("Start-Sleep -Seconds 300", "Start-Sleep")]
-    [InlineData("Get-Process -Name foo", "Get-Process foo")]
+    [InlineData("Get-Process -Name foo", "Get-Process")]
     [InlineData("Get-Process foo", "Get-Process foo")]
     [InlineData("Remove-Item x.txt -Force", "Remove-Item")]
     [InlineData("Get-Item -Path:foo bar", "Get-Item")]
@@ -561,21 +652,22 @@ public class CommandWordsTests
     public static IEnumerable<object[]> SeededOptionOrders()
     {
         // The repository has no property-test library, so a seeded table
-        // stands in for one. Before the verb slot, an option value must not
-        // be a plain word, because a plain word there is kept. After the
-        // verb chain, plain option values, digits, and bare globs may appear
-        // in any order.
+        // stands in for one. Before the verb slot, every option has a value
+        // (#237): a switch without a value would take `pr` as its value.
+        // After the verb chain, switches, plain option values, digits, and
+        // bare globs may appear in any order.
         var prefix = new[]
         {
             new[] { "-R", "o/r" },
-            new[] { "--web" },
             new[] { "--json=title" },
             new[] { "-L", "5" },
             new[] { "--repo=o/r" },
-            new[] { "-q" },
+            new[] { "-X", "value" },
         };
         var suffix = prefix.Concat(new[]
         {
+            new[] { "--web" },
+            new[] { "-q" },
             new[] { "--state", "open" },
             new[] { "-c", "Release" },
             new[] { "--json", "state,url" },

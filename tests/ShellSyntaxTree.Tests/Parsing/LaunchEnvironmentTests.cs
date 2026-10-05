@@ -234,7 +234,9 @@ public class LaunchEnvironmentTests
     [InlineData("\"${HOME}/bin/tool\" status", Home + "/bin/tool status")]
     [InlineData("git \"$SUB\" origin", "git push origin")]
     [InlineData("git $SUB origin", "git push origin")]
-    [InlineData("git -p \"$SUB\"", "git push")]
+    // `"$SUB"` is one static word, so it is the value of `-p` (#237).
+    [InlineData("git -p \"$SUB\"", "git")]
+    [InlineData("git -C . \"$SUB\"", "git push")]
     [InlineData("git \"$TMPDIR\" status", "git status")]
     [InlineData("git \"$SPACED\" status", "git status")]
     [InlineData("git \"$STAR\" status", "git status")]
