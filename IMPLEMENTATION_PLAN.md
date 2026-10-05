@@ -10,13 +10,15 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.18 arithmetic, loop transfers, and brace words)
+## Completed (0.4.0-beta.18 arithmetic, loop transfers, and brace words)
 
 - [x] Parse a bounded `$((…))` whose reads hold proved integers. Fail closed on `((…))`, `let`, subscripts, assignments, command substitutions, and unproved reads (#227).
 - [x] Parse bounded `break`, `continue`, `exit`, and `return`, and join loop-transfer states into their loops.
 - [x] Give a word with a brace expansion no exact value and no path.
 - [x] Prove that only inputs with these constructs change. Run manual mutants and the Netclaw call replay.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.18` and verify NuGet publication.
+- [x] Merge PR #230 after Linux and Windows CI. Tag `0.4.0-beta.18` on merge
+      `57be9192` and verify NuGet publication. Workflow run 37263555759
+      published the package and the GitHub prerelease.
 
 ## Completed (0.4.0-beta.17 effective values in fresh mode)
 
