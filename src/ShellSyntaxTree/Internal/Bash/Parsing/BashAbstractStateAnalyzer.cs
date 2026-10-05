@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using System.Text;
+using ShellSyntaxTree.Internal.Bash.Lexing;
 using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
@@ -34,6 +35,12 @@ internal sealed class BashAbstractStateAnalyzer
     private readonly Dictionary<Clause, ShellWorkingDirectoryEffectFacts>
         _workingDirectoryEffects = new(ClauseReferenceComparer.Instance);
     private readonly List<BashForInAnalysisPlanReference> _rewrittenForInPlans = new();
+
+    // The arithmetic expansions whose reads this pass proved (#227), and the
+    // enclosing loops of the statement under analysis, innermost last.
+    private readonly HashSet<int> _provedArithmetic = new();
+    private readonly List<LoopEscapeFrame> _loopFrames = new();
+    private string? _failureReason;
     private bool _isComplete = true;
     private int _remainingLoopAnalysisTransitions = MaxLoopAnalysisTransitions;
 
@@ -52,9 +59,11 @@ internal sealed class BashAbstractStateAnalyzer
         BashParserOptions options,
         Func<SimpleCommandSyntax, CommandOccurrenceFacts> factsFactory,
         Func<ForEachSyntax, BashForInAnalysisPlan?> forInPlanFactory,
+        IReadOnlyCollection<int> arithmeticSites,
         out ShellBlockSyntax analyzedSyntax,
         out Func<SimpleCommandSyntax, CommandOccurrenceFacts> analyzedFacts,
-        out IReadOnlyList<BashForInAnalysisPlanReference> analyzedForInPlans)
+        out IReadOnlyList<BashForInAnalysisPlanReference> analyzedForInPlans,
+        out string? failureReason)
     {
         var analyzer = new BashAbstractStateAnalyzer(
             options,
@@ -67,6 +76,20 @@ internal sealed class BashAbstractStateAnalyzer
             assignments: null,
             exportedNames: null);
         analyzer.AnalyzeBlock(syntax, initial);
+
+        // Every arithmetic expansion must have a proved state. One in a
+        // position that this pass does not visit fails closed (#227).
+        foreach (var site in arithmeticSites)
+        {
+            if (!analyzer._provedArithmetic.Contains(site))
+            {
+                analyzer.FailArithmetic(
+                    "a Bash arithmetic expansion is not supported in this position");
+                break;
+            }
+        }
+
+        failureReason = analyzer._failureReason;
         if (!analyzer._isComplete)
         {
             analyzedSyntax = syntax;
@@ -135,6 +158,12 @@ internal sealed class BashAbstractStateAnalyzer
                 clearBindings: false);
         }
 
+        if (syntax.Value is not null &&
+            !TryProveArithmetic(syntax.Value.Value.Fragments, input))
+        {
+            return new BashFlowResult(null, null);
+        }
+
         var domain = syntax.Value is null
             ? DomainOf(assignment.EffectiveValue)
             : EvaluateAssignmentValue(syntax.Value, input);
@@ -160,6 +189,15 @@ internal sealed class BashAbstractStateAnalyzer
         if (value.HasSubstitution)
         {
             return ShellValueDomainFacts.Unknown;
+        }
+
+        // A whole arithmetic expansion gives a decimal integer, which a
+        // later arithmetic expansion can read safely (#227).
+        if (!value.LeadingTilde &&
+            value.Value.Fragments.Count == 1 &&
+            IsArithmeticFragment(value.Value.Fragments[0]))
+        {
+            return ShellValueDomainFacts.IntegerRange(long.MinValue, long.MaxValue);
         }
 
         var options = OptionsFor(input, value.LaunchEnvironment);
@@ -233,6 +271,11 @@ internal sealed class BashAbstractStateAnalyzer
                 clearBindings: false);
         }
 
+        if (!TryProveArithmetic(_factsFactory(simple).ArithmeticExpansions, input))
+        {
+            return new BashFlowResult(null, null);
+        }
+
         if (input.Bindings.HasBindings &&
             IsPotentialPersistentBindingMutation(simple.Clause) &&
             !IsModeledRead(simple.Clause) &&
@@ -245,6 +288,7 @@ internal sealed class BashAbstractStateAnalyzer
 
         RecordInput(simple.Clause, input);
         RecordEffectiveArguments(simple, input);
+        RecordLoopTransfer(simple.Clause, input);
         if (TryAnalyzeRead(simple.Clause, input, out var readFlow))
         {
             return readFlow;
@@ -479,44 +523,66 @@ internal sealed class BashAbstractStateAnalyzer
             return BashFlowResult.Success(loopInput.Value);
         }
 
-        if (plan.RequiresFixedPoint)
+        var frame = new LoopEscapeFrame();
+        _loopFrames.Add(frame);
+        try
         {
-            return AnalyzeForEachFixedPoint(
-                forEach,
-                loopInput.Value,
-                sourcePlan,
-                plan);
-        }
-
-        BashFlowResult? last = null;
-        var iterationInput = loopInput.Value;
-        foreach (var candidate in plan.OrderedCandidates)
-        {
-            if (!TryConsumeLoopAnalysisTransition())
+            if (plan.RequiresFixedPoint)
             {
-                return new BashFlowResult(null, null);
+                return AnalyzeForEachFixedPoint(
+                    forEach,
+                    loopInput.Value,
+                    sourcePlan,
+                    plan,
+                    frame);
             }
 
-            iterationInput = iterationInput.WithBinding(
-                sourcePlan.BindingName,
-                candidate);
-            last = AnalyzeBlock(forEach.Body, iterationInput);
-            if (last.Value.JoinedState is not BashAbstractState next)
+            BashFlowResult? last = null;
+            BashAbstractState? lastContinue = null;
+            var iterationInput = loopInput.Value;
+            foreach (var candidate in plan.OrderedCandidates)
             {
-                return new BashFlowResult(null, null);
+                if (!TryConsumeLoopAnalysisTransition())
+                {
+                    return new BashFlowResult(null, null);
+                }
+
+                iterationInput = iterationInput.WithBinding(
+                    sourcePlan.BindingName,
+                    candidate);
+                frame.Continue = null;
+                last = AnalyzeBlock(forEach.Body, iterationInput);
+                lastContinue = frame.Continue;
+                if (BashAbstractState.JoinNullable(last.Value.JoinedState, lastContinue)
+                    is not BashAbstractState next)
+                {
+                    return new BashFlowResult(null, null);
+                }
+
+                iterationInput = next;
             }
 
-            iterationInput = next;
+            // A `continue` in the last iteration and a `break` in any
+            // iteration end the loop with status zero.
+            var result = last ?? BashFlowResult.Success(loopInput.Value);
+            return new BashFlowResult(
+                BashAbstractState.JoinNullable(
+                    BashAbstractState.JoinNullable(result.OnSuccess, lastContinue),
+                    frame.Break),
+                result.OnFailure);
         }
-
-        return last ?? BashFlowResult.Success(loopInput.Value);
+        finally
+        {
+            _loopFrames.RemoveAt(_loopFrames.Count - 1);
+        }
     }
 
     private BashFlowResult AnalyzeForEachFixedPoint(
         ForEachSyntax forEach,
         BashAbstractState loopInput,
         BashForInAnalysisPlan sourcePlan,
-        BashIterationPlan plan)
+        BashIterationPlan plan,
+        LoopEscapeFrame frame)
     {
         BashAbstractState? success = plan.Cardinality == BashIterationCardinality.ZeroOrMore
             ? loopInput
@@ -534,21 +600,28 @@ internal sealed class BashAbstractStateAnalyzer
                 return new BashFlowResult(null, null);
             }
 
+            frame.Continue = null;
             var body = AnalyzeBlock(
                 forEach.Body,
                 head.WithBinding(sourcePlan.BindingName, plan.Summary));
             success = BashAbstractState.JoinNullable(success, body.OnSuccess);
+            success = BashAbstractState.JoinNullable(success, frame.Continue);
             failure = BashAbstractState.JoinNullable(failure, body.OnFailure);
-            if (body.JoinedState is not BashAbstractState bodyExit)
+            if (BashAbstractState.JoinNullable(body.JoinedState, frame.Continue)
+                is not BashAbstractState bodyExit)
             {
-                return new BashFlowResult(success, failure);
+                return new BashFlowResult(
+                    BashAbstractState.JoinNullable(success, frame.Break),
+                    failure);
             }
 
             wideningBase = head;
             nextHead = BashAbstractState.Join(head, bodyExit);
             if (head.StateEquals(nextHead))
             {
-                return new BashFlowResult(success, failure);
+                return new BashFlowResult(
+                    BashAbstractState.JoinNullable(success, frame.Break),
+                    failure);
             }
 
             head = nextHead;
@@ -562,12 +635,108 @@ internal sealed class BashAbstractStateAnalyzer
         }
 
         var widened = BashAbstractState.Widen(wideningBase, nextHead);
+        frame.Continue = null;
         var widenedBody = AnalyzeBlock(
             forEach.Body,
             widened.WithBinding(sourcePlan.BindingName, plan.Summary));
+        success = BashAbstractState.JoinNullable(success, widenedBody.OnSuccess);
+        success = BashAbstractState.JoinNullable(success, frame.Continue);
         return new BashFlowResult(
-            BashAbstractState.JoinNullable(success, widenedBody.OnSuccess),
+            BashAbstractState.JoinNullable(success, frame.Break),
             BashAbstractState.JoinNullable(failure, widenedBody.OnFailure));
+    }
+
+    /// <summary>
+    /// Joins the state at a bounded <c>break</c> or <c>continue</c> into its
+    /// target loop. A level beyond the loop depth targets the outermost
+    /// loop. Without a loop, Bash reports an error and goes on, so the
+    /// normal flow already covers it. The statement after the builtin still
+    /// receives this state, which includes more states than Bash can reach.
+    /// </summary>
+    private void RecordLoopTransfer(Clause clause, BashAbstractState input)
+    {
+        if (_loopFrames.Count == 0 ||
+            !BashControlTransferBuiltin.TryGetLoopTransfer(clause, out var kind, out var level))
+        {
+            return;
+        }
+
+        var frame = _loopFrames[Math.Max(0, _loopFrames.Count - level)];
+        if (kind == BashLoopTransferKind.Break)
+        {
+            frame.Break = BashAbstractState.JoinNullable(frame.Break, input);
+        }
+        else
+        {
+            frame.Continue = BashAbstractState.JoinNullable(frame.Continue, input);
+        }
+    }
+
+    private static bool IsArithmeticFragment(ShellValueFragment fragment) =>
+        fragment.Kind == ShellValueFragmentKind.Opaque &&
+        fragment.OpaqueCause == ShellOpaqueCause.ArithmeticExpansion;
+
+    /// <summary>
+    /// Proves that each bounded arithmetic expansion in
+    /// <paramref name="fragments"/> runs no code (#227). Bash evaluates the
+    /// value of each variable that the expression reads as an arithmetic
+    /// expression too, and a value such as <c>a[$(cmd)]</c> runs
+    /// <c>cmd</c>. So each variable must hold a proved integer: a bound
+    /// value that is a decimal integer, or the result of an earlier
+    /// arithmetic expansion. The special parameters <c>$?</c>, <c>$#</c>,
+    /// and <c>$$</c> are always integers. A variable with an unknown value,
+    /// an environment value, or a value of a command substitution fails
+    /// closed.
+    /// </summary>
+    private bool TryProveArithmetic(
+        IReadOnlyList<ShellValueFragment> fragments,
+        BashAbstractState input)
+    {
+        foreach (var fragment in fragments)
+        {
+            if (!IsArithmeticFragment(fragment))
+            {
+                continue;
+            }
+
+            if (fragment.SourceStart is not int site ||
+                !BashArithmeticGrammar.TryGetReads(fragment.Value, out var reads))
+            {
+                FailArithmetic("a Bash arithmetic expansion has invalid source provenance");
+                return false;
+            }
+
+            foreach (var read in reads)
+            {
+                if (read.IsSpecialParameter)
+                {
+                    continue;
+                }
+
+                // Without a proved initial state, a name can carry an ambient
+                // attribute or value.
+                if (_options.InitialStateMode is not (
+                        BashInitialStateMode.IsolatedNonInteractive or
+                        BashInitialStateMode.FreshNonInteractiveNoStartup) ||
+                    !input.Bindings.TryGetDomain(read.Name, out var domain) ||
+                    !BashLoopBindingContext.IsIntegerOnly(domain))
+                {
+                    FailArithmetic(
+                        "a Bash arithmetic expansion reads a variable that does not hold a proved integer");
+                    return false;
+                }
+            }
+
+            _provedArithmetic.Add(site);
+        }
+
+        return true;
+    }
+
+    private void FailArithmetic(string reason)
+    {
+        _isComplete = false;
+        _failureReason ??= reason;
     }
 
     private bool TryConsumeLoopAnalysisTransition()
@@ -687,6 +856,23 @@ internal sealed class BashAbstractStateAnalyzer
             return new BashFlowResult(null, null);
         }
 
+        var frame = new LoopEscapeFrame();
+        _loopFrames.Add(frame);
+        try
+        {
+            return AnalyzeConditionLoopIterations(loop, input, frame);
+        }
+        finally
+        {
+            _loopFrames.RemoveAt(_loopFrames.Count - 1);
+        }
+    }
+
+    private BashFlowResult AnalyzeConditionLoopIterations(
+        ConditionLoopSyntax loop,
+        BashAbstractState input,
+        LoopEscapeFrame frame)
+    {
         BashAbstractState? exit = null;
         var head = input;
         var wideningBase = input;
@@ -707,18 +893,19 @@ internal sealed class BashAbstractStateAnalyzer
                 head = BashAbstractState.Widen(wideningBase, head);
             }
 
+            frame.Continue = null;
             var condition = AnalyzeBlock(loop.Condition, head);
             var (stay, leave) = loop.LoopKind == ConditionLoopKind.While
                 ? (condition.OnSuccess, condition.OnFailure)
                 : (condition.OnFailure, condition.OnSuccess);
             exit = BashAbstractState.JoinNullable(exit, leave);
-            if (stay is not BashAbstractState bodyInput)
-            {
-                break;
-            }
+            var bodyFlow = stay is BashAbstractState bodyInput
+                ? AnalyzeBlock(loop.Body, bodyInput).JoinedState
+                : null;
 
-            var body = AnalyzeBlock(loop.Body, bodyInput);
-            if (body.JoinedState is not BashAbstractState bodyExit)
+            // A `continue` returns to the condition (#227).
+            if (BashAbstractState.JoinNullable(bodyFlow, frame.Continue)
+                is not BashAbstractState bodyExit)
             {
                 break;
             }
@@ -733,7 +920,9 @@ internal sealed class BashAbstractStateAnalyzer
             head = nextHead;
         }
 
-        return exit is BashAbstractState state
+        // A `break` leaves the loop with status zero, but a condition exit
+        // can have either status. Both paths keep the joined state.
+        return BashAbstractState.JoinNullable(exit, frame.Break) is BashAbstractState state
             ? BashFlowResult.Both(state)
             : new BashFlowResult(null, null);
     }
@@ -2754,6 +2943,17 @@ internal sealed class BashAbstractStateAnalyzer
     /// does not prove the effective value. The isolated and fresh-process
     /// modes both prove it, so they publish effective values too (#224).
     /// </summary>
+    /// <summary>
+    /// The joined states at each <c>break</c> and <c>continue</c> that targets
+    /// one loop. <see cref="Continue"/> covers the current iteration only.
+    /// </summary>
+    private sealed class LoopEscapeFrame
+    {
+        internal BashAbstractState? Break { get; set; }
+
+        internal BashAbstractState? Continue { get; set; }
+    }
+
     private bool PublishesAuthoredFactsOnly =>
         _options.PublishAuthoredSourceFacts &&
         _options.InitialStateMode is not (BashInitialStateMode.IsolatedNonInteractive or

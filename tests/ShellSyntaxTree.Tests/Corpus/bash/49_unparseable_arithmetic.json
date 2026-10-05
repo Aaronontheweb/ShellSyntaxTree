@@ -1,8 +1,26 @@
 {
-  "name": "Unparseable: arithmetic expansion",
+  "name": "Bounded arithmetic expansion",
   "input": "echo $((1+2))",
   "expected": {
-    "isUnparseable": true,
-    "unparseableReasonContains": "arithmetic expansion"
-  }
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "echo"
+        ],
+        "args": [
+          {
+            "raw": "$((1+2))",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A bounded arithmetic expansion is an argument with an unknown value. It is never a path (#227). The file name is historical."
 }

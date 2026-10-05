@@ -1,3 +1,21 @@
+#### 0.4.0-beta.18 2026-10-05 ####
+
+This prerelease parses bounded Bash arithmetic expansion and loop `break` and `continue`. It also fixes two misreads: a brace word and an arithmetic command (#227).
+
+## Added
+
+- A bounded `$((…))` parses as a value part of a word. Its value is `Unknown`, with `Kind = DynamicSkip`. It is never a path or a command word. The grammar accepts numeric constants, variable reads, nested bounded expansions, parentheses, and the operators `+ - * / % ** << >> & | ^ ~ ! < > <= >= == != && || ?:`.
+- Each variable that an arithmetic expansion reads must hold a proved integer: a bound decimal value, the result of an earlier arithmetic expansion, or `$?`, `$#`, `$$`. `n=5; echo $((n*2))`, `for i in 1 2; do echo $((i+1)); done`, and `x=$((1+2)); y=$((x*2))` parse.
+- A bounded `break`, `continue`, `exit`, or `return` (no operand, or one decimal operand; a level of 1 or more) parses in a loop. The state pass joins the state at a `break` into the end of its loop and the state at a `continue` into its head. `for d in a b; do continue; done` parses. `cd x || exit 1` no longer makes a later loop, `if`, or assignment unparseable.
+
+## Security and compatibility
+
+- Bash evaluates the value of each variable in an arithmetic context as an expression, and a value such as `a[$(cmd)]` runs `cmd`. So an arithmetic expansion fails closed when it reads a variable without a proved integer value, or when it holds a command substitution, an array subscript, an assignment, `++`, `--`, or the comma operator. `age=$(( ($(date +%s) - $(stat -c %Y "$d")) / 86400 ))` stays unparseable for this reason.
+- An arithmetic command `((…))` is unparseable. Before, `((cmd))` parsed as two subshells that run `cmd`, and `p=/safe; (( p = 0 )); cat "$p"` gave `cat` the value `/safe`. Bash assigns `0` to `p`. `( (cmd) )` with a space stays two subshells. `let` stays unparseable.
+- A word with an unquoted brace expansion, such as `{a,b}` or `{1..3}`, has an `Unknown` value, no resolved path, and no command word. Before, `cat ~/.netclaw/config/{netclaw,secrets}.json` gave one exact, resolved path, but Bash reads two files. A quoted or escaped brace, `{}`, and `{a}` stay literal. A brace word in a command name or a case word is unparseable.
+- Only inputs with `$((`, `((`, a control-transfer builtin, or a brace expansion change. An output comparison over 4,257 inputs, with each initial-state mode, both authored-fact settings, two working directories, and with and without launch facts (93,176 records), found no other changed record. A replay of 11,063 Netclaw shell calls gives 3 more parsed calls, 0 worse calls, and 2 brace words that are now `Unknown`.
+- There is no public API change. A consumer gets `Unknown` values and no new node, role, region, or value kind.
+
 #### 0.4.0-beta.17 2026-10-04 ####
 
 This prerelease publishes effective values and binding command words under `FreshNonInteractiveNoStartup` (#224).

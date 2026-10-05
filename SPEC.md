@@ -53,7 +53,8 @@ command can consume it.
 - Command execution. The library never runs anything.
 - Variable expansion. We mark dynamic tokens, never resolve them.
 - Function definitions, here-docs body extraction, complex parameter
-  expansion (`${var//pattern/replacement}`), arithmetic expansion.
+  expansion (`${var//pattern/replacement}`), and arithmetic expansion outside
+  the bounded grammar of v0.4.0-beta.18 (see "Bash arithmetic expansion").
 - Command-substitution evaluation. The library never executes a substitution
   or claims its produced value is known. Stable v0.3 recursively discovers
   commands inside supported Bash `$()` positions while retaining the authored
@@ -830,7 +831,8 @@ value in the state pass:
 - `AuthoredValue` is `Unknown` for any value that is not only literal text.
 
 The parser rejects a tilde anywhere else (`a:~`, `~user`), ANSI-C `$'...'`
-and locale `$"..."` quotes, backticks, escapes, arithmetic, complex parameter
+and locale `$"..."` quotes, backticks, escapes, arithmetic outside the bounded
+grammar, complex parameter
 expansion, unquoted whitespace, glob, and brace characters, arrays, `+=`, and
 redirects on an assignment-only statement. It also rejects an assignment-only
 statement in a pipeline stage, in a subshell, in a substitution body, or in a
@@ -1169,9 +1171,10 @@ change the word. Each later verb or argument element then gets one class:
 - A split word is an unquoted Bash expansion, a Bash brace list, or a
   PowerShell array, splat, or subexpression. It gives `Unknown` even inside an
   option or a path. With `r='x push'`, `git --c=$r log` runs
-  `git --c=x push log`. A path fact never excuses a split word: the parser
-  reports `{push,a/b}` as one resolved path, but `git {push,a/b}` runs
-  `git push a/b`.
+  `git --c=x push log`. A path fact never excuses a split word:
+  `git {push,a/b}` runs `git push a/b`. Before v0.4.0-beta.18 the parser
+  reported `{push,a/b}` as one resolved path. It now gives a brace word no
+  path (see "Bash brace words").
 - The parser rejects many expansions before this fact exists. For example,
   ``git `cmd` ``, `git $((1+1))`, and `git $'push'` are unparseable. Under
   `FreshNonInteractiveNoStartup`, `git $SUB` with an unassigned `SUB` parses
@@ -1801,8 +1804,9 @@ forms are exact static queries: bare `hash`, `alias`, `shopt`, and `enable`;
 without a definition; `shopt` option clusters without `s` or `u`; and no-name
 `enable` listing flags composed only from `a`, `n`, `p`, and `s`. Dynamic or
 invalid grammar fails closed, and exact `command` / `builtin` wrappers cannot
-bypass the boundary. `break`, `continue`, `return`, and `exit` remain
-loop-region failures until their transfers are implemented.
+bypass the boundary. From v0.4.0-beta.18, a bounded `break`, `continue`,
+`return`, or `exit` parses in a loop (see "Bash loop control transfer"). Other
+forms of these builtins stay loop-region failures.
 
 Unquoted `time` and `!` reserved prefixes execute the following pipeline with
 current-shell state; `coproc` starts hidden concurrent execution; and
@@ -2362,8 +2366,8 @@ quoted_string   := single-quoted | double-quoted
   body literal. In an expanding body, unescaped `$()` substitutions are
   executable even when their spelling is surrounded by quote characters,
   because heredoc body quotes are data rather than shell quoting syntax.
-  Escaped substitutions remain literal. Legacy backticks, `$((...))` and
-  obsolete `$[...]` arithmetic expansion, prompt-transformed `${name@P}` or
+  Escaped substitutions remain literal. Legacy backticks, `$((...))` outside
+  the bounded grammar, obsolete `$[...]` arithmetic expansion, prompt-transformed `${name@P}` or
   other parameter operators, line continuations that could hide a
   substitution boundary, and incomplete substitutions make the whole result
   unparseable.
@@ -2373,7 +2377,8 @@ quoted_string   := single-quoted | double-quoted
   `Redirect.Target` and sets `Redirect.IsDynamicSkip = true`. This
   prevents `2>&1` from being incorrectly resolved to `<cwd>/&1`.
 - Function definitions, assignments outside the bounded v0.4 slice, `select`,
-  `[[`, C-style or implicit loops, arithmetic execution, process substitution,
+  `[[`, C-style or implicit loops, arithmetic commands `((...))` and `let`,
+  process substitution,
   and a redirect on a compound command remain unparseable because they can
   hide executable regions outside the bounded grammar below. `while`, `until`,
   `if`, and `case` parse since v0.4.0-beta.13 (see "Bash control flow").
@@ -2462,6 +2467,141 @@ directory. In the compatibility leaves, the command after `&` has the
 substitution does. An `&` in a wrong position, such as `x & ; y`,
 `x & && y`, `& x`, or `x | & y`, stays unparseable. These facts do not grant
 authority.
+
+### Bash arithmetic expansion (v0.4.0-beta.18)
+
+A bounded `$((…))` is a value part of a word (#227). The lexer gives it one
+opaque region. The parser does not compute the value, so the word has the
+value `Unknown`, `Kind = DynamicSkip`, no resolved path, and no command word.
+A quoted `"$((…))"` stays one word. An unquoted one makes the command words
+`Unknown`, as an unquoted command substitution does.
+
+Bash can run code in an arithmetic context in two ways:
+
+1. A token of the expression. An array subscript expands command
+   substitutions, and the assignment, increment, and decrement operators
+   change variables.
+2. The value of a variable. Bash evaluates the value of each variable that
+   the expression reads as an expression too. With `x='a[$(cmd)]'`,
+   `$((x))` and `$(( $x ))` run `cmd`. The output of a command substitution
+   inside the expression is evaluated in the same way.
+
+Owner and data. `BashArithmeticGrammar` (lexer) owns the token rule. It is
+call-local. The state pass (`BashAbstractStateAnalyzer`) owns the value rule.
+It uses the actor-local state of one parse call and keeps nothing.
+
+Token rule. The grammar accepts numeric constants (decimal, `0x` hexadecimal,
+and `base#digits`), variable reads (a bare name, `$name`, `${name}`, `$?`,
+`$#`, and `$$`), a nested bounded `$((…))` up to the structural limit of 16,
+parentheses, spaces, tabs, and the operators `+ - * / % ** << >> & | ^ ~ ! <
+> <= >= == != && || ? :`. Every other token fails closed: `=` and every
+compound assignment operator, `++`, `--`, the comma operator, `[` and `]`, a
+command substitution, a backtick, a quote, a backslash, a line break, a
+positional parameter, and an operator form of `${…}`.
+
+Value rule. Each variable read must hold a proved integer at that point of
+the flow: a bound value that is decimal integer text (an optional sign and
+digits), or the result of an earlier arithmetic expansion. `$?`, `$#`, and
+`$$` are always integers. A name with no binding (an environment value), an
+`Unknown` binding, a non-integer value, and any read under the `Unknown`
+initial state fail closed. Every arithmetic expansion of the source must
+pass this rule at each visit. An expansion that the state pass does not visit
+(for example in a `for` list or a decoded `bash -c` string) fails closed.
+
+Flow (schematic, omits the other gates):
+
+```
+lexer:   $((…)) → TryScanExpansion → opaque region, or a sentinel with a reason
+state:   for each statement, before its other facts:
+           for each arithmetic region: for each read r:
+             r is $?, $#, or $$                       → proved
+             mode is Isolated or Fresh, and binding(r) is integer-only → proved
+             otherwise                                 → the whole parse fails
+assign:  x=$((…)) alone → binding(x) = integer (public value: Unknown)
+end:     an arithmetic region that no statement proved → the whole parse fails
+```
+
+| Source (fresh mode) | Result |
+|---|---|
+| `echo $((60*60))` | `echo`, argument value `Unknown` |
+| `n=5; echo "$((n*2))"` | parses |
+| `for i in 1 2; do echo $((i+1)); done` | parses |
+| `x=$((1+2)); y=$((x*2))` | parses; `x` and `y` have the value `Unknown` |
+| `echo $((x))` (no binding) | unparseable |
+| `x=$(date +%s); echo $((x))` | unparseable |
+| `echo $(( $(date +%s) / 60 ))` | unparseable |
+| `echo $(( a[1] ))`, `echo $(( x = 1 ))`, `echo $(( x++ ))` | unparseable |
+| `$((1+2)) foo` | unparseable (a command name) |
+
+An arithmetic command `((…))` fails closed. Bash reads `((` as an arithmetic
+command when the parenthesis that closes the second `(` is followed at once by
+`)`. Before v0.4.0-beta.18 the parser read two subshells, so
+`p=/safe; (( p = 0 )); cat "$p"` gave `cat` the value `/safe`, but Bash assigns
+`0` to `p`. `( (cmd) )` with a space and `((cmd) )` stay subshells. `let` stays
+unparseable. These facts do not grant authority.
+
+### Bash loop control transfer (v0.4.0-beta.18)
+
+A bounded `break`, `continue`, `exit`, or `return` changes no variable and no
+directory (#227). The bounded form has no operand or one static decimal
+operand. A `break` or `continue` level must be 1 or more. Other forms, such as
+`break x`, `break 0`, `break 1 2`, `exit "$x"`, and `command break`, keep the
+earlier rule: they fail closed in a `for` loop and make the later state
+unmodeled.
+
+Owner and data. `BashControlTransferBuiltin` owns the form. The state pass
+owns the flow. The loop frames are actor-local to one parse call.
+
+Flow (schematic):
+
+```
+break N / continue N:  frame = enclosing loop N (the outermost when N is larger)
+                       break:    frame.exit += state
+                       continue: frame.head += state
+                       the next statement still receives the state
+for, while, until:     head = join(head, body end, continue states)
+                       loop end = join(normal end, break states)
+exit, return:          the next statement still receives the state
+```
+
+The flow does not stop at these builtins, so the analysis includes more
+states than Bash can reach. A `break` in a subshell, a pipeline stage, or a
+substitution also joins into the loop, which is more than Bash does.
+
+| Source (fresh mode) | Result |
+|---|---|
+| `for d in a b; do continue; done` | parses |
+| `x=/a; for d in 1 2; do x=/b; [ -n "$d" ] && break; x=/c; done; cat "$x"` | `cat` value `{/b,/c}` |
+| `for d in 1 2; do for e in 3; do x=/e; break 2; done; x=/z; done; cat "$x"` | `cat` value `{/e,/z}` |
+| `[ -f a ] \|\| exit 1; for f in a b; do echo "$f"; done` | parses (unparseable before) |
+| `for d in a b; do break x; done` | unparseable |
+
+### Bash brace words (v0.4.0-beta.18)
+
+Bash expands an unquoted brace list `{a,b}` or sequence `{x..y}` or
+`{x..y..step}` (integers or single letters) before every other expansion
+(#227). One word becomes several words: `cat {a,b}` runs `cat a b`. Brace
+expansion is on in a non-interactive shell. Before v0.4.0-beta.18 the parser
+reported the brace text as one exact, resolved path. Thus
+`cat ~/.netclaw/config/{netclaw,secrets}.json` gave one path that no policy
+protects.
+
+The parser does not expand the word. The lexer (`BashBraceExpansion`) marks
+the unquoted parts of each word with a brace expansion as an opaque region.
+The word then has the value `Unknown`, `AuthoredValue = Unknown`,
+`AuthoredFileSystemValue = Unknown`, `Kind = DynamicSkip`, no resolved path,
+and no command word. A redirect target with a brace expansion is
+unresolved. A brace word in the command name and in a case word fails closed.
+
+| Word | Result |
+|---|---|
+| `{a,b}`, `x{1..3}.txt`, `{a,b}*`, `a{b{c,d}e}f`, `{"x y",z}`, `~/{a,b}` | value `Unknown`, no path |
+| `{a}`, `x{}y`, `{!..#}`, `{1..3..x}` | literal text (Bash does not expand it) |
+| `"{a,b}"`, `'{a,b}'`, `\{a,b}`, `{a\,b}`, `"{"a,b}` | literal text (quoted or escaped) |
+| `${HOME}`, `-exec rm {} \;`, `awk '{print $1,$2}'` | unchanged |
+
+A consumer must treat the `Unknown` value of a brace word as it treats any
+unknown path. These facts do not grant authority.
 
 ### v0.3 structured Bash grammar
 
@@ -2566,7 +2706,8 @@ The lexer produces tokens consumed by the parser. Token kinds:
   and a body without its delimiter fail closed. The substitution body then
   parses with the top-level heredoc rules, and its heredoc spans point into
   the submitted source. Bash assignment values use the same boundary scan.
-- **UNPARSEABLE_SENTINEL** — `$((expr))` or obsolete `$[expr]` arithmetic
+- **UNPARSEABLE_SENTINEL** — `$((expr))` outside the bounded grammar of
+  v0.4.0-beta.18, obsolete `$[expr]` arithmetic
   expansion, or any operator-bearing parameter expansion such as
   `${var:-$(cmd)}`, `${var//pat/repl}`, or `${var@P}`. The lexer skips past
   the matching close (`))` or `}` respectively) and emits a sentinel
@@ -3285,8 +3426,9 @@ Conditions that produce `IsUnparseable = true`:
   is unparseable.
 - Function definitions (`name() { ... }`).
 - Process substitution (`<(cmd)`, `>(cmd)`).
-- Arithmetic expansion `$((expr))` (per §1 non-goal; lexer emits an
-  UNPARSEABLE_SENTINEL token; parser sets the outer flag).
+- Arithmetic expansion `$((expr))` outside the bounded grammar, or with a
+  variable read that the state pass cannot prove to be an integer (see "Bash
+  arithmetic expansion"). An arithmetic command `((expr))` and `let`.
 - Operator-bearing parameter expansion such as `${var:-$(cmd)}` or
   `${var//pat/repl}` (per §1 non-goal; same mechanism). Only simple braced
   identifiers, positional parameters, and special parameters are accepted.

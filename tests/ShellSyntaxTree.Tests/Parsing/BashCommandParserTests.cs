@@ -472,9 +472,9 @@ public class BashCommandParserTests
     // ---------------- Unparseable ----------------
 
     [Fact]
-    public void Arithmetic_expansion_marks_outer_unparseable()
+    public void Unbounded_arithmetic_expansion_marks_outer_unparseable()
     {
-        var result = Parse("echo $((1+2))");
+        var result = Parse("echo $((x = 1))");
         Assert.True(result.IsUnparseable);
         Assert.NotNull(result.UnparseableReason);
         Assert.Contains("arithmetic", result.UnparseableReason!);

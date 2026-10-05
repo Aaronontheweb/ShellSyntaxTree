@@ -286,8 +286,8 @@ public class CommandWordsTests
     [Theory]
     [InlineData("git `cmd`")]
     [InlineData("git push `cmd`")]
-    [InlineData("git $((1+1))")]
-    [InlineData("git push $((1+1))")]
+    [InlineData("git $((x=1))")]
+    [InlineData("git push $((a[1]))")]
     [InlineData("git <(cmd)")]
     public void Bash_unproved_expansion_fails_closed_before_words(string source)
     {

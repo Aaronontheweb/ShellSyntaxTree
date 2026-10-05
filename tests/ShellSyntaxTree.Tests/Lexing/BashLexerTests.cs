@@ -479,20 +479,21 @@ public class BashLexerTests
     // ------------------------------------------------------------ unparseables
 
     [Fact]
-    public void Arithmetic_expansion_emits_unparseable_sentinel()
+    public void Unbounded_arithmetic_expansion_emits_unparseable_sentinel()
     {
-        var tokens = LexNonWs("$((1 + 2))");
+        // An array subscript can run code in an arithmetic context (#227).
+        var tokens = LexNonWs("$((a[1] + 2))");
         var t = Assert.Single(tokens);
         Assert.Equal(BashTokenKind.UnparseableSentinel, t.Kind);
-        Assert.Equal("$((1 + 2))", t.Value);
-        Assert.Contains("arithmetic", t.UnparseableReason);
+        Assert.Equal("$((a[1] + 2))", t.Value);
+        Assert.Contains("subscript", t.UnparseableReason);
     }
 
     [Theory]
     [InlineData("$[value]")]
     [InlineData("\"$[value]\"")]
     [InlineData("prefix$[value]suffix")]
-    [InlineData("prefix$((1 + 2))suffix")]
+    [InlineData("prefix$((x = 2))suffix")]
     [InlineData("prefix${value@P}suffix")]
     public void Unsupported_expansion_anywhere_in_a_word_emits_unparseable_sentinel(
         string source)

@@ -1,0 +1,10 @@
+{
+  "name": "v0.4 command substitution inside arithmetic expansion rejected",
+  "input": "age=$(( ($(date +%s) - $(stat -c %Y \"$d\")) / 86400 )); [ \"$age\" -gt 2 ] && echo \"$age\"",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "command substitution inside a Bash arithmetic expansion"
+  },
+  "notes": "Bash evaluates the output of a command substitution as an arithmetic expression. Output such as a[$(cmd)] runs cmd, so the whole parse fails closed (#227).",
+  "oracleExpectation": "OutOfScope"
+}

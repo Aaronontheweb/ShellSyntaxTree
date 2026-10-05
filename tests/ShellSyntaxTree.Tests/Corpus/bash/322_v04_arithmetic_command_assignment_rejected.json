@@ -1,0 +1,11 @@
+{
+  "name": "v0.4 arithmetic command assignment rejected",
+  "input": "p=/safe; (( p = 0 )); cat \"$p\"",
+  "bashInitialStateMode": "FreshNonInteractiveNoStartup",
+  "expected": {
+    "isUnparseable": true,
+    "unparseableReasonContains": "arithmetic command"
+  },
+  "notes": "Bash assigns 0 to p, so cat reads 0 and not /safe. Before 0.4.0-beta.18 the parser read a subshell that runs p (#227).",
+  "oracleExpectation": "OutOfScope"
+}
