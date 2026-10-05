@@ -1,3 +1,20 @@
+#### 0.4.0-beta.19 2026-10-05 ####
+
+This prerelease decodes Bash ANSI-C quotes and publishes pathname-expansion and field-splitting facts for each argument (#232).
+
+## Added
+
+- `AnalyzedArgument.MayPathnameExpand` and `AnalyzedArgument.MayFieldSplit` tell whether Bash can glob or split the word at run time, also when its value is `Unknown`. A fully quoted or escaped word gives false. An unquoted glob character, an unquoted expansion or substitution, or a brace expansion gives true. Every PowerShell argument gives true.
+- An ANSI-C string `$'…'` decodes for escapes with one exact ASCII result. `cat a$'b'c` gives the path `/work/abc`.
+
+## Security and compatibility
+
+- Fix: a `$'…'` after other text in a word was a literal `$` and quoted text. `cat ~/.netclaw/$'\x6beys'/key-1.xml` gave the exact path `~/.netclaw/$\x6beys/key-1.xml`, but Bash reads `~/.netclaw/keys/key-1.xml`. It now gives the decoded path.
+- An escape without one exact result (`\u`, `\U`, `\c`, NUL, a byte above 127, an unknown escape) and a locale string `$"…"` in any position make the source unparseable. Before, `a$"b"` parsed as the literal `a$b`.
+- The word projection reads the authored `$`, so a word with `$'…'` gives `Unknown` command words.
+- An output comparison against 0.4.0-beta.18 over 4,373 inputs (95,960 records) found changes only in inputs with `$'` or `$"`, apart from the two new facts. A replay of 11,063 Netclaw shell calls gives no change apart from the two new facts.
+- Public API: two new read-only properties on `AnalyzedArgument`.
+
 #### 0.4.0-beta.18 2026-10-05 ####
 
 This prerelease parses bounded Bash arithmetic expansion and loop `break` and `continue`. It also fixes two misreads: a brace word and an arithmetic command (#227).

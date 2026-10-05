@@ -1,10 +1,26 @@
 {
-  "name": "Unsupported ANSI-C quoting fails closed",
+  "name": "Decoded ANSI-C quote (historical file name)",
   "input": "cat $'/etc/passwd'",
   "expected": {
-    "isUnparseable": true,
-    "unparseableReasonContains": "ANSI-C",
-    "clauses": []
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cat"
+        ],
+        "args": [
+          {
+            "raw": "$'/etc/passwd'",
+            "kind": "Literal",
+            "isPath": true,
+            "resolved": "/etc/passwd",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
   },
-  "notes": "ANSI-C quoting transforms authored bytes and remains outside the supported grammar."
+  "notes": "Since 0.4.0-beta.19 the parser decodes an ANSI-C string with exact ASCII escapes (#232). An escape without one exact result fails closed."
 }

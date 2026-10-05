@@ -575,6 +575,22 @@ Since 0.4.0-beta.18 (#227):
   `Unknown` value as an unproved path, and deny or ask, as for any unknown
   path. A brace word in the command name is unparseable.
 
+## ANSI-C quotes and expansion facts
+
+Since 0.4.0-beta.19 (#232):
+
+- A `$'…'` string decodes like Bash for exact ASCII escapes. Before, a
+  `$'…'` after other text gave a wrong exact value:
+  `~/.netclaw/$'\x6beys'/key-1.xml` was not read as `~/.netclaw/keys/key-1.xml`.
+  An escape that the parser cannot decode exactly, and every `$"…"` string,
+  make the source unparseable.
+- `AnalyzedArgument.MayPathnameExpand` and `MayFieldSplit` tell whether Bash
+  can glob or split the word at run time. Use them with an `Unknown` value: a
+  word such as `"${d}ret"/*` can list or read the names in a directory that
+  you protect, so do not treat it as data. A fully quoted `"$n"` gives false
+  for both facts. The facts are true when the parser is not sure, and for
+  every PowerShell argument.
+
 ## Display traversal is not authorization traversal
 
 `ParsedCommand.Syntax` preserves authored nesting for explainers, diagnostics,
