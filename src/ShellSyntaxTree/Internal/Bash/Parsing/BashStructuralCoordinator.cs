@@ -41,9 +41,11 @@ internal static partial class BashCommandParser
                 options,
                 coordinator.GetFacts,
                 coordinator.GetForInPlan,
+                coordinator.ArithmeticSites,
                 out var analyzedSyntax,
                 out var analyzedFacts,
-                out var analyzedForInPlans) ||
+                out var analyzedForInPlans,
+                out var analysisFailure) ||
             !ShellSyntaxProjection.TryProject(
                 analyzedSyntax,
                 analyzedFacts,
@@ -52,7 +54,8 @@ internal static partial class BashCommandParser
         {
             return StructuralFailure(
                 source,
-                "Bash structural syntax exceeded limits or contained invalid parser-owned facts",
+                analysisFailure ??
+                    "Bash structural syntax exceeded limits or contained invalid parser-owned facts",
                 analyzedSyntax);
         }
 
@@ -189,6 +192,11 @@ internal static partial class BashCommandParser
             new(ClauseReferenceComparer.Instance);
         private readonly Dictionary<ForEachSyntax, BashForInAnalysisPlan> _forInPlans =
             new(ForEachReferenceComparer.Instance);
+
+        // The source start of each bounded arithmetic expansion in this
+        // source and in every nested substitution body (#227). The state pass
+        // must prove the reads of each one, or the parse fails closed.
+        private readonly HashSet<int> _arithmeticSites = new();
         private int _position;
         private int _subshellDepth;
         private int _loopDepth;
@@ -231,7 +239,13 @@ internal static partial class BashCommandParser
             _boundedAssignmentNames = boundedAssignmentNames is null
                 ? new HashSet<string>(StringComparer.Ordinal)
                 : new HashSet<string>(boundedAssignmentNames, StringComparer.Ordinal);
+            foreach (var fragment in CollectArithmetic(tokens))
+            {
+                _arithmeticSites.Add(fragment.SourceStart ?? -1);
+            }
         }
+
+        internal IReadOnlyCollection<int> ArithmeticSites => _arithmeticSites;
 
         internal CommandOccurrenceFacts GetFacts(SimpleCommandSyntax simple) =>
             _facts.TryGetValue(simple.Clause, out var facts)
@@ -270,6 +284,16 @@ internal static partial class BashCommandParser
 
         internal bool TryParse(out ShellBlockSyntax syntax, out string? error)
         {
+            // A decoded command string is a separate Bash process. Its source
+            // offsets do not map to the outer source, so the state pass
+            // cannot prove its arithmetic reads (#227).
+            if (_bashCDepth > 0 && _arithmeticSites.Count > 0)
+            {
+                syntax = new ShellBlockSyntax();
+                error = "a Bash arithmetic expansion inside a decoded command string is not supported";
+                return false;
+            }
+
             SkipNewlines();
             if (_position == _tokens.Count)
             {
@@ -999,7 +1023,8 @@ internal static partial class BashCommandParser
                 parsed.PathResolutions,
                 effectiveOptions,
                 assignmentValues,
-                exports);
+                exports,
+                CollectArithmetic(prefixTokens, segmentTokens));
             command = simple;
             return true;
         }
@@ -1580,6 +1605,15 @@ internal static partial class BashCommandParser
             {
                 foreach (var fragment in value.Fragments)
                 {
+                    // Bash does not brace-expand a case word, but the lexer
+                    // marks the word before it knows its role (#227).
+                    if (fragment.Kind == ShellValueFragmentKind.Opaque &&
+                        fragment.OpaqueCause == ShellOpaqueCause.BraceExpansion)
+                    {
+                        error = "a brace list in a Bash case word is not supported";
+                        return false;
+                    }
+
                     if (fragment.Kind == ShellValueFragmentKind.Opaque)
                     {
                         error = "a command substitution in a Bash case word is not supported";
@@ -1842,6 +1876,13 @@ internal static partial class BashCommandParser
                 return false;
             }
 
+            if (IsArithmeticCommandStart())
+            {
+                command = null;
+                error = "Bash arithmetic command '((…))' is not supported";
+                return false;
+            }
+
             var open = _tokens[_position++];
             var outerMutationState = _hasUnmodeledShellStateMutation;
             var outerVariableMutationState = _hasUnmodeledVariableStateMutation;
@@ -1889,6 +1930,58 @@ internal static partial class BashCommandParser
             };
             return true;
         }
+
+        /// <summary>
+        /// True when the <c>(</c> at the current position starts a Bash
+        /// arithmetic command <c>((…))</c> (#227). Bash reads <c>((</c> as an
+        /// arithmetic command when the parenthesis that closes the second
+        /// <c>(</c> is followed at once by <c>)</c>. Otherwise it reads two
+        /// subshells. An arithmetic command can assign variables, for example
+        /// <c>(( p = 0 ))</c>, so it must not parse as a subshell.
+        /// </summary>
+        private bool IsArithmeticCommandStart()
+        {
+            var first = _position;
+            if (first + 1 >= _tokens.Count ||
+                !IsOperatorToken(_tokens[first + 1], "(") ||
+                _tokens[first + 1].SourceStart !=
+                    _tokens[first].SourceStart + _tokens[first].SourceLength)
+            {
+                return false;
+            }
+
+            var depth = 0;
+            for (var index = first + 1; index < _tokens.Count; index++)
+            {
+                var token = _tokens[index];
+                if (IsOperatorToken(token, "("))
+                {
+                    depth++;
+                    continue;
+                }
+
+                if (!IsOperatorToken(token, ")"))
+                {
+                    continue;
+                }
+
+                depth--;
+                if (depth > 0)
+                {
+                    continue;
+                }
+
+                return index + 1 < _tokens.Count &&
+                    IsOperatorToken(_tokens[index + 1], ")") &&
+                    _tokens[index + 1].SourceStart == token.SourceStart + token.SourceLength;
+            }
+
+            return false;
+        }
+
+        private static bool IsOperatorToken(BashToken token, string text) =>
+            token.Kind == BashTokenKind.Operator &&
+            string.Equals(token.OperatorText, text, StringComparison.Ordinal);
 
         /// <summary>
         /// Replaces the items of one and-or list with one background group
@@ -2095,6 +2188,26 @@ internal static partial class BashCommandParser
 
                     foreach (var fragment in value.Fragments)
                     {
+                        if (fragment.Kind == ShellValueFragmentKind.Opaque &&
+                            fragment.OpaqueCause is ShellOpaqueCause.ArithmeticExpansion or
+                                ShellOpaqueCause.BraceExpansion)
+                        {
+                            // An arithmetic value or a brace word names no
+                            // program that the parser can prove (#227).
+                            if (rejectCommandNameSubstitution &&
+                                (fragment.SourceStart is not int expansionStart ||
+                                 expansionStart < commandNameEnd))
+                            {
+                                substitutions = Array.Empty<ShellValueFragment>();
+                                error = fragment.OpaqueCause == ShellOpaqueCause.ArithmeticExpansion
+                                    ? "Bash command-name arithmetic expansion is not supported"
+                                    : "Bash command-name brace expansion is not supported";
+                                return false;
+                            }
+
+                            continue;
+                        }
+
                         if (fragment.Kind != ShellValueFragmentKind.Opaque ||
                             fragment.OpaqueCause != ShellOpaqueCause.CommandSubstitution)
                         {
@@ -2293,7 +2406,8 @@ internal static partial class BashCommandParser
             if (!TryClassifyAssignmentFragments(
                     rightHandSide,
                     out var hasNamedExpansion,
-                    out var hasSubstitution))
+                    out var hasSubstitution,
+                    out var hasArithmetic))
             {
                 error = "bounded Bash assignment values must be exact static scalars";
                 return false;
@@ -2313,7 +2427,8 @@ internal static partial class BashCommandParser
             // The state pass computes the effective value of an expanded
             // right-hand side. The authored value is exact only for literal
             // text, because Bash transforms every other part.
-            var isLiteral = !hasNamedExpansion && !hasSubstitution && !leadingTilde;
+            var isLiteral = !hasNamedExpansion && !hasSubstitution && !hasArithmetic &&
+                !leadingTilde;
             ShellValueDomain domain = isLiteral
                 ? new ShellValueDomain.Exact(rightHandSide.Decoded)
                 : new ShellValueDomain.Unknown();
@@ -2339,10 +2454,11 @@ internal static partial class BashCommandParser
         /// <summary>
         /// Accepts a right-hand side made of unquoted safe characters,
         /// single-quoted text, double-quoted text, <c>$name</c>,
-        /// <c>${name}</c>, and <c>$(...)</c> (#209). A leading <c>~</c> or
+        /// <c>${name}</c>, <c>$(...)</c> (#209), and a bounded
+        /// <c>$((...))</c> (#227). A leading <c>~</c> or
         /// <c>~/</c> is reported, because Bash expands it from <c>HOME</c>.
         /// Every other tilde, a backslash, a backtick, ANSI-C and locale
-        /// quotes, arithmetic, and a complex parameter expansion fail closed.
+        /// quotes, other arithmetic, and a complex parameter expansion fail closed.
         /// Bash does not split or glob an assignment value, but the parser
         /// rejects unquoted whitespace, glob, and brace characters so that
         /// one value stays one word.
@@ -2423,7 +2539,13 @@ internal static partial class BashCommandParser
             {
                 if (index + 2 < value.Length && value[index + 2] == '(')
                 {
-                    return false;
+                    if (!BashArithmeticGrammar.TryScanExpansion(value.AsSpan(), index, out var arithmeticEnd))
+                    {
+                        return false;
+                    }
+
+                    index = arithmeticEnd;
+                    return true;
                 }
 
                 if (!BashLexer.TryFindCommandSubstitutionEnd(value.AsSpan(), index + 1, out var close))
@@ -2473,12 +2595,23 @@ internal static partial class BashCommandParser
         private static bool TryClassifyAssignmentFragments(
             ShellValue value,
             out bool hasNamedExpansion,
-            out bool hasSubstitution)
+            out bool hasSubstitution,
+            out bool hasArithmetic)
         {
             hasNamedExpansion = false;
             hasSubstitution = false;
+            hasArithmetic = false;
             foreach (var fragment in value.Fragments)
             {
+                // The state pass proves the reads of a bounded arithmetic
+                // expansion before it accepts the statement (#227).
+                if (fragment.Kind == ShellValueFragmentKind.Opaque &&
+                    fragment.OpaqueCause == ShellOpaqueCause.ArithmeticExpansion)
+                {
+                    hasArithmetic = true;
+                    continue;
+                }
+
                 if (fragment.Kind == ShellValueFragmentKind.Literal &&
                     fragment.Cardinality == ShellValueCardinality.ExactlyOne &&
                     fragment.Expansion is null)
@@ -2650,7 +2783,8 @@ internal static partial class BashCommandParser
             IReadOnlyList<BashPathResolutionSeed> pathResolutions,
             BashParserOptions parseOptions,
             IReadOnlyList<BashAssignmentValue?> environmentAssignmentValues,
-            BashExportFacts? exports)
+            BashExportFacts? exports,
+            IReadOnlyList<ShellValueFragment> arithmeticExpansions)
         {
             var valueProvenance = new List<ShellValueElementProvenance>();
             var redirectProvenance = new List<RedirectTargetProvenance>();
@@ -2758,7 +2892,34 @@ internal static partial class BashCommandParser
                 Export = exports,
                 LaunchWordValues = launchWordValues ??
                     CommandOccurrenceFacts.EmptyLaunchWordValues,
+                ArithmeticExpansions = arithmeticExpansions,
             });
+        }
+
+        /// <summary>
+        /// Gets each bounded arithmetic expansion in the words, redirect
+        /// targets, and heredoc bodies of <paramref name="groups"/> (#227).
+        /// </summary>
+        private static IReadOnlyList<ShellValueFragment> CollectArithmetic(
+            params IReadOnlyList<BashToken>[] groups)
+        {
+            List<ShellValueFragment>? found = null;
+            foreach (var tokens in groups)
+            {
+                foreach (var value in TokenValues(tokens))
+                {
+                    foreach (var fragment in value.Fragments)
+                    {
+                        if (fragment.Kind == ShellValueFragmentKind.Opaque &&
+                            fragment.OpaqueCause == ShellOpaqueCause.ArithmeticExpansion)
+                        {
+                            (found ??= new List<ShellValueFragment>()).Add(fragment);
+                        }
+                    }
+                }
+            }
+
+            return found is null ? Array.Empty<ShellValueFragment>() : found.ToArray();
         }
 
         private static bool AreRedirectsComplete(
@@ -2853,6 +3014,8 @@ internal static partial class BashCommandParser
             {
                 _forInPlans.Add(pair.Key, pair.Value);
             }
+
+            _arithmeticSites.UnionWith(nested._arithmeticSites);
 
         }
 
@@ -3171,6 +3334,16 @@ internal static partial class BashCommandParser
             }
 
             var verb = clause.Verb.Tokens[0];
+
+            // A bounded `break`, `continue`, `exit`, or `return` changes no
+            // variable and no directory. The state pass joins the state at a
+            // loop transfer into its loop. Other operands keep the
+            // conservative rule below.
+            if (BashControlTransferBuiltin.IsBounded(clause))
+            {
+                return false;
+            }
+
             if (verb is "unset" or "read" or "readarray" or "mapfile" or
                 "declare" or "typeset" or "local" or "export" or "readonly" or
                 "let" or "eval" or "." or "source" or "getopts" or "set" or

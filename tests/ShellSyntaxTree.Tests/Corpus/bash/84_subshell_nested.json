@@ -1,18 +1,9 @@
 {
-  "name": "Nested subshells with greedy verb chain: ((echo deep))",
+  "name": "Arithmetic command, not nested subshells: ((echo deep))",
   "input": "((echo deep))",
   "expected": {
-    "isUnparseable": false,
-    "clauses": [
-      {
-        "operator": "None",
-        "verb": ["echo", "deep"],
-        "args": [],
-        "redirects": [],
-        "isSubshell": true,
-        "isCommandStringWrapped": false
-      }
-    ]
+    "isUnparseable": true,
+    "unparseableReasonContains": "arithmetic command"
   },
-  "notes": "Two levels of parens; the inner clause is still IsSubshell=true. Issue #27: `deep` is verb-like and absorbed into the verb chain because `echo` is not a FILE verb."
+  "notes": "Bash reads ((…)) as an arithmetic command when the parenthesis that closes the second ( is followed at once by ). An arithmetic command can assign variables, so it fails closed (#227). Before 0.4.0-beta.18 the parser read two subshells. Write ( (echo deep) ) for nested subshells."
 }

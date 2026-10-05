@@ -1,0 +1,19 @@
+{
+  "name": "v0.3 Bash loop break transfer",
+  "input": "for f in a b; do break; done",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "break"
+        ],
+        "args": [],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "A bounded break changes no variable and no directory. The state pass joins the state at the break into the end of its loop (#227).",
+  "oracleExpectation": "OutOfScope"
+}

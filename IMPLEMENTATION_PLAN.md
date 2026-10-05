@@ -10,6 +10,14 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.18 arithmetic, loop transfers, and brace words)
+
+- [x] Parse a bounded `$((…))` whose reads hold proved integers. Fail closed on `((…))`, `let`, subscripts, assignments, command substitutions, and unproved reads (#227).
+- [x] Parse bounded `break`, `continue`, `exit`, and `return`, and join loop-transfer states into their loops.
+- [x] Give a word with a brace expansion no exact value and no path.
+- [x] Prove that only inputs with these constructs change. Run manual mutants and the Netclaw call replay.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.18` and verify NuGet publication.
+
 ## Completed (0.4.0-beta.17 effective values in fresh mode)
 
 - [x] Publish effective values under the fresh-process mode with or without the authored-facts option. Give a quoted exact binding its command word (#224).
@@ -36,7 +44,8 @@ priorities.
 
 ## Next (Netclaw parse coverage, from #206)
 
-- Report leftovers: compound-command redirects, arithmetic expansion, complex parameter expansion, process substitution, and function definitions.
+- Report leftovers: compound-command redirects, complex parameter expansion, process substitution, function definitions, and arithmetic that reads a command substitution or an unproved variable (which fails closed on purpose).
+- Consider token-level brace expansion, so that a consumer sees each expanded word with its own path facts.
 
 ## Completed (0.4.0-beta.14 Bash background lists)
 

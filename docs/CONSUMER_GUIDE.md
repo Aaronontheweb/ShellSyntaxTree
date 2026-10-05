@@ -547,6 +547,34 @@ see the list's directory changes or assignments. A background job can keep
 running after the command ends, for example a test server. Treat the
 background group as a fact for your policy; it is not authority.
 
+## Arithmetic, loop transfers, and brace words
+
+Since 0.4.0-beta.18 (#227):
+
+- A bounded `$((…))` parses. Its value is `Unknown` with
+  `Kind = DynamicSkip`. It is never a path and never a command word. Treat it
+  as data. The parser accepts it only when each variable that it reads holds
+  a proved integer, because Bash evaluates the value of a variable in an
+  arithmetic context as code: with `x='a[$(cmd)]'`, `$((x))` runs `cmd`. A
+  command substitution inside the expression, an array subscript, an
+  assignment, `++`, `--`, the comma operator, and a read of an unproved
+  variable make the source unparseable.
+- An arithmetic command `((…))` and `let` are unparseable. Before
+  0.4.0-beta.18, `((cmd))` parsed as two subshells that run `cmd`. Write
+  `( (cmd) )` for nested subshells.
+- A `break`, `continue`, `exit`, or `return` with no operand or one decimal
+  operand parses, also in a loop. The parser joins the state at a `break` or
+  `continue` into its loop. Before, these builtins in a `for` loop made the
+  source unparseable, and an `exit` such as `cd x || exit 1` made a later loop,
+  `if`, or assignment unparseable.
+- A word with an unquoted brace expansion, such as `{a,b}` or `{1..3}`, has
+  an `Unknown` value, an `Unknown` `AuthoredFileSystemValue`, no
+  `Arg.Resolved`, and no command word. Bash expands it to several words, so
+  `cat ~/.config/{a,secrets}.json` reads two files. Before 0.4.0-beta.18, the
+  parser reported the brace text as one exact, resolved path. Treat the
+  `Unknown` value as an unproved path, and deny or ask, as for any unknown
+  path. A brace word in the command name is unparseable.
+
 ## Display traversal is not authorization traversal
 
 `ParsedCommand.Syntax` preserves authored nesting for explainers, diagnostics,

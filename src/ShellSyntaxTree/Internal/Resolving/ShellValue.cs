@@ -52,6 +52,18 @@ internal enum ShellOpaqueCause
     PowerShellExpressionSuffix,
     Splat,
     Unsupported,
+
+    /// <summary>
+    /// A bounded Bash arithmetic expansion <c>$((…))</c> (#227). The value is
+    /// an integer that the parser does not compute.
+    /// </summary>
+    ArithmeticExpansion,
+
+    /// <summary>
+    /// An unquoted part of a Bash word with a brace expansion (#227). Bash
+    /// expands the word to several words, which the parser does not compute.
+    /// </summary>
+    BraceExpansion,
 }
 
 internal enum ShellResolutionConsumer

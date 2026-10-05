@@ -379,6 +379,15 @@ internal sealed class BashLoopBindingContext
             return left;
         }
 
+        // The result of an arithmetic expansion joins with other integers
+        // and stays an integer (#227). Any other kind gives Unknown.
+        if ((left.Kind == ShellValueDomainKind.IntegerRange ||
+             right.Kind == ShellValueDomainKind.IntegerRange) &&
+            IsIntegerOnly(left) && IsIntegerOnly(right))
+        {
+            return ShellValueDomainFacts.IntegerRange(long.MinValue, long.MaxValue);
+        }
+
         if (left.Kind is not (
                 ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet) ||
             right.Kind is not (
@@ -416,6 +425,34 @@ internal sealed class BashLoopBindingContext
     private static bool DomainEquals(
         ShellValueDomainFacts left,
         ShellValueDomainFacts right) => ShellValueDomainFacts.AreEqual(left, right);
+
+    /// <summary>
+    /// True when every value of the domain is an integer: the result of an
+    /// arithmetic expansion, or decimal integer text (#227).
+    /// </summary>
+    internal static bool IsIntegerOnly(ShellValueDomainFacts domain)
+    {
+        if (domain.Kind == ShellValueDomainKind.IntegerRange)
+        {
+            return true;
+        }
+
+        if (domain.Kind is not (ShellValueDomainKind.Exact or ShellValueDomainKind.FiniteSet) ||
+            domain.Values.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var value in domain.Values)
+        {
+            if (!IsDecimalInteger(value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     internal bool TryAnalyzeEffectiveValue(
         ShellValue value,
@@ -670,6 +707,40 @@ internal sealed class BashLoopBindingContext
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Gets the domain of a bound name (#227). A name that no assignment or
+    /// loop in the source bound has no domain.
+    /// </summary>
+    internal bool TryGetDomain(string name, out ShellValueDomainFacts domain)
+    {
+        var binding = FindExactBinding(name);
+        domain = binding?.Domain ?? ShellValueDomainFacts.Unknown;
+        return binding is not null;
+    }
+
+    /// <summary>
+    /// True for an optional sign and one or more ASCII digits. Bash evaluates
+    /// such a value as an integer constant, which runs no code (#227).
+    /// </summary>
+    internal static bool IsDecimalInteger(string value)
+    {
+        var start = value.Length > 0 && value[0] is '+' or '-' ? 1 : 0;
+        if (start == value.Length)
+        {
+            return false;
+        }
+
+        for (var index = start; index < value.Length; index++)
+        {
+            if (value[index] is < '0' or > '9')
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

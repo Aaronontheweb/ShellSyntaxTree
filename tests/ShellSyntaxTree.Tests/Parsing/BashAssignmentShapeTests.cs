@@ -240,7 +240,7 @@ public class BashAssignmentShapeTests
     [InlineData("root=foo:~; inspect item")]
     [InlineData("root=~root; inspect item")]
     [InlineData("root=`id`; inspect item")]
-    [InlineData("root=$((1+2)); inspect item")]
+    [InlineData("root=$((a[0])); inspect item")]
     [InlineData("root=${other:-x}; inspect item")]
     [InlineData("root=a\\ b; inspect item")]
     [InlineData("root=*; inspect item")]

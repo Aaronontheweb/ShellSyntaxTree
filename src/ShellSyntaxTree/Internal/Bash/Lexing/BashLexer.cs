@@ -26,7 +26,10 @@ namespace ShellSyntaxTree.Internal.Bash.Lexing;
 ///         comments cannot hide a closing parenthesis. Backtick regions use
 ///         <see cref="OpaqueRegionScanner"/>. Both are emitted as a single
 ///         <see cref="BashTokenKind.OpaqueSubstitution"/> token.</item>
-///   <item>Constructs SPEC §1 calls non-goals — arithmetic expansion
+///   <item>A bounded arithmetic expansion <c>$((…))</c> (#227) is one
+///         opaque region with <see cref="ShellOpaqueCause.ArithmeticExpansion"/>.
+///         See <see cref="BashArithmeticGrammar"/>.</item>
+///   <item>Constructs SPEC §1 calls non-goals — other arithmetic expansion
 ///         <c>$((…))</c> / <c>$[…]</c> and complex parameter expansion
 ///         <c>${var//pat/repl}</c> — emit a
 ///         <see cref="BashTokenKind.UnparseableSentinel"/>. The parser
@@ -56,6 +59,16 @@ internal static class BashLexer
             return Array.Empty<BashToken>();
         }
 
+        var tokens = TokenizeCore(input);
+
+        // Brace expansion turns one word into several words. A word with one
+        // has no exact value (#227).
+        BashBraceExpansion.MarkWords(tokens);
+        return tokens;
+    }
+
+    private static List<BashToken> TokenizeCore(string input)
+    {
         var tokens = new List<BashToken>();
         var src = input.AsSpan();
         var i = 0;
@@ -189,7 +202,8 @@ internal static class BashLexer
 
                 if (next == '(')
                 {
-                    // $(( -> arithmetic, unparseable. Detect before $(.
+                    // $(( -> a bounded arithmetic expansion (#227), or a
+                    // fail-closed sentinel. Detect before $(.
                     if (i + 2 < src.Length && src[i + 2] == '(')
                     {
                         i = ConsumeArithmetic(src, i, tokens);
@@ -800,6 +814,14 @@ internal static class BashLexer
                         "legacy backtick command substitution is not supported");
                 }
 
+                if (c == '$' && BashArithmeticGrammar.TryScanExpansion(src, i, out var quotedArithmeticEnd))
+                {
+                    // A bounded arithmetic expansion holds no quote and no
+                    // heredoc operator. Skip it as one region (#227).
+                    i = quotedArithmeticEnd;
+                    continue;
+                }
+
                 if (c == '$' && i + 1 < src.Length && src[i + 1] == '(')
                 {
                     if (resumeDoubleQuote.Count >= ShellAnalysisLimits.MaxStructuralNesting)
@@ -912,6 +934,15 @@ internal static class BashLexer
                 pendingHeredocs.Add((delimiter, stripTabs));
                 atWordBoundary = false;
                 i = afterDelimiter;
+                continue;
+            }
+
+            if (c == '$' && BashArithmeticGrammar.TryScanExpansion(src, i, out var arithmeticEnd))
+            {
+                // `<<` in a bounded arithmetic expansion is a shift, not a
+                // heredoc (#227).
+                atWordBoundary = false;
+                i = arithmeticEnd;
                 continue;
             }
 
@@ -1105,6 +1136,33 @@ internal static class BashLexer
         // need to skip past matching '))'. Use the opaque scanner anchored
         // at the outer '(' so we count the correct depth: the inner '(' is
         // its own sub-region for the scanner.
+        if (BashArithmeticGrammar.TryScanExpansion(
+                src,
+                start,
+                out var arithmeticEnd,
+                out var rejection))
+        {
+            // The value is not known. Only the state pass can prove that
+            // each variable read holds an integer (#227).
+            var arithmeticLength = arithmeticEnd - start;
+            var raw = src.Slice(start, arithmeticLength).ToString();
+            tokens.Add(new BashToken(
+                BashTokenKind.OpaqueSubstitution,
+                raw,
+                null,
+                start,
+                arithmeticLength,
+                null)
+            {
+                ResolverValue = ShellValue.Opaque(
+                    raw,
+                    ShellOpaqueCause.ArithmeticExpansion,
+                    start,
+                    arithmeticLength),
+            });
+            return arithmeticEnd;
+        }
+
         var outerParen = start + 1;
         var scan = OpaqueRegionScanner.Scan(src, outerParen, '(', ')');
         // We want to land *one* paren past EndIndex (the inner ))) close).
@@ -1125,9 +1183,9 @@ internal static class BashLexer
         }
 
         var length = endInclusive - start + 1;
-        var reason = scan.Closed
+        var reason = rejection ?? (scan.Closed
             ? "arithmetic expansion '$((…))' not supported in v0.1"
-            : "unterminated arithmetic expansion '$((…))' (also not supported in v0.1)";
+            : "unterminated arithmetic expansion '$((…))' (also not supported in v0.1)");
         tokens.Add(new BashToken(
             BashTokenKind.UnparseableSentinel,
             src.Slice(start, length).ToString(),
@@ -1367,7 +1425,23 @@ internal static class BashLexer
         {
             if (start + 2 < src.Length && src[start + 2] == '(')
             {
-                error = "arithmetic expansion '$((…))' not supported in v0.1";
+                if (BashArithmeticGrammar.TryScanExpansion(
+                        src,
+                        start,
+                        out var arithmeticEnd,
+                        out var rejection))
+                {
+                    var arithmeticLength = arithmeticEnd - start;
+                    value.AppendOpaque(
+                        src.Slice(start, arithmeticLength).ToString(),
+                        ShellOpaqueCause.ArithmeticExpansion,
+                        start,
+                        arithmeticLength);
+                    index = arithmeticEnd;
+                    return true;
+                }
+
+                error = rejection ?? "arithmetic expansion '$((…))' not supported in v0.1";
                 index = src.Length;
                 return true;
             }

@@ -157,9 +157,7 @@ public class BashStructuralProjectionTests
     public void Hostile_structural_depth_is_rejected_before_recursive_descent()
     {
         const int hostileDepth = 4096;
-        var source = new string('(', hostileDepth)
-            + "echo ok"
-            + new string(')', hostileDepth);
+        var source = Subshells(hostileDepth, "echo ok");
 
         var result = Parse(source);
 
@@ -172,9 +170,7 @@ public class BashStructuralProjectionTests
     [Fact]
     public void Exact_structural_depth_limit_remains_parseable()
     {
-        var source = new string('(', ShellAnalysisLimits.MaxStructuralNesting)
-            + "echo ok"
-            + new string(')', ShellAnalysisLimits.MaxStructuralNesting);
+        var source = Subshells(ShellAnalysisLimits.MaxStructuralNesting, "echo ok");
 
         var result = Parse(source);
 
@@ -1515,7 +1511,7 @@ public class BashStructuralProjectionTests
     [InlineData("cat <<EOF | sh\nbody\nEOF")]
     [InlineData("cat <<A <<B\na\nA\nb\nB")]
     [InlineData("cat <<EOF\n`id`\nEOF")]
-    [InlineData("cat <<EOF\n$((1+1))\nEOF")]
+    [InlineData("cat <<EOF\n$((x++))\nEOF")]
     [InlineData("cat <<EOF\n$[x]\nEOF")]
     [InlineData("cat <<EOF\n${x@P}\nEOF")]
     [InlineData("cat <<EOF\n${x:-$(id)}\nEOF")]
@@ -1557,9 +1553,7 @@ public class BashStructuralProjectionTests
     [Fact]
     public void Subshell_and_substitution_share_the_structural_depth_budget()
     {
-        var exactSource = new string('(', ShellAnalysisLimits.MaxStructuralNesting - 1)
-            + "echo $(id)"
-            + new string(')', ShellAnalysisLimits.MaxStructuralNesting - 1);
+        var exactSource = Subshells(ShellAnalysisLimits.MaxStructuralNesting - 1, "echo $(id)");
         Assert.False(Parse(exactSource).IsUnparseable);
 
         var overflowSource = "(" + exactSource + ")";
@@ -1707,6 +1701,12 @@ public class BashStructuralProjectionTests
     }
 
     private static string CommandVerb(CommandOccurrence command) => command.Clause.Verb.Joined;
+
+    // Spaces keep each `(` a subshell. Bash reads adjacent `((` as an
+    // arithmetic command (#227).
+    private static string Subshells(int depth, string command) =>
+        string.Concat(Enumerable.Repeat("( ", depth)) + command +
+        string.Concat(Enumerable.Repeat(" )", depth));
 
     private static string NestedSubstitutions(int depth)
     {

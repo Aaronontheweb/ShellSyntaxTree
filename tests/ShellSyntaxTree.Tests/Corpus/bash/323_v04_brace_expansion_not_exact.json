@@ -1,0 +1,27 @@
+{
+  "name": "v0.4 brace expansion word is not one exact path",
+  "input": "cat ~/.netclaw/config/{netclaw,secrets}.json",
+  "expected": {
+    "isUnparseable": false,
+    "clauses": [
+      {
+        "operator": "None",
+        "verb": [
+          "cat"
+        ],
+        "args": [
+          {
+            "raw": "~/.netclaw/config/{netclaw,secrets}.json",
+            "kind": "DynamicSkip",
+            "isPath": false,
+            "resolved": "__NULL__",
+            "isFlag": false
+          }
+        ],
+        "redirects": []
+      }
+    ]
+  },
+  "notes": "Bash expands the word to two paths, one of them a protected file. Before 0.4.0-beta.18 the parser reported the literal brace text as one resolved path (#227).",
+  "oracleExpectation": "OutOfScope"
+}

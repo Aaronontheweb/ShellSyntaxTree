@@ -93,6 +93,14 @@ internal sealed class CommandOccurrenceFacts
     /// </summary>
     internal BashExportFacts? Export { get; init; }
 
+    /// <summary>
+    /// Each bounded Bash arithmetic expansion of the command: its words,
+    /// assignment prefixes, redirect targets, and heredoc bodies (#227). The
+    /// state pass proves the variable reads of each one.
+    /// </summary>
+    internal IReadOnlyList<ShellValueFragment> ArithmeticExpansions { get; init; } =
+        Array.Empty<ShellValueFragment>();
+
     internal static readonly IReadOnlyDictionary<int, string> EmptyLaunchWordValues =
         new Dictionary<int, string>();
 }
