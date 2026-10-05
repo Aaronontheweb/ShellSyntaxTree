@@ -186,17 +186,23 @@ internal static class BashLexer
             if (c == '$' && i + 1 < src.Length)
             {
                 var next = src[i + 1];
-                if (next is '\'' or '"')
+                if (next == '\'')
                 {
+                    i = ReadAnsiCQuoted(src, i, tokens);
+                    continue;
+                }
+
+                if (next == '"')
+                {
+                    // Bash can translate a `$"…"` string with a message catalog
+                    // that the environment selects, so its value is not proved.
                     tokens.Add(new BashToken(
                         BashTokenKind.UnparseableSentinel,
                         src.Slice(i).ToString(),
                         null,
                         i,
                         src.Length - i,
-                        next == '\''
-                            ? "ANSI-C quoted strings are not supported"
-                            : "localized quoted strings are not supported"));
+                        "localized quoted strings are not supported"));
                     return tokens;
                 }
 
@@ -555,6 +561,29 @@ internal static class BashLexer
 
     // ---------------------------------------------------------------- quoted
 
+    private static int ReadAnsiCQuoted(
+        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
+    {
+        var value = new ShellValueBuilder();
+        if (!BashAnsiCQuoting.TryDecode(src, start, value, out var end, out var error))
+        {
+            tokens.Add(new BashToken(
+                BashTokenKind.UnparseableSentinel,
+                src.Slice(start).ToString(),
+                null,
+                start,
+                src.Length - start,
+                error));
+            return src.Length;
+        }
+
+        var resolverValue = value.Build();
+        tokens.Add(new BashToken(
+            BashTokenKind.QuotedString, resolverValue.Decoded, null, start, end - start, null)
+        { ResolverValue = resolverValue });
+        return end;
+    }
+
     private static int ReadSingleQuoted(
         ReadOnlySpan<char> src, int start, List<BashToken> tokens)
     {
@@ -852,6 +881,19 @@ internal static class BashLexer
 
                 atWordBoundary = false;
                 i += 2;
+                continue;
+            }
+
+            if (c == '$' && i + 1 < src.Length && src[i + 1] == '\'')
+            {
+                // `\'` does not end an ANSI-C string (#232).
+                if (!BashAnsiCQuoting.TryFindEnd(src, i, out var ansiEnd))
+                {
+                    return new CommandSubstitutionScan(src.Length, false, null);
+                }
+
+                atWordBoundary = false;
+                i = ansiEnd;
                 continue;
             }
 
@@ -1325,7 +1367,10 @@ internal static class BashLexer
             if (c == '$' && i + 1 < src.Length)
             {
                 var next = src[i + 1];
-                if (next is '(' or '[') break;
+
+                // `$'…'` and `$"…"` start a new quoted part of the word. The
+                // outer tokenizer decodes them or fails closed (#232).
+                if (next is '(' or '[' or '\'' or '"') break;
                 if (next == '{')
                 {
                     var openBrace = i + 1;

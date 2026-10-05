@@ -394,6 +394,26 @@ public sealed record AnalyzedArgument
     /// <summary>Gets the authored word's uniform lexical path shape.</summary>
     public ShellPathShape AuthoredPathShape { get; internal init; }
 
+    /// <summary>
+    /// Gets whether the shell can apply pathname expansion (globbing) to this
+    /// word at run time (v0.4.0-beta.19). For Bash it is true for an unquoted
+    /// glob character, an unquoted expansion or substitution, and a brace
+    /// expansion, with the fixed shell options. A fully quoted or escaped word
+    /// gives false. It does not depend on a proved value. It is true when the
+    /// parser is not sure, and for every PowerShell argument. This parser fact
+    /// does not grant authority.
+    /// </summary>
+    public bool MayPathnameExpand { get; internal init; } = true;
+
+    /// <summary>
+    /// Gets whether the shell can split this word into several words at run
+    /// time (v0.4.0-beta.19). For Bash it is true for an unquoted expansion or
+    /// substitution, a brace expansion, and a quoted <c>"$@"</c>. It is true
+    /// when the parser is not sure, and for every PowerShell argument. This
+    /// parser fact does not grant authority.
+    /// </summary>
+    public bool MayFieldSplit { get; internal init; } = true;
+
     internal bool HasEffectiveValue { get; init; }
 }
 

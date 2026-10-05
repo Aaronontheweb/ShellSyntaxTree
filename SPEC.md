@@ -1000,6 +1000,8 @@ public sealed record AnalyzedArgument
     public ShellValueDomain AuthoredNonFileSystemValue { get; internal init; } =
         new ShellValueDomain.Unknown();
     public ShellPathShape AuthoredPathShape { get; internal init; }
+    public bool MayPathnameExpand { get; internal init; } // v0.4.0-beta.19
+    public bool MayFieldSplit { get; internal init; }     // v0.4.0-beta.19
 }
 
 public sealed record ShellFileSystemTreeAccess
@@ -1176,7 +1178,9 @@ change the word. Each later verb or argument element then gets one class:
   reported `{push,a/b}` as one resolved path. It now gives a brace word no
   path (see "Bash brace words").
 - The parser rejects many expansions before this fact exists. For example,
-  ``git `cmd` ``, `git $((1+1))`, and `git $'push'` are unparseable. Under
+  ``git `cmd` `` and `git $(( a[1] ))` are unparseable. `git $'push'` parses
+  from v0.4.0-beta.19, but the word projection reads the authored `$` and gives
+  `Unknown` words. Under
   `FreshNonInteractiveNoStartup`, `git $SUB` with an unassigned `SUB` parses
   with `Unknown` words (v0.4.0-beta.16).
 - Binding word (v0.4.0-beta.17, #224). An argument made only of literal text
@@ -2576,6 +2580,68 @@ substitution also joins into the loop, which is more than Bash does.
 | `[ -f a ] \|\| exit 1; for f in a b; do echo "$f"; done` | parses (unparseable before) |
 | `for d in a b; do break x; done` | unparseable |
 
+### Bash ANSI-C and locale quotes (v0.4.0-beta.19)
+
+Bash decodes the backslash escapes of an ANSI-C string `$'…'` and then uses
+the result as quoted text (#232). Before v0.4.0-beta.19 the parser read a
+`$'…'` after other text in a word as a literal `$` and single-quoted text.
+`cat ~/.netclaw/$'\x6beys'/key-1.xml` gave the exact path
+`~/.netclaw/$\x6beys/key-1.xml`, but Bash reads `~/.netclaw/keys/key-1.xml`.
+
+Owner and data. `BashAnsiCQuoting` (lexer) owns the decoding. It is
+call-local.
+
+The lexer decodes only escapes with one exact ASCII result:
+
+| Escape | Result |
+|---|---|
+| `\a \b \e \E \f \n \r \t \v` | the control character |
+| `\\ \' \" \?` | the character |
+| `\N`, `\NN`, `\NNN` (octal) | the byte, 1 to 127 |
+| `\xH`, `\xHH` | the byte, 1 to 127 |
+
+Every other escape fails closed: `\u` and `\U` (the result depends on the
+locale), `\c`, a NUL (Bash ends the string there), a byte above 127, `\x`
+without a digit, and an unknown escape such as `\z`. A locale string `$"…"`
+fails closed in every position, because a message catalog that the
+environment selects can translate it. A decoded string is a quoted part of
+its word: its glob characters and braces are literal. Inside double quotes
+and in a heredoc body, `$'` stays literal text, as in Bash.
+
+| Source | Result |
+|---|---|
+| `cat a$'b'c` | path `/work/abc` |
+| `cat ~/.netclaw/$'\x6beys'/key-1.xml` | path `~/.netclaw/keys/key-1.xml` |
+| `cat $'*.txt'` | the literal path `*.txt` |
+| `cat $'\u0041'`, `cat a$"b"` | unparseable |
+
+### Bash pathname-expansion and field-splitting facts (v0.4.0-beta.19)
+
+Each `AnalyzedArgument` has `MayPathnameExpand` and `MayFieldSplit` (#232).
+They tell a consumer whether Bash can glob or split the word at run time,
+also when its value is `Unknown`. The scan reads the authored word.
+
+- An unquoted glob character (`*`, `?`, `[`) sets `MayPathnameExpand`.
+- An unquoted parameter expansion or command substitution sets both facts.
+  The scan does not use the proved value. An unquoted bounded arithmetic
+  expansion sets only `MayFieldSplit`: its integer result has no glob
+  character.
+- A brace expansion sets both facts.
+- A quoted `"$@"` or `"${@}"` sets `MayFieldSplit`.
+- Single quotes, double quotes, ANSI-C quotes, and a backslash make their text
+  literal. A fully quoted or escaped word gives false for both facts.
+- Text that the scan cannot read gives true. Every PowerShell argument gives
+  true.
+
+| Word | `MayPathnameExpand` | `MayFieldSplit` |
+|---|---|---|
+| `"$n"`, `'*'`, `\*`, `"$(cmd)"` | false | false |
+| `"${d}ret"/*`, `a[1]` | true | false |
+| `$n`, `$(cmd)`, `{a,b}` | true | true |
+| `"$@"` | false | true |
+
+These facts do not grant authority.
+
 ### Bash brace words (v0.4.0-beta.18)
 
 Bash expands an unquoted brace list `{a,b}` or sequence `{x..y}` or
@@ -2706,7 +2772,9 @@ The lexer produces tokens consumed by the parser. Token kinds:
   and a body without its delimiter fail closed. The substitution body then
   parses with the top-level heredoc rules, and its heredoc spans point into
   the submitted source. Bash assignment values use the same boundary scan.
-- **UNPARSEABLE_SENTINEL** — `$((expr))` outside the bounded grammar of
+- **UNPARSEABLE_SENTINEL** — an ANSI-C `$'…'` string with an escape that
+  the lexer cannot decode exactly, or a locale `$"…"` string (v0.4.0-beta.19),
+  `$((expr))` outside the bounded grammar of
   v0.4.0-beta.18, obsolete `$[expr]` arithmetic
   expansion, or any operator-bearing parameter expansion such as
   `${var:-$(cmd)}`, `${var//pat/repl}`, or `${var@P}`. The lexer skips past

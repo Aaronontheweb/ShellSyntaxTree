@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using ShellSyntaxTree.Internal.Bash.Lexing;
 using ShellSyntaxTree.Internal.Parsing;
 using ShellSyntaxTree.Internal.Resolving;
 
@@ -1454,6 +1455,10 @@ internal static class ShellSyntaxProjection
                     var authoredValue = hasAuthoredValue
                         ? ToPublicDomain(authoredDomain!)
                         : value;
+                    var (mayPathnameExpand, mayFieldSplit) =
+                        language == ShellProjectionLanguage.Bash
+                            ? BashWordExpansionFacts.Analyze(element.Raw)
+                            : (true, true);
                     projected.Add(new AnalyzedArgument
                     {
                         Argument = argument,
@@ -1466,6 +1471,8 @@ internal static class ShellSyntaxProjection
                             ? ShellPathShapeClassifier.Classify(authoredValue)
                             : ShellPathShape.Unknown,
                         HasEffectiveValue = hasEffectiveValue,
+                        MayPathnameExpand = mayPathnameExpand,
+                        MayFieldSplit = mayFieldSplit,
                     });
                 }
 

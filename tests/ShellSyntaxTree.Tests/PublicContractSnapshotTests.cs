@@ -148,7 +148,9 @@ public class PublicContractSnapshotTests
             (nameof(AnalyzedArgument.AuthoredValue), typeof(ShellValueDomain)),
             (nameof(AnalyzedArgument.AuthoredFileSystemValue), typeof(ShellValueDomain)),
             (nameof(AnalyzedArgument.AuthoredNonFileSystemValue), typeof(ShellValueDomain)),
-            (nameof(AnalyzedArgument.AuthoredPathShape), typeof(ShellPathShape)));
+            (nameof(AnalyzedArgument.AuthoredPathShape), typeof(ShellPathShape)),
+            (nameof(AnalyzedArgument.MayPathnameExpand), typeof(bool)),
+            (nameof(AnalyzedArgument.MayFieldSplit), typeof(bool)));
         AssertResultRecord(
             typeof(ShellFileSystemTreeAccess),
             (nameof(ShellFileSystemTreeAccess.RootArgument), typeof(AnalyzedArgument)),

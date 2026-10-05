@@ -10,6 +10,13 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.19 ANSI-C quotes and expansion facts)
+
+- [x] Decode `$'…'` exactly for ASCII escapes. Fail closed on other escapes and on `$"…"` (#232).
+- [x] Publish `MayPathnameExpand` and `MayFieldSplit` for each argument.
+- [x] Prove that only inputs with `$'` or `$"` change apart from the new facts. Run manual mutants and the Netclaw call replay.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.19` and verify NuGet publication.
+
 ## Completed (0.4.0-beta.18 arithmetic, loop transfers, and brace words)
 
 - [x] Parse a bounded `$((…))` whose reads hold proved integers. Fail closed on `((…))`, `let`, subscripts, assignments, command substitutions, and unproved reads (#227).

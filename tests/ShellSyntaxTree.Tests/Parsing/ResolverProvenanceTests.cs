@@ -79,9 +79,9 @@ public class ResolverProvenanceTests
     }
 
     [Fact]
-    public void Bash_unsupported_ansi_c_quote_is_unparseable()
+    public void Bash_unsupported_ansi_c_escape_is_unparseable()
     {
-        var parsed = Bash.Parse("cat $'/etc/passwd'");
+        var parsed = Bash.Parse("cat $'/etc/pass\\u0077d'");
 
         Assert.True(parsed.IsUnparseable);
         Assert.Contains("ANSI-C", parsed.UnparseableReason);

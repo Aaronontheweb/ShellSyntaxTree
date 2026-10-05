@@ -220,13 +220,31 @@ public class CommandWordsTests
         AssertBashWords(source, expected);
 
     [Theory]
-    [InlineData("git $'push'")]
-    [InlineData("$'git' push")]
-    [InlineData("git $\"push\"")]
-    public void Bash_ansi_c_and_locale_quotes_fail_closed(string source)
+    [InlineData("git $'push'", "git push")]
+    [InlineData("$'git' push", "git push")]
+    [InlineData("git $'p'ush", "git push")]
+    [InlineData("git $'\\x70ush'", "git push")]
+    public void Bash_decoded_ansi_c_quote_parses_but_gives_no_words(string source, string decoded)
     {
-        // The parser does not resolve these quote forms, so it rejects the
-        // complete input. No command words can reach a grant.
+        // The parser decodes the string (#232). The word projection reads the
+        // authored text and treats `$` as an expansion, so the words stay
+        // Unknown and no grant can match them.
+        var parsed = ParseBashRaw(source);
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var command = Assert.Single(parsed.Commands);
+        Assert.Equal(decoded, string.Join(" ", command.Clause.Elements.Select(e => e.Value)));
+        Assert.IsType<ShellCommandWords.Unknown>(command.CommandWords);
+    }
+
+    [Theory]
+    [InlineData("git $\"push\"")]
+    [InlineData("git p$\"ush\"")]
+    [InlineData("git $'\\u0070ush'")]
+    [InlineData("git $'\\zpush'")]
+    public void Bash_locale_quotes_and_undecoded_ansi_c_escapes_fail_closed(string source)
+    {
+        // The parser cannot prove these values, so it rejects the complete
+        // input. No command words can reach a grant.
         Assert.True(ParseBashRaw(source).IsUnparseable);
     }
 
