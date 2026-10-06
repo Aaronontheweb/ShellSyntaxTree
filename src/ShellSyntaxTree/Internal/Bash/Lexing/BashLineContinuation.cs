@@ -24,11 +24,10 @@ internal enum BashContinuationContext
 
     /// <summary>
     /// Unquoted text, also inside <c>$( )</c>, <c>${ }</c>, and backticks.
-    /// The parser also accepts a carriage return before the newline here.
     /// </summary>
     Unquoted,
 
-    /// <summary>Double-quoted text. Only backslash + LF is a pair.</summary>
+    /// <summary>Double-quoted text.</summary>
     DoubleQuoted,
 }
 
@@ -56,20 +55,9 @@ internal static class BashLineContinuation
             return 0;
         }
 
-        var next = source[index + 1];
-        if (next == '\n')
-        {
-            return 2;
-        }
-
-        // The unquoted lexer has always read `\` + CR (+ LF) as a
-        // continuation. Double quotes keep `\` + CR as text, as Bash does.
-        if (next == '\r' && context == BashContinuationContext.Unquoted)
-        {
-            return index + 2 < source.Length && source[index + 2] == '\n' ? 3 : 2;
-        }
-
-        return 0;
+        // Only backslash + LF is a continuation. Bash reads `\` + CR as an
+        // escaped CR; the lexer fails closed on it (#243).
+        return source[index + 1] == '\n' ? 2 : 0;
     }
 
     /// <summary>

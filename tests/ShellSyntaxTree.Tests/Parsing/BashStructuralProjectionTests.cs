@@ -337,7 +337,7 @@ public class BashStructuralProjectionTests
 
     [Theory]
     [InlineData("command 3\\\n> out.log", 3, RedirectOperation.FileOutput, null)]
-    [InlineData("command 3\\\r\n>&1", 3, RedirectOperation.DescriptorDuplicate, 1)]
+    [InlineData("command 3\\\n>&1", 3, RedirectOperation.DescriptorDuplicate, 1)]
     [InlineData("command 1\\\n0>&2-", 10, RedirectOperation.DescriptorMove, 2)]
     public void Continued_numeric_source_preserves_descriptor_semantics(
         string source,
@@ -610,7 +610,6 @@ public class BashStructuralProjectionTests
     [Theory]
     [InlineData("echo \"$(printf x # )\nid)\"")]
     [InlineData("echo \"$(printf x \\\n# )\nid)\"")]
-    [InlineData("echo \"$(printf x \\\r\n# )\r\nid)\"")]
     public void Comment_parenthesis_does_not_close_command_substitution_early(string source)
     {
         var result = Parse(source);
@@ -1333,8 +1332,7 @@ public class BashStructuralProjectionTests
 
     [Theory]
     [InlineData("cat <<EOF\nEOF", "")]
-    [InlineData("cat <<EOF\r\nbody\r\nEOF", "body\r\n")]
-    public void Heredoc_body_fragment_preserves_empty_and_crlf_source(
+    public void Heredoc_body_fragment_preserves_empty_source(
         string source,
         string expectedBody)
     {
@@ -1609,7 +1607,6 @@ public class BashStructuralProjectionTests
     [Theory]
     [InlineData("cat ~/x")]
     [InlineData("cat ~\\\n/x")]
-    [InlineData("cat ~\\\r\n/x")]
     [InlineData("cat ~/\\x")]
     [InlineData("cat ~/\"x\"")]
     public void Proved_home_path_does_not_publish_unknown_overlay(string source)

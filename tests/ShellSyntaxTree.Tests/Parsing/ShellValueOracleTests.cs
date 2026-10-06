@@ -828,7 +828,6 @@ public class ShellValueOracleTests
         {
             "echo \"$(printf x # )\nid)\"",
             "echo \"$(printf x \\\n# )\nid)\"",
-            "echo \"$(printf x \\\r\n# )\r\nid)\"",
             "r\\\nm target",
             "echo \"$(r\\\n#suffix)\"",
             "echo \"$(X\\\n=1 rm -rf /tmp/x)\"",

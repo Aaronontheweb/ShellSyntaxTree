@@ -2311,9 +2311,7 @@ internal static partial class BashCommandParser
         private bool IsAssignmentWord(BashToken token)
         {
             var spelling = _source.Substring(token.SourceStart, token.SourceLength)
-                .Replace("\\\r\n", string.Empty)
-                .Replace("\\\n", string.Empty)
-                .Replace("\\\r", string.Empty);
+                .Replace("\\\n", string.Empty);
             var index = 0;
             if (spelling.Length == 0 || !IsBashIdentifierStart(spelling[index]))
             {
@@ -2372,9 +2370,7 @@ internal static partial class BashCommandParser
             }
 
             var spelling = _source.Substring(token.SourceStart, token.SourceLength)
-                .Replace("\\\r\n", string.Empty)
-                .Replace("\\\n", string.Empty)
-                .Replace("\\\r", string.Empty);
+                .Replace("\\\n", string.Empty);
             var equals = spelling.IndexOf('=');
             var name = equals > 0 ? spelling.Substring(0, equals) : string.Empty;
 

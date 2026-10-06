@@ -91,14 +91,26 @@ internal static class BashLexer
                 continue;
             }
 
+            // ---- carriage return: fail closed (#243) ----
+            // Bash reads CR as an ordinary word character, and `\` + CR as an
+            // escaped CR, not a line continuation. Read as a line end, CR could
+            // hide a command: in `a\r# ; id` Bash runs `id`, because the `#`
+            // is inside a word. Outside quotes, comments, and heredoc bodies,
+            // any CR makes the source unparseable.
+            if (IsUnquotedCarriageReturn(src, i))
+            {
+                AddCarriageReturnSentinel(src, i, tokens);
+                return tokens;
+            }
+
             // ---- newline (treated as a sequence terminator analogous to ';') ----
             // Per SPEC §4, top-level newlines separate clauses just like ';'.
             // Emitting them as a Whitespace token preserves source fidelity for
             // the parser without requiring a dedicated token kind.
-            if (c == '\n' || c == '\r')
+            if (c == '\n')
             {
                 var start = i;
-                while (i < src.Length && (src[i] == '\n' || src[i] == '\r'))
+                while (i < src.Length && src[i] == '\n')
                 {
                     i++;
                 }
@@ -110,17 +122,10 @@ internal static class BashLexer
             }
 
             // ---- backslash + newline = continuation (treat as whitespace) ----
-            if (c == '\\' && i + 1 < src.Length && (src[i + 1] == '\n' || src[i + 1] == '\r'))
+            if (c == '\\' && i + 1 < src.Length && src[i + 1] == '\n')
             {
                 var start = i;
                 i += 2;
-                // Optionally consume a paired \r\n.
-                if (i - start == 2 && start + 1 < src.Length && src[start + 1] == '\r'
-                    && i < src.Length && src[i] == '\n')
-                {
-                    i++;
-                }
-
                 tokens.Add(new BashToken(
                     BashTokenKind.Continuation, "", null, start, i - start, null));
                 continue;
@@ -666,6 +671,21 @@ internal static class BashLexer
                     continue;
                 }
 
+                if (n == '\r')
+                {
+                    // Bash keeps `\` + CR as text here. The parser still
+                    // fails closed: a `\` + CR anywhere outside single quotes,
+                    // comments, and heredoc bodies is unparseable (#243).
+                    tokens.Add(new BashToken(
+                        BashTokenKind.UnparseableSentinel,
+                        src.Slice(start).ToString(),
+                        null,
+                        start,
+                        src.Length - start,
+                        CarriageReturnReason));
+                    return src.Length;
+                }
+
                 // Other backslashes preserved literally per SPEC §5.
                 value.AppendLiteral(c, i, 1);
                 i++;
@@ -828,10 +848,9 @@ internal static class BashLexer
             {
                 if (c == '\\' && i + 1 < src.Length)
                 {
-                    if (src[i + 1] == '\r' && i + 2 < src.Length && src[i + 2] == '\n')
+                    if (src[i + 1] == '\r')
                     {
-                        i += 3;
-                        continue;
+                        return CarriageReturnScanFailure(src.Length);
                     }
 
                     i += 2;
@@ -886,6 +905,11 @@ internal static class BashLexer
 
                 i++;
                 continue;
+            }
+
+            if (IsUnquotedCarriageReturn(src, i))
+            {
+                return CarriageReturnScanFailure(src.Length);
             }
 
             if (c == '\\' && i + 1 < src.Length)
@@ -953,7 +977,8 @@ internal static class BashLexer
 
             if (c == '#' && atWordBoundary)
             {
-                while (i < src.Length && src[i] is not '\n' and not '\r')
+                // Bash ends a comment only at LF (#243).
+                while (i < src.Length && src[i] != '\n')
                 {
                     i++;
                 }
@@ -1203,6 +1228,35 @@ internal static class BashLexer
             secondParen != dollar + 2;
     }
 
+    private const string CarriageReturnReason =
+        "a carriage return outside quotes is not supported: Bash reads it as a word character";
+
+    /// <summary>
+    /// A CR, or a backslash before a CR, in a context where the lexer reads
+    /// code. Bash reads CR as a word character and `\` + CR as an escaped CR,
+    /// so neither ends a line or continues one (#243).
+    /// </summary>
+    private static bool IsUnquotedCarriageReturn(ReadOnlySpan<char> src, int index) =>
+        index < src.Length &&
+        (src[index] == '\r' ||
+         src[index] == '\\' && index + 1 < src.Length && src[index + 1] == '\r');
+
+    private static int AddCarriageReturnSentinel(
+        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
+    {
+        tokens.Add(new BashToken(
+            BashTokenKind.UnparseableSentinel,
+            src.Slice(start).ToString(),
+            null,
+            start,
+            src.Length - start,
+            CarriageReturnReason));
+        return src.Length;
+    }
+
+    private static CommandSubstitutionScan CarriageReturnScanFailure(int endIndex) =>
+        new(endIndex, false, CarriageReturnReason);
+
     private static CommandSubstitutionScan StructuralNestingOverflow(int endIndex) =>
         new(
             endIndex,
@@ -1257,8 +1311,9 @@ internal static class BashLexer
     private static int ConsumeLineComment(
         ReadOnlySpan<char> src, int start, List<BashToken> tokens)
     {
+        // Bash ends a comment only at LF. A CR is comment text (#243).
         var i = start;
-        while (i < src.Length && src[i] != '\n' && src[i] != '\r')
+        while (i < src.Length && src[i] != '\n')
         {
             i++;
         }
@@ -1444,6 +1499,7 @@ internal static class BashLexer
             var c = src[i];
 
             // Stop conditions.
+            // A CR ends the word here. The outer loop fails closed on it.
             if (c == ' ' || c == '\t' || c == '\n' || c == '\r') break;
             if (c == '\'' || c == '"' || c == '`') break;
             if (IsOperatorStart(src, i)
@@ -1461,14 +1517,18 @@ internal static class BashLexer
                 }
 
                 var n = src[i + 1];
-                if (n == '\n' || n == '\r')
+                if (n == '\n')
                 {
                     // Bash removes a continuation before word-boundary
                     // analysis, so adjacent fragments remain one word.
-                    i += n == '\r' && i + 2 < src.Length && src[i + 2] == '\n'
-                        ? 3
-                        : 2;
+                    i += 2;
                     continue;
+                }
+
+                if (n == '\r')
+                {
+                    // `\` + CR fails closed in the outer loop (#243).
+                    break;
                 }
 
                 value.AppendLiteral(n, i, 2);
@@ -1875,16 +1935,17 @@ internal static class BashLexer
 
         if (j < src.Length && src[j] == '#')
         {
-            while (j < src.Length && src[j] is not '\n' and not '\r')
+            while (j < src.Length && src[j] != '\n')
             {
                 j++;
             }
         }
 
-        if (j < src.Length && src[j] is not '\n' and not '\r')
+        // A CR here is a word character to Bash, so it fails closed (#243).
+        if (j < src.Length && src[j] != '\n')
         {
             var headerEnd = j;
-            while (headerEnd < src.Length && src[headerEnd] is not '\n' and not '\r')
+            while (headerEnd < src.Length && src[headerEnd] != '\n')
             {
                 headerEnd++;
             }
@@ -1912,14 +1973,7 @@ internal static class BashLexer
             return src.Length;
         }
 
-        if (src[j] == '\r' && j + 1 < src.Length && src[j + 1] == '\n')
-        {
-            j += 2;
-        }
-        else
-        {
-            j++;
-        }
+        j++;
 
         var bodyStart = j;
 
@@ -1933,11 +1987,9 @@ internal static class BashLexer
                 j++;
             }
 
+            // Bash compares the whole line, so `EOF` + CR does not end the
+            // body (#243).
             var lineEnd = j;
-            if (lineEnd > lineStart && src[lineEnd - 1] == '\r')
-            {
-                lineEnd--;
-            }
 
             // For <<-, optional leading tabs are stripped before comparing.
             var compareStart = lineStart;

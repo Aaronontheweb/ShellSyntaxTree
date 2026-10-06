@@ -61,6 +61,10 @@ public class BashLineContinuationTests
 
         // An escaped backslash before a newline is not a continuation.
         { "printf '<%s>' a\\\\\nprintf '<%s>' HIDDEN", "<a\\><HIDDEN>" },
+
+        // A comment ends only at LF. A CR is comment text, so `cat <<true`
+        // is in the comment and the next line is a command.
+        { "printf '<%s>' a #c\rcat <<true\nprintf '<%s>' HIDDEN\ntrue", "<a><HIDDEN>" },
     };
 
     [Theory]
@@ -356,13 +360,14 @@ public class BashLineContinuationTests
 
     [Theory]
     [InlineData("printf '<%s>' \"a\\\\\nb\"", "<a\\\nb>")]
-    [InlineData("printf '<%s>' \"$\\\r\n(printf HIDDEN)\"", "<$\\\r\n(printf HIDDEN)>")]
-    public void Double_quotes_keep_an_escaped_backslash_and_a_carriage_return(
+    [InlineData("printf '<%s>' \"a\rb\"", "<a\rb>")]
+    [InlineData("printf '<%s>' 'a\rb'", "<a\rb>")]
+    public void Quotes_keep_an_escaped_backslash_and_a_carriage_return(
         string source,
         string bashOutput)
     {
-        // In double quotes, only backslash + LF is a continuation. `\\` is
-        // an escaped backslash, and `\` + CR stays text, as in Bash.
+        // `\\` + LF in double quotes is an escaped backslash and a newline.
+        // A bare CR in quotes is text, as in Bash.
         AssertBashPrints(source, bashOutput);
 
         var parsed = Parser.Parse(source);
@@ -371,6 +376,48 @@ public class BashLineContinuationTests
         Assert.Equal(
             bashOutput.Substring(1, bashOutput.Length - 2),
             Assert.IsType<ShellValueDomain.Exact>(command.Arguments.Last().Value).Value);
+    }
+
+    // ---------------------------------------------------------------- carriage return
+
+    public static TheoryData<string, string> CarriageReturnSources => new()
+    {
+        // Bash reads `\` + CR as an escaped CR and LF as the line end. The
+        // old lexer read `\` + CRLF as a continuation and hid the command.
+        { "printf '<%s>' a\\\r\nprintf '<%s>' HIDDEN", "<a\r><HIDDEN>" },
+        // A CR is a word character, so this `#` does not start a comment.
+        { "printf '<%s>' a\r# ; printf '<%s>' HIDDEN", "<a\r#><HIDDEN>" },
+        { "printf '<%s>' $(printf '%s' a\r# ) ; printf '<%s>' HIDDEN", "<a\r#><HIDDEN>" },
+        // CRLF line endings: Bash passes `a` + CR.
+        { "printf '<%s>' a\r\nprintf '<%s>' HIDDEN", "<a\r><HIDDEN>" },
+        // Bash keeps `\` + CR as text in double quotes. The parser still
+        // fails closed on `\` + CR outside single quotes.
+        { "printf '<%s>' \"a\\\r\" ; printf '<%s>' HIDDEN", "<a\\\r><HIDDEN>" },
+    };
+
+    [Theory]
+    [MemberData(nameof(CarriageReturnSources))]
+    public void Carriage_return_in_code_fails_closed(string source, string bashOutput)
+    {
+        AssertBashPrints(source, bashOutput);
+        var parsed = Parser.Parse(source);
+
+        Assert.True(parsed.IsUnparseable);
+        Assert.Empty(parsed.Commands);
+    }
+
+    [Fact]
+    public void Heredoc_line_with_a_carriage_return_is_not_the_delimiter()
+    {
+        // Bash compares the whole line, so `EOF` + CR is body text.
+        const string source = "cat <<EOF\nbody\nEOF\r\nprintf '<%s>' AFTER\nEOF";
+        AssertBashPrints(source, "body\nEOF\r\nprintf '<%s>' AFTER");
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var redirect = Assert.IsType<HereDocumentRedirectAnalysis>(
+            Assert.Single(Assert.Single(parsed.Commands).Redirects));
+        Assert.Equal("body\nEOF\r\nprintf '<%s>' AFTER\n", redirect.Document.Body.Raw);
     }
 
     // ---------------------------------------------------------------- fail closed
