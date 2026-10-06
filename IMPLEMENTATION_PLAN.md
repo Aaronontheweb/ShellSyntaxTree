@@ -10,11 +10,13 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.20 option value in the verb slot)
+## Completed (0.4.0-beta.20 option value in the verb slot)
 
 - [x] Skip a plain word directly after an option in the verb slot of `CommandWords` (#237). Keep bare `--` without a value in the verb slot.
 - [x] Prove that only `CommandWords` changes, and only for inputs with an option before the verb. Run manual mutants and the Netclaw call replay.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.20` and verify NuGet publication.
+- [x] Merge PR #238 after Linux and Windows CI. Tag `0.4.0-beta.20` on merge
+      `ec3292f4` and verify NuGet publication. Workflow run 37394324611
+      published the package and the GitHub prerelease.
 
 ## Completed (0.4.0-beta.19 ANSI-C quotes and expansion facts)
 
