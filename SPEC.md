@@ -2640,6 +2640,12 @@ the grammar reads only an exact `$((`), a continuation in an expanding
 heredoc body or delimiter (Bash joins the body lines before it looks for the
 delimiter), a continuation in `$'…'`, and `$\⏎"…"`.
 
+Reserved words. A reserved word, a keyword, or a literal check reads the
+spelling without line continuations: `t\⏎ime touch x` and `{\⏎ touch x; }`
+fail closed like `time touch x` and `{ touch x; }`, and `f\⏎i` is `fi`. Two
+operators split by a continuation are one: `(\⏎(` starts an arithmetic
+command (unparseable), and `;\⏎;` ends a case item.
+
 Carriage return. Bash reads a CR as an ordinary word character and `\` + CR as
 an escaped CR, so neither ends or continues a line. Before v0.4.0-beta.22 the
 lexer read CR as a line end and `\` + CRLF as a continuation, which hid
@@ -2923,15 +2929,18 @@ redirect.
 
 ### Comment handling
 
-- An unquoted `#` that appears at a **word boundary** starts a comment
-  that runs to (but does not include) the next newline. A word boundary
-  is: start of input, or the position immediately after a whitespace
-  run, a newline, an operator (`&&`, `||`, `;`, `|`, `>`, `>>`, `<`,
-  a numeric descriptor adjacent to `>`, `>>`, `<`, `<<`, `<<-`, or `<<<`,
-  `&>`, `&>>`, `(`, `)`, `<<`, `<<-`, `<<<`), a quoted string, or an opaque
-  substitution. Equivalently: `#` is comment-start everywhere the
-  outer lexer dispatch loop sits, because every other lexer rule has
-  already consumed its territory before `#` is considered.
+- An unquoted `#` that begins a word starts a comment that runs to (but
+  does not include) the next LF. A `#` begins a word at the start of
+  input, or immediately after a whitespace run, a newline, or an operator
+  (`&&`, `||`, `;`, `|`, `>`, `>>`, `<`, a numeric descriptor adjacent to
+  `>`, `>>`, `<`, `<<`, `<<-`, or `<<<`, `&>`, `&>>`, `(`, `)`, `<<`,
+  `<<-`, `<<<`).
+- Directly after a quoted string, `$'…'`, or an opaque substitution
+  (`$(…)`, `$((…))`), also across a line continuation, `#` is word text
+  (v0.4.0-beta.22, #243). Bash runs `touch` in `echo "a"# ; touch x`; the
+  argument is `a#`. Before v0.4.0-beta.22 the lexer started a comment there
+  and hid the next command. The same rule holds when a substitution body is
+  parsed again.
 - `#` **inside** single or double quotes is a literal character (no
   comment).
 - `#` in the **interior** of an unquoted word (e.g. `abc#def`) is a
@@ -3283,6 +3292,16 @@ a normalized absolute path. Resolution order:
    `~/foo` → `<home>/foo`. The complete tilde prefix must be unquoted;
    quoted or escaped slash spellings remain literal, while backslash-newline
    is removed before this test. `~user` not supported → `DynamicSkip`.
+   Since v0.4.0-beta.22 (#243), a word whose text before the first unquoted
+   `=` (or `+=`) is a variable name is assignment-shaped. Outside POSIX mode
+   Bash expands a `~` directly after that `=` and after each later unquoted
+   `:`, in arguments, `for` and `case` words, and redirect targets:
+   `make PREFIX=~/x` passes `PREFIX=<home>/x`, and `ls a=b:~/y` passes
+   `a=b:<home>/y`. The prefix ends at `/`, `:`, or the end of the word. A
+   quoted or escaped prefix (`a=~"/x"`, `a=~\/x`), a later `=`
+   (`a=b=~/x`), and a here-string keep the text. `~user`, `~+`, and a `~`
+   after a quoted part of the word (`a="b":~/x`) are not proved, so the value
+   is Unknown. The value is never exact with a literal `~` that Bash expands.
 
 2. **Env-var substitution.** `$VAR` and `${VAR}` are **not expanded**
    even if the value is in `Environment`. We treat any env var reference

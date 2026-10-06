@@ -15,6 +15,7 @@ priorities.
 - [x] Remove a Bash line continuation before the lexer reads the next character of an expansion or an operator (#243). `echo "$\⏎(touch /tmp/x)"` gives the `touch` occurrence. Fail closed on a split `$((` marker.
 - [x] Fail closed on a CR in Bash code and on `\` + CR (owner decision). Comments end only at LF.
 - [x] Take a Bash `--name=value` value from the decoded word (owner decision).
+- [x] Review fixes: `#` after a word part is word text; reserved words, `((`, and `;;` read across a continuation; a `~` after `=` or `:` of an assignment-shaped word expands from HOME.
 - [x] Pin each case against real Bash. Prove the general rule: a continuation at any point gives the same facts or fails closed. Run manual mutants and an output comparison against beta.21.
 - [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.22` and verify NuGet publication.
 - [ ] Move the literal twins of #242 to 0.4.0-beta.23.

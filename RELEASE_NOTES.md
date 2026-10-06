@@ -1,6 +1,6 @@
 #### 0.4.0-beta.22 2026-10-06 ####
 
-This prerelease fixes security bugs. A Bash line continuation or a carriage return could hide a command from `Parse` (#243). In the examples, `⏎` is a real newline and CR is a carriage return.
+This prerelease fixes security bugs. A Bash line continuation, a carriage return, or a `#` after a quoted part could hide a command from `Parse` (#243). In the examples, `⏎` is a real newline and CR is a carriage return.
 
 ## Fixed
 
@@ -9,6 +9,9 @@ This prerelease fixes security bugs. A Bash line continuation or a carriage retu
 - Bash keeps a line continuation in single quotes, in `$'…'`, in a comment, and in a heredoc body with a quoted delimiter. These stay literal.
 - Values: `n=build; rm -rf "$n\⏎dir/"` gave the exact value `builddir/`. Bash reads the variable `ndir`, so it runs `rm -rf /`. The value is now unknown. `"$\⏎n/"` gives `build/`, `"${\⏎x}"` gives the value of `x`, and `x$\⏎'y'` gives `xy`.
 - A carriage return could hide a command. Bash reads CR as a word character and `\` + CR as an escaped CR. The lexer read CR as a line end and `\` + CRLF as a line continuation. `echo a\` + CRLF + `touch /tmp/x` and `echo a` + CR + `# ; touch /tmp/x` run `touch` in Bash, but `Parse` gave no `touch` occurrence. A comment now ends only at LF, and a heredoc line with a trailing CR is not its delimiter, as in Bash.
+- A `#` directly after a quoted part, `$'…'`, `$(…)`, or `$((…))` started a comment. Bash starts a comment only when `#` begins a word, so the `#` is word text. `echo "a"# ; touch x`, `ls 'a'#;touch x`, and `echo $(echo "a"# ; touch x)` run `touch` in Bash, but `Parse` gave no `touch` occurrence (0.4.0-beta.3 to 0.4.0-beta.21). The argument is now `a#`, and the next command is an occurrence.
+- A reserved word or keyword with a line continuation in it is read without the continuation. `t\⏎ime touch x`, `!\⏎ touch x`, `coproc\⏎ touch x`, and `{\⏎ touch x; }` gave the reserved word as the program; they now fail closed like the forms without the continuation. `f\⏎i` and `d\⏎one` are keywords, `(\⏎(` is an arithmetic command (unparseable), and `;\⏎;` ends a case item.
+- A `~` after `=` or `:` of an assignment-shaped word. `make PREFIX=~/x` gave `PREFIX=~/x`, but Bash passes `PREFIX=$HOME/x` (also `a=b:~/y`, `a+=~/x`, `a=~`). The value is now expanded from HOME when HOME is known, and Unknown for `~user`, `~+`, or a `~` after a quoted part. A quoted prefix, a later `=`, and a here-string keep the text, as in Bash.
 - The value argument of a Bash `--name=value` word is now the part after the first `=` of the decoded word that Bash passes. `curl --data=@p\.json` gave the value `--data=@p.json`, `curl --data=\a""` gave `--data=a`, and `curl --data="a b"` gave `"a b"` with the quotes. Bash passes `@p.json`, `a`, and `a b`. A value that the parser cannot take from the decoded word is Unknown.
 - Readers of authored text use the same rule: the redirect operator analysis (`>\⏎>` is an append), `MayPathnameExpand` and `MayFieldSplit` (`"$\⏎@"`, `{a.\⏎.c}`), `CommandWords`, and option names in the per-verb flag tables (`curl -\⏎o /tmp/out` binds the path). `Raw` keeps the exact source slice.
 
