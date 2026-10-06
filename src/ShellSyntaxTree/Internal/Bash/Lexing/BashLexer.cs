@@ -219,7 +219,7 @@ internal static class BashLexer
                         src, dollarNext + 1, BashContinuationContext.Unquoted);
                     if (secondParen < src.Length && src[secondParen] == '(')
                     {
-                        i = ConsumeArithmetic(src, i, secondParen, tokens);
+                        i = ConsumeArithmetic(src, i, tokens);
                         continue;
                     }
 
@@ -1269,14 +1269,11 @@ internal static class BashLexer
     }
 
     private static int ConsumeArithmetic(
-        ReadOnlySpan<char> src, int start, int secondParen, List<BashToken> tokens)
+        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
     {
-        if (secondParen != start + 2)
-        {
-            // Bash reads `$(\⏎(` as `$((`. The arithmetic grammar reads only
-            // an exact `$((` marker, so a split marker fails closed (#243).
-            return AddArithmeticMarkerSentinel(src, start, tokens);
-        }
+        // Bash reads `$(\⏎(` as `$((`. The arithmetic grammar reads only an
+        // exact `$((` marker, so a split marker reaches the sentinel below
+        // and fails closed (#243).
 
         // src[start] = '$', src[start+1] = '(', src[start+2] = '(' — and we
         // need to skip past matching '))'. Use the opaque scanner anchored
@@ -1344,19 +1341,6 @@ internal static class BashLexer
 
     private const string ArithmeticMarkerContinuationReason =
         "a line continuation inside the Bash '$((' marker is not supported";
-
-    private static int AddArithmeticMarkerSentinel(
-        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
-    {
-        tokens.Add(new BashToken(
-            BashTokenKind.UnparseableSentinel,
-            src.Slice(start).ToString(),
-            null,
-            start,
-            src.Length - start,
-            ArithmeticMarkerContinuationReason));
-        return src.Length;
-    }
 
     /// <summary>
     /// The body of <c>${…}</c> between <paramref name="openBrace"/> and
