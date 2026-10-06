@@ -3302,6 +3302,16 @@ a normalized absolute path. Resolution order:
    (`a=b=~/x`), and a here-string keep the text. `~user`, `~+`, and a `~`
    after a quoted part of the word (`a="b":~/x`) are not proved, so the value
    is Unknown. The value is never exact with a literal `~` that Bash expands.
+   The expansion is POSIX-dependent: POSIX-mode Bash and dash keep the text.
+   The parser expands it only when all of these hold: (a) the word is in the
+   submitted source, not in a decoded `sh -c`, `bash -c`, or
+   `bash --posix -c` child; (b) the mode is
+   `BashInitialStateMode.FreshNonInteractiveNoStartup`, which excludes an
+   inherited POSIX mode (`POSIXLY_CORRECT`, `SHELLOPTS`, `--posix`); and (c)
+   HOME is a launch-proved value. In every other case the value is Unknown,
+   neither the text nor an expansion. A subscripted name (`a[0]=~/x`) also
+   gives Unknown. A real assignment (`x=~/a`) expands its leading tilde in
+   every mode and is not affected.
 
 2. **Env-var substitution.** `$VAR` and `${VAR}` are **not expanded**
    even if the value is in `Environment`. We treat any env var reference
