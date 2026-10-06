@@ -5,7 +5,6 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using Xunit;
@@ -22,7 +21,7 @@ namespace ShellSyntaxTree.Tests.Parsing;
 /// </summary>
 public class BashLineContinuationTests
 {
-    private const string Home = "/home/test";
+    private const string Home = BashOracle.Home;
 
     private static readonly BashParser Parser = new(new BashParserOptions
     {
@@ -72,7 +71,7 @@ public class BashLineContinuationTests
     [MemberData(nameof(HiddenCommandSources))]
     public void Command_after_a_continuation_is_an_occurrence(string source, string bashOutput)
     {
-        AssertBashPrints(source, bashOutput);
+        BashOracle.AssertPrints(source, bashOutput);
         var parsed = Parser.Parse(source);
 
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
@@ -108,7 +107,7 @@ public class BashLineContinuationTests
     {
         // The `)` in the body must not end the substitution.
         const string source = "printf '<%s>' \"$(cat <\\\n<EOF\na)b\nEOF\n)\"";
-        AssertBashPrints(source, "<a)b>");
+        BashOracle.AssertPrints(source, "<a)b>");
         var parsed = Parser.Parse(source);
 
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
@@ -122,7 +121,7 @@ public class BashLineContinuationTests
     {
         // `\'` does not end `$'…'`, so the `)` after it is text.
         const string source = "printf '<%s>' $(printf '%s' $\\\n'a)\\'b')";
-        AssertBashPrints(source, "<a)'b>");
+        BashOracle.AssertPrints(source, "<a)'b>");
         var parsed = Parser.Parse(source);
 
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
@@ -144,7 +143,7 @@ public class BashLineContinuationTests
     [InlineData("printf '<%s>' -\\\no", "-o")]
     public void Expansion_across_a_continuation_has_the_bash_value(string source, string value)
     {
-        AssertBashPrints(source, "<" + value + ">");
+        BashOracle.AssertPrints(source, "<" + value + ">");
 
         Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(LastArgument(source).Value).Value);
     }
@@ -155,7 +154,7 @@ public class BashLineContinuationTests
         // Bash reads `$ndir`, which is unset, so `rm -rf "$n\⏎dir/"` runs
         // `rm -rf /`. The old value was the wrong exact path `builddir/`.
         const string source = "n=build; printf '<%s>' \"$n\\\ndir/\"";
-        AssertBashPrints(source, "</>");
+        BashOracle.AssertPrints(source, "</>");
 
         var value = LastArgument(source).Value;
         Assert.True(
@@ -168,7 +167,7 @@ public class BashLineContinuationTests
     public void Unquoted_name_after_a_continuation_reads_the_bound_value()
     {
         const string source = "x=/etc/hostname; printf '<%s>' $\\\nx";
-        AssertBashPrints(source, "</etc/hostname>");
+        BashOracle.AssertPrints(source, "</etc/hostname>");
 
         Assert.Equal(
             "/etc/hostname",
@@ -180,7 +179,7 @@ public class BashLineContinuationTests
     [InlineData("set -- p q; printf '<%s>' \"${\\\n@}\"", "<p><q>")]
     public void Quoted_all_positional_across_a_continuation_can_split(string source, string bashOutput)
     {
-        AssertBashPrints(source, bashOutput);
+        BashOracle.AssertPrints(source, bashOutput);
 
         Assert.True(LastArgument(source).MayFieldSplit);
     }
@@ -190,7 +189,7 @@ public class BashLineContinuationTests
     [InlineData("printf '<%s>' {\\\n-1..1}", "<-1><0><1>")]
     public void Brace_sequence_across_a_continuation_expands(string source, string bashOutput)
     {
-        AssertBashPrints(source, bashOutput);
+        BashOracle.AssertPrints(source, bashOutput);
 
         var argument = LastArgument(source);
         Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
@@ -203,7 +202,7 @@ public class BashLineContinuationTests
     {
         // The `"` inside `$\⏎( )` must not end the outer double quotes.
         const string source = "printf '<%s>' \"$\\\n(printf \"*\")\"";
-        AssertBashPrints(source, "<*>");
+        BashOracle.AssertPrints(source, "<*>");
 
         var argument = LastArgument(source);
         Assert.False(argument.MayPathnameExpand);
@@ -295,7 +294,7 @@ public class BashLineContinuationTests
     [InlineData("printf a >&\\\n2")]
     public void Descriptor_target_continues_across_a_line(string source)
     {
-        AssertBashWritesToStandardError(source, "a");
+        BashOracle.AssertWritesToStandardError(source, "a");
         var command = Assert.Single(Parser.Parse(source).Commands);
 
         var redirect = Assert.IsType<DescriptorDuplicateRedirectAnalysis>(Assert.Single(command.Redirects));
@@ -309,7 +308,7 @@ public class BashLineContinuationTests
     public void Here_string_operator_continues_across_a_line()
     {
         const string source = "cat <\\\n<<word";
-        AssertBashPrints(source, "word");
+        BashOracle.AssertPrints(source, "word");
 
         var redirect = Assert.IsType<HereStringRedirectAnalysis>(
             Assert.Single(Assert.Single(Parser.Parse(source).Commands).Redirects));
@@ -321,7 +320,7 @@ public class BashLineContinuationTests
     [InlineData("cat <<\\\n-EOF\n\tbody\n\tEOF", true)]
     public void Heredoc_operator_continues_across_a_line(string source, bool stripTabs)
     {
-        AssertBashPrints(source, "body");
+        BashOracle.AssertPrints(source, "body");
 
         var redirect = Assert.IsType<HereDocumentRedirectAnalysis>(
             Assert.Single(Assert.Single(Parser.Parse(source).Commands).Redirects));
@@ -335,7 +334,7 @@ public class BashLineContinuationTests
     public void Single_quotes_keep_the_continuation()
     {
         const string source = "printf '<%s>' '$\\\n(printf HIDDEN)'";
-        AssertBashPrints(source, "<$\\\n(printf HIDDEN)>");
+        BashOracle.AssertPrints(source, "<$\\\n(printf HIDDEN)>");
 
         var parsed = Parser.Parse(source);
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
@@ -349,7 +348,7 @@ public class BashLineContinuationTests
     public void Quoted_heredoc_delimiter_keeps_the_continuation()
     {
         const string source = "cat <<'EOF'\n$\\\n(printf HIDDEN)\nEOF";
-        AssertBashPrints(source, "$\\\n(printf HIDDEN)");
+        BashOracle.AssertPrints(source, "$\\\n(printf HIDDEN)");
 
         var parsed = Parser.Parse(source);
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
@@ -369,7 +368,7 @@ public class BashLineContinuationTests
     {
         // `\\` + LF in double quotes is an escaped backslash and a newline.
         // A bare CR in quotes is text, as in Bash.
-        AssertBashPrints(source, bashOutput);
+        BashOracle.AssertPrints(source, bashOutput);
 
         var parsed = Parser.Parse(source);
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
@@ -401,7 +400,7 @@ public class BashLineContinuationTests
         // The program reads the word that Bash passes and splits it at its
         // first `=`. Before 0.4.0-beta.22 an escape or a quote gave the whole
         // word or the authored spelling as the value (#243).
-        AssertBashPrints("x='v w'; printf '<%s>' " + word, "<--data=" + value + ">");
+        BashOracle.AssertPrints("x='v w'; printf '<%s>' " + word, "<--data=" + value + ">");
         var parsed = Parser.Parse("x='v w'; curl " + word + " https://example.invalid");
 
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
@@ -415,7 +414,7 @@ public class BashLineContinuationTests
     public void Inline_option_value_of_a_loop_is_each_value_after_the_equals()
     {
         const string source = "for v in a b; do curl --data=\"$v\" https://example.invalid; done";
-        AssertBashPrints("for v in a b; do printf '<%s>' --data=\"$v\"; done", "<--data=a><--data=b>");
+        BashOracle.AssertPrints("for v in a b; do printf '<%s>' --data=\"$v\"; done", "<--data=a><--data=b>");
 
         var value = Assert.IsType<ShellValueDomain.FiniteSet>(
             Parser.Parse(source).Commands.Single().Arguments[1].Value);
@@ -436,7 +435,7 @@ public class BashLineContinuationTests
     public void Inline_option_value_that_splits_is_unknown()
     {
         const string source = "x='v w'; curl --data=$x https://example.invalid";
-        AssertBashPrints("x='v w'; printf '<%s>' --data=$x", "<--data=v><w>");
+        BashOracle.AssertPrints("x='v w'; printf '<%s>' --data=$x", "<--data=v><w>");
 
         var arguments = Parser.Parse(source).Commands.Last().Arguments;
         Assert.IsType<ShellValueDomain.Unknown>(arguments[1].Value);
@@ -463,7 +462,7 @@ public class BashLineContinuationTests
     [MemberData(nameof(CarriageReturnSources))]
     public void Carriage_return_in_code_fails_closed(string source, string bashOutput)
     {
-        AssertBashPrints(source, bashOutput);
+        BashOracle.AssertPrints(source, bashOutput);
         var parsed = Parser.Parse(source);
 
         Assert.True(parsed.IsUnparseable);
@@ -475,7 +474,7 @@ public class BashLineContinuationTests
     {
         // Bash compares the whole line, so `EOF` + CR is body text.
         const string source = "cat <<EOF\nbody\nEOF\r\nprintf '<%s>' AFTER\nEOF";
-        AssertBashPrints(source, "body\nEOF\r\nprintf '<%s>' AFTER");
+        BashOracle.AssertPrints(source, "body\nEOF\r\nprintf '<%s>' AFTER");
         var parsed = Parser.Parse(source);
 
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
@@ -505,7 +504,7 @@ public class BashLineContinuationTests
     [InlineData("printf '<%s>' \"${x:-$\\\n(printf HIDDEN)}\"")]
     public void Unmodeled_context_fails_closed(string source)
     {
-        AssertBashSucceeds(source);
+        BashOracle.AssertSucceeds(source);
         var parsed = Parser.Parse(source);
 
         Assert.True(parsed.IsUnparseable);
@@ -652,86 +651,4 @@ public class BashLineContinuationTests
 
     private static string Quote(string value) =>
         "\"" + value.Replace("\\", "\\\\").Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
-
-    // ---------------------------------------------------------------- bash oracle
-
-    private static bool IsNativeBashAvailable() =>
-        !OperatingSystem.IsWindows() && BashResult("true") is { ExitCode: 0 };
-
-    private static void AssertBashPrints(string source, string expected)
-    {
-        if (!IsNativeBashAvailable())
-        {
-            return;
-        }
-
-        var result = BashResult(source)!.Value;
-        Assert.True(result.ExitCode == 0, $"bash failed: {result.StandardError}");
-        Assert.True(string.IsNullOrEmpty(result.StandardError), result.StandardError);
-        Assert.Equal(expected, result.StandardOutput.TrimEnd('\n'));
-    }
-
-    private static void AssertBashWritesToStandardError(string source, string expected)
-    {
-        if (!IsNativeBashAvailable())
-        {
-            return;
-        }
-
-        var result = BashResult(source)!.Value;
-        Assert.Equal(0, result.ExitCode);
-        Assert.Equal(string.Empty, result.StandardOutput);
-        Assert.Equal(expected, result.StandardError);
-    }
-
-    private static void AssertBashSucceeds(string source)
-    {
-        if (!IsNativeBashAvailable())
-        {
-            return;
-        }
-
-        var result = BashResult(source)!.Value;
-        Assert.True(result.ExitCode == 0, $"bash failed: {result.StandardError}");
-    }
-
-    private static ProcessResult? BashResult(string source)
-    {
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = "bash",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
-        startInfo.ArgumentList.Add("--noprofile");
-        startInfo.ArgumentList.Add("--norc");
-        startInfo.ArgumentList.Add("-c");
-        startInfo.ArgumentList.Add(source);
-        startInfo.Environment["HOME"] = Home;
-        try
-        {
-            using var process = Process.Start(startInfo);
-            if (process is null)
-            {
-                return null;
-            }
-
-            var standardOutput = process.StandardOutput.ReadToEnd();
-            var standardError = process.StandardError.ReadToEnd();
-            Assert.True(process.WaitForExit(10_000), "bash oracle timed out");
-            return new ProcessResult(process.ExitCode, standardOutput, standardError);
-        }
-        catch (System.ComponentModel.Win32Exception)
-        {
-            // No bash on this machine: the parser assertions still run.
-            return null;
-        }
-    }
-
-    private readonly record struct ProcessResult(
-        int ExitCode,
-        string StandardOutput,
-        string StandardError);
 }
