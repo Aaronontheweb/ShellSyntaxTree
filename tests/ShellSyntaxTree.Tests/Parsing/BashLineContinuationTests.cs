@@ -47,6 +47,10 @@ public class BashLineContinuationTests
         { "printf '<%s>' \"$(printf '%s' \"$\\\n(printf HIDDEN)\")\"", "<HIDDEN>" },
         { "printf '<%s>' $(printf '%s' $\\\n(printf HIDDEN))", "<HIDDEN>" },
 
+        // The substitution boundary scan reads `$\⏎(` too: the `)` in the
+        // quoted argument must not end the outer `$(`.
+        { "printf '<%s>' \"$(printf '%s' \"$\\\n(printf ')%s' HIDDEN)\")\"", "<)HIDDEN>" },
+
         // An operator can continue across a line.
         { "true &\\\n& printf '<%s>' HIDDEN", "<HIDDEN>" },
         { "false |\\\n| printf '<%s>' HIDDEN", "<HIDDEN>" },
@@ -91,6 +95,33 @@ public class BashLineContinuationTests
         var echo = parsed.Commands[1];
         Assert.Equal(new[] { "echo" }, echo.Clause.Verb.Tokens);
         Assert.IsType<ShellValueDomain.Unknown>(Assert.Single(echo.Arguments).Value);
+    }
+
+    [Fact]
+    public void Heredoc_operator_in_a_substitution_continues_across_a_line()
+    {
+        // The `)` in the body must not end the substitution.
+        const string source = "printf '<%s>' \"$(cat <\\\n<EOF\na)b\nEOF\n)\"";
+        AssertBashPrints(source, "<a)b>");
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var cat = Assert.Single(parsed.Commands, c => c.ImmediateRole == CommandOccurrenceRole.Substitution);
+        var redirect = Assert.IsType<HereDocumentRedirectAnalysis>(Assert.Single(cat.Redirects));
+        Assert.Equal("a)b\n", redirect.Document.Body.Raw);
+    }
+
+    [Fact]
+    public void Ansi_c_string_in_a_substitution_continues_across_a_line()
+    {
+        // `\'` does not end `$'…'`, so the `)` after it is text.
+        const string source = "printf '<%s>' $(printf '%s' $\\\n'a)\\'b')";
+        AssertBashPrints(source, "<a)'b>");
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var inner = Assert.Single(parsed.Commands, c => c.ImmediateRole == CommandOccurrenceRole.Substitution);
+        Assert.Equal("a)'b", Assert.IsType<ShellValueDomain.Exact>(inner.Arguments.Last().Value).Value);
     }
 
     // ---------------------------------------------------------------- exact values
@@ -159,6 +190,46 @@ public class BashLineContinuationTests
         Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
         Assert.True(argument.MayPathnameExpand);
         Assert.True(argument.MayFieldSplit);
+    }
+
+    [Fact]
+    public void Quoted_substitution_across_a_continuation_does_not_expand()
+    {
+        // The `"` inside `$\⏎( )` must not end the outer double quotes.
+        const string source = "printf '<%s>' \"$\\\n(printf \"*\")\"";
+        AssertBashPrints(source, "<*>");
+
+        var argument = LastArgument(source);
+        Assert.False(argument.MayPathnameExpand);
+        Assert.False(argument.MayFieldSplit);
+    }
+
+    [Theory]
+    // A backslash in an opaque value must not make the word look like a path.
+    [InlineData("git \"$(printf pu\\\nsh)\"")]
+    // `"$@/x"` can give several words, such as `a` and `push/x`.
+    [InlineData("git \"$\\\n@/x\"")]
+    public void Expansion_across_a_continuation_in_the_verb_slot_makes_words_unknown(string source)
+    {
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.IsType<ShellCommandWords.Unknown>(parsed.Commands.Last().CommandWords);
+    }
+
+    [Theory]
+    [InlineData("a\\\nb", "ab")]
+    [InlineData("a\\\\\nb", "a\\\\\nb")]
+    [InlineData("a\\\\\\\nb", "a\\\\b")]
+    [InlineData("a\\xb", "a\\xb")]
+    public void Remove_keeps_a_newline_after_an_escaped_backslash(string text, string expected)
+    {
+        // `\\` + newline is an escaped backslash and a real newline (#243).
+        Assert.Equal(
+            expected,
+            Internal.Bash.Lexing.BashLineContinuation.Remove(
+                text.AsSpan(),
+                Internal.Bash.Lexing.BashContinuationContext.Unquoted));
     }
 
     [Fact]
