@@ -395,6 +395,7 @@ public sealed record BashLiteralTwinCommand
 public sealed record BashLiteralTwin
 {
     public string Source { get; internal init; }
+    public string WorkingDirectory { get; internal init; }
     public CommandOccurrence Occurrence { get; internal init; }
     public IReadOnlyList<BashLiteralTwinWord> Words { get; internal init; }
 }
@@ -1534,20 +1535,26 @@ command that a loop or a bounded variable can run. A changeable argument word
 is a word that the shell can change before the program runs: an expansion
 (`$n`, `"$f"`, `repos/x/$n`) or a tilde word. For each occurrence whose
 changeable words all have a proved finite set of values, the projection
-writes one literal twin for each combination of values. A twin is the full
-source with each changeable word of that occurrence written as one literal
-word. The parser parses the twin with the same options. The twin occurrence
-then has its own normal facts: `CommandWords`, verb tokens, path facts,
-`AuthoredFileSystemValue`, and the expansion facts of a typed literal.
+writes one literal twin for each combination of values. A twin text is the
+authored text of that one command, from its first word to its last word, with
+each changeable word written as one literal word. The parser parses the twin
+text in the exact directory of the occurrence, with the launch facts that are
+live there. The twin occurrence then has its own normal facts: `CommandWords`,
+verb tokens, path facts, `AuthoredFileSystemValue`, and the expansion facts of
+a typed literal. Its structure (role, ancestry) is that of one top-level
+command, so read the structure from `SourceOccurrence`.
 
 The projection uses this schematic flow:
 
 ```text
-give nothing when the source has a backslash-newline or a carriage return
+give nothing when the source has a backslash-newline, a carriage return,
+    `=~`, or `:~`
 for each occurrence of the full parse:
     give nothing unless the occurrence is complete
+    give nothing unless its directory is exact
+    give nothing when it has an assignment prefix (`X=1 cmd`)
     give nothing when the source has `~` or `HOME` and no live launch HOME
-    give nothing when a word has `=~` or `:~`
+    give nothing unless each word has a span in the submitted source
     give nothing unless each redirect is fixed
     for each word that is not static:
         give nothing unless it is one argument with an analyzed value
@@ -1557,23 +1564,26 @@ for each occurrence of the full parse:
             give nothing unless the mode is FreshNonInteractiveNoStartup
             give nothing unless each value is nonempty and has no
                 space, tab, newline, *, ?, [, (, ), or backslash
-        give nothing unless the word has a span in the submitted source
     give nothing when the combinations pass 32
-for each occurrence that passed:
-    give nothing when its parses do not fit in the rest of the budget
-        (128 parses and 32,768 source characters for one call)
+    compute the length of every twin text before any build
+for each occurrence that passed, in order:
+    give nothing when its twins do not fit in the rest of the budget:
+        128 twin parses, and 2,048 + 8 x (source length) twin characters
+    charge its twin count and twin characters
     for each combination:
-        count one parse, also when the parse fails
         write each value as one literal word (plain text, else single quotes)
-        parse the full twin source
-        give nothing unless the twin has the same commands, is complete,
-            and each written word is one literal word with that exact value
+        parse the twin text in the directory of the occurrence
+        give nothing unless the twin is one complete command in that
+            directory, and each written word is one literal word with that
+            exact value
 ```
 
 A word is static when it has no expansion, glob character, brace list, or
 leading tilde. A twin keeps every static word as authored. A verb word must be
-static. A fixed redirect is an exact file target, a descriptor operation, a
-heredoc with a literal body, or a here-string with exact data.
+static. A fixed redirect is an exact file target, a descriptor operation, or a
+here-string with exact data. A heredoc body is outside the words of the
+command, so the twin text cannot hold it, and a command with a heredoc gets no
+twins.
 
 The effective value of an unquoted expansion stays `Unknown`, because the
 shell can split or glob it. Under `FreshNonInteractiveNoStartup`, the caller
@@ -1587,21 +1597,25 @@ unquoted word. An empty value can remove the word, so it gives no twin. The
 authored value needs `PublishAuthoredSourceFacts`.
 
 Some guards are wider than Bash, because the twin facts are only as good as
-the `Parse` value facts:
+the `Parse` value facts. A value can come from any part of the source, such as
+a loop list, so these guards read the full source:
 
 - Bash removes a backslash-newline before it reads a word, also inside an
   expansion. Bash reads a carriage return as a word character. A source with
   either text gets no twins.
-- Bash expands a tilde after `=` and after `:` in an argument that looks like
-  an assignment (`dd if=~/x`). An occurrence with `=~` or `:~` in a word gets
-  no twins.
+- Bash expands a tilde after `=` and after `:` in an argument or a loop list
+  item that looks like an assignment (`dd if=~/x`, `for f in if=~/x`). A source
+  with `=~` or `:~` anywhere gets no twins. This also stops `[[ $x =~ re ]]`.
 - Without a live launch `HOME`, the home directory is the caller assumption
   `HomeDirectory`. When the source has `~` or `HOME`, an occurrence gets twins
   only with a live launch `HOME`.
 
-The budget counts each twin parse, also one that fails. An occurrence whose
-parses do not fit in the rest of the budget gets no twins and costs no parse.
-A 2 KB source gets at most 16 twin parses.
+The budget is checked before a twin text is built. A twin text is one simple
+command with no loop, so its parse costs about as much as its length. The
+character budget grows with the source, so the twin work of one call stays a
+small constant factor of one `Parse`. An occurrence that does not fit gets no
+twins and costs no build and no parse. A charged occurrence keeps its charge
+when a twin fails.
 
 The values of different words combine independently. Two words that read one
 loop variable can give a twin with two different values. That combination
@@ -1610,21 +1624,22 @@ runs, so a consumer that checks every twin checks every run.
 
 An occurrence that is not in `Commands` has no twins. The method returns
 `false` and a null projection when no occurrence has twins. Bash runs only
-the authored source, never `twin.Source`. Only the occurrence at
-`SourceOccurrenceIndex` in a parse of `twin.Source` has the twin facts. A literal value can move a word between
-the verb and argument roles, as the typed literal does: the twins of
+the authored source, never `twin.Source`. A literal value can move a word
+between the verb and argument roles, as the typed literal does: the twins of
 `for v in push fetch; do git $v origin; done` have the command words
 `git push origin` and `git fetch origin`.
 
 Positive example: from `/work`,
 `for n in 8250 8244; do gh api repos/o/r/issues/$n >/dev/null; done` gives two
-twins. Each twin occurrence has the command words `gh api` and the path fact of
-`repos/o/r/issues/8250` or `repos/o/r/issues/8244`.
+twins, `gh api repos/o/r/issues/8250 >/dev/null` and
+`gh api repos/o/r/issues/8244 >/dev/null`. Each twin occurrence has the
+command words `gh api` and the path fact of its literal word.
 
 Negative examples: `for n in $(gh issue list); do gh api repos/o/r/issues/$n; done`
 gives no twins, because the list has no proved values. `for f in 'a b' c; do cat $f; done`
 gives no twins, because `a b` splits. `for d in a b; do ~/bin/tool "$d"; done`
-gives no twins, because the program word is not static.
+gives no twins, because the program word is not static. `for f in if=~/x; do dd "$f"; done`
+gives no twins, because Bash expands the tilde in the list item.
 
 A twin is syntax evidence. It does not grant authority. The caller owns path
 policy, grant matching, and process launch, and it must check every twin.

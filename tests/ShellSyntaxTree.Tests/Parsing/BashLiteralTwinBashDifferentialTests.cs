@@ -87,6 +87,26 @@ public class BashLiteralTwinBashDifferentialTests
         Assert.True(checkedCommands > 0);
     }
 
+    // The parser keeps a loop list item with `=~` or `:~` as text, but Bash
+    // expands the tilde. The projection must give no twins for such a source.
+    [BashTheory]
+    [InlineData("for n in x=~/y; do cat \"$n\"; done", "x=~/y", "x=/home/agent/y")]
+    [InlineData("for n in x=~; do cat \"$n\"; done", "x=~", "x=/home/agent")]
+    [InlineData("for n in a=b:~/y; do cat \"$n\"; done", "a=b:~/y", "a=b:/home/agent/y")]
+    [InlineData("for n in a; do for m in x=~/y; do cat \"$n\" \"$m\"; done; done", "x=~/y", "x=/home/agent/y")]
+    public void Bash_changes_a_list_item_that_gives_no_twins(
+        string source,
+        string parserValue,
+        string bashValue)
+    {
+        Assert.False(Parser.TryProjectLiteralTwins(source, out _));
+
+        var argument = Assert.Single(Parser.Parse(source).Commands).Arguments[^1];
+        Assert.Equal(parserValue, Assert.IsType<ShellValueDomain.Exact>(argument.Value).Value);
+        var run = Assert.Single(RunArgv(source, "cat"));
+        Assert.Equal(bashValue, run.Split('\u001f')[^1]);
+    }
+
     private static string SstArgv(BashLiteralTwin twin) =>
         string.Join("\u001f", twin.Occurrence.Clause.Elements
             .Where(element => element.Role != ClauseElementRole.Redirect)

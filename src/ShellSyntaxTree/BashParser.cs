@@ -71,6 +71,6 @@ public sealed class BashParser : IShellParser
         out BashLiteralTwinProjection? projection)
     {
         var parsed = Parse(command);
-        return BashLiteralTwinAnalyzer.TryProject(parsed, this, _options, out projection);
+        return BashLiteralTwinAnalyzer.TryProject(parsed, _options, out projection);
     }
 }

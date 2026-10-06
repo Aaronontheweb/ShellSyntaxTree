@@ -412,7 +412,7 @@ public class PublicApiSnapshotTests
         AssertDeclaredPropertyNames(typeof(BashLiteralTwinCommand),
             "SourceOccurrence", "SourceOccurrenceIndex", "Twins");
         AssertDeclaredPropertyNames(typeof(BashLiteralTwin),
-            "Source", "Occurrence", "Words");
+            "Source", "WorkingDirectory", "Occurrence", "Words");
         AssertDeclaredPropertyNames(typeof(BashLiteralTwinWord),
             "ClauseElementIndex", "Value");
         Assert.Empty(typeof(BashLiteralTwinProjection).GetConstructors());

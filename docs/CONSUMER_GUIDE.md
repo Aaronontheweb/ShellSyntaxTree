@@ -1001,9 +1001,9 @@ if (parser.TryProjectLiteralTwins(source, out var projection))
     {
         foreach (var twin in command.Twins)
         {
-            // twin.Occurrence is `gh api -X PATCH repos/o/r/issues/8250 ...`
-            // with the command words `gh api` and the path facts of the
-            // literal word. Check it as you check a typed command.
+            // twin.Source is `gh api -X PATCH repos/o/r/issues/8250 -f milestone=157`.
+            // twin.Occurrence has the command words `gh api` and the path facts
+            // of the literal word. Check it as you check a typed command.
         }
     }
 }
@@ -1017,28 +1017,29 @@ Rules for a consumer:
   did before.
 - Twins of different words combine independently, so some twins never run.
   This makes the check stricter, never weaker.
-- `twin.Source` is the full source with one occurrence rewritten.
-  `SourceOccurrenceIndex` is the index of the occurrence in a parse of that
-  source, so you can run your own analysis on `twin.Source`.
+- `twin.Source` is the text of one command. The parser parsed it in
+  `twin.WorkingDirectory` with the launch facts that are live at the command.
+  To run your own analysis on it, use that directory.
+- Read the words, values, and path facts from `twin.Occurrence`. Read the
+  structure (role, ancestry, assignments) from `SourceOccurrence`.
 - An unquoted word gets twins only under `FreshNonInteractiveNoStartup`
   with `PublishAuthoredSourceFacts`, and only when no value can split or glob.
-- A word that reads the home directory gets twins only with a live launch
-  `HOME` in `LaunchEnvironment`.
+- A source with `~` or `HOME` gets twins only with a live launch `HOME` in
+  `LaunchEnvironment`.
 
 Warnings:
 
-- Do not run `twin.Source`. Bash runs only the authored source. A twin source
-  can hold a combination of values that never runs.
-- Only the occurrence at `SourceOccurrenceIndex` has the twin facts. The other
-  occurrences in a parse of `twin.Source` keep their expansions. Their facts
-  are not the facts of the authored run. Read `twin.Occurrence`.
+- Do not run `twin.Source`. Bash runs only the authored source. A twin can
+  hold a combination of values that never runs.
 - When the method returns `false`, `projection` is null. Use your own result
   of `Parse` for the normal facts.
 - The twin facts are only as good as the `Parse` value facts. The self-check
   compares the parser with itself, not with Bash. The projection gives no
-  twins for text that the lexer does not model as Bash does (a
-  backslash-newline, a carriage return, `=~` or `:~` in a word). A test of the
-  library compares each twin with the argv that GNU Bash passes.
+  twins for a source with text that the lexer does not model as Bash does: a
+  backslash-newline, a carriage return, or `=~` or `:~` anywhere. A test of
+  the library compares each twin with the argv that GNU Bash passes.
+- One call parses at most 128 twins and at most 2,048 + 8 x (source length)
+  characters of twin text. A command that does not fit gets no twins.
 
 A twin is evidence. It does not grant authority.
 

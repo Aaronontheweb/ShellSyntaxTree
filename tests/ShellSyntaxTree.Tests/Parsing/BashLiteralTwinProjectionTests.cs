@@ -55,11 +55,10 @@ public class BashLiteralTwinProjectionTests
         {
             var twin = api.Twins[index];
             var path = "repos/akkadotnet/akka.net/issues/" + issues[index];
-            Assert.Equal(source.Replace("issues/$n", "issues/" + issues[index]), twin.Source);
+            Assert.Equal($"gh api -X PATCH {path} -f milestone=157 >/dev/null", twin.Source);
+            Assert.Equal(WorkingDirectory, twin.WorkingDirectory);
             Assert.Equal(path, Assert.Single(twin.Words).Value);
-            var literal = Parser.Parse(
-                $"gh api -X PATCH {path} -f milestone=157 >/dev/null").Commands[0];
-            AssertSameFacts(literal, twin.Occurrence);
+            AssertSameFacts(Assert.Single(Parser.Parse(twin.Source).Commands), twin.Occurrence);
             Assert.Equal(new[] { "gh", "api" },
                 Assert.IsType<ShellCommandWords.Known>(twin.Occurrence.CommandWords).Words);
             var argument = twin.Occurrence.Arguments.Single(candidate => candidate.Argument.Raw == path);
@@ -70,6 +69,7 @@ public class BashLiteralTwinProjectionTests
         var echo = Assert.Single(projection.Commands, command => command.SourceOccurrenceIndex == 1);
         Assert.Equal(issues.Select(issue => "moved " + issue),
             echo.Twins.Select(twin => Assert.Single(twin.Words).Value));
+        Assert.Equal("echo 'moved 8250'", echo.Twins[0].Source);
     }
 
     [Fact]
@@ -232,6 +232,9 @@ public class BashLiteralTwinProjectionTests
     [InlineData("for n in a b; do cat \"$n\" <<< \"$n\"; done")]
     [InlineData("for n in a b; do cat \"$n\" <<EOF\n$n\nEOF\ndone")]
     [InlineData("for n in a b; do cat \"$n\" > \"out/$n\"; done")]
+    // A heredoc body is outside the words of the command, so the twin text
+    // cannot hold it.
+    [InlineData("for n in a b; do cat \"$n\" <<'EOF'\nx\nEOF\ndone")]
     public void A_redirect_that_depends_on_a_value_gives_no_twins(string source)
     {
         Assert.False(Parser.TryProjectLiteralTwins(source, out _));
@@ -239,7 +242,6 @@ public class BashLiteralTwinProjectionTests
 
     [Theory]
     [InlineData("for n in a b; do cat \"$n\" 2>&1 >/dev/null <<< x; done")]
-    [InlineData("for n in a b; do cat \"$n\" <<'EOF'\nx\nEOF\ndone")]
     [InlineData("for n in a b; do cat \"$n\" >> /work/log 2>&-; done")]
     public void A_fixed_redirect_keeps_the_twins(string source)
     {
@@ -339,35 +341,17 @@ public class BashLiteralTwinProjectionTests
     }
 
     [Fact]
-    public void Every_twin_parse_counts_against_one_budget()
+    public void A_charged_command_keeps_its_charge_when_a_twin_fails()
     {
         var values = string.Join(" ", Enumerable.Range(0, 31).Select(index => $"v{index}"));
         // The last value '' fails the twin match of `cat`, after 31 good parses.
         var source = $"for n in {values} ''; do " +
                      string.Concat(Enumerable.Repeat("cat \"$n\"; ", 6)) + "done";
 
-        Assert.False(Project(source, out var projection, out var parses));
+        Assert.False(Project(source, out var projection, out var cost));
 
         Assert.Null(projection);
-        Assert.Equal(BashLiteralTwinAnalyzer.MaximumTwinParses, parses);
-    }
-
-    [Fact]
-    public void A_long_source_gets_few_twin_parses()
-    {
-        var values = string.Join(" ", Enumerable.Range(0, 32).Select(index => $"v{index}"));
-        var source = $"for n in {values}; do " +
-                     string.Concat(Enumerable.Repeat("cat \"$n\"; ", 200)) + "done";
-        Assert.True(source.Length > 2048);
-
-        // Each occurrence needs 32 parses of the full source. That passes the
-        // character budget, so no occurrence gets a twin parse.
-        Assert.False(Project(source, out _, out var parses));
-        Assert.Equal(0, parses);
-
-        // A short source with the same values fits.
-        Assert.True(Project($"for n in {values}; do cat \"$n\"; done", out _, out parses));
-        Assert.Equal(32, parses);
+        Assert.Equal(BashLiteralTwinAnalyzer.MaximumTwinParses, cost.Parses);
     }
 
     [Fact]
@@ -376,16 +360,98 @@ public class BashLiteralTwinProjectionTests
         var values = string.Join(" ", Enumerable.Range(1, 32));
         var source = $"for n in {values}; do a \"x/$n\"; b \"x/$n\"; c \"x/$n\"; d \"x/$n\"; e \"x/$n\"; done";
 
-        Assert.True(Project(source, out var projection, out var parses));
+        Assert.True(Project(source, out var projection, out var cost));
 
-        Assert.Equal(BashLiteralTwinAnalyzer.MaximumTwinParses, parses);
+        Assert.Equal(BashLiteralTwinAnalyzer.MaximumTwinParses, cost.Parses);
+        Assert.Equal(new[] { 0, 1, 2, 3 },
+            projection!.Commands.Select(command => command.SourceOccurrenceIndex));
+    }
+
+    [Theory]
+    [InlineData(2_000)]
+    public void A_source_with_many_commands_builds_a_fixed_amount_of_twin_text(int commands)
+    {
+        var values = string.Join(" ", Enumerable.Range(0, 32).Select(index => $"v{index}"));
+        var source = $"for n in {values}; do " +
+                     string.Concat(Enumerable.Repeat("cat \"$n\"; ", commands)) + "done";
+
+        Assert.True(Project(source, out var projection, out var cost));
+
+        // Only the first four commands fit in the parse budget. Each builds 32
+        // twin texts: `cat v0` to `cat v9` (6 characters) and `cat v10` to
+        // `cat v31` (7 characters). No other command builds a twin text.
         Assert.Equal(4, projection!.Commands.Count);
+        Assert.Equal(BashLiteralTwinAnalyzer.MaximumTwinParses, cost.Parses);
+        Assert.Equal(4 * (10 * 6 + 22 * 7), cost.Characters);
+    }
+
+    [Fact]
+    public void A_long_command_gets_no_twin_text()
+    {
+        var values = string.Join(" ", Enumerable.Range(0, 32).Select(index => $"v{index}"));
+        var word = new string('a', 4096);
+
+        // Each twin text has more than 4 KB, so 32 of them pass the character
+        // budget of eight characters for each source character.
+        Assert.False(Project($"for n in {values}; do cat \"$n\" {word}; done", out _, out var cost));
+        Assert.Equal(0, cost.Parses);
+        Assert.Equal(0, cost.Characters);
+
+        Assert.True(Project($"for n in {values}; do cat \"$n\" {word.Substring(0, 64)}; done",
+            out _, out cost));
+        Assert.Equal(32, cost.Parses);
+    }
+
+    [Fact]
+    public void A_nested_loop_builds_twins_of_single_commands()
+    {
+        var values = string.Join(" ", Enumerable.Range(0, 32));
+        var source = $"for a in {values}; do x=$a; for b in {values}; do y=$x$b; z=$y$a; " +
+                     "cat \"$a\"; cat \"$a\"; cat \"$a\"; cat \"$a\"; done; done";
+
+        Assert.True(Project(source, out var projection, out var cost));
+
+        // Each twin text is one command, `cat 0` to `cat 31`, not the loop.
+        Assert.All(projection!.Commands.SelectMany(command => command.Twins),
+            twin => Assert.StartsWith("cat ", twin.Source));
+        Assert.Equal(BashLiteralTwinAnalyzer.MaximumTwinParses, cost.Parses);
+        Assert.Equal(4 * (10 * 5 + 22 * 6), cost.Characters);
+    }
+
+    [Theory]
+    [InlineData("for f in if=~/.ssh/id_rsa; do dd \"$f\" of=out.txt; done")]
+    [InlineData("for n in x=~/y; do cat \"$n\"; done")]
+    [InlineData("for n in x=~; do cat \"$n\"; done")]
+    [InlineData("for n in a=b:~/y; do cat \"$n\"; done")]
+    [InlineData("for n in a b=~/y c; do cat \"$n\"; done")]
+    [InlineData("for n in x=~+; do cat \"$n\"; done")]
+    [InlineData("for n in a; do for m in x=~/y; do cat \"$n\" \"$m\"; done; done")]
+    [InlineData("for n in x=~/y; do cat $n; done")]
+    public void A_loop_list_item_with_an_assignment_tilde_gives_no_twins(string source)
+    {
+        // Bash expands the tilde in the list item. The launch facts prove
+        // HOME, so only the full-source tilde guard applies.
+        Assert.False(LaunchParser.TryProjectLiteralTwins(source, out _));
+    }
+
+    [Fact]
+    public void A_command_without_an_exact_directory_gives_no_twins()
+    {
+        Assert.False(Parser.TryProjectLiteralTwins(
+            "cd \"$TARGET\"; for n in a b; do cat \"$n\"; done", out _));
+    }
+
+    [Fact]
+    public void A_command_with_an_assignment_prefix_gives_no_twins()
+    {
+        Assert.False(Parser.TryProjectLiteralTwins(
+            "for n in a b; do FOO=1 cat \"$n\"; done", out _));
     }
 
     private static bool Project(
         string source,
         out BashLiteralTwinProjection? projection,
-        out int parses)
+        out BashLiteralTwinCost cost)
     {
         var options = new BashParserOptions
         {
@@ -394,9 +460,8 @@ public class BashLiteralTwinProjectionTests
             InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
             PublishAuthoredSourceFacts = true,
         };
-        var parser = new BashParser(options);
         return BashLiteralTwinAnalyzer.TryProject(
-            parser.Parse(source), parser, options, out projection, out parses);
+            new BashParser(options).Parse(source), options, out projection, out cost);
     }
 
     private static void AssertSameFacts(CommandOccurrence expected, CommandOccurrence actual)
