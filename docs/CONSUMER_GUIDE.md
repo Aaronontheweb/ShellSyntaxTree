@@ -1037,9 +1037,10 @@ Warnings:
   of `Parse` for the normal facts.
 - The twin facts are only as good as the `Parse` value facts. The self-check
   compares the parser with itself, not with Bash. The projection gives no
-  twins for a source with text that the lexer does not model as Bash does: a
-  backslash-newline, a carriage return, or `=~` or `:~` anywhere. A test of
-  the library compares each twin with the argv that GNU Bash passes.
+  twins for a source with a backslash-newline, a carriage return, or `=~` or
+  `:~` anywhere. Before 0.4.0-beta.22 the lexer modeled this text wrongly.
+  The guards stay as defense in depth. A test of the library compares each
+  twin with the argv and the directory that GNU Bash uses.
 - One call parses at most 128 twins and at most 2,048 + 8 x (source length)
   characters of twin text. A command that does not fit gets no twins.
 

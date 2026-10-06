@@ -337,26 +337,26 @@ internal static class BashLiteralTwinAnalyzer
     private const string SecondOtherHome = "/nonexistent/shellsyntaxtree-twin-home-2";
 
     /// <summary>
-    /// Returns true when the source has text that the Bash lexer does not
-    /// model as Bash does.
+    /// Returns true when the source has text that the Bash lexer modeled
+    /// wrongly before 0.4.0-beta.22.
     /// </summary>
     /// <remarks>
-    /// SECURITY: a value can come from any part of the source, such as a loop
-    /// list, so each check reads the full source. A twin would turn a wrong
-    /// value into a literal word, so such a source gets no twins.
+    /// SECURITY: a twin turns a value into a literal word, so a wrong value
+    /// would become a wrong literal fact. A value can come from any part of the
+    /// source, such as a loop list, so each check reads the full source.
     /// <list type="bullet">
     ///   <item>Bash removes a backslash-newline before it reads a word, also
     ///         inside an expansion: <c>"$</c>, a backslash-newline, and
     ///         <c>(id)"</c> run <c>id</c>.</item>
-    ///   <item>The lexer reads a carriage return as a command separator, but
-    ///         Bash reads it as a word character.</item>
+    ///   <item>Bash reads a carriage return as a word character.</item>
     ///   <item>Bash expands a tilde after <c>=</c> and after <c>:</c> in an
     ///         argument or a loop list item that looks like an assignment
     ///         (<c>dd if=~/x</c>, <c>for f in if=~/x</c>, <c>PATH=a:~/bin</c>).
-    ///         The parser reads such text as static. The check is lexical and
-    ///         stricter than Bash: it also rejects quoted text and
-    ///         <c>[[ $x =~ re ]]</c>.</item>
+    ///         The check is lexical and stricter than Bash: it also rejects
+    ///         quoted text and <c>[[ $x =~ re ]]</c>.</item>
     /// </list>
+    /// Since 0.4.0-beta.22 (#243), <c>Parse</c> gives correct facts for this
+    /// text or fails closed. The guards stay as defense in depth.
     /// </remarks>
     private static bool HasUnmodeledText(string source) =>
         source.IndexOf('\r') >= 0 ||

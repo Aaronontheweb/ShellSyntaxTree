@@ -92,8 +92,10 @@ public class BashLiteralTwinBashDifferentialTests
         Assert.True(checkedCommands > 0);
     }
 
-    // The parser keeps a loop list item with `=~` or `:~` as text, but Bash
-    // expands the tilde. The projection must give no twins for such a source.
+    // Bash expands the tilde in a loop list item with `=~` or `:~`. Before
+    // 0.4.0-beta.22 the parser kept the text. Since then it gives Unknown or
+    // the value that Bash passes, never the text. The projection gives no
+    // twins for such a source.
     [BashTheory]
     [InlineData("for n in x=~/y; do cat \"$n\"; done", "x=~/y", "x=/home/agent/y")]
     [InlineData("for n in x=~; do cat \"$n\"; done", "x=~", "x=/home/agent")]
@@ -107,9 +109,18 @@ public class BashLiteralTwinBashDifferentialTests
         Assert.False(Parser.TryProjectLiteralTwins(source, out _));
 
         var argument = Assert.Single(Parser.Parse(source).Commands).Arguments[^1];
-        Assert.Equal(parserValue, Assert.IsType<ShellValueDomain.Exact>(argument.Value).Value);
+        if (argument.Value is ShellValueDomain.Exact exact)
+        {
+            Assert.Equal(bashValue, exact.Value);
+        }
+        else
+        {
+            Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
+        }
+
         var run = Assert.Single(RunArgv(source, "cat"));
         Assert.Equal(bashValue, run.Split('\u001f')[^1]);
+        Assert.NotEqual(parserValue, bashValue);
     }
 
     // With an unknown initial state, the parser reports `-o$n` as an exact

@@ -1601,7 +1601,10 @@ authored value needs `PublishAuthoredSourceFacts`.
 
 Some guards are wider than Bash, because the twin facts are only as good as
 the `Parse` value facts. A value can come from any part of the source, such as
-a loop list, so these guards read the full source:
+a loop list, so these guards read the full source. The first two guards cover
+text that `Parse` modeled wrongly before v0.4.0-beta.22. Since then `Parse`
+gives correct facts for it or fails closed, and the guards stay as defense in
+depth:
 
 - Bash removes a backslash-newline before it reads a word, also inside an
   expansion. Bash reads a carriage return as a word character. A source with

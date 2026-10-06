@@ -310,6 +310,7 @@ public class BashLiteralTwinProjectionTests
     [InlineData("x=/etc\r\nfor n in a; do cat \"$x\" \"$n\"; done")]
     [InlineData("for n in a; do printf '%s' \"$n\"\rid; done")]
     [InlineData("for n in a b; do cat \"$n\"; done\r\n")]
+    [InlineData("for n in a b; do cat \"$n\" 'x\ry'; done")]
     public void A_source_with_a_carriage_return_gives_no_twins(string source)
     {
         // Bash reads a carriage return as a word character.
