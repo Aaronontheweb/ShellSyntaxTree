@@ -111,6 +111,9 @@ public sealed class BashParser : IShellParser
     public bool TryProjectFiniteScopes(
         string command,
         out BashFiniteScopeProjection? projection);
+    public bool TryProjectLiteralTwins(
+        string command,
+        out BashLiteralTwinProjection? projection);
 }
 
 /// <summary>PowerShell implementation of IShellParser (v0.2.0). The
@@ -276,6 +279,12 @@ public enum ShellTreeTraversalMode { ... }
 public sealed record BashFiniteScopeProjection { ... }
 public sealed record BashScopedCommand { ... }
 
+// v0.4.0-beta.22 literal twin evidence — see §3.
+public sealed record BashLiteralTwinProjection { ... }
+public sealed record BashLiteralTwinCommand { ... }
+public sealed record BashLiteralTwin { ... }
+public sealed record BashLiteralTwinWord { ... }
+
 // v0.4.0-beta.7 command-word evidence — see §3.
 public abstract record ShellCommandWords { ... }
 ```
@@ -364,6 +373,36 @@ public sealed record BashScopedCommand
     public string Source { get; internal init; }
     public int SourceStart { get; internal init; }
     public string WorkingDirectory { get; internal init; }
+}
+```
+
+`TryProjectLiteralTwins` (v0.4.0-beta.22) returns these parser-owned records:
+
+```csharp
+public sealed record BashLiteralTwinProjection
+{
+    public ParsedCommand Parsed { get; internal init; }
+    public IReadOnlyList<BashLiteralTwinCommand> Commands { get; internal init; }
+}
+
+public sealed record BashLiteralTwinCommand
+{
+    public CommandOccurrence SourceOccurrence { get; internal init; }
+    public int SourceOccurrenceIndex { get; internal init; }
+    public IReadOnlyList<BashLiteralTwin> Twins { get; internal init; }
+}
+
+public sealed record BashLiteralTwin
+{
+    public string Source { get; internal init; }
+    public CommandOccurrence Occurrence { get; internal init; }
+    public IReadOnlyList<BashLiteralTwinWord> Words { get; internal init; }
+}
+
+public sealed record BashLiteralTwinWord
+{
+    public int ClauseElementIndex { get; internal init; }
+    public string Value { get; internal init; }
 }
 ```
 
@@ -1487,6 +1526,80 @@ For example, `cd /work/sub && true; touch marker.txt` from `/work` yields
 `touch` under both `/work` and `/work/sub`. Its path facts name both possible
 files. By contrast, `cd "$target" && touch marker.txt` yields no projection.
 The caller owns filesystem checks, policy, grant matching, and process launch.
+
+#### Literal twin projection (v0.4.0-beta.22)
+
+`BashParser.TryProjectLiteralTwins` gives a consumer the facts of each literal
+command that a loop or a bounded variable can run. A changeable argument word
+is a word that the shell can change before the program runs: an expansion
+(`$n`, `"$f"`, `repos/x/$n`) or a tilde word. For each occurrence whose
+changeable words all have a proved finite set of values, the projection
+writes one literal twin for each combination of values. A twin is the full
+source with each changeable word of that occurrence written as one literal
+word. The parser parses the twin with the same options. The twin occurrence
+then has its own normal facts: `CommandWords`, verb tokens, path facts,
+`AuthoredFileSystemValue`, and the expansion facts of a typed literal.
+
+The projection uses this schematic flow:
+
+```text
+for each occurrence of the full parse:
+    give nothing unless the occurrence is complete
+    give nothing unless each redirect is fixed
+    for each word that is not static:
+        give nothing unless it is one argument with an analyzed value
+        values = effective Exact or FiniteSet value
+        if the word can split or glob:
+            values = authored Exact or FiniteSet value when the effective value is Unknown
+            give nothing unless the mode is FreshNonInteractiveNoStartup
+            give nothing unless each value is nonempty and has no
+                space, tab, newline, *, ?, [, or backslash
+        give nothing unless the word has a span in the submitted source
+    give nothing when the combinations pass 32 or the total budget of 128
+    for each combination:
+        write each value as one literal word (plain text, else single quotes)
+        parse the full twin source
+        give nothing unless the twin has the same commands, is complete,
+            and each written word is one literal word with that exact value
+```
+
+A word is static when it has no expansion, glob character, brace list, or
+leading tilde. A twin keeps every static word as authored. A verb word must be
+static. A fixed redirect is an exact file target, a descriptor operation, a
+heredoc with a literal body, or a here-string with exact data.
+
+The effective value of an unquoted expansion stays `Unknown`, because the
+shell can split or glob it. Under `FreshNonInteractiveNoStartup`, the caller
+removes an inherited `IFS`, and the parser rejects source that changes `IFS`
+or a glob option. Bash then splits only on space, tab, and newline, and it
+globs only on `*`, `?`, and `[`. A nonempty value without these characters
+and without a backslash stays one unchanged word. Only then does the projection
+use the authored value of an unquoted word. An empty value can remove the word,
+so it gives no twin. The authored value needs `PublishAuthoredSourceFacts`.
+
+The values of different words combine independently. Two words that read one
+loop variable can give a twin with two different values. That combination
+does not run, but each of its values does. The twin set is a superset of the
+runs, so a consumer that checks every twin checks every run.
+
+An occurrence that is not in `Commands` has no twins. The method returns
+`false` when no occurrence has twins. A literal value can move a word between
+the verb and argument roles, as the typed literal does: the twins of
+`for v in push fetch; do git $v origin; done` have the command words
+`git push origin` and `git fetch origin`.
+
+Positive example: from `/work`,
+`for n in 8250 8244; do gh api repos/o/r/issues/$n >/dev/null; done` gives two
+twins. Each twin occurrence has the command words `gh api` and the path fact of
+`repos/o/r/issues/8250` or `repos/o/r/issues/8244`.
+
+Negative examples: `for n in $(gh issue list); do gh api repos/o/r/issues/$n; done`
+gives no twins, because the list has no proved values. `for f in 'a b' c; do cat $f; done`
+gives no twins, because `a b` splits. `for d in a b; do ~/bin/tool "$d"; done`
+gives no twins, because the program word is not static.
+
+A twin is syntax evidence. It does not grant authority. The caller owns path
+policy, grant matching, and process launch, and it must check every twin.
 
 Effects join per authored occurrence. Two `Unchanged` visits remain
 `Unchanged`; two success-only changes join their bounded targets. Unknown,

@@ -978,6 +978,53 @@ The existing resolver normalizes Windows separators to `/`. By contrast,
 relative to another operand rather than an independently resolved path.
 Non-filesystem providers and native remote endpoints also remain unknown.
 
+### Literal twins of loop values
+
+From 0.4.0-beta.22, `BashParser.TryProjectLiteralTwins` writes each command
+of a loop once for each proved value, as if a person typed the literal. Use it
+when a loop word has a finite set of values and you want the facts of the
+literal command, not a rule for the expansion:
+
+```csharp
+var parser = new BashParser(new BashParserOptions
+{
+    WorkingDirectory = "/work",
+    InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+    PublishAuthoredSourceFacts = true,
+});
+
+const string source =
+    "for n in 8250 8244; do gh api -X PATCH repos/o/r/issues/$n -f milestone=157; done";
+if (parser.TryProjectLiteralTwins(source, out var projection))
+{
+    foreach (var command in projection!.Commands)
+    {
+        foreach (var twin in command.Twins)
+        {
+            // twin.Occurrence is `gh api -X PATCH repos/o/r/issues/8250 ...`
+            // with the command words `gh api` and the path facts of the
+            // literal word. Check it as you check a typed command.
+        }
+    }
+}
+```
+
+Rules for a consumer:
+
+- Check every twin of an occurrence. Use the strictest result. One twin
+  that fails your policy fails the occurrence.
+- An occurrence that has no twins keeps its normal facts. Treat it as you
+  did before.
+- Twins of different words combine independently, so some twins never run.
+  This makes the check stricter, never weaker.
+- `twin.Source` is the full source with one occurrence rewritten.
+  `SourceOccurrenceIndex` is the index of the occurrence in a parse of that
+  source, so you can run your own analysis on `twin.Source`.
+- An unquoted word gets twins only under `FreshNonInteractiveNoStartup`
+  with `PublishAuthoredSourceFacts`, and only when no value can split or glob.
+
+A twin is evidence. It does not grant authority.
+
 ## Filesystem tree-access effects
 
 Target 0.4.0-beta.1 adds `CommandOccurrence.FileSystemTreeAccesses` so a

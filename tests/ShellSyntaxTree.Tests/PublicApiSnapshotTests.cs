@@ -64,12 +64,21 @@ public class PublicApiSnapshotTests
         Assert.NotNull(parse);
         Assert.Equal(typeof(ParsedCommand), parse!.ReturnType);
         Assert.Equal(
-            new[] { nameof(BashParser.Parse), nameof(BashParser.TryProjectFiniteScopes) },
+            new[]
+            {
+                nameof(BashParser.Parse),
+                nameof(BashParser.TryProjectFiniteScopes),
+                nameof(BashParser.TryProjectLiteralTwins),
+            },
             DeclaredPublicMethodNames(t));
         var project = t.GetMethod(nameof(BashParser.TryProjectFiniteScopes),
             new[] { typeof(string), typeof(BashFiniteScopeProjection).MakeByRefType() });
         Assert.NotNull(project);
         Assert.Equal(typeof(bool), project!.ReturnType);
+        var twins = t.GetMethod(nameof(BashParser.TryProjectLiteralTwins),
+            new[] { typeof(string), typeof(BashLiteralTwinProjection).MakeByRefType() });
+        Assert.NotNull(twins);
+        Assert.Equal(typeof(bool), twins!.ReturnType);
         AssertReferenceNullability(parse.ReturnParameter, NullabilityState.NotNull);
         AssertReferenceNullability(
             Assert.Single(parse.GetParameters()),
@@ -391,6 +400,27 @@ public class PublicApiSnapshotTests
         Assert.Empty(typeof(BashScopedCommand).GetConstructors());
     }
 
+    [Fact]
+    public void Bash_literal_twin_results_have_expected_shapes()
+    {
+        AssertIsRecord(typeof(BashLiteralTwinProjection));
+        AssertIsRecord(typeof(BashLiteralTwinCommand));
+        AssertIsRecord(typeof(BashLiteralTwin));
+        AssertIsRecord(typeof(BashLiteralTwinWord));
+        AssertDeclaredPropertyNames(typeof(BashLiteralTwinProjection),
+            "Parsed", "Commands");
+        AssertDeclaredPropertyNames(typeof(BashLiteralTwinCommand),
+            "SourceOccurrence", "SourceOccurrenceIndex", "Twins");
+        AssertDeclaredPropertyNames(typeof(BashLiteralTwin),
+            "Source", "Occurrence", "Words");
+        AssertDeclaredPropertyNames(typeof(BashLiteralTwinWord),
+            "ClauseElementIndex", "Value");
+        Assert.Empty(typeof(BashLiteralTwinProjection).GetConstructors());
+        Assert.Empty(typeof(BashLiteralTwinCommand).GetConstructors());
+        Assert.Empty(typeof(BashLiteralTwin).GetConstructors());
+        Assert.Empty(typeof(BashLiteralTwinWord).GetConstructors());
+    }
+
     // -------- Clause --------
 
     [Fact]
@@ -654,6 +684,10 @@ public class PublicApiSnapshotTests
             nameof(BashParser),
             nameof(BashFiniteScopeProjection),
             nameof(BashInitialStateMode),
+            nameof(BashLiteralTwin),
+            nameof(BashLiteralTwinCommand),
+            nameof(BashLiteralTwinProjection),
+            nameof(BashLiteralTwinWord),
             nameof(BashParserOptions),
             nameof(BashScopedCommand),
             nameof(CaseItemSyntax),
