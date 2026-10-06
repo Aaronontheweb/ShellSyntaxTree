@@ -253,6 +253,22 @@ public class BashWordHashAndTildeTests
     }
 
     [Theory]
+    // An escaped character or an expansion before the `=` makes the word not
+    // assignment-shaped, and one before the `~` breaks "directly after".
+    [InlineData("a\\b=~/x", "ab=~/x")]
+    [InlineData("a=\\:~/x", "a=:~/x")]
+    [InlineData("a$x=~/y", "ab=~/y")]
+    [InlineData("a=$x~/y", "a=b~/y")]
+    public void Tilde_after_an_escape_or_an_expansion_stays_text(string word, string value)
+    {
+        var source = "x=b; printf '<%s>' " + word;
+        BashOracle.AssertPrints(source, "<" + value + ">");
+
+        var argument = Parser.Parse(source).Commands.Last().Arguments.Last();
+        Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(argument.AuthoredValue).Value);
+    }
+
+    [Theory]
     [InlineData("a=~+", "a=")]
     [InlineData("a=~user/x", "a=~user/x")]
     [InlineData("\"a\"=~/x", "a=~/x")]
@@ -305,10 +321,12 @@ public class BashWordHashAndTildeTests
             Assert.IsType<ShellValueDomain.Exact>(parsed.Commands.Last().Arguments.Last().Value).Value);
     }
 
-    [Fact]
-    public void Assignment_word_tilde_is_not_a_static_command_word()
+    [Theory]
+    [InlineData("make install PREFIX=~/x a=~+")]
+    [InlineData("make install a=\\\n~")]
+    public void Assignment_word_tilde_is_not_a_static_command_word(string source)
     {
-        var words = Parser.Parse("make install PREFIX=~/x a=~+").Commands.Single().CommandWords;
+        var words = Parser.Parse(source).Commands.Single().CommandWords;
 
         var known = Assert.IsType<ShellCommandWords.Known>(words);
         Assert.DoesNotContain(known.Words, word => word.Contains('~'));
