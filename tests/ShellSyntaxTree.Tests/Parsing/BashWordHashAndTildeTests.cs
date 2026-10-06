@@ -209,6 +209,32 @@ public class BashWordHashAndTildeTests
     }
 
     [Theory]
+    // Bash reads `(\⏎(` as the arithmetic command `((`: `ls` is a variable
+    // there, not a program. The parser fails closed on `((…))`.
+    [InlineData("(\\\n(ls))")]
+    [InlineData("((ls)\\\n)")]
+    public void Arithmetic_command_with_a_continuation_fails_closed(string source)
+    {
+        if (BashOracle.IsAvailable())
+        {
+            Assert.Empty(BashOracle.LoggedCommands(source)!);
+        }
+
+        Assert.True(Parser.Parse(source).IsUnparseable);
+    }
+
+    [Fact]
+    public void Case_terminator_with_a_continuation_ends_the_item()
+    {
+        const string source = "case a in a) printf HIDDEN;\\\n; esac";
+        BashOracle.AssertPrints(source, "HIDDEN");
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.Contains(parsed.Commands, command => command.Clause.Elements.Any(e => e.Value == "HIDDEN"));
+    }
+
+    [Theory]
     [InlineData("time printf HIDDEN")]
     [InlineData("! printf HIDDEN")]
     [InlineData("coproc printf HIDDEN")]

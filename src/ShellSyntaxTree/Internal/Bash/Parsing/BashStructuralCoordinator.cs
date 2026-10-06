@@ -1944,8 +1944,7 @@ internal static partial class BashCommandParser
             var first = _position;
             if (first + 1 >= _tokens.Count ||
                 !IsOperatorToken(_tokens[first + 1], "(") ||
-                _tokens[first + 1].SourceStart !=
-                    _tokens[first].SourceStart + _tokens[first].SourceLength)
+                !IsAdjacent(_tokens[first], _tokens[first + 1]))
             {
                 return false;
             }
@@ -1973,11 +1972,21 @@ internal static partial class BashCommandParser
 
                 return index + 1 < _tokens.Count &&
                     IsOperatorToken(_tokens[index + 1], ")") &&
-                    _tokens[index + 1].SourceStart == token.SourceStart + token.SourceLength;
+                    IsAdjacent(token, _tokens[index + 1]);
             }
 
             return false;
         }
+
+        /// <summary>
+        /// True when only line continuations come between the two tokens.
+        /// Bash removes them first, so `(\⏎(` is `((` and `;\⏎;` is `;;` (#243).
+        /// </summary>
+        private bool IsAdjacent(BashToken first, BashToken second) =>
+            BashLineContinuation.Skip(
+                _source.AsSpan(),
+                first.SourceStart + first.SourceLength,
+                BashContinuationContext.Unquoted) == second.SourceStart;
 
         private static bool IsOperatorToken(BashToken token, string text) =>
             token.Kind == BashTokenKind.Operator &&
@@ -2123,8 +2132,7 @@ internal static partial class BashCommandParser
             _position + 1 < _tokens.Count &&
             _tokens[_position + 1].Kind == BashTokenKind.Operator &&
             _tokens[_position + 1].OperatorText == ";" &&
-            _tokens[_position + 1].SourceStart ==
-                _tokens[_position].SourceStart + _tokens[_position].SourceLength;
+            IsAdjacent(_tokens[_position], _tokens[_position + 1]);
 
         private bool IsAnyWord(string[]? words)
         {
