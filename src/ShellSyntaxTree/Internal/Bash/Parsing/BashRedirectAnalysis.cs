@@ -169,6 +169,33 @@ internal static class BashRedirectAnalysis
         for (var index = 0; index < fragments.Length; index++)
         {
             var fragment = value.Fragments[index];
+
+            // Bash does not apply the assignment-word tilde rule to a
+            // here-string: `<<< a=~/x` passes `a=~/x` (#243).
+            if (fragment.Expansion is
+                {
+                    Kind: ShellExpansionKind.Tilde,
+                    Name: BashAssignmentWordTilde.ExpansionName,
+                } ||
+                fragment is
+                {
+                    Kind: ShellValueFragmentKind.Opaque,
+                    OpaqueCause: ShellOpaqueCause.Unsupported,
+                    Value: "~",
+                })
+            {
+                changed = true;
+                fragments[index] = fragment with
+                {
+                    Kind = ShellValueFragmentKind.Literal,
+                    AllowedTransforms = ShellLexicalTransform.None,
+                    Expansion = null,
+                    Cardinality = ShellValueCardinality.ExactlyOne,
+                    OpaqueCause = ShellOpaqueCause.None,
+                };
+                continue;
+            }
+
             if (fragment.Expansion is { Kind: ShellExpansionKind.Glob })
             {
                 changed = true;

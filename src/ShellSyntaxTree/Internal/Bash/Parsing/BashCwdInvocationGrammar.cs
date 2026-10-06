@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using ShellSyntaxTree.Internal.Bash.Lexing;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
@@ -87,7 +88,9 @@ internal static class BashCwdInvocationGrammar
         if (words.Count > 0)
         {
             var firstWord = clause.Elements[words[0]];
-            if (firstWord.Raw == firstWord.Value &&
+            // The reserved-word test reads the spelling without line
+            // continuations: `t\⏎ime` is `time` (#243).
+            if (BashLineContinuation.Spelling(firstWord.Raw) == firstWord.Value &&
                 UnsupportedReservedExecutionSyntax.Contains(firstWord.Value))
             {
                 return BashExecutionBoundaryKind.UnsupportedReservedExecutionSyntax;

@@ -6,6 +6,7 @@
 using System;
 using System.IO;
 using System.Text;
+using ShellSyntaxTree.Internal.Bash.Lexing;
 
 namespace ShellSyntaxTree.Internal.Resolving;
 
@@ -530,6 +531,20 @@ internal static class BashResolver
         int fragmentIndex)
     {
         var fragment = value.Fragments[fragmentIndex];
+
+        // The lexer already proved a `~` after `=` or `:` of an
+        // assignment-shaped word and the end of its prefix (#243).
+        if (fragment.Expansion is
+            {
+                Kind: ShellExpansionKind.Tilde,
+                Name: BashAssignmentWordTilde.ExpansionName,
+            })
+        {
+            return (fragment.AllowedTransforms & ShellLexicalTransform.Tilde) == 0
+                ? BashTildeExpansionKind.Literal
+                : BashTildeExpansionKind.Home;
+        }
+
         if (fragmentIndex != 0 ||
             (fragment.AllowedTransforms & ShellLexicalTransform.Tilde) == 0)
         {

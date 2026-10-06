@@ -401,6 +401,11 @@ internal static class ShellCommandWordProjection
                 case '~' when index == 0:
                     shape = Max(shape, WordShape.Expanded);
                     break;
+                case '~' when FollowsAssignmentMark(raw, index):
+                    // Bash can expand `~` after `=` or `:` of an
+                    // assignment-shaped word: `PREFIX=~/x` (#243).
+                    shape = Max(shape, WordShape.Expanded);
+                    break;
                 case '{':
                     braceDepth++;
                     break;
@@ -424,6 +429,18 @@ internal static class ShellCommandWordProjection
 
         // An unterminated quote cannot come from a parsed word.
         return inSingle || inDouble ? WordShape.MaySplit : shape;
+    }
+
+    // The character before `~`, across line continuations, is `=` or `:`.
+    private static bool FollowsAssignmentMark(string raw, int tilde)
+    {
+        var index = tilde - 1;
+        while (index >= 1 && raw[index] == '\n' && raw[index - 1] == '\\')
+        {
+            index -= 2;
+        }
+
+        return index >= 0 && raw[index] is '=' or ':';
     }
 
     // `{a.\⏎.c}` is the sequence `{a..c}`: a line continuation between the

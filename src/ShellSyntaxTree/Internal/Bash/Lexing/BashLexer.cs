@@ -259,12 +259,13 @@ internal static class BashLexer
             }
 
             // ---- line comment ----
-            // Reaching this branch implies a word boundary (quotes,
-            // operators, and opaque regions are dispatched above), so `#`
-            // here starts a comment to EOL. Mid-word `#` is consumed by
-            // ReadWord, and `\#` by its escape handling — neither reaches
-            // this point. SPEC §5.
-            if (c == '#')
+            // A `#` starts a comment only when it begins a new word: at the
+            // start of the input, or after a blank, a newline, or an
+            // operator. Directly after a quoted part, `$(…)`, or `$((…))`
+            // (also across a line continuation) it is word text: Bash runs
+            // `touch` in `echo "a"# ; touch x` (#243). That `#` falls
+            // through to ReadWord, which keeps it as a literal.
+            if (c == '#' && StartsNewWord(tokens, i))
             {
                 i = ConsumeLineComment(src, i, tokens);
                 continue;
@@ -275,6 +276,36 @@ internal static class BashLexer
         }
 
         return tokens;
+    }
+
+    /// <summary>
+    /// True when the character at <paramref name="position"/> begins a new
+    /// word. It does not when it directly follows a word part, also across
+    /// line continuations.
+    /// </summary>
+    private static bool StartsNewWord(IReadOnlyList<BashToken> tokens, int position)
+    {
+        var end = position;
+        for (var index = tokens.Count - 1; index >= 0; index--)
+        {
+            var token = tokens[index];
+            if (token.SourceStart + token.SourceLength != end)
+            {
+                return true;
+            }
+
+            if (token.Kind == BashTokenKind.Continuation)
+            {
+                end = token.SourceStart;
+                continue;
+            }
+
+            return token.Kind is not (BashTokenKind.Word
+                or BashTokenKind.QuotedString
+                or BashTokenKind.OpaqueSubstitution);
+        }
+
+        return true;
     }
 
     private static bool TryConsumeFileDescriptorTarget(
@@ -1493,6 +1524,7 @@ internal static class BashLexer
         // necessary. SPEC §5 explicitly says `echo \$HOME` produces a
         // Literal token.)
         var value = new ShellValueBuilder();
+        var assignmentTilde = new BashAssignmentWordTilde(StartsNewWord(tokens, start));
         var i = start;
         while (i < src.Length)
         {
@@ -1532,6 +1564,7 @@ internal static class BashLexer
                 }
 
                 value.AppendLiteral(n, i, 2);
+                assignmentTilde.OnOther();
                 i += 2;
                 continue;
             }
@@ -1570,10 +1603,14 @@ internal static class BashLexer
                         out var error))
                 {
                     if (error is not null) break;
+                    assignmentTilde.OnOther();
                     continue;
                 }
             }
 
+            var assignmentTildeKind = c == '~' && i != start
+                ? assignmentTilde.Classify(src, i)
+                : BashAssignmentTildeKind.Literal;
             if (c == '~' && i == start)
             {
                 value.AppendExpansion(
@@ -1583,6 +1620,23 @@ internal static class BashLexer
                     ShellValueCardinality.ExactlyOne,
                     i,
                     1);
+            }
+            else if (assignmentTildeKind == BashAssignmentTildeKind.Home)
+            {
+                value.AppendExpansion(
+                    "~",
+                    ShellLexicalTransform.Tilde,
+                    new ShellExpansionReference(
+                        ShellExpansionKind.Tilde,
+                        BashAssignmentWordTilde.ExpansionName),
+                    ShellValueCardinality.ExactlyOne,
+                    i,
+                    1);
+            }
+            else if (assignmentTildeKind == BashAssignmentTildeKind.Unknown)
+            {
+                // `~user`, `~+`, or a word whose start the lexer cannot see.
+                value.AppendOpaque("~", ShellOpaqueCause.Unsupported, i, 1);
             }
             else if (c is '*' or '?' or '[')
             {
@@ -1599,6 +1653,7 @@ internal static class BashLexer
                 value.AppendLiteral(c, i, 1);
             }
 
+            assignmentTilde.OnPlain(c);
             i++;
         }
 

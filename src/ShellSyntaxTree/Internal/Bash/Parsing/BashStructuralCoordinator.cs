@@ -1053,7 +1053,7 @@ internal static partial class BashCommandParser
                 _tokens[_position].Kind != BashTokenKind.Word ||
                 !HasExactLiteralValue(_tokens[_position]) ||
                 !string.Equals(
-                    SourceSlice(_source, _tokens[_position]),
+                    BashLineContinuation.Spelling(SourceSlice(_source, _tokens[_position])),
                     _tokens[_position].Value,
                     StringComparison.Ordinal) ||
                 !IsBashIdentifier(_tokens[_position].Value))
@@ -1672,7 +1672,7 @@ internal static partial class BashCommandParser
             string.Equals(clause.Verb.Tokens[0], "export", StringComparison.Ordinal) &&
             tokens.Count > 0 &&
             tokens[0].Kind == BashTokenKind.Word &&
-            string.Equals(SourceSlice(_source, tokens[0]), "export", StringComparison.Ordinal) &&
+            string.Equals(BashLineContinuation.Spelling(SourceSlice(_source, tokens[0])), "export", StringComparison.Ordinal) &&
             clause.Redirects.Count == 0;
 
         /// <summary>
@@ -1692,7 +1692,7 @@ internal static partial class BashCommandParser
             error = null;
             if (tokens.Count == 2 &&
                 tokens[1].Kind == BashTokenKind.Word &&
-                string.Equals(SourceSlice(_source, tokens[1]), "-p", StringComparison.Ordinal))
+                string.Equals(BashLineContinuation.Spelling(SourceSlice(_source, tokens[1])), "-p", StringComparison.Ordinal))
             {
                 exports = new BashExportFacts(assignments, names);
                 return true;
@@ -1720,7 +1720,7 @@ internal static partial class BashCommandParser
 
                 if (token.Kind != BashTokenKind.Word ||
                     !HasExactLiteralValue(token) ||
-                    !string.Equals(SourceSlice(_source, token), token.Value, StringComparison.Ordinal) ||
+                    !string.Equals(BashLineContinuation.Spelling(SourceSlice(_source, token)), token.Value, StringComparison.Ordinal) ||
                     !BashVariableAssignmentGrammar.IsEligibleCommandEnvironmentName(token.Value))
                 {
                     error = "Bash export accepts only bounded names and assignments";
@@ -2103,7 +2103,7 @@ internal static partial class BashCommandParser
             _tokens[_position].Kind == BashTokenKind.Word &&
             HasExactLiteralValue(_tokens[_position]) &&
             string.Equals(
-                SourceSlice(_source, _tokens[_position]),
+                BashLineContinuation.Spelling(SourceSlice(_source, _tokens[_position])),
                 value,
                 StringComparison.Ordinal) &&
             string.Equals(_tokens[_position].Value, value, StringComparison.Ordinal);
@@ -2615,6 +2615,19 @@ internal static partial class BashCommandParser
                 if (fragment.Kind == ShellValueFragmentKind.Literal &&
                     fragment.Cardinality == ShellValueCardinality.ExactlyOne &&
                     fragment.Expansion is null)
+                {
+                    continue;
+                }
+
+                // The leading `~` of the value (#243). The spelling gate
+                // accepts only a leading tilde, and the state pass reads it
+                // from HOME through the leading-tilde fact.
+                if (fragment.Kind == ShellValueFragmentKind.Expansion &&
+                    fragment.Expansion is
+                    {
+                        Kind: ShellExpansionKind.Tilde,
+                        Name: BashAssignmentWordTilde.ExpansionName,
+                    })
                 {
                     continue;
                 }
@@ -3378,7 +3391,7 @@ internal static partial class BashCommandParser
 
             foreach (var argument in clause.Args)
             {
-                if (string.Equals(argument.Raw, "-v", StringComparison.Ordinal))
+                if (string.Equals(BashLineContinuation.Spelling(argument.Raw), "-v", StringComparison.Ordinal))
                 {
                     return true;
                 }

@@ -117,6 +117,15 @@ internal static class BashLineContinuation
     }
 
     /// <summary>
+    /// The spelling of authored text that Bash reads for a reserved word, a
+    /// keyword, or a literal check: <paramref name="raw"/> without its line
+    /// continuations. Quotes and escapes stay, so `"fi"` and `\fi` still differ
+    /// from `fi` (#243).
+    /// </summary>
+    internal static string Spelling(string raw) =>
+        Remove(raw.AsSpan(), BashContinuationContext.Unquoted);
+
+    /// <summary>
     /// Matches <paramref name="expected"/> at <paramref name="index"/>, with
     /// line continuations allowed between its characters. On success,
     /// <paramref name="end"/> is the index after the last matched character.
