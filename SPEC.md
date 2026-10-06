@@ -2853,6 +2853,12 @@ Before v0.4.0-beta.24 the parser split at a quoted `=` and failed, so
 | `cat --foo='x=y' f` | `--foo`, `x=y`, `f` (the `=` is unquoted) |
 | `cat -D'x'=y f` | `-Dx`, `y`, `f` |
 | `make PREFIX'='~/x` | `PREFIX=~/x` (no tilde expansion) |
+| `cat --'x'='y' f` | `--x`, `y`, `f` (unparseable before v0.4.0-beta.24) |
+
+A quoted option name with a quoted value (`--'x'='y'`) gives the option
+argument with the decoded name and the value argument with the authored
+spelling. The projection pairs them when the decoded word starts with the
+option and `=`, and the authored word ends with `=` and the value spelling.
 
 | Source | Result |
 |---|---|

@@ -13,6 +13,7 @@ priorities.
 ## NOW (0.4.0-beta.24 Netclaw 0.27.2 parser fixes)
 
 - [x] Split a Bash inline option value only at an unquoted `=`. A quoted or escaped `=` is plain text, so `awk -F'[= ]' '{print $2}' f` parses. Use the same test as the assignment-word tilde rule.
+- [x] Pair a quoted option name with a quoted value (`--'x'='y'`). The source was unparseable.
 - [ ] Merge the PRs after Linux and Windows CI. Tag `0.4.0-beta.24` and verify NuGet publication.
 
 ## Completed (0.4.0-beta.23 literal twins of loop values)

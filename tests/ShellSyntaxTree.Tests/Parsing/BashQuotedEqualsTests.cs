@@ -118,6 +118,57 @@ public class BashQuotedEqualsTests
         Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(arguments[1].Value).Value);
     }
 
+    [Theory]
+    [InlineData("cat --'x'='y' f", "--x", "y")]
+    [InlineData("cat --'x'='a=b' f", "--x", "a=b")]
+    [InlineData("cat --\"x\"=\"a b\" f", "--x", "a b")]
+    [InlineData("cat -\"o\"='' f", "-o", "")]
+    [InlineData("cat --x\"y\"='z' f", "--xy", "z")]
+    public void Quoted_option_name_pairs_with_a_quoted_value(string source, string option, string value)
+    {
+        // A quoted part on both sides of an unquoted `=` made the source
+        // unparseable before 0.4.0-beta.24: the option argument has the
+        // decoded name, and the value argument has the authored spelling.
+        Unquoted_equals_still_splits_an_inline_value(source, option, value);
+    }
+
+    [Theory]
+    // Only the word that holds the pair is a pair. The raw text of the
+    // first word ends with `=--c`, but its value does not start with `--c=`.
+    [InlineData("cat x=--c --c=d", "x=--c", "--c", "d")]
+    [InlineData("cat x='=--c' --c='d'", "x==--c", "--c", "d")]
+    public void Pair_rule_does_not_take_a_word_before_the_pair(
+        string source,
+        string first,
+        string option,
+        string value)
+    {
+        var logged = BashOracle.LoggedCommands(source);
+        if (logged is not null)
+        {
+            Assert.Equal(new[] { "cat", first, option + "=" + value }, Assert.Single(logged));
+        }
+
+        var arguments = CreateParser(BashInitialStateMode.FreshNonInteractiveNoStartup)
+            .Parse(source).Commands.Single().Arguments;
+        Assert.Equal(
+            new[] { first, option, value },
+            arguments.Select(a => Assert.IsType<ShellValueDomain.Exact>(a.Value).Value).ToArray());
+    }
+
+    [Fact]
+    public void Quoted_option_name_with_a_path_value_keeps_the_path()
+    {
+        var arguments = CreateParser(BashInitialStateMode.FreshNonInteractiveNoStartup)
+            .Parse("curl --'output'='/tmp/x' https://example.invalid")
+            .Commands.Single().Arguments;
+
+        Assert.Equal("--output", Assert.IsType<ShellValueDomain.Exact>(arguments[0].Value).Value);
+        Assert.Equal("/tmp/x", Assert.IsType<ShellValueDomain.Exact>(arguments[1].Value).Value);
+        Assert.True(arguments[1].Argument.IsPath);
+        Assert.Equal("/tmp/x", arguments[1].Argument.Resolved);
+    }
+
     [Fact]
     public void Brace_word_with_an_unquoted_equals_still_splits()
     {

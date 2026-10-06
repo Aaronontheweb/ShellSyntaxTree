@@ -1518,7 +1518,19 @@ internal static class ShellSyntaxProjection
             Arg first,
             Arg second) =>
             IsInlineArgumentPair(element.Value, first.Raw, second.Raw) ||
-            IsInlineArgumentPair(element.Raw, first.Raw, second.Raw);
+            IsInlineArgumentPair(element.Raw, first.Raw, second.Raw) ||
+            IsQuotedInlineArgumentPair(element, first, second);
+
+        // A Bash option name with a quoted part and a quoted value
+        // (`--'x'='y'`): the option argument has the decoded name, and the
+        // value argument has the authored spelling after the `=`.
+        private static bool IsQuotedInlineArgumentPair(
+            ClauseElement element,
+            Arg first,
+            Arg second) =>
+            first.Raw.Length > 0 &&
+            element.Value.StartsWith(first.Raw + "=", StringComparison.Ordinal) &&
+            element.Raw.EndsWith("=" + second.Raw, StringComparison.Ordinal);
 
         private static bool IsInlineArgumentPair(
             string combined,

@@ -6,13 +6,14 @@ This prerelease fixes Bash words with a quoted `=`.
 
 - Only an unquoted `=` splits a Bash word into an option and its inline value. A quoted or escaped `=` is plain text, as in Bash. Before, the parser split the word at a quoted `=`, and then it failed: `awk -F'[= ]' '{print $2}' f`, `awk -F'x=y' 1 /tmp/x`, `cat -F'= ' f`, `echo -F'[= ]'`, and `cat -F"x=y" f` were unparseable (0.4.0-beta.3 to 0.4.0-beta.23). Each word is now one argument with the exact value that Bash passes, for example `-F[= ]` and `-Fx=y`. This applies in every initial state mode.
 - A word with only an escaped `=` is now one argument too. `curl --output\=/tmp/x` gave the arguments `--output` and `/tmp/x`. It now gives one argument `--output=/tmp/x`, with the same facts as the fully quoted word `"--output=/tmp/x"`.
+- A word with a quoted part before an unquoted `=` and a quoted value was unparseable: `cat --'x'='y' f`, `curl --'output'='/tmp/x' u`, and `tool -"o"="$n"`. The option argument has the decoded name and the value argument has the authored spelling, and the projection did not pair them. It now pairs them when the decoded word starts with the option and `=` and the authored word ends with `=` and the value spelling. `curl --'output'='/tmp/x'` gives the option `--output` and the path value `/tmp/x`.
 - `BashWordEquals` owns the test. The lexer records it for each word before a brace expansion replaces the word value, and the parser keeps it when it joins adjacent word parts. The assignment-word tilde rule of 0.4.0-beta.22 counts only unquoted, unescaped characters, so it uses the same test: `make PREFIX'='~/x` keeps the text `PREFIX=~/x`.
 
 ## Security and compatibility
 
 - Not changed: `--foo='x=y'` (the `=` after the option is unquoted) still gives `--foo` and `x=y`. `-D'x'=y` gives `-Dx` and `y`. `--file={a,b}` still splits.
 - The program can still read an option and a value from a word with a quoted `=`. A consumer that needs that split reads the exact value of the argument, as for a fully quoted word.
-- Output comparison against 0.4.0-beta.23: 5,028 inputs, 55,808 records in each of two launch modes. 180 records change, in 15 inputs, all with a quoted or escaped `=` in an option word. 13 inputs go from unparseable to parsed. In 2 inputs (`--name\=value`), two arguments become one.
+- Output comparison against 0.4.0-beta.23: 5,085 inputs, 56,492 records in each of two launch modes. 368 records change, in 32 inputs. Each input has a quoted or escaped `=` in an option word, or a quoted option name with a quoted value. 30 inputs go from unparseable to parsed. In 2 inputs (`--name\=value`), two arguments become one.
 - Public API: no change.
 
 #### 0.4.0-beta.23 2026-10-06 ####
