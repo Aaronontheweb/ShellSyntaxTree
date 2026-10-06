@@ -1445,15 +1445,34 @@ internal static class ShellSyntaxProjection
                                                 elementIndex,
                                                 out var domain) &&
                                             offset == effectiveOffset;
-                    var value = hasEffectiveValue
-                        ? ToPublicDomain(domain!)
-                        : DefaultArgumentDomain(argument, element, count == 1);
+
+                    // The value of a Bash `--name=value` word is what the
+                    // program reads after the first `=` of the word that Bash
+                    // passes. Both the element value and an element-level
+                    // overlay describe the whole word, so take the part after
+                    // the option. The authored spelling after `=` still has
+                    // quotes and escapes, so it is not the value (#243).
+                    var inlineOptionPrefix =
+                        language == ShellProjectionLanguage.Bash && count == 2 && offset == 1
+                            ? authoredArguments[argumentIndex].Raw + "="
+                            : null;
+                    var value = inlineOptionPrefix is not null
+                        ? InlineOptionValue(
+                            hasEffectiveValue
+                                ? ToPublicDomain(domain!)
+                                : WholeInlineOptionWord(argument, element),
+                            inlineOptionPrefix)
+                        : hasEffectiveValue
+                            ? ToPublicDomain(domain!)
+                            : DefaultArgumentDomain(argument, element, count == 1);
                     var hasAuthoredValue = authoredDomains.TryGetValue(
                                                elementIndex,
                                                out var authoredDomain) &&
                                            offset == effectiveOffset;
                     var authoredValue = hasAuthoredValue
-                        ? ToPublicDomain(authoredDomain!)
+                        ? inlineOptionPrefix is not null
+                            ? InlineOptionValue(ToPublicDomain(authoredDomain!), inlineOptionPrefix)
+                            : ToPublicDomain(authoredDomain!)
                         : value;
                     var (mayPathnameExpand, mayFieldSplit) =
                         language == ShellProjectionLanguage.Bash
@@ -1507,6 +1526,55 @@ internal static class ShellSyntaxProjection
             string second) =>
             string.Equals(combined, first + "=" + second, StringComparison.Ordinal) ||
             string.Equals(combined, first + ":" + second, StringComparison.Ordinal);
+
+        private static ShellValueDomain WholeInlineOptionWord(Arg argument, ClauseElement element) =>
+            argument.Kind is ArgKind.DynamicSkip or ArgKind.EnvVar or ArgKind.Glob
+                ? new ShellValueDomain.Unknown()
+                : new ShellValueDomain.Exact(element.Value);
+
+        /// <summary>
+        /// The part of each whole-word value after <paramref name="prefix"/>,
+        /// the decoded option name and its <c>=</c>. The name has no <c>=</c>,
+        /// so this <c>=</c> is the first one, where the program splits. A
+        /// value that does not start with the prefix gives Unknown.
+        /// </summary>
+        private static ShellValueDomain InlineOptionValue(ShellValueDomain whole, string prefix)
+        {
+            switch (whole)
+            {
+                case ShellValueDomain.Exact exact:
+                    return TryStripInlineOption(exact.Value, prefix, out var value)
+                        ? new ShellValueDomain.Exact(value)
+                        : new ShellValueDomain.Unknown();
+                case ShellValueDomain.FiniteSet set:
+                    var values = new List<string>(set.Values.Count);
+                    foreach (var member in set.Values)
+                    {
+                        if (!TryStripInlineOption(member, prefix, out var memberValue))
+                        {
+                            return new ShellValueDomain.Unknown();
+                        }
+
+                        values.Add(memberValue);
+                    }
+
+                    return new ShellValueDomain.FiniteSet(values);
+                default:
+                    return new ShellValueDomain.Unknown();
+            }
+        }
+
+        private static bool TryStripInlineOption(string word, string prefix, out string value)
+        {
+            value = string.Empty;
+            if (!word.StartsWith(prefix, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            value = word.Substring(prefix.Length);
+            return true;
+        }
 
         private static ShellValueDomain DefaultArgumentDomain(
             Arg argument,

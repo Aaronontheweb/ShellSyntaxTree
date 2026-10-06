@@ -378,6 +378,59 @@ public class BashLineContinuationTests
             Assert.IsType<ShellValueDomain.Exact>(command.Arguments.Last().Value).Value);
     }
 
+    // ---------------------------------------------------------------- inline option values
+
+    [Theory]
+    [InlineData("--data=@p.json", "@p.json")]
+    [InlineData("--data=@p\\.json", "@p.json")]
+    [InlineData("--data=\\a\"\"", "a")]
+    [InlineData("--data=\"a b\"", "a b")]
+    [InlineData("--data='x=y'", "x=y")]
+    [InlineData("--data=a=b", "a=b")]
+    [InlineData("--data=@\"p q\".json", "@p q.json")]
+    [InlineData("--data=-\\ x", "- x")]
+    [InlineData("-\\-data=@p.json", "@p.json")]
+    [InlineData("--da\\ta=@p.json", "@p.json")]
+    [InlineData("--data=@x\\\n", "@x")]
+    [InlineData("-\\\n-data=@p.json", "@p.json")]
+    [InlineData("--data=\\\n\"\"", "")]
+    [InlineData("--data=\"$x\"", "v w")]
+    public void Inline_option_value_is_the_part_after_the_first_equals(string word, string value)
+    {
+        // The program reads the word that Bash passes and splits it at its
+        // first `=`. Before 0.4.0-beta.22 an escape or a quote gave the whole
+        // word or the authored spelling as the value (#243).
+        AssertBashPrints("x='v w'; printf '<%s>' " + word, "<--data=" + value + ">");
+        var parsed = Parser.Parse("x='v w'; curl " + word + " https://example.invalid");
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var arguments = parsed.Commands.Last().Arguments;
+        Assert.Equal("--data", Assert.IsType<ShellValueDomain.Exact>(arguments[0].Value).Value);
+        Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(arguments[1].Value).Value);
+        Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(arguments[1].AuthoredValue).Value);
+    }
+
+    [Fact]
+    public void Inline_option_value_of_a_loop_is_each_value_after_the_equals()
+    {
+        const string source = "for v in a b; do curl --data=\"$v\" https://example.invalid; done";
+        AssertBashPrints("for v in a b; do printf '<%s>' --data=\"$v\"; done", "<--data=a><--data=b>");
+
+        var value = Assert.IsType<ShellValueDomain.FiniteSet>(
+            Parser.Parse(source).Commands.Single().Arguments[1].Value);
+        Assert.Equal(new[] { "a", "b" }, value.Values);
+    }
+
+    [Fact]
+    public void Inline_option_value_that_splits_is_unknown()
+    {
+        const string source = "x='v w'; curl --data=$x https://example.invalid";
+        AssertBashPrints("x='v w'; printf '<%s>' --data=$x", "<--data=v><w>");
+
+        var arguments = Parser.Parse(source).Commands.Last().Arguments;
+        Assert.IsType<ShellValueDomain.Unknown>(arguments[1].Value);
+    }
+
     // ---------------------------------------------------------------- carriage return
 
     public static TheoryData<string, string> CarriageReturnSources => new()

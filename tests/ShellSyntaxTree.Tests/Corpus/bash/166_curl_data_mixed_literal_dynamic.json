@@ -128,7 +128,7 @@
             "value": {
               "kind": "Exact",
               "values": [
-                "--data=@$HOME.json"
+                "@$HOME.json"
               ],
               "pattern": null,
               "coveringDirectory": null
@@ -158,5 +158,5 @@
       }
     ]
   },
-  "notes": "All fragments are literal, so the curl @ prefix is removed without reinterpreting the quoted $HOME text. Promotes stable design case bash-static-mixed-quote-native-fragment with complete v0.3 syntax, occurrence, value, and completeness assertions."
+  "notes": "Since 0.4.0-beta.22 the value argument is the part after the first = of the word that Bash passes (@$HOME.json), not the whole word (#243). All fragments are literal, so the curl @ prefix is removed without reinterpreting the quoted $HOME text. Promotes stable design case bash-static-mixed-quote-native-fragment with complete v0.3 syntax, occurrence, value, and completeness assertions."
 }
