@@ -28,7 +28,7 @@ This prerelease fixes security bugs. A Bash line continuation, a carriage return
 
 ## Security and compatibility
 
-- Output comparison against 0.4.0-beta.21: 6,480 inputs, 119,616 records in two launch modes. 3,072 records change, in 151 inputs. 82 inputs have a backslash before LF, 22 inputs have a CR, and 47 inputs have a `--name=value` word with an escape, a quote, or an expansion. In the 47, only the value of the value argument changes.
+- Output comparison against 0.4.0-beta.21: 6,611 inputs, 122,760 records in two launch modes. 4,100 records change, in 197 inputs: 105 with a backslash before LF, 24 with a CR, 47 with a `--name=value` word that has an escape, a quote, or an expansion (only the value of the value argument changes), 9 with a `#` after a quoted part or `)`, and 12 with a `~` after `=` or `:`.
 - Public API: no change.
 - 0.4.0-beta.22 was planned for the literal twins of #242. That change moves to 0.4.0-beta.23.
 
