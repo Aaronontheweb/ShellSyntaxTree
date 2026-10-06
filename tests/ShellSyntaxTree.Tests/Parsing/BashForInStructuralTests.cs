@@ -770,13 +770,15 @@ public class BashForInStructuralTests
     [Fact]
     public void Newline_separators_and_redirects_compose_inside_a_multiline_loop_body()
     {
-        const string source = """
+        // A Windows checkout gives this literal CRLF line ends. Bash reads a
+        // CR as a word character, so the parser fails closed on it (#243).
+        var source = """
             for f in a b
             do
             printf '%s\n' "$f" > out.txt
             echo done
             done
-            """;
+            """.ReplaceLineEndings("\n");
 
         var result = Parse(source);
 
