@@ -142,39 +142,81 @@ public sealed record BashLiteralTwinWord
 /// </remarks>
 internal static class BashLiteralTwinAnalyzer
 {
-    private const int MaximumTotalTwins = 128;
+    /// <summary>The most twin parses for one call, successful or not.</summary>
+    internal const int MaximumTwinParses = 128;
+
+    /// <summary>
+    /// The most source characters that the twin parses of one call can read.
+    /// The cost of a parse grows with the source, so a long source gets fewer
+    /// twin parses. A 2 KB source gets at most 16.
+    /// </summary>
+    internal const int MaximumTwinCharacters = 32 * 1024;
 
     internal static bool TryProject(
         ParsedCommand parsed,
         BashParser parser,
         BashParserOptions options,
-        out BashLiteralTwinProjection? projection)
+        out BashLiteralTwinProjection? projection) =>
+        TryProject(parsed, parser, options, out projection, out _);
+
+    internal static bool TryProject(
+        ParsedCommand parsed,
+        BashParser parser,
+        BashParserOptions options,
+        out BashLiteralTwinProjection? projection,
+        out int parseCount)
     {
         projection = null;
-        var commands = new List<BashLiteralTwinCommand>();
-        var budget = MaximumTotalTwins;
+        parseCount = 0;
+        if (HasUnmodeledLineText(parsed.Source))
+        {
+            return false;
+        }
+
+        // The cheap checks run for every occurrence before any twin parse.
+        var candidates = new List<(int Index, List<TwinWord> Words, int Count)>();
         for (var index = 0; index < parsed.Commands.Count; index++)
         {
-            var occurrence = parsed.Commands[index];
-            if (!TryGetWordValues(parsed.Source, occurrence, options, out var words) ||
-                words.Count == 0 ||
-                !TryCountCombinations(words, out var count) ||
-                count > budget)
+            if (TryGetWordValues(parsed.Source, parsed.Commands[index], options, out var words) &&
+                words.Count > 0 &&
+                TryCountCombinations(words, out var count))
+            {
+                candidates.Add((index, words, count));
+            }
+        }
+
+        var commands = new List<BashLiteralTwinCommand>();
+        var characters = 0;
+        foreach (var candidate in candidates)
+        {
+            var sources = RenderAll(parsed.Source, candidate.Words);
+            var cost = 0;
+            foreach (var (source, _) in sources)
+            {
+                cost += source.Length;
+            }
+
+            // SECURITY (availability): the budget counts every twin parse,
+            // also one that fails. An occurrence that does not fit in the
+            // rest of the budget gets no twins and costs no parse.
+            if (parseCount + sources.Count > MaximumTwinParses ||
+                characters + cost > MaximumTwinCharacters)
             {
                 continue;
             }
 
-            var twins = new List<BashLiteralTwin>(count);
-            if (!TryBuildTwins(parsed, parser, index, words, twins))
+            characters += cost;
+            var twins = new List<BashLiteralTwin>(sources.Count);
+            if (!TryBuildTwins(parsed, parser, candidate.Index, candidate.Words, sources,
+                    twins, ref parseCount))
             {
                 continue;
             }
 
-            budget -= twins.Count;
             commands.Add(new BashLiteralTwinCommand
             {
-                SourceOccurrence = occurrence,
-                SourceOccurrenceIndex = index,
+                SourceOccurrence = parsed.Commands[candidate.Index],
+                SourceOccurrenceIndex = candidate.Index,
                 Twins = twins,
             });
         }
@@ -191,6 +233,22 @@ internal static class BashLiteralTwinAnalyzer
         };
         return true;
     }
+
+    /// <summary>
+    /// Returns true when the source has line text that the Bash lexer does not
+    /// model as Bash does.
+    /// </summary>
+    /// <remarks>
+    /// SECURITY: Bash removes a backslash-newline before it reads a word, also
+    /// inside an expansion: <c>"$</c>, a backslash-newline, and <c>(id)"</c>
+    /// run <c>id</c>. The lexer reads a carriage return as a command separator,
+    /// but Bash reads it as a word character. A value can come from any part of the source, such as a
+    /// loop list, so the check reads the full source. A twin would turn such a
+    /// wrong value into a literal word, so the source gets no twins.
+    /// </remarks>
+    private static bool HasUnmodeledLineText(string source) =>
+        source.IndexOf('\r') >= 0 ||
+        source.IndexOf("\\\n", StringComparison.Ordinal) >= 0;
 
     private sealed class TwinWord
     {
@@ -219,7 +277,7 @@ internal static class BashLiteralTwinAnalyzer
         out List<TwinWord> words)
     {
         words = new List<TwinWord>();
-        if (!occurrence.IsComplete)
+        if (!occurrence.IsComplete || UsesUnprovedHome(source, occurrence))
         {
             return false;
         }
@@ -236,6 +294,11 @@ internal static class BashLiteralTwinAnalyzer
         for (var index = 0; index < elements.Count; index++)
         {
             var element = elements[index];
+            if (HasAssignmentTilde(element.Raw))
+            {
+                return false;
+            }
+
             if (element.Role == ClauseElementRole.Redirect)
             {
                 continue;
@@ -264,6 +327,36 @@ internal static class BashLiteralTwinAnalyzer
 
         return true;
     }
+
+    /// <summary>
+    /// Returns true when a value of the occurrence can come from a home
+    /// directory that the launch facts do not prove.
+    /// </summary>
+    /// <remarks>
+    /// SECURITY: Bash expands <c>~</c> from <c>$HOME</c>. Without a live launch
+    /// <c>HOME</c>, the parser takes the home directory from
+    /// <see cref="ShellParserOptions.HomeDirectory"/>, a caller assumption. A
+    /// twin would show that assumption as a literal path. The value can come
+    /// from any part of the source, such as a loop list, so the check reads the
+    /// full source. It is lexical and stricter than Bash.
+    /// </remarks>
+    private static bool UsesUnprovedHome(string source, CommandOccurrence occurrence) =>
+        (source.IndexOf('~') >= 0 || source.IndexOf("HOME", StringComparison.Ordinal) >= 0) &&
+        occurrence.LaunchEnvironment?.TryGetLiveValue("HOME", out _) != true;
+
+    /// <summary>
+    /// Returns true when a word has <c>=~</c> or <c>:~</c>.
+    /// </summary>
+    /// <remarks>
+    /// SECURITY: Bash expands a tilde after <c>=</c> and after <c>:</c> in an
+    /// argument that looks like an assignment (<c>dd if=~/x</c>,
+    /// <c>PATH=a:~/bin</c>). The parser reads such a word as static text, so a
+    /// twin would keep a wrong value. The check is lexical and stricter than
+    /// Bash: it also rejects quoted text.
+    /// </remarks>
+    private static bool HasAssignmentTilde(string raw) =>
+        raw.IndexOf("=~", StringComparison.Ordinal) >= 0 ||
+        raw.IndexOf(":~", StringComparison.Ordinal) >= 0;
 
     // A word of a `bash -c` child has no span in the submitted source, so it
     // cannot be rewritten in place.
@@ -332,9 +425,11 @@ internal static class BashLiteralTwinAnalyzer
     /// when the caller proves the fresh-process contract: that contract removes
     /// an inherited <c>IFS</c>, and the parser rejects source that changes
     /// <c>IFS</c> or a glob option. Bash then splits only on space, tab, and
-    /// newline, and it globs only on <c>*</c>, <c>?</c>, and <c>[</c>. A value
-    /// without these characters and without a backslash stays one unchanged
-    /// word. An empty value can remove the word, so it gives no twin.
+    /// newline. It globs on <c>*</c>, <c>?</c>, and <c>[</c>, and with
+    /// <c>extglob</c> on, a Bash build default, also on a pattern such as
+    /// <c>@(a)</c> or <c>+(a)</c>. A value without these characters, without a
+    /// parenthesis, and without a backslash stays one unchanged word. An empty
+    /// value can remove the word, so it gives no twin.
     /// </remarks>
     private static bool TryGetProvedValues(
         AnalyzedArgument argument,
@@ -381,7 +476,7 @@ internal static class BashLiteralTwinAnalyzer
     }
 
     private static readonly char[] SplitOrGlobCharacters =
-        { ' ', '\t', '\n', '*', '?', '[', '\\' };
+        { ' ', '\t', '\n', '*', '?', '[', '\\', '(', ')' };
 
     private static bool TryCountCombinations(List<TwinWord> words, out int count)
     {
@@ -398,17 +493,41 @@ internal static class BashLiteralTwinAnalyzer
         return true;
     }
 
+    private static List<(string Source, int[] Choice)> RenderAll(
+        string source,
+        List<TwinWord> words)
+    {
+        var sources = new List<(string, int[])>();
+        var choice = new int[words.Count];
+        while (true)
+        {
+            sources.Add((Render(source, words, choice), (int[])choice.Clone()));
+            var position = words.Count - 1;
+            while (position >= 0 && ++choice[position] == words[position].Values.Count)
+            {
+                choice[position] = 0;
+                position--;
+            }
+
+            if (position < 0)
+            {
+                return sources;
+            }
+        }
+    }
+
     private static bool TryBuildTwins(
         ParsedCommand parsed,
         BashParser parser,
         int occurrenceIndex,
         List<TwinWord> words,
-        List<BashLiteralTwin> twins)
+        List<(string Source, int[] Choice)> sources,
+        List<BashLiteralTwin> twins,
+        ref int parseCount)
     {
-        var choice = new int[words.Count];
-        while (true)
+        foreach (var (source, choice) in sources)
         {
-            var source = Render(parsed.Source, words, choice);
+            parseCount++;
             var twinParse = parser.Parse(source);
             if (!TryMatchTwin(parsed, twinParse, occurrenceIndex, words, choice,
                     out var twinOccurrence))
@@ -432,19 +551,9 @@ internal static class BashLiteralTwinAnalyzer
                 Occurrence = twinOccurrence,
                 Words = twinWords,
             });
-
-            var position = words.Count - 1;
-            while (position >= 0 && ++choice[position] == words[position].Values.Count)
-            {
-                choice[position] = 0;
-                position--;
-            }
-
-            if (position < 0)
-            {
-                return true;
-            }
         }
+
+        return true;
     }
 
     private static string Render(string source, List<TwinWord> words, int[] choice)

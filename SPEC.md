@@ -279,7 +279,7 @@ public enum ShellTreeTraversalMode { ... }
 public sealed record BashFiniteScopeProjection { ... }
 public sealed record BashScopedCommand { ... }
 
-// v0.4.0-beta.22 literal twin evidence — see §3.
+// v0.4.0-beta.23 literal twin evidence — see §3.
 public sealed record BashLiteralTwinProjection { ... }
 public sealed record BashLiteralTwinCommand { ... }
 public sealed record BashLiteralTwin { ... }
@@ -376,7 +376,7 @@ public sealed record BashScopedCommand
 }
 ```
 
-`TryProjectLiteralTwins` (v0.4.0-beta.22) returns these parser-owned records:
+`TryProjectLiteralTwins` (v0.4.0-beta.23) returns these parser-owned records:
 
 ```csharp
 public sealed record BashLiteralTwinProjection
@@ -1527,7 +1527,7 @@ For example, `cd /work/sub && true; touch marker.txt` from `/work` yields
 files. By contrast, `cd "$target" && touch marker.txt` yields no projection.
 The caller owns filesystem checks, policy, grant matching, and process launch.
 
-#### Literal twin projection (v0.4.0-beta.22)
+#### Literal twin projection (v0.4.0-beta.23)
 
 `BashParser.TryProjectLiteralTwins` gives a consumer the facts of each literal
 command that a loop or a bounded variable can run. A changeable argument word
@@ -1543,8 +1543,11 @@ then has its own normal facts: `CommandWords`, verb tokens, path facts,
 The projection uses this schematic flow:
 
 ```text
+give nothing when the source has a backslash-newline or a carriage return
 for each occurrence of the full parse:
     give nothing unless the occurrence is complete
+    give nothing when the source has `~` or `HOME` and no live launch HOME
+    give nothing when a word has `=~` or `:~`
     give nothing unless each redirect is fixed
     for each word that is not static:
         give nothing unless it is one argument with an analyzed value
@@ -1553,10 +1556,14 @@ for each occurrence of the full parse:
             values = authored Exact or FiniteSet value when the effective value is Unknown
             give nothing unless the mode is FreshNonInteractiveNoStartup
             give nothing unless each value is nonempty and has no
-                space, tab, newline, *, ?, [, or backslash
+                space, tab, newline, *, ?, [, (, ), or backslash
         give nothing unless the word has a span in the submitted source
-    give nothing when the combinations pass 32 or the total budget of 128
+    give nothing when the combinations pass 32
+for each occurrence that passed:
+    give nothing when its parses do not fit in the rest of the budget
+        (128 parses and 32,768 source characters for one call)
     for each combination:
+        count one parse, also when the parse fails
         write each value as one literal word (plain text, else single quotes)
         parse the full twin source
         give nothing unless the twin has the same commands, is complete,
@@ -1571,11 +1578,30 @@ heredoc with a literal body, or a here-string with exact data.
 The effective value of an unquoted expansion stays `Unknown`, because the
 shell can split or glob it. Under `FreshNonInteractiveNoStartup`, the caller
 removes an inherited `IFS`, and the parser rejects source that changes `IFS`
-or a glob option. Bash then splits only on space, tab, and newline, and it
-globs only on `*`, `?`, and `[`. A nonempty value without these characters
-and without a backslash stays one unchanged word. Only then does the projection
-use the authored value of an unquoted word. An empty value can remove the word,
-so it gives no twin. The authored value needs `PublishAuthoredSourceFacts`.
+or a glob option. Bash then splits only on space, tab, and newline. It globs
+on `*`, `?`, and `[`, and, when a Bash build turns `extglob` on by default,
+also on a pattern such as `@(a)` or `+(a)`. A nonempty value without these
+characters, without a parenthesis, and without a backslash stays one
+unchanged word. Only then does the projection use the authored value of an
+unquoted word. An empty value can remove the word, so it gives no twin. The
+authored value needs `PublishAuthoredSourceFacts`.
+
+Some guards are wider than Bash, because the twin facts are only as good as
+the `Parse` value facts:
+
+- Bash removes a backslash-newline before it reads a word, also inside an
+  expansion. Bash reads a carriage return as a word character. A source with
+  either text gets no twins.
+- Bash expands a tilde after `=` and after `:` in an argument that looks like
+  an assignment (`dd if=~/x`). An occurrence with `=~` or `:~` in a word gets
+  no twins.
+- Without a live launch `HOME`, the home directory is the caller assumption
+  `HomeDirectory`. When the source has `~` or `HOME`, an occurrence gets twins
+  only with a live launch `HOME`.
+
+The budget counts each twin parse, also one that fails. An occurrence whose
+parses do not fit in the rest of the budget gets no twins and costs no parse.
+A 2 KB source gets at most 16 twin parses.
 
 The values of different words combine independently. Two words that read one
 loop variable can give a twin with two different values. That combination
@@ -1583,7 +1609,9 @@ does not run, but each of its values does. The twin set is a superset of the
 runs, so a consumer that checks every twin checks every run.
 
 An occurrence that is not in `Commands` has no twins. The method returns
-`false` when no occurrence has twins. A literal value can move a word between
+`false` and a null projection when no occurrence has twins. Bash runs only
+the authored source, never `twin.Source`. Only the occurrence at
+`SourceOccurrenceIndex` in a parse of `twin.Source` has the twin facts. A literal value can move a word between
 the verb and argument roles, as the typed literal does: the twins of
 `for v in push fetch; do git $v origin; done` have the command words
 `git push origin` and `git fetch origin`.

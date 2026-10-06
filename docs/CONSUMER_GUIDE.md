@@ -980,7 +980,7 @@ Non-filesystem providers and native remote endpoints also remain unknown.
 
 ### Literal twins of loop values
 
-From 0.4.0-beta.22, `BashParser.TryProjectLiteralTwins` writes each command
+From 0.4.0-beta.23, `BashParser.TryProjectLiteralTwins` writes each command
 of a loop once for each proved value, as if a person typed the literal. Use it
 when a loop word has a finite set of values and you want the facts of the
 literal command, not a rule for the expansion:
@@ -1022,6 +1022,23 @@ Rules for a consumer:
   source, so you can run your own analysis on `twin.Source`.
 - An unquoted word gets twins only under `FreshNonInteractiveNoStartup`
   with `PublishAuthoredSourceFacts`, and only when no value can split or glob.
+- A word that reads the home directory gets twins only with a live launch
+  `HOME` in `LaunchEnvironment`.
+
+Warnings:
+
+- Do not run `twin.Source`. Bash runs only the authored source. A twin source
+  can hold a combination of values that never runs.
+- Only the occurrence at `SourceOccurrenceIndex` has the twin facts. The other
+  occurrences in a parse of `twin.Source` keep their expansions. Their facts
+  are not the facts of the authored run. Read `twin.Occurrence`.
+- When the method returns `false`, `projection` is null. Use your own result
+  of `Parse` for the normal facts.
+- The twin facts are only as good as the `Parse` value facts. The self-check
+  compares the parser with itself, not with Bash. The projection gives no
+  twins for text that the lexer does not model as Bash does (a
+  backslash-newline, a carriage return, `=~` or `:~` in a word). A test of the
+  library compares each twin with the argv that GNU Bash passes.
 
 A twin is evidence. It does not grant authority.
 

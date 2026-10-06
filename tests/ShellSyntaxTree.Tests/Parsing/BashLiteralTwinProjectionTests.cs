@@ -3,6 +3,8 @@
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Xunit;
 
@@ -23,6 +25,18 @@ public class BashLiteralTwinProjectionTests
         });
 
     private static readonly BashParser Parser = CreateParser();
+
+    // The launch facts prove HOME, so a tilde word has a proved value.
+    private static readonly BashParser LaunchParser = new(new BashParserOptions
+    {
+        WorkingDirectory = WorkingDirectory,
+        HomeDirectory = "/home/agent",
+        InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+        PublishAuthoredSourceFacts = true,
+        LaunchEnvironment = new ShellLaunchEnvironment(
+            new[] { new KeyValuePair<string, string>("HOME", "/home/agent") },
+            Array.Empty<string>()),
+    });
 
     [Fact]
     public void The_real_gh_api_loop_gives_one_gh_api_twin_for_each_issue()
@@ -110,25 +124,13 @@ public class BashLiteralTwinProjectionTests
             out _));
     }
 
-    [Fact]
-    public void The_twins_of_a_projection_stop_at_the_total_budget()
-    {
-        var values = string.Join(" ", Enumerable.Range(1, 32));
-        var source = $"for n in {values}; do a \"x/$n\"; b \"x/$n\"; c \"x/$n\"; d \"x/$n\"; e \"x/$n\"; done";
-
-        Assert.True(Parser.TryProjectLiteralTwins(source, out var projection));
-
-        Assert.Equal(new[] { 0, 1, 2, 3 },
-            projection!.Commands.Select(command => command.SourceOccurrenceIndex));
-        Assert.Equal(128, projection.Commands.Sum(command => command.Twins.Count));
-    }
-
     [Theory]
     [InlineData("for d in a b; do ~/bin/tool \"$d\"; done")]
     [InlineData("for d in a b; do ~/bin/tool sub \"$d\"; done")]
     public void A_program_word_that_the_shell_can_change_gives_no_twins(string source)
     {
-        Assert.False(Parser.TryProjectLiteralTwins(source, out _));
+        // The launch facts prove HOME, so only the program-word rule applies.
+        Assert.False(LaunchParser.TryProjectLiteralTwins(source, out _));
     }
 
     [Theory]
@@ -140,6 +142,11 @@ public class BashLiteralTwinProjectionTests
     [InlineData("'[ab]'")]
     [InlineData("'a\\b'")]
     [InlineData("''")]
+    [InlineData("'@(a)'")]
+    [InlineData("'+(a).txt'")]
+    [InlineData("'!(a)'")]
+    [InlineData("'a)b'")]
+    [InlineData("'a(b'")]
     public void An_unquoted_value_that_can_split_or_glob_gives_no_twins(string value)
     {
         Assert.False(Parser.TryProjectLiteralTwins(
@@ -282,6 +289,116 @@ public class BashLiteralTwinProjectionTests
     // The facts a consumer reads for a command: its words, directory, and the
     // value and path facts of each argument. The structural role can differ,
     // because the twin stays inside its loop.
+    [Theory]
+    [InlineData("for n in build; do rm -rf \"$n\\\ndir/\"; done")]
+    [InlineData("for n in a; do printf '<%s>' \"$\\\n(id -u)\" \"$n\"; done")]
+    [InlineData("for n in a; do cat \"$\\\nHOME/.ssh/id_rsa\" \"$n\"; done")]
+    [InlineData("x=/etc/hostname; cat $\\\nx")]
+    [InlineData("for n in a; do printf %s \"$\\\n{n}\"; done")]
+    [InlineData("for n in a; do printf %s x$\\\n'y' \"$n\"; done")]
+    [InlineData("for n in a \\\nb; do cat \"$n\"; done")]
+    public void A_source_with_a_line_continuation_gives_no_twins(string source)
+    {
+        // The lexer does not remove a backslash-newline inside an expansion,
+        // but Bash does. The guard keeps a wrong value out of every twin.
+        Assert.False(LaunchParser.TryProjectLiteralTwins(source, out _));
+    }
+
+    [Theory]
+    [InlineData("x=/etc\r\nfor n in a; do cat \"$x\" \"$n\"; done")]
+    [InlineData("for n in a; do printf '%s' \"$n\"\rid; done")]
+    [InlineData("for n in a b; do cat \"$n\"; done\r\n")]
+    public void A_source_with_a_carriage_return_gives_no_twins(string source)
+    {
+        // Bash reads a carriage return as a word character.
+        Assert.False(LaunchParser.TryProjectLiteralTwins(source, out _));
+    }
+
+    [Theory]
+    [InlineData("for n in out.txt; do dd if=~/.ssh/id_rsa of=\"$n\"; done")]
+    [InlineData("for n in a b; do env PATH=x:~/bin \"$n\"; done")]
+    [InlineData("for n in a b; do cat \"$n\" > of=~/x; done")]
+    public void A_word_with_a_tilde_after_an_equals_sign_or_colon_gives_no_twins(string source)
+    {
+        // Bash expands such a tilde, but the parser keeps it as text.
+        Assert.False(LaunchParser.TryProjectLiteralTwins(source, out _));
+    }
+
+    [Theory]
+    [InlineData("for n in a b; do cat ~/x \"$n\"; done")]
+    [InlineData("for n in a b; do cat \"$HOME/x\" \"$n\"; done")]
+    public void A_home_value_needs_a_live_launch_home(string source)
+    {
+        Assert.False(Parser.TryProjectLiteralTwins(source, out _));
+
+        Assert.True(LaunchParser.TryProjectLiteralTwins(source, out var projection));
+        Assert.All(Assert.Single(projection!.Commands).Twins, twin =>
+            Assert.Contains(twin.Occurrence.Arguments, argument =>
+                argument.Value is ShellValueDomain.Exact { Value: var value } &&
+                value.StartsWith("/home/agent/", StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void Every_twin_parse_counts_against_one_budget()
+    {
+        var values = string.Join(" ", Enumerable.Range(0, 31).Select(index => $"v{index}"));
+        // The last value '' fails the twin match of `cat`, after 31 good parses.
+        var source = $"for n in {values} ''; do " +
+                     string.Concat(Enumerable.Repeat("cat \"$n\"; ", 6)) + "done";
+
+        Assert.False(Project(source, out var projection, out var parses));
+
+        Assert.Null(projection);
+        Assert.Equal(BashLiteralTwinAnalyzer.MaximumTwinParses, parses);
+    }
+
+    [Fact]
+    public void A_long_source_gets_few_twin_parses()
+    {
+        var values = string.Join(" ", Enumerable.Range(0, 32).Select(index => $"v{index}"));
+        var source = $"for n in {values}; do " +
+                     string.Concat(Enumerable.Repeat("cat \"$n\"; ", 200)) + "done";
+        Assert.True(source.Length > 2048);
+
+        // Each occurrence needs 32 parses of the full source. That passes the
+        // character budget, so no occurrence gets a twin parse.
+        Assert.False(Project(source, out _, out var parses));
+        Assert.Equal(0, parses);
+
+        // A short source with the same values fits.
+        Assert.True(Project($"for n in {values}; do cat \"$n\"; done", out _, out parses));
+        Assert.Equal(32, parses);
+    }
+
+    [Fact]
+    public void The_twin_parses_stop_at_the_parse_budget()
+    {
+        var values = string.Join(" ", Enumerable.Range(1, 32));
+        var source = $"for n in {values}; do a \"x/$n\"; b \"x/$n\"; c \"x/$n\"; d \"x/$n\"; e \"x/$n\"; done";
+
+        Assert.True(Project(source, out var projection, out var parses));
+
+        Assert.Equal(BashLiteralTwinAnalyzer.MaximumTwinParses, parses);
+        Assert.Equal(4, projection!.Commands.Count);
+    }
+
+    private static bool Project(
+        string source,
+        out BashLiteralTwinProjection? projection,
+        out int parses)
+    {
+        var options = new BashParserOptions
+        {
+            WorkingDirectory = WorkingDirectory,
+            HomeDirectory = "/home/agent",
+            InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+            PublishAuthoredSourceFacts = true,
+        };
+        var parser = new BashParser(options);
+        return BashLiteralTwinAnalyzer.TryProject(
+            parser.Parse(source), parser, options, out projection, out parses);
+    }
+
     private static void AssertSameFacts(CommandOccurrence expected, CommandOccurrence actual)
     {
         Assert.Equal(expected.IsComplete, actual.IsComplete);
