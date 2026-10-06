@@ -1110,11 +1110,9 @@ static string? GetCommandWordKey(CommandOccurrence occurrence) =>
 |---|---|
 | `gh pr view 123 -R o/r` | `gh pr view` |
 | `gh -R o/r pr view 123` | `gh pr view` |
-| `git --no-pager log -1` | `git` |
+| `git --no-pager log -1` | `git log` |
 | `git push origin feature-x` | `git push origin feature-x` |
-| `pgrep -x name` | `pgrep` |
-| `ilspycmd -t A.B /p/x.dll` | `ilspycmd` |
-| `kubectl -n prod get pods` | `kubectl get pods` |
+| `pgrep -x name` | `pgrep name` |
 | `dotnet build -c Release` | `dotnet build` |
 | `git commit -m fix` | `git commit` |
 | `git add *` | `git add` |
@@ -1127,24 +1125,22 @@ The words skip options, paths, globs that contain `/`, words with a digit, text 
 whitespace, and redirect targets. A quoted single word counts: `git "push"`
 gives `git push`.
 
-The verb slot is the first word after the program. The rules:
+The verb slot is the first word after the program. In the verb slot, the
+rules are strict: a plain word after an option stays (`git -p filter-branch`
+gives `git filter-branch`), and an expansion or a bare glob makes the result
+`Unknown` (`git $(cmd)`, `git *`). After the verb slot, a plain word directly
+after an option is skipped as its value, and expansions and bare globs are
+skipped as arguments. A glob that contains `/` is a path pattern everywhere.
 
-- From v0.4.0-beta.20 (#237), a plain word directly after an option is that
-  option's value everywhere, also in the verb slot. The next plain word is the
-  verb: `ilspycmd -t A.B /p/x.dll` gives `ilspycmd`, and
-  `kubectl -n prod get pods` gives `kubectl get pods`.
-- An inline value (`--flag=value`) takes no next word.
-- Bare `--` takes no value in the verb slot: `git -- push` gives `git push`.
-- In the verb slot, an expansion or a bare glob makes the result `Unknown`
-  (`git $(cmd)`, `git *`), also after an option. After the verb slot,
-  expansions and bare globs are skipped as arguments.
-- A glob that contains `/` is a path pattern everywhere.
+Limit: after the verb slot, a sub-subcommand that follows an option is
+skipped. `git remote -v add evil url` gives `git remote evil url`.
 
-Limit: the rules do not know which options take a value. A switch without a
-value hides the plain word after it. `docker --debug run` gives `docker`, and
-`git remote -v add evil url` gives `git remote evil url`. A wrapper is
-affected too: `xargs -0 rm` gives `xargs`. Do not let a grant for a wrapper
-program cover the program that it runs.
+v0.4.0-beta.20 skipped the plain word after an option in the verb slot too.
+v0.4.0-beta.21 restores the rule above (#240). A switch without a value,
+followed by a subcommand, looks the same as an option and its value. Skipping
+the word let a short grant cover a hidden program: `xargs -0 rm` gave `xargs`.
+From v0.4.0-beta.21, `xargs -0 rm` gives `xargs rm` and `docker --debug run`
+gives `docker run`, as in v0.4.0-beta.19.
 
 ## Evaluating arguments and paths
 

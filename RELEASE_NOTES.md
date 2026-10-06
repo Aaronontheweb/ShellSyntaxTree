@@ -1,3 +1,19 @@
+#### 0.4.0-beta.21 2026-10-06 ####
+
+This prerelease restores the 0.4.0-beta.19 verb-slot rule of `CommandOccurrence.CommandWords` (#240). It reverts the 0.4.0-beta.20 change (#237).
+
+## Changed
+
+- In the verb slot, a plain word directly after an option stays a command word again. After the verb slot, a plain word directly after an option is still skipped as that option's value.
+- Reason (owner decision): without per-program grammar, a switch without a value, followed by a subcommand, looks the same as an option and its value. In 0.4.0-beta.20, skipping the word let a short grant cover a hidden program: `git --no-pager push` gave `git`, `xargs -0 rm` gave `xargs`, and `env -i rm` gave `env`.
+- Pins: `docker --debug run` gives `docker run`, `ilspycmd -t X /p/x.dll` gives `ilspycmd X`, `git --no-pager push` gives `git push`, and `xargs -0 rm` gives `xargs rm`.
+
+## Security and compatibility
+
+- The library code equals 0.4.0-beta.19. An output comparison over 6,057 inputs (109,960 records in two launch modes) gives output that is byte-identical to 0.4.0-beta.19. Against 0.4.0-beta.20, only `CommandWords` changes, in the same 186 inputs.
+- A consumer that keys grants on `CommandWords` gets the 0.4.0-beta.19 keys.
+- Public API: no change.
+
 #### 0.4.0-beta.20 2026-10-05 ####
 
 This prerelease applies the option-value rule to the verb slot of `CommandOccurrence.CommandWords` (#237).

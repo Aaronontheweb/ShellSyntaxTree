@@ -10,7 +10,15 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.21 restore the beta.19 verb-slot rule)
+
+- [x] Restore the beta.19 verb-slot rule of `CommandWords` (#240). The verb slot keeps a plain word after an option. Pin `docker --debug run`, `ilspycmd -t X /p/x.dll`, `git --no-pager push`, and `xargs -0 rm`.
+- [x] Prove that the output equals beta.19 over the beta.20 comparison inputs.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.21` and verify NuGet publication.
+
 ## Completed (0.4.0-beta.20 option value in the verb slot)
+
+- Reverted in 0.4.0-beta.21 (#240).
 
 - [x] Skip a plain word directly after an option in the verb slot of `CommandWords` (#237). Keep bare `--` without a value in the verb slot.
 - [x] Prove that only `CommandWords` changes, and only for inputs with an option before the verb. Run manual mutants and the Netclaw call replay.
