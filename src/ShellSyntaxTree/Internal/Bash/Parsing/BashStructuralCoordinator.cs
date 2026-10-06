@@ -2235,8 +2235,12 @@ internal static partial class BashCommandParser
                             return false;
                         }
 
-                        if (!raw.StartsWith("$(", StringComparison.Ordinal) ||
-                            raw[raw.Length - 1] != ')')
+                        if (!BashLexer.TryGetCommandSubstitutionBody(
+                                _source,
+                                fragment.SourceStart.Value,
+                                fragment.SourceLength.Value,
+                                out _,
+                                out _))
                         {
                             substitutions = Array.Empty<ShellValueFragment>();
                             error = "unsupported Bash command substitution provenance";
@@ -2702,8 +2706,18 @@ internal static partial class BashCommandParser
             {
                 var sourceStart = fragment.SourceStart!.Value;
                 var sourceLength = fragment.SourceLength!.Value;
-                var bodyStart = sourceStart + 2;
-                var bodyLength = sourceLength - 3;
+                if (!BashLexer.TryGetCommandSubstitutionBody(
+                        _source,
+                        sourceStart,
+                        sourceLength,
+                        out var bodyStart,
+                        out var bodyLength))
+                {
+                    substitutions = Array.Empty<CommandSubstitutionSyntax>();
+                    error = "unsupported Bash command substitution provenance";
+                    return false;
+                }
+
                 if (!TryParseSubstitutionBody(
                         bodyStart,
                         bodyLength,

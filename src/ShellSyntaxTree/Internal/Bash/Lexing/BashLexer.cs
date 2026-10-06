@@ -183,12 +183,17 @@ internal static class BashLexer
             }
 
             // ---- $( ... ) command substitution / $((expr)) / ${var//...} ----
-            if (c == '$' && i + 1 < src.Length)
+            // A line continuation between `$` and the next character does
+            // not end the expansion (#243).
+            var dollarNext = c == '$'
+                ? BashLineContinuation.Skip(src, i + 1, BashContinuationContext.Unquoted)
+                : src.Length;
+            if (dollarNext < src.Length)
             {
-                var next = src[i + 1];
+                var next = src[dollarNext];
                 if (next == '\'')
                 {
-                    i = ReadAnsiCQuoted(src, i, tokens);
+                    i = ReadAnsiCQuoted(src, i, dollarNext, tokens);
                     continue;
                 }
 
@@ -210,25 +215,27 @@ internal static class BashLexer
                 {
                     // $(( -> a bounded arithmetic expansion (#227), or a
                     // fail-closed sentinel. Detect before $(.
-                    if (i + 2 < src.Length && src[i + 2] == '(')
+                    var secondParen = BashLineContinuation.Skip(
+                        src, dollarNext + 1, BashContinuationContext.Unquoted);
+                    if (secondParen < src.Length && src[secondParen] == '(')
                     {
-                        i = ConsumeArithmetic(src, i, tokens);
+                        i = ConsumeArithmetic(src, i, secondParen, tokens);
                         continue;
                     }
 
-                    i = ConsumeCommandSubstitution(src, i, tokens);
+                    i = ConsumeCommandSubstitution(src, i, dollarNext, tokens);
                     continue;
                 }
 
                 if (next == '[')
                 {
-                    i = ConsumeObsoleteArithmetic(src, i, tokens);
+                    i = ConsumeObsoleteArithmetic(src, i, dollarNext, tokens);
                     continue;
                 }
 
                 if (next == '{')
                 {
-                    if (TryConsumeComplexParamExpansion(src, i, tokens, out var afterBrace))
+                    if (TryConsumeComplexParamExpansion(src, i, dollarNext, tokens, out var afterBrace))
                     {
                         i = afterBrace;
                         continue;
@@ -302,7 +309,9 @@ internal static class BashLexer
             return false;
         }
 
-        var end = start + 1;
+        // `>&\⏎1` is `>&1`: the target may continue across a line
+        // continuation (#243).
+        var end = BashLineContinuation.Skip(src, start + 1, BashContinuationContext.Unquoted);
         if (end < src.Length && src[end] == '$')
         {
             afterTarget = ReadWord(src, start, tokens, allowLeadingAmpersand: true);
@@ -316,9 +325,12 @@ internal static class BashLexer
         else
         {
             var digitStart = end;
-            while (end < src.Length && src[end] is >= '0' and <= '9')
+            var digitEnd = end;
+            while (digitEnd < src.Length && src[digitEnd] is >= '0' and <= '9')
             {
-                end++;
+                end = digitEnd + 1;
+                digitEnd = BashLineContinuation.Skip(
+                    src, end, BashContinuationContext.Unquoted);
             }
 
             if (end == digitStart)
@@ -326,18 +338,21 @@ internal static class BashLexer
                 return false;
             }
 
-            if (end < src.Length && src[end] == '-')
+            if (digitEnd < src.Length && src[digitEnd] == '-')
             {
-                end++;
+                end = digitEnd + 1;
             }
         }
 
-        if (end < src.Length && !char.IsWhiteSpace(src[end]) && !IsOperatorStart(src, end))
+        var afterEnd = BashLineContinuation.Skip(src, end, BashContinuationContext.Unquoted);
+        if (afterEnd < src.Length && !char.IsWhiteSpace(src[afterEnd]) &&
+            !IsOperatorStart(src, afterEnd))
         {
             return false;
         }
 
-        var raw = src.Slice(start, end - start).ToString();
+        var raw = BashLineContinuation.Remove(
+            src.Slice(start, end - start), BashContinuationContext.Unquoted);
         tokens.Add(new BashToken(
             BashTokenKind.Word,
             raw,
@@ -401,67 +416,26 @@ internal static class BashLexer
 
         if (canStartNumericDescriptor &&
             descriptor.Length > 0 &&
-            descriptorEnd < src.Length)
+            descriptorEnd < src.Length &&
+            src[descriptorEnd] is '>' or '<' &&
+            TryMatchRedirectOperator(src, descriptorEnd, out var redirectEnd, out var redirectText))
         {
-            if (src[descriptorEnd] == '>')
-            {
-                var append = descriptorEnd + 1 < src.Length &&
-                    src[descriptorEnd + 1] == '>';
-                length = descriptorEnd - i + (append ? 2 : 1);
-                text = descriptor.ToString() + (append ? ">>" : ">");
-                return true;
-            }
-
-            if (src[descriptorEnd] == '<')
-            {
-                var redirectLength = 1;
-                if (descriptorEnd + 1 < src.Length && src[descriptorEnd + 1] == '<')
-                {
-                    redirectLength = descriptorEnd + 2 < src.Length &&
-                        src[descriptorEnd + 2] is '<' or '-'
-                            ? 3
-                            : 2;
-                }
-
-                length = descriptorEnd - i + redirectLength;
-                text = descriptor.ToString() +
-                    (redirectLength == 3
-                        ? src[descriptorEnd + 2] == '<' ? "<<<" : "<<-"
-                        : redirectLength == 2 ? "<<" : "<");
-                return true;
-            }
+            length = redirectEnd - i;
+            text = descriptor.ToString() + redirectText;
+            return true;
         }
 
-        // Multi-char operators first.
-        if (i + 1 < src.Length)
+        // Multi-char operators first. Bash removes a line continuation
+        // before it reads an operator, so `&\⏎&` is `&&` (#243).
+        foreach (var candidate in MultiCharacterOperators)
         {
-            var c0 = src[i];
-            var c1 = src[i + 1];
-            if (c0 == '&' && c1 == '>')
+            if (BashLineContinuation.TryMatch(
+                    src, i, candidate, BashContinuationContext.Unquoted, out var operatorEnd))
             {
-                if (i + 2 < src.Length && src[i + 2] == '>')
-                {
-                    length = 3; text = "&>>"; return true;
-                }
-
-                length = 2; text = "&>"; return true;
+                length = operatorEnd - i;
+                text = candidate;
+                return true;
             }
-
-            if (c0 == '&' && c1 == '&') { length = 2; text = "&&"; return true; }
-            if (c0 == '|' && c1 == '|') { length = 2; text = "||"; return true; }
-            if (c0 == '>' && c1 == '>') { length = 2; text = ">>"; return true; }
-            if (c0 == '<' && c1 == '<')
-            {
-                if (i + 2 < src.Length && src[i + 2] is '<' or '-')
-                {
-                    length = 3;
-                    text = src[i + 2] == '<' ? "<<<" : "<<-";
-                    return true;
-                }
-
-                length = 2; text = "<<"; return true;
-            }
-
         }
 
         // Single-char operators.
@@ -478,23 +452,44 @@ internal static class BashLexer
         }
     }
 
+    // Longer operators come first, so `&>>` wins over `&>`.
+    private static readonly string[] MultiCharacterOperators =
+        { "&>>", "&>", "&&", "||", ">>", "<<<", "<<-", "<<" };
+
+    // A redirect operator after a numeric descriptor.
+    private static readonly string[] DescriptorRedirectOperators =
+        { ">>", ">", "<<<", "<<-", "<<", "<" };
+
+    private static bool TryMatchRedirectOperator(
+        ReadOnlySpan<char> src,
+        int start,
+        out int end,
+        out string text)
+    {
+        foreach (var candidate in DescriptorRedirectOperators)
+        {
+            if (BashLineContinuation.TryMatch(
+                    src, start, candidate, BashContinuationContext.Unquoted, out end))
+            {
+                text = candidate;
+                return true;
+            }
+        }
+
+        end = start;
+        text = string.Empty;
+        return false;
+    }
+
     private static bool TrySkipLineContinuation(
         ReadOnlySpan<char> source,
         int index,
         out int afterContinuation)
     {
-        afterContinuation = index;
-        if (index + 1 >= source.Length || source[index] != '\\' ||
-            source[index + 1] is not ('\n' or '\r'))
-        {
-            return false;
-        }
-
-        afterContinuation = source[index + 1] == '\r' &&
-            index + 2 < source.Length && source[index + 2] == '\n'
-            ? index + 3
-            : index + 2;
-        return true;
+        var length = BashLineContinuation.LengthAt(
+            source, index, BashContinuationContext.Unquoted);
+        afterContinuation = index + length;
+        return length > 0;
     }
 
     internal static bool IsHeredocOperator(string? operatorText)
@@ -562,10 +557,10 @@ internal static class BashLexer
     // ---------------------------------------------------------------- quoted
 
     private static int ReadAnsiCQuoted(
-        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
+        ReadOnlySpan<char> src, int start, int openQuote, List<BashToken> tokens)
     {
         var value = new ShellValueBuilder();
-        if (!BashAnsiCQuoting.TryDecode(src, start, value, out var end, out var error))
+        if (!BashAnsiCQuoting.TryDecode(src, openQuote, value, out var end, out var error))
         {
             tokens.Add(new BashToken(
                 BashTokenKind.UnparseableSentinel,
@@ -679,7 +674,12 @@ internal static class BashLexer
 
             if (c == '$'
                 && TryAppendBashExpansion(
-                    src, ref i, value, allowFieldSplit: false, out var error))
+                    src,
+                    ref i,
+                    value,
+                    allowFieldSplit: false,
+                    BashContinuationContext.DoubleQuoted,
+                    out var error))
             {
                 if (error is not null)
                 {
@@ -739,10 +739,9 @@ internal static class BashLexer
     // ---------------------------------------------------------------- substitutions
 
     private static int ConsumeCommandSubstitution(
-        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
+        ReadOnlySpan<char> src, int start, int openParen, List<BashToken> tokens)
     {
-        // src[start] = '$', src[start+1] = '('
-        var openParen = start + 1;
+        // src[start] = '$'. Only line continuations come before openParen.
         var scan = ScanCommandSubstitution(src, openParen);
         if (!scan.Closed)
         {
@@ -759,22 +758,33 @@ internal static class BashLexer
         // EndIndex is the closing ')' (inclusive). The opaque region runs
         // from start ($) through EndIndex (closing paren) inclusive.
         var length = scan.EndIndex - start + 1;
+        var text = OpaqueSubstitutionText(src.Slice(start, length));
         tokens.Add(new BashToken(
             BashTokenKind.OpaqueSubstitution,
-            src.Slice(start, length).ToString(),
+            text,
             null,
             start,
             length,
             null)
         {
             ResolverValue = ShellValue.Opaque(
-                    src.Slice(start, length).ToString(),
+                    text,
                     ShellOpaqueCause.CommandSubstitution,
                     start,
                     length),
         });
         return start + length;
     }
+
+    /// <summary>
+    /// The text of an opaque <c>$(…)</c> value. Its value is unknown, so the
+    /// text is only a placeholder. It drops line continuations, so a
+    /// backslash that Bash removes does not make the word look like a
+    /// Windows path to a later heuristic (#243). The source span keeps the
+    /// exact authored text.
+    /// </summary>
+    private static string OpaqueSubstitutionText(ReadOnlySpan<char> authored) =>
+        BashLineContinuation.Remove(authored, BashContinuationContext.Unquoted);
 
     private static CommandSubstitutionScan ScanCommandSubstitution(
         ReadOnlySpan<char> src,
@@ -843,16 +853,25 @@ internal static class BashLexer
                         "legacy backtick command substitution is not supported");
                 }
 
-                if (c == '$' && BashArithmeticGrammar.TryScanExpansion(src, i, out var quotedArithmeticEnd))
+                if (c == '$' &&
+                    TryFindDollarParen(
+                        src, i, BashContinuationContext.DoubleQuoted, out var quotedOpenParen))
                 {
-                    // A bounded arithmetic expansion holds no quote and no
-                    // heredoc operator. Skip it as one region (#227).
-                    i = quotedArithmeticEnd;
-                    continue;
-                }
+                    if (IsSplitArithmeticMarker(
+                            src, i, quotedOpenParen, BashContinuationContext.DoubleQuoted))
+                    {
+                        return new CommandSubstitutionScan(
+                            src.Length, false, ArithmeticMarkerContinuationReason);
+                    }
 
-                if (c == '$' && i + 1 < src.Length && src[i + 1] == '(')
-                {
+                    if (BashArithmeticGrammar.TryScanExpansion(src, i, out var quotedArithmeticEnd))
+                    {
+                        // A bounded arithmetic expansion holds no quote and no
+                        // heredoc operator. Skip it as one region (#227).
+                        i = quotedArithmeticEnd;
+                        continue;
+                    }
+
                     if (resumeDoubleQuote.Count >= ShellAnalysisLimits.MaxStructuralNesting)
                     {
                         return StructuralNestingOverflow(src.Length);
@@ -861,7 +880,7 @@ internal static class BashLexer
                     resumeDoubleQuote.Push(true);
                     inDoubleQuote = false;
                     atWordBoundary = true;
-                    i += 2;
+                    i = quotedOpenParen + 1;
                     continue;
                 }
 
@@ -871,11 +890,9 @@ internal static class BashLexer
 
             if (c == '\\' && i + 1 < src.Length)
             {
-                if (src[i + 1] is '\n' or '\r')
+                if (TrySkipLineContinuation(src, i, out var afterContinuation))
                 {
-                    i += src[i + 1] == '\r' && i + 2 < src.Length && src[i + 2] == '\n'
-                        ? 3
-                        : 2;
+                    i = afterContinuation;
                     continue;
                 }
 
@@ -884,10 +901,13 @@ internal static class BashLexer
                 continue;
             }
 
-            if (c == '$' && i + 1 < src.Length && src[i + 1] == '\'')
+            var unquotedDollarNext = c == '$'
+                ? BashLineContinuation.Skip(src, i + 1, BashContinuationContext.Unquoted)
+                : src.Length;
+            if (unquotedDollarNext < src.Length && src[unquotedDollarNext] == '\'')
             {
                 // `\'` does not end an ANSI-C string (#232).
-                if (!BashAnsiCQuoting.TryFindEnd(src, i, out var ansiEnd))
+                if (!BashAnsiCQuoting.TryFindEnd(src, unquotedDollarNext, out var ansiEnd))
                 {
                     return new CommandSubstitutionScan(src.Length, false, null);
                 }
@@ -942,18 +962,22 @@ internal static class BashLexer
                 continue;
             }
 
-            if (c == '<' && i + 1 < src.Length && src[i + 1] == '<')
+            if (c == '<' &&
+                BashLineContinuation.TryMatch(
+                    src, i, "<<", BashContinuationContext.Unquoted, out var afterHeredocOperator))
             {
-                if (i + 2 < src.Length && src[i + 2] == '<')
+                if (BashLineContinuation.TryMatch(
+                        src, i, "<<<", BashContinuationContext.Unquoted, out var afterHereString))
                 {
                     // A here-string. Its word is ordinary text.
                     atWordBoundary = true;
-                    i += 3;
+                    i = afterHereString;
                     continue;
                 }
 
-                var stripTabs = i + 2 < src.Length && src[i + 2] == '-';
-                i += stripTabs ? 3 : 2;
+                var stripTabs = BashLineContinuation.TryMatch(
+                    src, i, "<<-", BashContinuationContext.Unquoted, out var afterStripOperator);
+                i = stripTabs ? afterStripOperator : afterHeredocOperator;
                 while (i < src.Length && src[i] is ' ' or '\t')
                 {
                     i++;
@@ -979,17 +1003,26 @@ internal static class BashLexer
                 continue;
             }
 
-            if (c == '$' && BashArithmeticGrammar.TryScanExpansion(src, i, out var arithmeticEnd))
+            if (c == '$' &&
+                TryFindDollarParen(
+                    src, i, BashContinuationContext.Unquoted, out var unquotedOpenParen))
             {
-                // `<<` in a bounded arithmetic expansion is a shift, not a
-                // heredoc (#227).
-                atWordBoundary = false;
-                i = arithmeticEnd;
-                continue;
-            }
+                if (IsSplitArithmeticMarker(
+                        src, i, unquotedOpenParen, BashContinuationContext.Unquoted))
+                {
+                    return new CommandSubstitutionScan(
+                        src.Length, false, ArithmeticMarkerContinuationReason);
+                }
 
-            if (c == '$' && i + 1 < src.Length && src[i + 1] == '(')
-            {
+                if (BashArithmeticGrammar.TryScanExpansion(src, i, out var arithmeticEnd))
+                {
+                    // `<<` in a bounded arithmetic expansion is a shift, not a
+                    // heredoc (#227).
+                    atWordBoundary = false;
+                    i = arithmeticEnd;
+                    continue;
+                }
+
                 if (resumeDoubleQuote.Count >= ShellAnalysisLimits.MaxStructuralNesting)
                 {
                     return StructuralNestingOverflow(src.Length);
@@ -997,7 +1030,7 @@ internal static class BashLexer
 
                 resumeDoubleQuote.Push(false);
                 atWordBoundary = true;
-                i += 2;
+                i = unquotedOpenParen + 1;
                 continue;
             }
 
@@ -1106,6 +1139,70 @@ internal static class BashLexer
         return scan.Closed && scan.Error is null;
     }
 
+    /// <summary>
+    /// Finds the body of the <c>$(…)</c> region that the lexer read at
+    /// <paramref name="start"/>. Line continuations can come between the
+    /// <c>$</c> and the <c>(</c> (#243), so the body does not always start
+    /// two characters after the <c>$</c>.
+    /// </summary>
+    internal static bool TryGetCommandSubstitutionBody(
+        string source,
+        int start,
+        int length,
+        out int bodyStart,
+        out int bodyLength)
+    {
+        bodyStart = 0;
+        bodyLength = 0;
+        var end = start + length;
+        if (start < 0 || length < 3 || end > source.Length ||
+            source[start] != '$' || source[end - 1] != ')')
+        {
+            return false;
+        }
+
+        var openParen = BashLineContinuation.Skip(
+            source.AsSpan(0, end), start + 1, BashContinuationContext.Unquoted);
+        if (openParen >= end - 1 || source[openParen] != '(')
+        {
+            return false;
+        }
+
+        bodyStart = openParen + 1;
+        bodyLength = end - 1 - bodyStart;
+        return true;
+    }
+
+    /// <summary>
+    /// Finds the <c>(</c> of a <c>$(</c> or <c>$((</c> that starts at
+    /// <paramref name="dollar"/>, after any line continuations (#243).
+    /// </summary>
+    private static bool TryFindDollarParen(
+        ReadOnlySpan<char> src,
+        int dollar,
+        BashContinuationContext context,
+        out int openParen)
+    {
+        openParen = BashLineContinuation.Skip(src, dollar + 1, context);
+        return openParen < src.Length && src[openParen] == '(';
+    }
+
+    /// <summary>
+    /// True when the <c>$((</c> marker at <paramref name="dollar"/> has a line
+    /// continuation in it, such as <c>$(\⏎(</c>. Bash reads it as arithmetic,
+    /// but the arithmetic grammar reads only an exact marker.
+    /// </summary>
+    private static bool IsSplitArithmeticMarker(
+        ReadOnlySpan<char> src,
+        int dollar,
+        int openParen,
+        BashContinuationContext context)
+    {
+        var secondParen = BashLineContinuation.Skip(src, openParen + 1, context);
+        return secondParen < src.Length && src[secondParen] == '(' &&
+            secondParen != dollar + 2;
+    }
+
     private static CommandSubstitutionScan StructuralNestingOverflow(int endIndex) =>
         new(
             endIndex,
@@ -1172,8 +1269,15 @@ internal static class BashLexer
     }
 
     private static int ConsumeArithmetic(
-        ReadOnlySpan<char> src, int start, List<BashToken> tokens)
+        ReadOnlySpan<char> src, int start, int secondParen, List<BashToken> tokens)
     {
+        if (secondParen != start + 2)
+        {
+            // Bash reads `$(\⏎(` as `$((`. The arithmetic grammar reads only
+            // an exact `$((` marker, so a split marker fails closed (#243).
+            return AddArithmeticMarkerSentinel(src, start, tokens);
+        }
+
         // src[start] = '$', src[start+1] = '(', src[start+2] = '(' — and we
         // need to skip past matching '))'. Use the opaque scanner anchored
         // at the outer '(' so we count the correct depth: the inner '(' is
@@ -1238,10 +1342,40 @@ internal static class BashLexer
         return start + length;
     }
 
-    private static int ConsumeObsoleteArithmetic(
+    private const string ArithmeticMarkerContinuationReason =
+        "a line continuation inside the Bash '$((' marker is not supported";
+
+    private static int AddArithmeticMarkerSentinel(
         ReadOnlySpan<char> src, int start, List<BashToken> tokens)
     {
-        var scan = OpaqueRegionScanner.Scan(src, start + 1, '[', ']');
+        tokens.Add(new BashToken(
+            BashTokenKind.UnparseableSentinel,
+            src.Slice(start).ToString(),
+            null,
+            start,
+            src.Length - start,
+            ArithmeticMarkerContinuationReason));
+        return src.Length;
+    }
+
+    /// <summary>
+    /// The body of <c>${…}</c> between <paramref name="openBrace"/> and
+    /// <paramref name="closeBrace"/>. Bash removes a line continuation in it,
+    /// so <c>${\⏎x}</c> reads <c>x</c> (#243).
+    /// </summary>
+    private static string BracedParameterBody(
+        ReadOnlySpan<char> src,
+        int openBrace,
+        int closeBrace,
+        BashContinuationContext context) =>
+        BashLineContinuation.Remove(
+            src.Slice(openBrace + 1, closeBrace - openBrace - 1),
+            context);
+
+    private static int ConsumeObsoleteArithmetic(
+        ReadOnlySpan<char> src, int start, int openBracket, List<BashToken> tokens)
+    {
+        var scan = OpaqueRegionScanner.Scan(src, openBracket, '[', ']');
         var endInclusive = scan.Closed ? scan.EndIndex : src.Length - 1;
         var length = endInclusive - start + 1;
         var reason = scan.Closed
@@ -1258,13 +1392,12 @@ internal static class BashLexer
     }
 
     private static bool TryConsumeComplexParamExpansion(
-        ReadOnlySpan<char> src, int start, List<BashToken> tokens, out int afterBrace)
+        ReadOnlySpan<char> src, int start, int openBrace, List<BashToken> tokens, out int afterBrace)
     {
-        // src[start] = '$', src[start+1] = '{'. We need to find the matching
+        // src[start] = '$', src[openBrace] = '{'. We need to find the matching
         // '}' and decide: a simple variable, positional, or special parameter
         // falls through to the word reader. Operators can themselves contain
         // executable substitutions, so every other body fails closed.
-        var openBrace = start + 1;
         var scan = OpaqueRegionScanner.Scan(src, openBrace, '{', '}');
         if (!scan.Closed)
         {
@@ -1280,10 +1413,8 @@ internal static class BashLexer
         }
 
         var endInclusive = scan.EndIndex;
-        var bodyStart = openBrace + 1;
-        var bodyEnd = endInclusive; // exclusive of '}'
-        var body = src.Slice(bodyStart, bodyEnd - bodyStart);
-        if (IsSimpleBracedParameterName(body))
+        if (IsSimpleBracedParameterName(BracedParameterBody(
+                src, openBrace, endInclusive, BashContinuationContext.Unquoted).AsSpan()))
         {
             afterBrace = -1;
             return false;
@@ -1364,25 +1495,35 @@ internal static class BashLexer
             // Unsupported expansion forms terminate the word so the outer
             // tokenizer can emit one fail-closed sentinel at their exact
             // authored boundary. Simple ${VAR}, $VAR, $$ etc. are absorbed.
-            if (c == '$' && i + 1 < src.Length)
+            // The outer tokenizer reads `$` with the same continuation rule,
+            // so a break here always reaches its `$` dispatch (#243).
+            var dollarNext = c == '$'
+                ? BashLineContinuation.Skip(src, i + 1, BashContinuationContext.Unquoted)
+                : src.Length;
+            if (dollarNext < src.Length)
             {
-                var next = src[i + 1];
+                var next = src[dollarNext];
 
                 // `$'…'` and `$"…"` start a new quoted part of the word. The
                 // outer tokenizer decodes them or fails closed (#232).
                 if (next is '(' or '[' or '\'' or '"') break;
                 if (next == '{')
                 {
-                    var openBrace = i + 1;
-                    var scan = OpaqueRegionScanner.Scan(src, openBrace, '{', '}');
+                    var scan = OpaqueRegionScanner.Scan(src, dollarNext, '{', '}');
                     if (!scan.Closed) break; // let outer loop emit the sentinel
 
-                    var body = src.Slice(openBrace + 1, scan.EndIndex - openBrace - 1);
-                    if (!IsSimpleBracedParameterName(body)) break;
+                    var body = BracedParameterBody(
+                        src, dollarNext, scan.EndIndex, BashContinuationContext.Unquoted);
+                    if (!IsSimpleBracedParameterName(body.AsSpan())) break;
                 }
 
                 if (TryAppendBashExpansion(
-                        src, ref i, value, allowFieldSplit: true, out var error))
+                        src,
+                        ref i,
+                        value,
+                        allowFieldSplit: true,
+                        BashContinuationContext.Unquoted,
+                        out var error))
                 {
                     if (error is not null) break;
                     continue;
@@ -1449,16 +1590,25 @@ internal static class BashLexer
         ref int index,
         ShellValueBuilder value,
         bool allowFieldSplit,
+        BashContinuationContext context,
         out string? error)
     {
         error = null;
         var start = index;
-        if (start + 1 >= src.Length || src[start] != '$')
+        if (start >= src.Length || src[start] != '$')
         {
             return false;
         }
 
-        var next = src[start + 1];
+        // Bash removes a line continuation before it reads the expansion,
+        // so `"$\⏎(id)"` runs `id` (#243).
+        var nextIndex = BashLineContinuation.Skip(src, start + 1, context);
+        if (nextIndex >= src.Length)
+        {
+            return false;
+        }
+
+        var next = src[nextIndex];
         if (next == '[')
         {
             error = "obsolete arithmetic expansion '$[…]': not supported in v0.3";
@@ -1468,7 +1618,14 @@ internal static class BashLexer
 
         if (next == '(')
         {
-            if (start + 2 < src.Length && src[start + 2] == '(')
+            if (IsSplitArithmeticMarker(src, start, nextIndex, context))
+            {
+                error = ArithmeticMarkerContinuationReason;
+                index = src.Length;
+                return true;
+            }
+
+            if (start + 2 < src.Length && src[start + 1] == '(' && src[start + 2] == '(')
             {
                 if (BashArithmeticGrammar.TryScanExpansion(
                         src,
@@ -1491,7 +1648,7 @@ internal static class BashLexer
                 return true;
             }
 
-            var scan = ScanCommandSubstitution(src, start + 1);
+            var scan = ScanCommandSubstitution(src, nextIndex);
             if (!scan.Closed)
             {
                 error = scan.Error ?? "unbalanced '$(' command substitution";
@@ -1501,7 +1658,7 @@ internal static class BashLexer
 
             var length = scan.EndIndex - start + 1;
             value.AppendOpaque(
-                src.Slice(start, length).ToString(),
+                OpaqueSubstitutionText(src.Slice(start, length)),
                 ShellOpaqueCause.CommandSubstitution,
                 start,
                 length);
@@ -1513,7 +1670,7 @@ internal static class BashLexer
         int expansionLength;
         if (next == '{')
         {
-            var scan = OpaqueRegionScanner.Scan(src, start + 1, '{', '}');
+            var scan = OpaqueRegionScanner.Scan(src, nextIndex, '{', '}');
             if (!scan.Closed)
             {
                 error = "unbalanced '${' parameter expansion";
@@ -1522,7 +1679,7 @@ internal static class BashLexer
             }
 
             expansionLength = scan.EndIndex - start + 1;
-            name = src.Slice(start + 2, expansionLength - 3).ToString();
+            name = BracedParameterBody(src, nextIndex, scan.EndIndex, context);
             if (!IsSimpleBracedParameterName(name.AsSpan()))
             {
                 error = "complex parameter expansion is not supported in v0.3";
@@ -1532,19 +1689,25 @@ internal static class BashLexer
         }
         else if (IsBashIdentifierStart(next))
         {
-            var end = start + 2;
-            while (end < src.Length && IsBashIdentifierContinuation(src[end]))
+            // `$n\⏎dir` reads the variable `ndir`. A continuation after the
+            // last name character stays outside the expansion.
+            var end = nextIndex + 1;
+            var afterContinuation = BashLineContinuation.Skip(src, end, context);
+            while (afterContinuation < src.Length &&
+                   IsBashIdentifierContinuation(src[afterContinuation]))
             {
-                end++;
+                end = afterContinuation + 1;
+                afterContinuation = BashLineContinuation.Skip(src, end, context);
             }
 
             expansionLength = end - start;
-            name = src.Slice(start + 1, expansionLength - 1).ToString();
+            name = BashLineContinuation.Remove(
+                src.Slice(nextIndex, end - nextIndex), context);
         }
         else if (next is '?' or '$' or '#' or '-' or '!' or '@' or '*'
             || next is >= '0' and <= '9')
         {
-            expansionLength = 2;
+            expansionLength = nextIndex + 1 - start;
             name = next.ToString();
         }
         else
@@ -1567,7 +1730,7 @@ internal static class BashLexer
         }
 
         value.AppendExpansion(
-            src.Slice(start, expansionLength).ToString(),
+            BashLineContinuation.Remove(src.Slice(start, expansionLength), context),
             transforms,
             new ShellExpansionReference(kind, name),
             cardinality,
@@ -2006,11 +2169,15 @@ internal static class BashLexer
             if (character == '$')
             {
                 var afterExpansion = index;
+                // Bash joins the lines of an expanding body before it reads
+                // them, which this scan does not model. Without a skip, a
+                // continuation after `$` reaches the fail-closed check above.
                 if (TryAppendBashExpansion(
                         src.Slice(0, bodyEnd),
                         ref afterExpansion,
                         builder,
                         allowFieldSplit: false,
+                        BashContinuationContext.None,
                         out var expansionError))
                 {
                     if (expansionError is not null)

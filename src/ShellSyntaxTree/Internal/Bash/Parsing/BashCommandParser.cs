@@ -958,6 +958,13 @@ internal static partial class BashCommandParser
                     {
                         var sourceRaw = SourceSlice(source, t);
 
+                        // A word token is unquoted text. Bash removes its line
+                        // continuations before it reads it, so `-\⏎o` is the
+                        // option `-o` (#243). Option tables and the inline
+                        // value read this spelling; Raw keeps the exact source.
+                        var spelling = BashLineContinuation.Remove(
+                            sourceRaw.AsSpan(), BashContinuationContext.Unquoted);
+
                         // Bash concatenates adjacent word fragments into one
                         // argv entry. Preserve that behavior for an inline option
                         // whose value is quoted or computed:
@@ -968,6 +975,7 @@ internal static partial class BashCommandParser
                                 source,
                                 t.SourceStart,
                                 t.SourceStart + t.SourceLength,
+                                // A source offset, so it uses the exact slice.
                                 t.SourceStart + sourceRaw.IndexOf('=') + 1,
                                 adjacentFlagPart + "=",
                                 GetResolverValue(t, adjacentValuePrefix),
@@ -1065,9 +1073,9 @@ internal static partial class BashCommandParser
                         if (TrySplitInlineFlag(
                                 t, out var flagPart, out var valuePart))
                         {
-                            var rawEquals = sourceRaw.IndexOf('=');
+                            var rawEquals = spelling.IndexOf('=');
                             var rawValuePart = rawEquals >= 0
-                                ? sourceRaw.Substring(rawEquals + 1)
+                                ? spelling.Substring(rawEquals + 1)
                                 : valuePart;
                             // Flag arg.
                             argList.Add(new Arg
@@ -1169,9 +1177,9 @@ internal static partial class BashCommandParser
                             // attributes correctly.
                             if (verbKeyForFlagValuePaths is not null
                                 && BashVerbs.FlagsWithValue.TryGetValue(verbKeyForFlagValuePaths, out var flagsTable)
-                                && flagsTable.Contains(sourceRaw))
+                                && flagsTable.Contains(spelling))
                             {
-                                pendingFlagForValue = sourceRaw;
+                                pendingFlagForValue = spelling;
                             }
                             else
                             {
@@ -1444,8 +1452,14 @@ internal static partial class BashCommandParser
             return;
         }
 
+        // A line continuation is not quoting: `>&\⏎2` duplicates fd 2 (#243).
+        // Any quote or escape still makes the spelling differ from the value.
         if (target.Kind == BashTokenKind.Word
-            && string.Equals(SourceSlice(source, target), target.Value, StringComparison.Ordinal)
+            && string.Equals(
+                BashLineContinuation.Remove(
+                    SourceSlice(source, target).AsSpan(), BashContinuationContext.Unquoted),
+                target.Value,
+                StringComparison.Ordinal)
             && IsFdDupTarget(target.Value))
         {
             // POSIX fd-dup / fd-close shorthand: `&N`, `&N-`, `&-`. These

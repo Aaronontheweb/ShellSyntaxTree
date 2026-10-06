@@ -43,8 +43,19 @@ internal static class BashWordExpansionFacts
             var c = raw[index];
             if (c == '\\')
             {
-                active.Append('x');
-                index += 2;
+                // Bash removes a line continuation, so `{a.\⏎.c}` is the
+                // brace sequence `{a..c}` (#243). Any other backslash quotes
+                // the next character.
+                var continuation = BashLineContinuation.LengthAt(
+                    raw.AsSpan(),
+                    index,
+                    inDouble ? BashContinuationContext.DoubleQuoted : BashContinuationContext.Unquoted);
+                if (continuation == 0)
+                {
+                    active.Append('x');
+                }
+
+                index += continuation > 0 ? continuation : 2;
                 continue;
             }
 
@@ -57,15 +68,12 @@ internal static class BashWordExpansionFacts
                     continue;
                 }
 
-                if (c == '$' && index + 1 < raw.Length &&
-                    (raw[index + 1] == '@' ||
-                     index + 3 < raw.Length && raw[index + 1] == '{' &&
-                     raw[index + 2] == '@' && raw[index + 3] == '}'))
+                if (c == '$' && IsQuotedAllPositional(raw, index))
                 {
                     maySplit = true;
                 }
 
-                if (!TrySkipSubstitution(raw, ref index))
+                if (!TrySkipSubstitution(raw, ref index, BashContinuationContext.DoubleQuoted))
                 {
                     return (true, true);
                 }
@@ -74,6 +82,11 @@ internal static class BashWordExpansionFacts
                 continue;
             }
 
+            // Bash removes a line continuation before it reads `$`, so
+            // `$\⏎'a'` is an ANSI-C string and `$\⏎(id)` a substitution (#243).
+            var dollarNext = c == '$'
+                ? BashLineContinuation.Skip(raw.AsSpan(), index + 1, BashContinuationContext.Unquoted)
+                : raw.Length;
             switch (c)
             {
                 case '\'':
@@ -92,8 +105,8 @@ internal static class BashWordExpansionFacts
                     inDouble = true;
                     index++;
                     continue;
-                case '$' when index + 1 < raw.Length && raw[index + 1] == '\'':
-                    if (!BashAnsiCQuoting.TryFindEnd(raw.AsSpan(), index, out var ansiEnd))
+                case '$' when dollarNext < raw.Length && raw[dollarNext] == '\'':
+                    if (!BashAnsiCQuoting.TryFindEnd(raw.AsSpan(), dollarNext, out var ansiEnd))
                     {
                         return (true, true);
                     }
@@ -101,9 +114,9 @@ internal static class BashWordExpansionFacts
                     active.Append('x');
                     index = ansiEnd;
                     continue;
-                case '$' when index + 1 < raw.Length && raw[index + 1] == '"':
+                case '$' when dollarNext < raw.Length && raw[dollarNext] == '"':
                     inDouble = true;
-                    index += 2;
+                    index = dollarNext + 1;
                     continue;
                 case '$' when BashArithmeticGrammar.TryScanExpansion(raw.AsSpan(), index, out var arithmeticEnd):
                     // A bounded arithmetic result is an integer. It has no
@@ -112,11 +125,11 @@ internal static class BashWordExpansionFacts
                     active.Append('x');
                     index = arithmeticEnd;
                     continue;
-                case '$' when index + 1 < raw.Length:
+                case '$' when dollarNext < raw.Length:
                 case '`':
                     mayExpand = true;
                     maySplit = true;
-                    if (!TrySkipSubstitution(raw, ref index))
+                    if (!TrySkipSubstitution(raw, ref index, BashContinuationContext.Unquoted))
                     {
                         return (true, true);
                     }
@@ -155,7 +168,40 @@ internal static class BashWordExpansionFacts
     /// <c>$((…))</c>, <c>${…}</c>, <c>$name</c>, or backtick region that starts
     /// at <paramref name="index"/>. Returns false when the region has no end.
     /// </summary>
-    private static bool TrySkipSubstitution(string raw, ref int index)
+    /// <summary>
+    /// True for <c>$@</c> or <c>${@}</c> at <paramref name="dollar"/> in
+    /// double quotes, also with line continuations in it.
+    /// </summary>
+    private static bool IsQuotedAllPositional(string raw, int dollar)
+    {
+        var next = BashLineContinuation.Skip(
+            raw.AsSpan(), dollar + 1, BashContinuationContext.DoubleQuoted);
+        if (next >= raw.Length)
+        {
+            return false;
+        }
+
+        if (raw[next] == '@')
+        {
+            return true;
+        }
+
+        if (raw[next] != '{')
+        {
+            return false;
+        }
+
+        var close = raw.IndexOf('}', next + 1);
+        return close > next &&
+            BashLineContinuation.Remove(
+                raw.AsSpan(next + 1, close - next - 1),
+                BashContinuationContext.DoubleQuoted) == "@";
+    }
+
+    private static bool TrySkipSubstitution(
+        string raw,
+        ref int index,
+        BashContinuationContext context)
     {
         var c = raw[index];
         if (c == '`')
@@ -175,16 +221,19 @@ internal static class BashWordExpansionFacts
             return true;
         }
 
-        if (c != '$' || index + 1 >= raw.Length)
+        var nextIndex = c == '$'
+            ? BashLineContinuation.Skip(raw.AsSpan(), index + 1, context)
+            : raw.Length;
+        if (nextIndex >= raw.Length)
         {
             index++;
             return true;
         }
 
-        var next = raw[index + 1];
+        var next = raw[nextIndex];
         if (next == '(')
         {
-            if (!BashLexer.TryFindCommandSubstitutionEnd(raw.AsSpan(), index + 1, out var close))
+            if (!BashLexer.TryFindCommandSubstitutionEnd(raw.AsSpan(), nextIndex, out var close))
             {
                 return false;
             }
@@ -195,7 +244,7 @@ internal static class BashWordExpansionFacts
 
         if (next == '{')
         {
-            var close = raw.IndexOf('}', index + 2);
+            var close = raw.IndexOf('}', nextIndex + 1);
             if (close < 0)
             {
                 return false;
@@ -205,20 +254,20 @@ internal static class BashWordExpansionFacts
             return true;
         }
 
-        // `$name` continues over name characters. `$1` and `$?` end after
-        // one character.
-        index++;
-        if (raw[index] == '_' || char.IsLetter(raw[index]))
+        // `$name` continues over name characters, also across a line
+        // continuation. `$1` and `$?` end after one character.
+        index = nextIndex + 1;
+        if (next == '_' || char.IsLetter(next))
         {
-            while (index < raw.Length && (raw[index] == '_' || char.IsLetterOrDigit(raw[index])))
+            var afterContinuation = BashLineContinuation.Skip(raw.AsSpan(), index, context);
+            while (afterContinuation < raw.Length &&
+                   (raw[afterContinuation] == '_' || char.IsLetterOrDigit(raw[afterContinuation])))
             {
-                index++;
+                index = afterContinuation + 1;
+                afterContinuation = BashLineContinuation.Skip(raw.AsSpan(), index, context);
             }
-
-            return true;
         }
 
-        index++;
         return true;
     }
 }
