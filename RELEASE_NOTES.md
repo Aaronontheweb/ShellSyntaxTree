@@ -1,3 +1,29 @@
+#### 0.4.0-beta.23 2026-10-06 ####
+
+This prerelease adds literal twins of Bash commands whose argument words have a proved finite set of values.
+
+## Added
+
+- `BashParser.TryProjectLiteralTwins` and the records `BashLiteralTwinProjection`, `BashLiteralTwinCommand`, `BashLiteralTwin`, and `BashLiteralTwinWord`.
+- A twin writes each changeable argument word of one command (an expansion or a tilde word) as one literal value. The parser parses the text of that one command in the exact directory of the command, with the launch facts that are live there. The twin occurrence has the normal facts of the typed literal: command words, path facts, and expansion facts. `BashLiteralTwin.WorkingDirectory` names the directory.
+- The projection gives one twin for each combination of values, up to 32 for one command.
+- Example: `for n in 8250 8244; do gh api repos/o/r/issues/$n; done` gives the twins `gh api repos/o/r/issues/8250` and `gh api repos/o/r/issues/8244`. `for f in a.txt b.txt; do cat "$f"; done` gives twins with the command words `cat`.
+
+## Security and compatibility
+
+- A command gets no twins when it is incomplete, when its directory is not exact, when it has an assignment prefix, when a verb word is not static, when a word has no complete finite value set, when an unquoted value can split or glob, when a redirect depends on a value, when it has a heredoc, or when its twins do not fit in the budget. The caller keeps its current behavior for such a command.
+- An unquoted word uses its authored values only under `FreshNonInteractiveNoStartup`, and only when each value is nonempty and has no space, tab, newline, `*`, `?`, `[`, parenthesis, or backslash. The parenthesis rule covers a Bash build with `extglob` on by default.
+- A source with a backslash-newline, a carriage return, `=~`, or `:~` anywhere gets no twins. The lexer does not model this text as Bash does. The `=~` and `:~` rule covers a loop list item such as `for f in if=~/x`, and it also stops `[[ $x =~ re ]]`.
+- When the source has `~` or `HOME`, a command gets twins only with a live launch `HOME`. Without it, the home directory is the caller assumption `HomeDirectory`.
+- A command whose exact directory comes from `HOME` (after `cd`, `cd --`, `builtin cd`, or `if cd; then`) gets twins only with a live launch `HOME`. The projection finds such a command with one more parse that uses another `HomeDirectory`.
+- The projection gives no twins under `BashInitialStateMode.Unknown`. In that mode the parser can report `-o"$n"` as the exact value `-o$n`.
+- Budget: one call parses at most 128 twins and at most 2,048 + 8 x (source length) characters of twin text, plus at most one more parse of the source for the `HOME` check. The projection checks the budget before it builds a twin, so its cost stays a small constant factor of one `Parse`. On an 80 KB source with 8,000 commands, the projection takes about as long as `Parse`.
+- Values of different words combine independently. The twin set can hold combinations that never run, so a check of every twin is stricter, not weaker.
+- A Linux test runs each source and each twin in GNU Bash and compares the argv and the working directory.
+- With the 0.4.0-beta.22 lexer, a backslash-newline, a carriage return, and an assignment-shaped `=~` or `:~` give correct `Parse` facts or fail closed. The projection keeps its guards for this text as defense in depth. Twins of a source without such text do not change.
+- A twin grants no authority. Existing facts do not change: `Parse` gives the same output as 0.4.0-beta.22.
+- Public API: additive.
+
 #### 0.4.0-beta.22 2026-10-06 ####
 
 This prerelease fixes security bugs. A Bash line continuation, a carriage return, or a `#` after a quoted part could hide a command from `Parse` (#243). In the examples, `⏎` is a real newline and CR is a carriage return.

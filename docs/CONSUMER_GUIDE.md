@@ -978,6 +978,74 @@ The existing resolver normalizes Windows separators to `/`. By contrast,
 relative to another operand rather than an independently resolved path.
 Non-filesystem providers and native remote endpoints also remain unknown.
 
+### Literal twins of loop values
+
+From 0.4.0-beta.23, `BashParser.TryProjectLiteralTwins` writes each command
+of a loop once for each proved value, as if a person typed the literal. Use it
+when a loop word has a finite set of values and you want the facts of the
+literal command, not a rule for the expansion:
+
+```csharp
+var parser = new BashParser(new BashParserOptions
+{
+    WorkingDirectory = "/work",
+    InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+    PublishAuthoredSourceFacts = true,
+});
+
+const string source =
+    "for n in 8250 8244; do gh api -X PATCH repos/o/r/issues/$n -f milestone=157; done";
+if (parser.TryProjectLiteralTwins(source, out var projection))
+{
+    foreach (var command in projection!.Commands)
+    {
+        foreach (var twin in command.Twins)
+        {
+            // twin.Source is `gh api -X PATCH repos/o/r/issues/8250 -f milestone=157`.
+            // twin.Occurrence has the command words `gh api` and the path facts
+            // of the literal word. Check it as you check a typed command.
+        }
+    }
+}
+```
+
+Rules for a consumer:
+
+- Check every twin of an occurrence. Use the strictest result. One twin
+  that fails your policy fails the occurrence.
+- An occurrence that has no twins keeps its normal facts. Treat it as you
+  did before.
+- Twins of different words combine independently, so some twins never run.
+  This makes the check stricter, never weaker.
+- `twin.Source` is the text of one command. The parser parsed it in
+  `twin.WorkingDirectory` with the launch facts that are live at the command.
+  To run your own analysis on it, use that directory.
+- Read the words, values, and path facts from `twin.Occurrence`. Read the
+  structure (role, ancestry, assignments) from `SourceOccurrence`.
+- An unquoted word gets twins only under `FreshNonInteractiveNoStartup`
+  with `PublishAuthoredSourceFacts`, and only when no value can split or glob.
+- A source with `~` or `HOME` gets twins only with a live launch `HOME` in
+  `LaunchEnvironment`. A command whose directory comes from `HOME` (after a
+  `cd` without an operand) also needs a live launch `HOME`.
+- The projection gives no twins under `BashInitialStateMode.Unknown`.
+
+Warnings:
+
+- Do not run `twin.Source`. Bash runs only the authored source. A twin can
+  hold a combination of values that never runs.
+- When the method returns `false`, `projection` is null. Use your own result
+  of `Parse` for the normal facts.
+- The twin facts are only as good as the `Parse` value facts. The self-check
+  compares the parser with itself, not with Bash. The projection gives no
+  twins for a source with a backslash-newline, a carriage return, or `=~` or
+  `:~` anywhere. Before 0.4.0-beta.22 the lexer modeled this text wrongly.
+  The guards stay as defense in depth. A test of the library compares each
+  twin with the argv and the directory that GNU Bash uses.
+- One call parses at most 128 twins and at most 2,048 + 8 x (source length)
+  characters of twin text. A command that does not fit gets no twins.
+
+A twin is evidence. It does not grant authority.
+
 ## Filesystem tree-access effects
 
 Target 0.4.0-beta.1 adds `CommandOccurrence.FileSystemTreeAccesses` so a

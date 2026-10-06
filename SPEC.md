@@ -111,6 +111,9 @@ public sealed class BashParser : IShellParser
     public bool TryProjectFiniteScopes(
         string command,
         out BashFiniteScopeProjection? projection);
+    public bool TryProjectLiteralTwins(
+        string command,
+        out BashLiteralTwinProjection? projection);
 }
 
 /// <summary>PowerShell implementation of IShellParser (v0.2.0). The
@@ -276,6 +279,12 @@ public enum ShellTreeTraversalMode { ... }
 public sealed record BashFiniteScopeProjection { ... }
 public sealed record BashScopedCommand { ... }
 
+// v0.4.0-beta.23 literal twin evidence — see §3.
+public sealed record BashLiteralTwinProjection { ... }
+public sealed record BashLiteralTwinCommand { ... }
+public sealed record BashLiteralTwin { ... }
+public sealed record BashLiteralTwinWord { ... }
+
 // v0.4.0-beta.7 command-word evidence — see §3.
 public abstract record ShellCommandWords { ... }
 ```
@@ -364,6 +373,37 @@ public sealed record BashScopedCommand
     public string Source { get; internal init; }
     public int SourceStart { get; internal init; }
     public string WorkingDirectory { get; internal init; }
+}
+```
+
+`TryProjectLiteralTwins` (v0.4.0-beta.23) returns these parser-owned records:
+
+```csharp
+public sealed record BashLiteralTwinProjection
+{
+    public ParsedCommand Parsed { get; internal init; }
+    public IReadOnlyList<BashLiteralTwinCommand> Commands { get; internal init; }
+}
+
+public sealed record BashLiteralTwinCommand
+{
+    public CommandOccurrence SourceOccurrence { get; internal init; }
+    public int SourceOccurrenceIndex { get; internal init; }
+    public IReadOnlyList<BashLiteralTwin> Twins { get; internal init; }
+}
+
+public sealed record BashLiteralTwin
+{
+    public string Source { get; internal init; }
+    public string WorkingDirectory { get; internal init; }
+    public CommandOccurrence Occurrence { get; internal init; }
+    public IReadOnlyList<BashLiteralTwinWord> Words { get; internal init; }
+}
+
+public sealed record BashLiteralTwinWord
+{
+    public int ClauseElementIndex { get; internal init; }
+    public string Value { get; internal init; }
 }
 ```
 
@@ -1487,6 +1527,137 @@ For example, `cd /work/sub && true; touch marker.txt` from `/work` yields
 `touch` under both `/work` and `/work/sub`. Its path facts name both possible
 files. By contrast, `cd "$target" && touch marker.txt` yields no projection.
 The caller owns filesystem checks, policy, grant matching, and process launch.
+
+#### Literal twin projection (v0.4.0-beta.23)
+
+`BashParser.TryProjectLiteralTwins` gives a consumer the facts of each literal
+command that a loop or a bounded variable can run. A changeable argument word
+is a word that the shell can change before the program runs: an expansion
+(`$n`, `"$f"`, `repos/x/$n`) or a tilde word. For each occurrence whose
+changeable words all have a proved finite set of values, the projection
+writes one literal twin for each combination of values. A twin text is the
+authored text of that one command, from its first word to its last word, with
+each changeable word written as one literal word. The parser parses the twin
+text in the exact directory of the occurrence, with the launch facts that are
+live there. The twin occurrence then has its own normal facts: `CommandWords`,
+verb tokens, path facts, `AuthoredFileSystemValue`, and the expansion facts of
+a typed literal. Its structure (role, ancestry) is that of one top-level
+command, so read the structure from `SourceOccurrence`.
+
+The projection uses this schematic flow:
+
+```text
+give nothing when the initial state mode is Unknown
+give nothing when the source has a backslash-newline, a carriage return,
+    `=~`, or `:~`
+for each occurrence of the full parse:
+    give nothing unless the occurrence is complete
+    give nothing unless its directory is exact
+    without a live launch HOME, give nothing when its directory changes
+        in one more parse with another HomeDirectory
+    give nothing when it has an assignment prefix (`X=1 cmd`)
+    give nothing when the source has `~` or `HOME` and no live launch HOME
+    give nothing unless each word has a span in the submitted source
+    give nothing unless each redirect is fixed
+    for each word that is not static:
+        give nothing unless it is one argument with an analyzed value
+        values = effective Exact or FiniteSet value
+        if the word can split or glob:
+            values = authored Exact or FiniteSet value when the effective value is Unknown
+            give nothing unless the mode is FreshNonInteractiveNoStartup
+            give nothing unless each value is nonempty and has no
+                space, tab, newline, *, ?, [, (, ), or backslash
+    give nothing when the combinations pass 32
+    compute the length of every twin text before any build
+for each occurrence that passed, in order:
+    give nothing when its twins do not fit in the rest of the budget:
+        128 twin parses, and 2,048 + 8 x (source length) twin characters
+    charge its twin count and twin characters
+    for each combination:
+        write each value as one literal word (plain text, else single quotes)
+        parse the twin text in the directory of the occurrence
+        give nothing unless the twin is one complete command in that
+            directory, and each written word is one literal word with that
+            exact value
+```
+
+A word is static when it has no expansion, glob character, brace list, or
+leading tilde. A twin keeps every static word as authored. A verb word must be
+static. A fixed redirect is an exact file target, a descriptor operation, or a
+here-string with exact data. A heredoc body is outside the words of the
+command, so the twin text cannot hold it, and a command with a heredoc gets no
+twins.
+
+The effective value of an unquoted expansion stays `Unknown`, because the
+shell can split or glob it. Under `FreshNonInteractiveNoStartup`, the caller
+removes an inherited `IFS`, and the parser rejects source that changes `IFS`
+or a glob option. Bash then splits only on space, tab, and newline. It globs
+on `*`, `?`, and `[`, and, when a Bash build turns `extglob` on by default,
+also on a pattern such as `@(a)` or `+(a)`. A nonempty value without these
+characters, without a parenthesis, and without a backslash stays one
+unchanged word. Only then does the projection use the authored value of an
+unquoted word. An empty value can remove the word, so it gives no twin. The
+authored value needs `PublishAuthoredSourceFacts`.
+
+Some guards are wider than Bash, because the twin facts are only as good as
+the `Parse` value facts. A value can come from any part of the source, such as
+a loop list, so these guards read the full source. The first two guards cover
+text that `Parse` modeled wrongly before v0.4.0-beta.22. Since then `Parse`
+gives correct facts for it or fails closed, and the guards stay as defense in
+depth:
+
+- Bash removes a backslash-newline before it reads a word, also inside an
+  expansion. Bash reads a carriage return as a word character. A source with
+  either text gets no twins.
+- Bash expands a tilde after `=` and after `:` in an argument or a loop list
+  item that looks like an assignment (`dd if=~/x`, `for f in if=~/x`). A source
+  with `=~` or `:~` anywhere gets no twins. This also stops `[[ $x =~ re ]]`.
+- Without a live launch `HOME`, the home directory is the caller assumption
+  `HomeDirectory`. When the source has `~` or `HOME`, an occurrence gets twins
+  only with a live launch `HOME`.
+- A `cd` without an operand (also `cd --`, `builtin cd`, `if cd; then`) goes
+  to `$HOME`. Without a live launch `HOME`, the parser takes that directory
+  from `HomeDirectory`. The projection does not read the `cd` forms. It parses
+  the source once more with another `HomeDirectory`, and an occurrence whose
+  exact directory changes gets no twins. When the launch facts export `HOME`
+  but `HOME` is not live at the occurrence, the occurrence gets no twins.
+- Under `BashInitialStateMode.Unknown`, the parser can report an exact value
+  for a word that Bash expands (`-o"$n"` gives `-o$n`). The projection gives
+  no twins in that mode.
+
+The budget is checked before a twin text is built. A twin text is one simple
+command with no loop, so its parse costs about as much as its length. The
+character budget grows with the source, so the twin work of one call stays a
+small constant factor of one `Parse`. An occurrence that does not fit gets no
+twins and costs no build and no parse. A charged occurrence keeps its charge
+when a twin fails.
+
+The values of different words combine independently. Two words that read one
+loop variable can give a twin with two different values. That combination
+does not run, but each of its values does. The twin set is a superset of the
+runs, so a consumer that checks every twin checks every run.
+
+An occurrence that is not in `Commands` has no twins. The method returns
+`false` and a null projection when no occurrence has twins. Bash runs only
+the authored source, never `twin.Source`. A literal value can move a word
+between the verb and argument roles, as the typed literal does: the twins of
+`for v in push fetch; do git $v origin; done` have the command words
+`git push origin` and `git fetch origin`.
+
+Positive example: from `/work`,
+`for n in 8250 8244; do gh api repos/o/r/issues/$n >/dev/null; done` gives two
+twins, `gh api repos/o/r/issues/8250 >/dev/null` and
+`gh api repos/o/r/issues/8244 >/dev/null`. Each twin occurrence has the
+command words `gh api` and the path fact of its literal word.
+
+Negative examples: `for n in $(gh issue list); do gh api repos/o/r/issues/$n; done`
+gives no twins, because the list has no proved values. `for f in 'a b' c; do cat $f; done`
+gives no twins, because `a b` splits. `for d in a b; do ~/bin/tool "$d"; done`
+gives no twins, because the program word is not static. `for f in if=~/x; do dd "$f"; done`
+gives no twins, because Bash expands the tilde in the list item.
+
+A twin is syntax evidence. It does not grant authority. The caller owns path
+policy, grant matching, and process launch, and it must check every twin.
 
 Effects join per authored occurrence. Two `Unchanged` visits remain
 `Unchanged`; two success-only changes join their bounded targets. Unknown,

@@ -57,4 +57,22 @@ public sealed class BashParser : IShellParser
         var parsed = Parse(command);
         return BashFiniteScopeAnalyzer.TryProject(parsed, _options, out projection);
     }
+
+    /// <summary>
+    /// Builds literal twins for each command whose changeable argument words
+    /// (an expansion, a tilde) have a proved finite set of values. A twin
+    /// writes each such word as one literal value. The parser then parses the
+    /// text of that one command in the exact directory of the command, so the
+    /// twin occurrence has the facts of the literal command. Returns false,
+    /// with a null projection, when no command has twins, and always under
+    /// <see cref="BashInitialStateMode.Unknown"/>. A command without twins
+    /// keeps the facts of <see cref="Parse(string)"/> only.
+    /// </summary>
+    public bool TryProjectLiteralTwins(
+        string command,
+        out BashLiteralTwinProjection? projection)
+    {
+        var parsed = Parse(command);
+        return BashLiteralTwinAnalyzer.TryProject(parsed, _options, out projection);
+    }
 }

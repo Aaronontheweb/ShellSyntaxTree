@@ -283,6 +283,12 @@ internal static class ShellCommandWordProjection
         MaySplit,
     }
 
+    /// <summary>
+    /// Returns true when the shell cannot change the authored Bash word: it
+    /// has no expansion, no glob character, no brace list, and no tilde.
+    /// </summary>
+    internal static bool IsStaticBashWord(string raw) => ScanBash(raw) == WordShape.Static;
+
     private static WordShape Scan(string raw, ShellProjectionLanguage language) =>
         language == ShellProjectionLanguage.Bash
             ? ScanBash(raw)

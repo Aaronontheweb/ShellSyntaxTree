@@ -10,15 +10,25 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.22 Bash line continuations, security)
+## NOW (0.4.0-beta.23 literal twins of loop values)
+
+- [x] Add `BashParser.TryProjectLiteralTwins`. Write each changeable argument word as one proved literal value.
+- [x] Give no twins for an incomplete occurrence, a verb word that is not static, a word without a complete finite value set, an unquoted value that can split or glob, a redirect that depends on a value, and combinations over the limit. Kill a hand mutant of each gate with a test.
+- [x] Review round 1: guard a backslash-newline, a carriage return, `=~` and `:~`, an unproved home directory, and `extglob` patterns. Count every twin parse against one budget of parses and source characters. Compare twins with GNU Bash argv on Linux.
+- [x] Review round 2: check `=~` and `:~` in the full source. Parse each twin as one command in its exact directory, and check the budget before a twin is built.
+- [x] Verification round: give no twins under the Unknown initial state, and for a directory that comes from an unproved `HOME`.
+- [x] Rebase on 0.4.0-beta.22 (#243). Keep the line-text guards. Run the twin tests, the real-Bash comparison, and the twin probe again.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.23` and verify NuGet publication.
+
+## Completed (0.4.0-beta.22 Bash line continuations, security)
 
 - [x] Remove a Bash line continuation before the lexer reads the next character of an expansion or an operator (#243). `echo "$\⏎(touch /tmp/x)"` gives the `touch` occurrence. Fail closed on a split `$((` marker.
 - [x] Fail closed on a CR in Bash code and on `\` + CR (owner decision). Comments end only at LF.
 - [x] Take a Bash `--name=value` value from the decoded word (owner decision).
 - [x] Review fixes: `#` after a word part is word text; reserved words, `((`, and `;;` read across a continuation; a `~` after `=` or `:` of an assignment-shaped word expands from HOME.
 - [x] Pin each case against real Bash. Prove the general rule: a continuation at any point gives the same facts or fails closed. Run manual mutants and an output comparison against beta.21.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.22` and verify NuGet publication.
-- [ ] Move the literal twins of #242 to 0.4.0-beta.23.
+- [x] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.22`.
+- [x] Move the literal twins of #242 to 0.4.0-beta.23.
 
 ## Completed (0.4.0-beta.21 restore the beta.19 verb-slot rule)
 
