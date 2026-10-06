@@ -66,6 +66,10 @@ internal struct BashAssignmentWordTilde
         Name,
         Value,
         Other,
+
+        // `name[` : Bash also accepts `name[subscript]=`. The parser does not
+        // model the subscript, so a later `~` after `=` or `:` is Unknown.
+        Subscript,
     }
 
     /// <summary>Classifies a <c>~</c> that is not the first character of the token.</summary>
@@ -76,7 +80,7 @@ internal struct BashAssignmentWordTilde
             return BashAssignmentTildeKind.Literal;
         }
 
-        if (!_isWordStart)
+        if (!_isWordStart || _state == State.Subscript)
         {
             return BashAssignmentTildeKind.Unknown;
         }
@@ -112,6 +116,10 @@ internal struct BashAssignmentWordTilde
                 {
                     _plus = true;
                 }
+                else if (character == '[' && _nameLength > 0 && !_plus)
+                {
+                    _state = State.Subscript;
+                }
                 else if (!_plus && IsNameCharacter(character, _nameLength == 0))
                 {
                     _nameLength++;
@@ -124,6 +132,9 @@ internal struct BashAssignmentWordTilde
                 return;
             case State.Value:
                 _tildeMayFollow = character == ':';
+                return;
+            case State.Subscript:
+                _tildeMayFollow = character is '=' or ':';
                 return;
             default:
                 // Not at the word start: the word may be assignment-shaped.

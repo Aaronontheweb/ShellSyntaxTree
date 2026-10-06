@@ -7,6 +7,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Xunit;
 
 namespace ShellSyntaxTree.Tests.Parsing;
@@ -112,14 +113,47 @@ internal static class BashOracle
         }
     }
 
+    /// <summary>
+    /// Asserts that <paramref name="shell"/> (for example <c>sh</c>, which is
+    /// dash on Debian and Ubuntu, or <c>bash --posix</c>) prints
+    /// <paramref name="expected"/> for <paramref name="source"/>.
+    /// </summary>
+    internal static void AssertShellPrints(
+        string[] shell,
+        string source,
+        string expected,
+        IReadOnlyDictionary<string, string>? environment = null)
+    {
+        if (!IsAvailable())
+        {
+            return;
+        }
+
+        var result = RunProcess(shell[0], shell.Skip(1).Append("-c").Append(source), null, environment);
+        Assert.NotNull(result);
+        Assert.True(result!.Value.ExitCode == 0, $"{shell[0]} failed: {result.Value.StandardError}");
+        Assert.Equal(expected, result.Value.StandardOutput.TrimEnd('\n'));
+    }
+
     private static ProcessResult? Run(
         string source,
         string? workingDirectory = null,
-        IReadOnlyDictionary<string, string>? environment = null)
+        IReadOnlyDictionary<string, string>? environment = null) =>
+        RunProcess(
+            "bash",
+            new[] { "--noprofile", "--norc", "-c", source },
+            workingDirectory,
+            environment);
+
+    private static ProcessResult? RunProcess(
+        string fileName,
+        IEnumerable<string> arguments,
+        string? workingDirectory,
+        IReadOnlyDictionary<string, string>? environment)
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = "bash",
+            FileName = fileName,
             WorkingDirectory = workingDirectory ?? string.Empty,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -127,10 +161,11 @@ internal static class BashOracle
             UseShellExecute = false,
             CreateNoWindow = true,
         };
-        startInfo.ArgumentList.Add("--noprofile");
-        startInfo.ArgumentList.Add("--norc");
-        startInfo.ArgumentList.Add("-c");
-        startInfo.ArgumentList.Add(source);
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
         startInfo.Environment["HOME"] = Home;
         if (environment is not null)
         {

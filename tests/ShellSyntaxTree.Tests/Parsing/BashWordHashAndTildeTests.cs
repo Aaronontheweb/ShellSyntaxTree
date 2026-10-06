@@ -313,6 +313,142 @@ public class BashWordHashAndTildeTests
         Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
     }
 
+    // ---------------------------------------------------------------- tilde gate (round 2)
+
+    public static TheoryData<string> ChildShellTildeSources => new()
+    {
+        "sh -c 'make PREFIX=~/x'",
+        "sh -c 'cp a b=~/.ssh/k'",
+        "bash --posix -c 'make PREFIX=~/x'",
+        // A plain `bash -c` child is also a separate shell: not proved.
+        "bash -c 'make PREFIX=~/x'",
+    };
+
+    [Theory]
+    [MemberData(nameof(ChildShellTildeSources))]
+    public void Child_shell_assignment_word_tilde_is_unknown(string source)
+    {
+        // dash (`sh` on Debian and Ubuntu) and POSIX-mode Bash keep the text.
+        BashOracle.AssertShellPrints(new[] { "sh" }, "printf '<%s>' PREFIX=~/x", "<PREFIX=~/x>");
+        BashOracle.AssertShellPrints(
+            new[] { "bash", "--noprofile", "--norc", "--posix" },
+            "printf '<%s>' PREFIX=~/x",
+            "<PREFIX=~/x>");
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var argument = parsed.Commands.Last().Arguments.Last();
+        Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
+        Assert.IsType<ShellValueDomain.Unknown>(argument.AuthoredValue);
+    }
+
+    [Fact]
+    public void Child_shell_redirect_target_with_an_assignment_word_tilde_is_not_proved()
+    {
+        BashOracle.AssertShellPrints(new[] { "sh" }, "printf '<%s>' b=~/y", "<b=~/y>");
+
+        var command = Parser.Parse("sh -c 'printf a > b=~/y'").Commands.Last();
+        var redirect = Assert.Single(command.Redirects);
+        Assert.False(redirect is FileRedirectAnalysis { Target: ShellValueDomain.Exact });
+    }
+
+    public static TheoryData<string> UnprovedModeTildeSources => new()
+    {
+        "make PREFIX=~/x",
+        "printf '<%s>' a=b:~/y",
+        "printf '<%s>' \"$(printf '%s' PREFIX=~/x)\"",
+    };
+
+    [Theory]
+    [MemberData(nameof(UnprovedModeTildeSources))]
+    public void Assignment_word_tilde_outside_the_fresh_mode_is_unknown(string source)
+    {
+        // An inherited POSIX mode keeps the text. Only the fresh mode
+        // excludes it, and only a launch-proved HOME is known.
+        BashOracle.AssertShellPrints(
+            new[] { "bash", "--noprofile", "--norc" },
+            "printf '<%s>' PREFIX=~/x",
+            "<PREFIX=~/x>",
+            new Dictionary<string, string> { ["POSIXLY_CORRECT"] = "1" });
+        var launch = new ShellLaunchEnvironment(
+            new Dictionary<string, string> { ["HOME"] = BashOracle.Home },
+            new[] { "CDPATH" });
+        foreach (var options in new[]
+                 {
+                     new BashParserOptions { HomeDirectory = BashOracle.Home, WorkingDirectory = "/work", InitialStateMode = BashInitialStateMode.Unknown, LaunchEnvironment = launch },
+                     new BashParserOptions { HomeDirectory = BashOracle.Home, WorkingDirectory = "/work", InitialStateMode = BashInitialStateMode.IsolatedNonInteractive, LaunchEnvironment = launch },
+                     new BashParserOptions { HomeDirectory = BashOracle.Home, WorkingDirectory = "/work", InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup },
+                 })
+        {
+            var parsed = new BashParser(options).Parse(source);
+            Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+            var tildeWords = parsed.Commands
+                .SelectMany(command => command.Arguments)
+                .Where(argument => argument.Element.Raw.StartsWith("PREFIX=~", System.StringComparison.Ordinal) ||
+                                   argument.Element.Raw.StartsWith("a=b:~", System.StringComparison.Ordinal))
+                .ToList();
+            Assert.NotEmpty(tildeWords);
+            Assert.All(tildeWords, argument => Assert.IsType<ShellValueDomain.Unknown>(argument.Value));
+        }
+    }
+
+    [Fact]
+    public void Redirect_target_outside_the_fresh_mode_is_not_proved()
+    {
+        var parser = new BashParser(new BashParserOptions
+        {
+            HomeDirectory = BashOracle.Home,
+            WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.IsolatedNonInteractive,
+        });
+
+        var redirect = Assert.Single(parser.Parse("printf a > b=~/y").Commands.Single().Redirects);
+        Assert.False(redirect is FileRedirectAnalysis { Target: ShellValueDomain.Exact });
+    }
+
+    [Fact]
+    public void Leading_tilde_assignment_parses_without_a_launch_home()
+    {
+        // A real assignment expands its leading `~` also in POSIX mode, so
+        // the gate does not make it unparseable.
+        var parser = new BashParser(new BashParserOptions
+        {
+            HomeDirectory = BashOracle.Home,
+            WorkingDirectory = "/work",
+            InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+        });
+
+        Assert.False(parser.Parse("x=~/a; printf '<%s>' \"$x\"").IsUnparseable);
+    }
+
+    [Theory]
+    [InlineData("a[0]=~/x", "a[0]=/home/test/x")]
+    [InlineData("a[0]+=~/x", "a[0]+=/home/test/x")]
+    [InlineData("a[x:~/y]=1", "a[x:/home/test/y]=1")]
+    public void Subscripted_assignment_word_tilde_is_unknown(string word, string bashValue)
+    {
+        // Bash accepts `name[subscript]=` and expands the `~`. The parser
+        // does not model the subscript, so the value and the pattern are
+        // not proved.
+        if (BashOracle.IsAvailable())
+        {
+            var logged = BashOracle.LoggedCommands("printf '<%s>' " + word)!;
+            Assert.Equal(bashValue, Assert.Single(logged)[2]);
+        }
+
+        var argument = Parser.Parse("printf '<%s>' " + word).Commands.Single().Arguments.Last();
+        Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
+        Assert.IsType<ShellValueDomain.Unknown>(argument.AuthoredValue);
+    }
+
+    [Fact]
+    public void Subscripted_redirect_target_is_not_proved()
+    {
+        var redirect = Assert.Single(Parser.Parse("printf a > a[0]=~/x/f").Commands.Single().Redirects);
+
+        Assert.False(redirect is FileRedirectAnalysis { Target: ShellValueDomain.Exact or ShellValueDomain.PathPattern });
+    }
+
     [Fact]
     public void Here_string_keeps_an_assignment_word_tilde()
     {

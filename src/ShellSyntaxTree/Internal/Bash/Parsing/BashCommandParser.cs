@@ -87,7 +87,7 @@ internal static partial class BashCommandParser
                 markBashCWrapped);
         }
 
-        var tokens = BashLexer.Tokenize(source);
+        var tokens = BashLexer.Tokenize(source, ExpandsAssignmentTilde(options, bashCDepth));
         for (var index = 0; index < tokens.Count; index++)
         {
             var token = tokens[index];
@@ -111,6 +111,20 @@ internal static partial class BashCommandParser
             structuralDepth,
             markBashCWrapped);
     }
+
+    /// <summary>
+    /// True when the lexer may expand a <c>~</c> after <c>=</c> or <c>:</c>
+    /// of an assignment-shaped word (#243). Bash does this only outside POSIX
+    /// mode. The parser proves that only for the submitted source (not a
+    /// decoded <c>sh -c</c> or <c>bash -c</c> child) in
+    /// <see cref="BashInitialStateMode.FreshNonInteractiveNoStartup"/>, which
+    /// excludes an inherited POSIX mode, with a launch-proved HOME.
+    /// </summary>
+    internal static bool ExpandsAssignmentTilde(BashParserOptions options, int bashCDepth) =>
+        bashCDepth == 0 &&
+        options.InitialStateMode == BashInitialStateMode.FreshNonInteractiveNoStartup &&
+        ShellLaunchFacts.TryGetValue(options, "HOME", out var home) &&
+        home.Length > 0;
 
     // ---------------------------------------------------------------- cd attribution
 

@@ -47,7 +47,16 @@ internal static class BashLexer
     /// <see cref="BashTokenKind.UnparseableSentinel"/> tokens that the
     /// parser must lift into <c>ParsedCommand.IsUnparseable</c>.
     /// </summary>
-    internal static IReadOnlyList<BashToken> Tokenize(string input)
+    internal static IReadOnlyList<BashToken> Tokenize(string input) =>
+        Tokenize(input, expandsAssignmentTilde: false);
+
+    /// <summary>
+    /// Tokenizes <paramref name="input"/>. <paramref name="expandsAssignmentTilde"/>
+    /// is true only when the caller proved non-POSIX Bash with a known HOME
+    /// (#243). Otherwise a <c>~</c> after <c>=</c> or <c>:</c> of an
+    /// assignment-shaped word is not proved.
+    /// </summary>
+    internal static IReadOnlyList<BashToken> Tokenize(string input, bool expandsAssignmentTilde)
     {
         if (input is null)
         {
@@ -59,7 +68,7 @@ internal static class BashLexer
             return Array.Empty<BashToken>();
         }
 
-        var tokens = TokenizeCore(input);
+        var tokens = TokenizeCore(input, expandsAssignmentTilde);
 
         // Brace expansion turns one word into several words. A word with one
         // has no exact value (#227).
@@ -67,7 +76,7 @@ internal static class BashLexer
         return tokens;
     }
 
-    private static List<BashToken> TokenizeCore(string input)
+    private static List<BashToken> TokenizeCore(string input, bool expandsAssignmentTilde)
     {
         var tokens = new List<BashToken>();
         var src = input.AsSpan();
@@ -161,7 +170,8 @@ internal static class BashLexer
 
             if (c == '&')
             {
-                if (TryConsumeFileDescriptorTarget(src, i, tokens, out var afterTarget))
+                if (TryConsumeFileDescriptorTarget(
+                    src, i, tokens, expandsAssignmentTilde, out var afterTarget))
                 {
                     i = afterTarget;
                     continue;
@@ -272,7 +282,7 @@ internal static class BashLexer
             }
 
             // ---- word ----
-            i = ReadWord(src, i, tokens);
+            i = ReadWord(src, i, tokens, expandsAssignmentTilde);
         }
 
         return tokens;
@@ -312,6 +322,7 @@ internal static class BashLexer
         ReadOnlySpan<char> src,
         int start,
         List<BashToken> tokens,
+        bool expandsAssignmentTilde,
         out int afterTarget)
     {
         afterTarget = start;
@@ -350,7 +361,8 @@ internal static class BashLexer
         var end = BashLineContinuation.Skip(src, start + 1, BashContinuationContext.Unquoted);
         if (end < src.Length && src[end] == '$')
         {
-            afterTarget = ReadWord(src, start, tokens, allowLeadingAmpersand: true);
+            afterTarget = ReadWord(
+                src, start, tokens, expandsAssignmentTilde, allowLeadingAmpersand: true);
             return afterTarget > start + 1;
         }
 
@@ -1508,6 +1520,7 @@ internal static class BashLexer
         ReadOnlySpan<char> src,
         int start,
         List<BashToken> tokens,
+        bool expandsAssignmentTilde,
         bool allowLeadingAmpersand = false)
     {
         // A word continues until we hit whitespace, an operator boundary,
@@ -1611,6 +1624,14 @@ internal static class BashLexer
             var assignmentTildeKind = c == '~' && i != start
                 ? assignmentTilde.Classify(src, i)
                 : BashAssignmentTildeKind.Literal;
+
+            // POSIX mode and a child shell keep the text, and the caller
+            // may not prove HOME. Outside the proved case the value is not
+            // known (#243).
+            if (assignmentTildeKind == BashAssignmentTildeKind.Home && !expandsAssignmentTilde)
+            {
+                assignmentTildeKind = BashAssignmentTildeKind.Unknown;
+            }
             if (c == '~' && i == start)
             {
                 value.AppendExpansion(

@@ -2629,12 +2629,20 @@ internal static partial class BashCommandParser
 
                 // The leading `~` of the value (#243). The spelling gate
                 // accepts only a leading tilde, and the state pass reads it
-                // from HOME through the leading-tilde fact.
+                // from HOME through the leading-tilde fact. A real assignment
+                // expands it also in POSIX mode, so the lexer's Unknown form
+                // (no proved non-POSIX Bash) is accepted here too.
                 if (fragment.Kind == ShellValueFragmentKind.Expansion &&
                     fragment.Expansion is
                     {
                         Kind: ShellExpansionKind.Tilde,
                         Name: BashAssignmentWordTilde.ExpansionName,
+                    } ||
+                    fragment is
+                    {
+                        Kind: ShellValueFragmentKind.Opaque,
+                        OpaqueCause: ShellOpaqueCause.Unsupported,
+                        Value: "~",
                     })
                 {
                     continue;
@@ -2767,7 +2775,9 @@ internal static partial class BashCommandParser
             out string? error)
         {
             var source = _source.Substring(sourceStart, sourceLength);
-            var relativeTokens = BashLexer.Tokenize(source);
+            var relativeTokens = BashLexer.Tokenize(
+                source,
+                ExpandsAssignmentTilde(_options, _bashCDepth));
             for (var index = 0; index < relativeTokens.Count; index++)
             {
                 if (relativeTokens[index].Kind == BashTokenKind.UnparseableSentinel)
