@@ -1,3 +1,26 @@
+#### 0.4.0-beta.22 2026-10-06 ####
+
+This prerelease fixes a security bug. A Bash line continuation could hide a command from `Parse` (#243). In the examples, `⏎` is a real newline.
+
+## Fixed
+
+- Bash removes a line continuation (a backslash and a newline) before it splits the input into tokens. The lexer did not remove it before it read an expansion. In `echo "$\⏎(touch /tmp/x)"`, Bash runs `touch`, but `Parse` gave only the `echo` occurrence. In `x="$\⏎(touch /tmp/x)"`, `Parse` gave no occurrence. 0.4.0-beta.3 to 0.4.0-beta.21 have this bug.
+- The lexer now skips line continuations before it reads the next character of `$(`, `$((`, `${`, `$name`, `$'`, `$"`, the operators `&&`, `||`, `>>`, `<<`, `<<-`, `<<<`, `&>`, and `&>>`, a numeric descriptor, and a descriptor target (`>&\⏎2`). This applies in unquoted text, in double quotes, and in the substitution boundary scan. `BashLineContinuation` owns the rule.
+- Bash keeps a line continuation in single quotes, in `$'…'`, in a comment, and in a heredoc body with a quoted delimiter. These stay literal.
+- Values: `n=build; rm -rf "$n\⏎dir/"` gave the exact value `builddir/`. Bash reads the variable `ndir`, so it runs `rm -rf /`. The value is now unknown. `"$\⏎n/"` gives `build/`, `"${\⏎x}"` gives the value of `x`, and `x$\⏎'y'` gives `xy`.
+- Readers of authored text use the same rule: the redirect operator analysis (`>\⏎>` is an append), `MayPathnameExpand` and `MayFieldSplit` (`"$\⏎@"`, `{a.\⏎.c}`), `CommandWords`, and option names in the per-verb flag tables (`curl -\⏎o /tmp/out` binds the path). `Raw` keeps the exact source slice.
+
+## Fail closed
+
+- `$(\⏎(` and `$\⏎((`: Bash reads arithmetic, but the grammar reads only an exact `$((` marker. Before, the parser read a subshell that runs `1+2`.
+- As before: a line continuation in an expanding heredoc body or delimiter (Bash joins the body lines before it looks for the delimiter), and in `$'…'`.
+
+## Security and compatibility
+
+- Output comparison against 0.4.0-beta.21: 6,416 inputs, 118,080 records in two launch modes. 1,644 records change, in 76 inputs. Every changed input has a backslash before a newline.
+- Public API: no change.
+- 0.4.0-beta.22 was planned for the literal twins of #242. That change moves to 0.4.0-beta.23.
+
 #### 0.4.0-beta.21 2026-10-06 ####
 
 This prerelease restores the 0.4.0-beta.19 verb-slot rule of `CommandOccurrence.CommandWords` (#240). It reverts the 0.4.0-beta.20 change (#237).

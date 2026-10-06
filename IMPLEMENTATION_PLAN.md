@@ -10,11 +10,20 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.21 restore the beta.19 verb-slot rule)
+## NOW (0.4.0-beta.22 Bash line continuations, security)
+
+- [x] Remove a Bash line continuation before the lexer reads the next character of an expansion or an operator (#243). `echo "$\⏎(touch /tmp/x)"` gives the `touch` occurrence. Fail closed on a split `$((` marker.
+- [x] Pin each case against real Bash. Prove the general rule: a continuation at any point gives the same facts or fails closed. Run manual mutants and an output comparison against beta.21.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.22` and verify NuGet publication.
+- [ ] Move the literal twins of #242 to 0.4.0-beta.23.
+
+## Completed (0.4.0-beta.21 restore the beta.19 verb-slot rule)
 
 - [x] Restore the beta.19 verb-slot rule of `CommandWords` (#240). The verb slot keeps a plain word after an option. Pin `docker --debug run`, `ilspycmd -t X /p/x.dll`, `git --no-pager push`, and `xargs -0 rm`.
 - [x] Prove that the output equals beta.19 over the beta.20 comparison inputs.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.21` and verify NuGet publication.
+- [x] Merge PR #241 after Linux and Windows CI. Tag `0.4.0-beta.21` on merge
+      `d197ba35` and verify NuGet publication. Workflow run 37468677260
+      published the package and the GitHub prerelease.
 
 ## Completed (0.4.0-beta.20 option value in the verb slot)
 

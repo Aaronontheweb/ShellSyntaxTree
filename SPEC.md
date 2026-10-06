@@ -2358,7 +2358,9 @@ quoted_string   := single-quoted | double-quoted
   separates the heredoc's clause from what follows.
 - `\` followed by a newline is removed before word-boundary analysis. It joins
   adjacent fragments (`r\` + newline + `m` is the command name `rm`); actual
-  surrounding spaces still separate words.
+  surrounding spaces still separate words. Since v0.4.0-beta.22 it is also
+  removed before the lexer reads the next character of an expansion or an
+  operator (see "Bash line continuations").
 - Bash line comments (`#` at a word boundary through end-of-line) are
   whitespace-equivalent at the lexer level — they emit a Comment token
   for source fidelity but are filtered alongside Whitespace by the
@@ -2588,6 +2590,68 @@ substitution also joins into the loop, which is more than Bash does.
 | `[ -f a ] \|\| exit 1; for f in a b; do echo "$f"; done` | parses (unparseable before) |
 | `for d in a b; do break x; done` | unparseable |
 
+### Bash line continuations (v0.4.0-beta.22)
+
+Bash removes a line continuation, a backslash and a newline, before it splits
+the input into tokens (#243). Before v0.4.0-beta.22 the lexer removed it only
+inside a word. It did not remove it before it read the next character of an
+expansion or an operator. `echo "$\⏎(touch /tmp/x)"` gave one `echo`
+occurrence with the literal value `$(touch /tmp/x)`, but Bash runs `touch`.
+0.4.0-beta.3 to 0.4.0-beta.21 have this bug. (`⏎` is a real newline.)
+
+Owner and data. `BashLineContinuation` (lexer) owns the rule. It is
+call-local. Every scan that reads the next character of a multi-character
+construct asks it to skip the continuations first.
+
+| Context | Line continuation |
+|---|---|
+| Unquoted text, `$( )`, `${ }`, `$(( ))`, backticks | removed |
+| Double quotes | removed (backslash + LF only) |
+| Expanding heredoc body or delimiter | removed by Bash; the parser fails closed |
+| Single quotes, `$'…'`, a comment | kept as text |
+| Heredoc body with a quoted delimiter | kept as text |
+
+Schematic flow after `$` (it omits the nesting limit):
+
+```
+next = skip_continuations(source, dollar + 1, context)
+case source[next]:
+  '('  : second = skip_continuations(source, next + 1, context)
+         if source[second] == '(' : exact `$((` -> bounded arithmetic,
+                                    split marker -> fail closed
+         else                     : command substitution; its body
+                                    starts after source[next]
+  '{'  : the parameter name is the body without continuations
+  name : the name continues across continuations (`$n\⏎dir` is `$ndir`)
+  '\'' : ANSI-C string; continuations inside stay text
+  '"'  : locale string -> fail closed
+```
+
+The same rule reads the operators `&&`, `||`, `>>`, `<<`, `<<-`, `<<<`, `&>`,
+and `&>>`, a numeric source descriptor, and a descriptor target such as
+`>&\⏎2`. The readers of authored text use it too: the redirect operator
+analysis, `MayPathnameExpand` and `MayFieldSplit`, `CommandWords`, and option
+names in the per-verb flag tables. `ClauseElement.Raw` and `Arg.Raw` keep the
+exact source slice. The placeholder text of an opaque `$( )` value drops its
+continuations, so a removed backslash does not look like a Windows path.
+
+These forms fail closed: `$(\⏎(` and `$\⏎((` (Bash reads arithmetic, but
+the grammar reads only an exact `$((`), a continuation in an expanding
+heredoc body or delimiter (Bash joins the body lines before it looks for the
+delimiter), a continuation in `$'…'`, and `$\⏎"…"`.
+
+| Source | Result |
+|---|---|
+| `echo "$\⏎(touch /tmp/x)"` | occurrences `touch` (substitution) and `echo` |
+| `x="$\⏎(touch /tmp/x)"` | occurrence `touch` |
+| `true &\⏎& touch /tmp/x` | occurrences `true` and `touch` |
+| `n=build; rm -rf "$n\⏎dir/"` | not `builddir/`: Bash reads `$ndir` |
+| `n=build; cat "$\⏎n/"` | value `build/` |
+| `echo a >\⏎> out` | append redirect to `/work/out` |
+| `echo '$\⏎(touch /tmp/x)'` | one `echo`; the value keeps `\⏎` |
+| `echo a # c \⏎touch /tmp/x` | `echo a` and `touch`: a comment does not continue |
+| `echo "$(\⏎(1+2))"` | unparseable |
+
 ### Bash ANSI-C and locale quotes (v0.4.0-beta.19)
 
 Bash decodes the backslash escapes of an ANSI-C string `$'…'` and then uses
@@ -2761,7 +2825,10 @@ The lexer produces tokens consumed by the parser. Token kinds:
   tokens past `FilterSignificant` and splits clauses on them per §4. A
   pure space/tab run carries no flag and is discarded after splitting.
 - **CONTINUATION** — `\` + `\n` (or `\r\n`). Removed before word-boundary
-  analysis; adjacent lexical fragments remain one authored word.
+  analysis; adjacent lexical fragments remain one authored word. A scan that
+  reads the second character of a construct (`$(`, `${`, `$name`, `&&`, `>>`,
+  `<<`) skips continuations first (v0.4.0-beta.22, #243). Single quotes,
+  `$'…'`, comments, and heredoc bodies keep them.
 - **OPAQUE_SUBSTITUTION** — `$(cmd)` or backtick `` `cmd` ``. The full
   substitution slice (including delimiters) becomes a single token.
   Boundary tracking handles nested same-kind regions, nested quotes,
