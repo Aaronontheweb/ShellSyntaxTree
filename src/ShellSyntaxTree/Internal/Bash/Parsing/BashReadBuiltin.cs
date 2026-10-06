@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using ShellSyntaxTree.Internal.Bash.Lexing;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
@@ -132,7 +133,7 @@ internal static class BashReadBuiltin
     // expansion, so it cannot become an option or another name.
     private static bool IsStatic(ClauseElement element, string expected) =>
         element.Kind == ArgKind.Literal &&
-        string.Equals(element.Raw, element.Value, StringComparison.Ordinal) &&
+        string.Equals(BashLineContinuation.Spelling(element.Raw), element.Value, StringComparison.Ordinal) &&
         string.Equals(element.Value, expected, StringComparison.Ordinal);
 }
 
@@ -150,7 +151,7 @@ internal static class BashSetPositionalBuiltin
             !string.Equals(clause.Verb.Tokens[0], "set", StringComparison.Ordinal) ||
             clause.Elements.Count < 2 ||
             clause.Elements[0].Role != ClauseElementRole.Verb ||
-            !string.Equals(clause.Elements[0].Raw, "set", StringComparison.Ordinal))
+            !string.Equals(BashLineContinuation.Spelling(clause.Elements[0].Raw), "set", StringComparison.Ordinal))
         {
             return false;
         }
@@ -158,7 +159,7 @@ internal static class BashSetPositionalBuiltin
         var first = clause.Elements[1];
         if (first.Role == ClauseElementRole.Redirect ||
             first.Kind != ArgKind.Literal ||
-            !string.Equals(first.Raw, "--", StringComparison.Ordinal))
+            !string.Equals(BashLineContinuation.Spelling(first.Raw), "--", StringComparison.Ordinal))
         {
             return false;
         }

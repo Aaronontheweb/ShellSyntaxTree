@@ -1,0 +1,654 @@
+// -----------------------------------------------------------------------
+// <copyright file="BashLineContinuationTests.cs" company="Aaron Stannard">
+//      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
+// </copyright>
+// -----------------------------------------------------------------------
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using Xunit;
+
+namespace ShellSyntaxTree.Tests.Parsing;
+
+/// <summary>
+/// Pins #243. Bash removes a line continuation (a backslash and a newline)
+/// before it splits the input into tokens, except in single quotes,
+/// <c>$'…'</c>, a comment, and a heredoc body. Before 0.4.0-beta.22 the
+/// lexer read <c>"$\⏎(cmd)"</c> as literal text, so <c>cmd</c> ran with no
+/// occurrence. Each source here is also run in real Bash when Bash is
+/// available, so the expected Bash behavior is proved, not assumed.
+/// </summary>
+public class BashLineContinuationTests
+{
+    private const string Home = BashOracle.Home;
+
+    private static readonly BashParser Parser = new(new BashParserOptions
+    {
+        HomeDirectory = Home,
+        WorkingDirectory = "/work",
+        InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+        PublishAuthoredSourceFacts = true,
+        LaunchEnvironment = new ShellLaunchEnvironment(
+            new Dictionary<string, string> { ["HOME"] = Home },
+            new[] { "CDPATH" }),
+    });
+
+    // ---------------------------------------------------------------- hidden commands
+
+    public static TheoryData<string, string> HiddenCommandSources => new()
+    {
+        // The reported bug: an expansion in double quotes.
+        { "printf '<%s>' \"$\\\n(printf HIDDEN)\"", "<HIDDEN>" },
+        { "printf '<%s>' $\\\n(printf HIDDEN)", "<HIDDEN>" },
+        { "printf '<%s>' \"$\\\n\\\n(printf HIDDEN)\"", "<HIDDEN>" },
+        { "x=\"$\\\n(printf HIDDEN)\"; printf '<%s>' \"$x\"", "<HIDDEN>" },
+        { "printf '<%s>' \"$(printf '%s' \"$\\\n(printf HIDDEN)\")\"", "<HIDDEN>" },
+        { "printf '<%s>' $(printf '%s' $\\\n(printf HIDDEN))", "<HIDDEN>" },
+
+        // The substitution boundary scan reads `$\⏎(` too: the inner `$(`
+        // leaves the double quotes, so `"%s)"` opens new quotes and its `)`
+        // must not end the outer `$(`.
+        { "printf '<%s>' \"$(printf '%s' \"$\\\n(printf \"%s)\" HIDDEN)\")\"", "<HIDDEN)>" },
+
+        // An operator can continue across a line.
+        { "true &\\\n& printf '<%s>' HIDDEN", "<HIDDEN>" },
+        { "false |\\\n| printf '<%s>' HIDDEN", "<HIDDEN>" },
+
+        // A comment does not continue: the next line is a command.
+        { "printf '<%s>' a # $\\\n(printf HIDDEN)", "<a>HIDDEN" },
+
+        // An escaped backslash before a newline is not a continuation.
+        { "printf '<%s>' a\\\\\nprintf '<%s>' HIDDEN", "<a\\><HIDDEN>" },
+
+        // A comment ends only at LF. A CR is comment text, so `cat <<true`
+        // is in the comment and the next line is a command.
+        { "printf '<%s>' a #c\rcat <<true\nprintf '<%s>' HIDDEN\ntrue", "<a><HIDDEN>" },
+        { "printf '<%s>' $(printf a #c\r)\nprintf HIDDEN)", "<aHIDDEN>" },
+    };
+
+    [Theory]
+    [MemberData(nameof(HiddenCommandSources))]
+    public void Command_after_a_continuation_is_an_occurrence(string source, string bashOutput)
+    {
+        BashOracle.AssertPrints(source, bashOutput);
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var hidden = Assert.Single(
+            parsed.Commands,
+            command => command.Clause.Verb.Tokens.SequenceEqual(new[] { "printf" }) &&
+                command.Clause.Elements.Any(element => element.Value == "HIDDEN"));
+        Assert.True(hidden.IsComplete);
+        Assert.Equal(
+            "HIDDEN",
+            Assert.IsType<ShellValueDomain.Exact>(hidden.Arguments.Last().Value).Value);
+    }
+
+    [Fact]
+    public void Hidden_substitution_has_the_substitution_role_and_source_span()
+    {
+        const string source = "echo \"$\\\n(touch /tmp/x)\"";
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.Equal(2, parsed.Commands.Count);
+        var touch = parsed.Commands[0];
+        Assert.Equal(CommandOccurrenceRole.Substitution, touch.ImmediateRole);
+        Assert.Equal(new[] { "touch" }, touch.Clause.Verb.Tokens);
+        Assert.Equal("/tmp/x", Assert.Single(touch.Arguments).Argument.Resolved);
+        var echo = parsed.Commands[1];
+        Assert.Equal(new[] { "echo" }, echo.Clause.Verb.Tokens);
+        Assert.IsType<ShellValueDomain.Unknown>(Assert.Single(echo.Arguments).Value);
+    }
+
+    [Fact]
+    public void Heredoc_operator_in_a_substitution_continues_across_a_line()
+    {
+        // The `)` in the body must not end the substitution.
+        const string source = "printf '<%s>' \"$(cat <\\\n<EOF\na)b\nEOF\n)\"";
+        BashOracle.AssertPrints(source, "<a)b>");
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var cat = Assert.Single(parsed.Commands, c => c.ImmediateRole == CommandOccurrenceRole.Substitution);
+        var redirect = Assert.IsType<HereDocumentRedirectAnalysis>(Assert.Single(cat.Redirects));
+        Assert.Equal("a)b\n", redirect.Document.Body.Raw);
+    }
+
+    [Fact]
+    public void Ansi_c_string_in_a_substitution_continues_across_a_line()
+    {
+        // `\'` does not end `$'…'`, so the `)` after it is text.
+        const string source = "printf '<%s>' $(printf '%s' $\\\n'a)\\'b')";
+        BashOracle.AssertPrints(source, "<a)'b>");
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var inner = Assert.Single(parsed.Commands, c => c.ImmediateRole == CommandOccurrenceRole.Substitution);
+        Assert.Equal("a)'b", Assert.IsType<ShellValueDomain.Exact>(inner.Arguments.Last().Value).Value);
+    }
+
+    // ---------------------------------------------------------------- exact values
+
+    [Theory]
+    [InlineData("n=build; printf '<%s>' \"$\\\nn/\"", "build/")]
+    [InlineData("ndir=/tmp/q; n=build; printf '<%s>' \"$n\\\ndir\"", "/tmp/q")]
+    [InlineData("printf '<%s>' \"$\\\nHOME/.ssh/id_rsa\"", "/home/test/.ssh/id_rsa")]
+    [InlineData("for n in a; do printf '<%s>' \"$\\\n{n}\"; done", "a")]
+    [InlineData("x=VAL; printf '<%s>' \"${\\\nx}\"", "VAL")]
+    [InlineData("x=VAL; printf '<%s>' \"${x\\\n}\"", "VAL")]
+    [InlineData("printf '<%s>' x$\\\n'y'", "xy")]
+    [InlineData("printf '<%s>' a\\\nb", "ab")]
+    [InlineData("printf '<%s>' -\\\no", "-o")]
+    public void Expansion_across_a_continuation_has_the_bash_value(string source, string value)
+    {
+        BashOracle.AssertPrints(source, "<" + value + ">");
+
+        Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(LastArgument(source).Value).Value);
+    }
+
+    [Fact]
+    public void Name_after_a_continuation_is_part_of_the_variable_name()
+    {
+        // Bash reads `$ndir`, which is unset, so `rm -rf "$n\⏎dir/"` runs
+        // `rm -rf /`. The old value was the wrong exact path `builddir/`.
+        const string source = "n=build; printf '<%s>' \"$n\\\ndir/\"";
+        BashOracle.AssertPrints(source, "</>");
+
+        var value = LastArgument(source).Value;
+        Assert.True(
+            value is ShellValueDomain.Unknown ||
+            value is ShellValueDomain.Exact { Value: "/" },
+            $"unexpected value {value}");
+    }
+
+    [Fact]
+    public void Unquoted_name_after_a_continuation_reads_the_bound_value()
+    {
+        const string source = "x=/etc/hostname; printf '<%s>' $\\\nx";
+        BashOracle.AssertPrints(source, "</etc/hostname>");
+
+        Assert.Equal(
+            "/etc/hostname",
+            Assert.IsType<ShellValueDomain.Exact>(LastArgument(source).AuthoredValue).Value);
+    }
+
+    [Theory]
+    [InlineData("set -- p q; printf '<%s>' \"$\\\n@\"", "<p><q>")]
+    [InlineData("set -- p q; printf '<%s>' \"${\\\n@}\"", "<p><q>")]
+    public void Quoted_all_positional_across_a_continuation_can_split(string source, string bashOutput)
+    {
+        BashOracle.AssertPrints(source, bashOutput);
+
+        Assert.True(LastArgument(source).MayFieldSplit);
+    }
+
+    [Theory]
+    [InlineData("printf '<%s>' {a.\\\n.c}", "<a><b><c>")]
+    [InlineData("printf '<%s>' {\\\n-1..1}", "<-1><0><1>")]
+    public void Brace_sequence_across_a_continuation_expands(string source, string bashOutput)
+    {
+        BashOracle.AssertPrints(source, bashOutput);
+
+        var argument = LastArgument(source);
+        Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
+        Assert.True(argument.MayPathnameExpand);
+        Assert.True(argument.MayFieldSplit);
+    }
+
+    [Fact]
+    public void Quoted_substitution_across_a_continuation_does_not_expand()
+    {
+        // The `"` inside `$\⏎( )` must not end the outer double quotes.
+        const string source = "printf '<%s>' \"$\\\n(printf \"*\")\"";
+        BashOracle.AssertPrints(source, "<*>");
+
+        var argument = LastArgument(source);
+        Assert.False(argument.MayPathnameExpand);
+        Assert.False(argument.MayFieldSplit);
+    }
+
+    [Theory]
+    // A backslash in an opaque value must not make the word look like a path.
+    [InlineData("git \"$(printf pu\\\nsh)\"")]
+    // `"$@/x"` can give several words, such as `a` and `push/x`.
+    [InlineData("git \"$\\\n@/x\"")]
+    public void Expansion_across_a_continuation_in_the_verb_slot_makes_words_unknown(string source)
+    {
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.IsType<ShellCommandWords.Unknown>(parsed.Commands.Last().CommandWords);
+    }
+
+    [Theory]
+    [InlineData("a\\\nb", "ab")]
+    [InlineData("a\\\\\nb", "a\\\\\nb")]
+    [InlineData("a\\\\\\\nb", "a\\\\b")]
+    [InlineData("a\\xb", "a\\xb")]
+    public void Remove_keeps_a_newline_after_an_escaped_backslash(string text, string expected)
+    {
+        // `\\` + newline is an escaped backslash and a real newline (#243).
+        Assert.Equal(
+            expected,
+            Internal.Bash.Lexing.BashLineContinuation.Remove(
+                text.AsSpan(),
+                Internal.Bash.Lexing.BashContinuationContext.Unquoted));
+    }
+
+    [Fact]
+    public void Brace_sequence_across_a_continuation_can_name_a_subcommand()
+    {
+        var parsed = Parser.Parse("git {a.\\\n.c}");
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        Assert.IsType<ShellCommandWords.Unknown>(Assert.Single(parsed.Commands).CommandWords);
+    }
+
+    // ---------------------------------------------------------------- options and redirects
+
+    [Fact]
+    public void Option_after_a_continuation_binds_its_path_value()
+    {
+        var parsed = Parser.Parse("curl -\\\no /tmp/out https://example.invalid");
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var output = Assert.Single(parsed.Commands).Clause.Args[1];
+        Assert.True(output.IsPath);
+        Assert.Equal("/tmp/out", output.Resolved);
+    }
+
+    [Fact]
+    public void Option_after_a_continuation_keeps_its_value_out_of_the_command_words()
+    {
+        var parsed = Parser.Parse("git -\\\nC repo push");
+
+        Assert.Equal(
+            new[] { "git", "push" },
+            Assert.IsType<ShellCommandWords.Known>(Assert.Single(parsed.Commands).CommandWords).Words);
+    }
+
+    [Theory]
+    [InlineData("printf a >\\\n> out", null)]
+    [InlineData("printf a 2>\\\n> out", 2)]
+    public void Append_operator_continues_across_a_line(string source, int? descriptor)
+    {
+        var redirect = Assert.IsType<FileRedirectAnalysis>(
+            Assert.Single(Assert.Single(Parser.Parse(source).Commands).Redirects));
+
+        Assert.Equal(FileRedirectMode.Append, redirect.Mode);
+        Assert.Equal("/work/out", Assert.IsType<ShellValueDomain.Exact>(redirect.Target).Value);
+        if (descriptor is int value)
+        {
+            Assert.Equal(value, Assert.IsType<RedirectSource.Descriptor>(redirect.Source).Value);
+        }
+        else
+        {
+            Assert.IsType<RedirectSource.Default>(redirect.Source);
+        }
+    }
+
+    [Theory]
+    [InlineData("printf a >\\\n&2")]
+    [InlineData("printf a >&\\\n2")]
+    public void Descriptor_target_continues_across_a_line(string source)
+    {
+        BashOracle.AssertWritesToStandardError(source, "a");
+        var command = Assert.Single(Parser.Parse(source).Commands);
+
+        var redirect = Assert.IsType<DescriptorDuplicateRedirectAnalysis>(Assert.Single(command.Redirects));
+        Assert.Equal(2, redirect.TargetDescriptor);
+        var authored = Assert.Single(command.Clause.Redirects);
+        Assert.Equal("&2", authored.Target);
+        Assert.True(authored.IsDynamicSkip);
+    }
+
+    [Fact]
+    public void Here_string_operator_continues_across_a_line()
+    {
+        const string source = "cat <\\\n<<word";
+        BashOracle.AssertPrints(source, "word");
+
+        var redirect = Assert.IsType<HereStringRedirectAnalysis>(
+            Assert.Single(Assert.Single(Parser.Parse(source).Commands).Redirects));
+        Assert.Equal("word\n", Assert.IsType<ShellValueDomain.Exact>(redirect.Data).Value);
+    }
+
+    [Theory]
+    [InlineData("cat <\\\n<EOF\nbody\nEOF", false)]
+    [InlineData("cat <<\\\n-EOF\n\tbody\n\tEOF", true)]
+    public void Heredoc_operator_continues_across_a_line(string source, bool stripTabs)
+    {
+        BashOracle.AssertPrints(source, "body");
+
+        var redirect = Assert.IsType<HereDocumentRedirectAnalysis>(
+            Assert.Single(Assert.Single(Parser.Parse(source).Commands).Redirects));
+        Assert.Equal(stripTabs, redirect.Document.StripLeadingTabs);
+        Assert.Equal("EOF", redirect.Document.Delimiter.Raw);
+    }
+
+    // ---------------------------------------------------------------- literal contexts
+
+    [Fact]
+    public void Single_quotes_keep_the_continuation()
+    {
+        const string source = "printf '<%s>' '$\\\n(printf HIDDEN)'";
+        BashOracle.AssertPrints(source, "<$\\\n(printf HIDDEN)>");
+
+        var parsed = Parser.Parse(source);
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var command = Assert.Single(parsed.Commands);
+        Assert.Equal(
+            "$\\\n(printf HIDDEN)",
+            Assert.IsType<ShellValueDomain.Exact>(command.Arguments.Last().Value).Value);
+    }
+
+    [Fact]
+    public void Quoted_heredoc_delimiter_keeps_the_continuation()
+    {
+        const string source = "cat <<'EOF'\n$\\\n(printf HIDDEN)\nEOF";
+        BashOracle.AssertPrints(source, "$\\\n(printf HIDDEN)");
+
+        var parsed = Parser.Parse(source);
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var redirect = Assert.IsType<HereDocumentRedirectAnalysis>(
+            Assert.Single(Assert.Single(parsed.Commands).Redirects));
+        Assert.Equal(HereDocumentExpansionMode.Literal, redirect.Document.ExpansionMode);
+        Assert.Equal("$\\\n(printf HIDDEN)\n", redirect.Document.Body.Raw);
+    }
+
+    [Theory]
+    [InlineData("printf '<%s>' \"a\\\\\nb\"", "<a\\\nb>")]
+    [InlineData("printf '<%s>' \"a\rb\"", "<a\rb>")]
+    [InlineData("printf '<%s>' 'a\rb'", "<a\rb>")]
+    public void Quotes_keep_an_escaped_backslash_and_a_carriage_return(
+        string source,
+        string bashOutput)
+    {
+        // `\\` + LF in double quotes is an escaped backslash and a newline.
+        // A bare CR in quotes is text, as in Bash.
+        BashOracle.AssertPrints(source, bashOutput);
+
+        var parsed = Parser.Parse(source);
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var command = Assert.Single(parsed.Commands);
+        Assert.Equal(
+            bashOutput.Substring(1, bashOutput.Length - 2),
+            Assert.IsType<ShellValueDomain.Exact>(command.Arguments.Last().Value).Value);
+    }
+
+    // ---------------------------------------------------------------- inline option values
+
+    [Theory]
+    [InlineData("--data=@p.json", "@p.json")]
+    [InlineData("--data=@p\\.json", "@p.json")]
+    [InlineData("--data=\\a\"\"", "a")]
+    [InlineData("--data=\"a b\"", "a b")]
+    [InlineData("--data='x=y'", "x=y")]
+    [InlineData("--data=a=b", "a=b")]
+    [InlineData("--data=@\"p q\".json", "@p q.json")]
+    [InlineData("--data=-\\ x", "- x")]
+    [InlineData("-\\-data=@p.json", "@p.json")]
+    [InlineData("--da\\ta=@p.json", "@p.json")]
+    [InlineData("--data=@x\\\n", "@x")]
+    [InlineData("-\\\n-data=@p.json", "@p.json")]
+    [InlineData("--data=\\\n\"\"", "")]
+    [InlineData("--data=\"$x\"", "v w")]
+    public void Inline_option_value_is_the_part_after_the_first_equals(string word, string value)
+    {
+        // The program reads the word that Bash passes and splits it at its
+        // first `=`. Before 0.4.0-beta.22 an escape or a quote gave the whole
+        // word or the authored spelling as the value (#243).
+        BashOracle.AssertPrints("x='v w'; printf '<%s>' " + word, "<--data=" + value + ">");
+        var parsed = Parser.Parse("x='v w'; curl " + word + " https://example.invalid");
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var arguments = parsed.Commands.Last().Arguments;
+        Assert.Equal("--data", Assert.IsType<ShellValueDomain.Exact>(arguments[0].Value).Value);
+        Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(arguments[1].Value).Value);
+        Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(arguments[1].AuthoredValue).Value);
+    }
+
+    [Fact]
+    public void Inline_option_value_of_a_loop_is_each_value_after_the_equals()
+    {
+        const string source = "for v in a b; do curl --data=\"$v\" https://example.invalid; done";
+        BashOracle.AssertPrints("for v in a b; do printf '<%s>' --data=\"$v\"; done", "<--data=a><--data=b>");
+
+        var value = Assert.IsType<ShellValueDomain.FiniteSet>(
+            Parser.Parse(source).Commands.Single().Arguments[1].Value);
+        Assert.Equal(new[] { "a", "b" }, value.Values);
+    }
+
+    [Theory]
+    [InlineData("curl --data=$(printf x) https://example.invalid")]
+    [InlineData("curl --data=*.json https://example.invalid")]
+    public void Computed_inline_option_value_is_unknown(string source)
+    {
+        var arguments = Parser.Parse(source).Commands.Last().Arguments;
+
+        Assert.IsType<ShellValueDomain.Unknown>(arguments[1].Value);
+    }
+
+    [Fact]
+    public void Inline_option_value_that_splits_is_unknown()
+    {
+        const string source = "x='v w'; curl --data=$x https://example.invalid";
+        BashOracle.AssertPrints("x='v w'; printf '<%s>' --data=$x", "<--data=v><w>");
+
+        var arguments = Parser.Parse(source).Commands.Last().Arguments;
+        Assert.IsType<ShellValueDomain.Unknown>(arguments[1].Value);
+    }
+
+    // ---------------------------------------------------------------- carriage return
+
+    public static TheoryData<string, string> CarriageReturnSources => new()
+    {
+        // Bash reads `\` + CR as an escaped CR and LF as the line end. The
+        // old lexer read `\` + CRLF as a continuation and hid the command.
+        { "printf '<%s>' a\\\r\nprintf '<%s>' HIDDEN", "<a\r><HIDDEN>" },
+        // A CR is a word character, so this `#` does not start a comment.
+        { "printf '<%s>' a\r# ; printf '<%s>' HIDDEN", "<a\r#><HIDDEN>" },
+        { "printf '<%s>' $(printf '%s' a\r# ) ; printf '<%s>' HIDDEN", "<a\r#><HIDDEN>" },
+        // CRLF line endings: Bash passes `a` + CR.
+        { "printf '<%s>' a\r\nprintf '<%s>' HIDDEN", "<a\r><HIDDEN>" },
+        // Bash keeps `\` + CR as text in double quotes. The parser still
+        // fails closed on `\` + CR outside single quotes.
+        { "printf '<%s>' \"a\\\r\" ; printf '<%s>' HIDDEN", "<a\\\r><HIDDEN>" },
+    };
+
+    [Theory]
+    [MemberData(nameof(CarriageReturnSources))]
+    public void Carriage_return_in_code_fails_closed(string source, string bashOutput)
+    {
+        BashOracle.AssertPrints(source, bashOutput);
+        var parsed = Parser.Parse(source);
+
+        Assert.True(parsed.IsUnparseable);
+        Assert.Empty(parsed.Commands);
+    }
+
+    [Fact]
+    public void Heredoc_line_with_a_carriage_return_is_not_the_delimiter()
+    {
+        // Bash compares the whole line, so `EOF` + CR is body text.
+        const string source = "cat <<EOF\nbody\nEOF\r\nprintf '<%s>' AFTER\nEOF";
+        BashOracle.AssertPrints(source, "body\nEOF\r\nprintf '<%s>' AFTER");
+        var parsed = Parser.Parse(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var redirect = Assert.IsType<HereDocumentRedirectAnalysis>(
+            Assert.Single(Assert.Single(parsed.Commands).Redirects));
+        Assert.Equal("body\nEOF\r\nprintf '<%s>' AFTER\n", redirect.Document.Body.Raw);
+    }
+
+    // ---------------------------------------------------------------- fail closed
+
+    [Theory]
+    // Bash reads `$(\⏎(` as arithmetic. The arithmetic grammar reads only an
+    // exact `$((` marker.
+    [InlineData("printf '<%s>' \"$(\\\n(1+2))\"")]
+    [InlineData("printf '<%s>' $\\\n((1+2))")]
+    [InlineData("printf '<%s>' $(printf '%s' $(\\\n(1+2)))")]
+    // Bash joins the lines of an expanding heredoc body before it looks for
+    // the delimiter. The parser does not model that join.
+    [InlineData("cat <<EOF\n$\\\n(printf HIDDEN)\nEOF")]
+    [InlineData("cat <<EOF\nEO\\\nF\nprintf HIDDEN")]
+    [InlineData("cat <<EO\\\nF\nbody\nEOF")]
+    // Bash keeps `\⏎` in `$'…'`. The decoder rejects that escape.
+    [InlineData("printf '<%s>' $'a\\\nb'")]
+    // A locale string, legacy backticks, and a complex parameter expansion.
+    [InlineData("printf '<%s>' $\\\n\"text\"")]
+    [InlineData("printf '<%s>' `printf '%s' $\\\n(printf HIDDEN)`")]
+    [InlineData("printf '<%s>' \"${x:-$\\\n(printf HIDDEN)}\"")]
+    public void Unmodeled_context_fails_closed(string source)
+    {
+        BashOracle.AssertSucceeds(source);
+        var parsed = Parser.Parse(source);
+
+        Assert.True(parsed.IsUnparseable);
+        Assert.Empty(parsed.Commands);
+    }
+
+    // ---------------------------------------------------------------- general rule
+
+    public static TheoryData<string> InvarianceSources => new()
+    {
+        "echo \"$(touch /tmp/x)\" $(id -u)",
+        "x=\"$(printf HIDDEN)\"; echo \"$x\"",
+        "n=build; rm -rf \"$n/\" \"${n}/out\"",
+        "x=/etc/hostname; cat \"$x\" $x",
+        "for n in a b; do printf \"%s\" \"${n}\" \"$n\"; done",
+        "true && touch /tmp/x || echo no",
+        "echo a >> out 2>&1; cat <<< word",
+        "cd /tmp && rm -rf ./build",
+        "git -C repo push origin main",
+        "curl -o /tmp/out https://example.invalid",
+        "echo \"$@\" \"${x}\" $y $1 \"$?\"",
+        "cat {a,b}.txt {1..3}",
+        "( cd /tmp; ls ) | wc -l",
+        "echo $(echo $(id -u)) > /tmp/out",
+        "if true; then touch /tmp/x; fi",
+    };
+
+    /// <summary>
+    /// The general rule: a continuation where Bash removes it never changes
+    /// a fact. Each source has no single quote, comment, or heredoc, so a
+    /// continuation at any point is removed. The parser must give the same
+    /// facts or fail closed. It must never give a different fact.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(InvarianceSources))]
+    public void Continuation_at_any_point_keeps_the_facts_or_fails_closed(string source)
+    {
+        var expected = Facts(Parser.Parse(source));
+        Assert.NotNull(expected);
+        var parsedVariants = 0;
+        for (var index = 0; index <= source.Length; index++)
+        {
+            if (IsEscaped(source, index))
+            {
+                continue;
+            }
+
+            var variant = source.Substring(0, index) + "\\\n" + source.Substring(index);
+            var parsed = Parser.Parse(variant);
+            if (parsed.IsUnparseable)
+            {
+                continue;
+            }
+
+            parsedVariants++;
+            Assert.True(
+                expected == Facts(parsed),
+                $"facts changed for {Quote(variant)}:\n{expected}\n---\n{Facts(parsed)}");
+        }
+
+        // Most points are inside words or between them, so most variants
+        // parse. A rule that failed closed everywhere would prove nothing.
+        Assert.True(parsedVariants * 2 > source.Length, $"only {parsedVariants} variants parsed");
+    }
+
+    // ---------------------------------------------------------------- helpers
+
+    private static AnalyzedArgument LastArgument(string source)
+    {
+        var parsed = Parser.Parse(source);
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        return parsed.Commands.Last().Arguments.Last();
+    }
+
+    private static bool IsEscaped(string source, int index)
+    {
+        var backslashes = 0;
+        for (var position = index - 1; position >= 0 && source[position] == '\\'; position--)
+        {
+            backslashes++;
+        }
+
+        return backslashes % 2 == 1;
+    }
+
+    private static string? Facts(ParsedCommand parsed)
+    {
+        if (parsed.IsUnparseable)
+        {
+            return null;
+        }
+
+        var facts = new StringBuilder();
+        foreach (var command in parsed.Commands)
+        {
+            facts.Append(command.ImmediateRole).Append(' ')
+                .Append(string.Join(">", command.Ancestry.Select(a => a.Region))).Append(' ')
+                .Append(command.IsComplete).Append(' ')
+                .Append(Domain(command.WorkingDirectory)).Append(' ')
+                .Append(command.CommandWords is ShellCommandWords.Known known
+                    ? "[" + string.Join(",", known.Words) + "]"
+                    : "?")
+                .Append('\n');
+            foreach (var argument in command.Arguments)
+            {
+                facts.Append("  ")
+                    .Append(Domain(argument.Value)).Append(' ')
+                    .Append(Domain(argument.AuthoredValue)).Append(' ')
+                    .Append(Domain(argument.AuthoredFileSystemValue)).Append(' ')
+                    .Append(argument.MayPathnameExpand).Append(' ')
+                    .Append(argument.MayFieldSplit).Append(' ')
+                    .Append(argument.Argument.Kind).Append(' ')
+                    .Append(argument.Argument.IsPath).Append(' ')
+                    .Append(argument.Argument.Resolved)
+                    .Append('\n');
+            }
+
+            foreach (var redirect in command.Redirects)
+            {
+                facts.Append("  ").Append(redirect.GetType().Name).Append(' ')
+                    .Append(redirect.Source).Append(' ')
+                    .Append(redirect switch
+                    {
+                        FileRedirectAnalysis file => file.Mode + " " + Domain(file.Target),
+                        DescriptorDuplicateRedirectAnalysis duplicate => duplicate.TargetDescriptor.ToString(),
+                        HereStringRedirectAnalysis hereString => Domain(hereString.Data),
+                        _ => string.Empty,
+                    })
+                    .Append('\n');
+            }
+        }
+
+        return facts.ToString();
+    }
+
+    private static string Domain(ShellValueDomain domain) => domain switch
+    {
+        ShellValueDomain.Exact exact => "Exact(" + Quote(exact.Value) + ")",
+        ShellValueDomain.FiniteSet set => "Set(" + string.Join(",", set.Values.Select(Quote)) + ")",
+        ShellValueDomain.Concatenation concatenation =>
+            "Cat(" + string.Join("+", concatenation.Parts.Select(Domain)) + ")",
+        _ => domain.GetType().Name,
+    };
+
+    private static string Quote(string value) =>
+        "\"" + value.Replace("\\", "\\\\").Replace("\n", "\\n").Replace("\r", "\\r") + "\"";
+}

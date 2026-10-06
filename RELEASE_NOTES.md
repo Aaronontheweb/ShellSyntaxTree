@@ -1,3 +1,37 @@
+#### 0.4.0-beta.22 2026-10-06 ####
+
+This prerelease fixes security bugs. A Bash line continuation, a carriage return, or a `#` after a quoted part could hide a command from `Parse` (#243). In the examples, `⏎` is a real newline and CR is a carriage return.
+
+## Fixed
+
+- Bash removes a line continuation (a backslash and a newline) before it splits the input into tokens. The lexer did not remove it before it read an expansion. In `echo "$\⏎(touch /tmp/x)"`, Bash runs `touch`, but `Parse` gave only the `echo` occurrence. In `x="$\⏎(touch /tmp/x)"`, `Parse` gave no occurrence. 0.4.0-beta.3 to 0.4.0-beta.21 have this bug.
+- The lexer now skips line continuations before it reads the next character of `$(`, `$((`, `${`, `$name`, `$'`, `$"`, the operators `&&`, `||`, `>>`, `<<`, `<<-`, `<<<`, `&>`, and `&>>`, a numeric descriptor, and a descriptor target (`>&\⏎2`). This applies in unquoted text, in double quotes, and in the substitution boundary scan. `BashLineContinuation` owns the rule.
+- Bash keeps a line continuation in single quotes, in `$'…'`, in a comment, and in a heredoc body with a quoted delimiter. These stay literal.
+- Values: `n=build; rm -rf "$n\⏎dir/"` gave the exact value `builddir/`. Bash reads the variable `ndir`, so it runs `rm -rf /`. The value is now unknown. `"$\⏎n/"` gives `build/`, `"${\⏎x}"` gives the value of `x`, and `x$\⏎'y'` gives `xy`.
+- A carriage return could hide a command. Bash reads CR as a word character and `\` + CR as an escaped CR. The lexer read CR as a line end and `\` + CRLF as a line continuation. `echo a\` + CRLF + `touch /tmp/x` and `echo a` + CR + `# ; touch /tmp/x` run `touch` in Bash, but `Parse` gave no `touch` occurrence. A comment now ends only at LF, and a heredoc line with a trailing CR is not its delimiter, as in Bash.
+- A `#` directly after a quoted part, `$'…'`, `$(…)`, or `$((…))` started a comment. Bash starts a comment only when `#` begins a word, so the `#` is word text. `echo "a"# ; touch x`, `ls 'a'#;touch x`, and `echo $(echo "a"# ; touch x)` run `touch` in Bash, but `Parse` gave no `touch` occurrence (0.4.0-beta.3 to 0.4.0-beta.21). The argument is now `a#`, and the next command is an occurrence.
+- A reserved word or keyword with a line continuation in it is read without the continuation. `t\⏎ime touch x`, `!\⏎ touch x`, `coproc\⏎ touch x`, and `{\⏎ touch x; }` gave the reserved word as the program; they now fail closed like the forms without the continuation. `f\⏎i` and `d\⏎one` are keywords, `(\⏎(` is an arithmetic command (unparseable), and `;\⏎;` ends a case item.
+- A `~` after `=` or `:` of an assignment-shaped word. `make PREFIX=~/x` gave `PREFIX=~/x`, but non-POSIX Bash passes `PREFIX=$HOME/x` (also `a=b:~/y`, `a+=~/x`, `a=~`). POSIX-mode Bash and dash keep the text. The parser now expands it only in the submitted source (not a decoded `sh -c` or `bash -c` child), in `FreshNonInteractiveNoStartup` mode, with a launch-proved HOME. In every other case, and for `~user`, `~+`, a `~` after a quoted part, or a subscripted name (`a[0]=~/x`), the value is Unknown. A quoted prefix, a later `=`, and a here-string keep the text, as in Bash.
+- The value argument of a Bash `--name=value` word is now the part after the first `=` of the decoded word that Bash passes. `curl --data=@p\.json` gave the value `--data=@p.json`, `curl --data=\a""` gave `--data=a`, and `curl --data="a b"` gave `"a b"` with the quotes. Bash passes `@p.json`, `a`, and `a b`. A value that the parser cannot take from the decoded word is Unknown.
+- Readers of authored text use the same rule: the redirect operator analysis (`>\⏎>` is an append), `MayPathnameExpand` and `MayFieldSplit` (`"$\⏎@"`, `{a.\⏎.c}`), `CommandWords`, and option names in the per-verb flag tables (`curl -\⏎o /tmp/out` binds the path). `Raw` keeps the exact source slice.
+
+## Fail closed
+
+- `$(\⏎(` and `$\⏎((`: Bash reads arithmetic, but the grammar reads only an exact `$((` marker. Before, the parser read a subshell that runs `1+2`.
+- As before: a line continuation in an expanding heredoc body or delimiter (Bash joins the body lines before it looks for the delimiter), and in `$'…'`.
+- New: a CR outside quotes, comments, and heredoc bodies, and `\` + CR outside single quotes, comments, and heredoc bodies. This includes CRLF line endings. Bash passes the CR to the program, so a CRLF script does not run as written.
+
+## Changed tests
+
+- Removed the tests that pinned the old CR rules: `command 3\` + CRLF + `>out` and `>&1` (a descriptor across `\` + CRLF), `cat ~\` + CRLF + `/x`, a CRLF heredoc body, `\` + CRLF before a comment in `$( )`, and CRLF as a statement separator. Bash does not read these sources the way the tests claimed. The LF forms stay pinned.
+- Corpus entries 166 and 288: the value argument of `curl --data=…` is now `@$HOME.json`, not the whole word.
+
+## Security and compatibility
+
+- Output comparison against 0.4.0-beta.21: 6,640 inputs, 123,456 records in two launch modes. 4,458 records change, in 213 inputs: 105 with a backslash before LF, 24 with a CR, 47 with a `--name=value` word that has an escape, a quote, or an expansion (only the value of the value argument changes), 9 with a `#` after a quoted part or `)`, and 28 with a `~` after `=` or `:`.
+- Public API: no change.
+- 0.4.0-beta.22 was planned for the literal twins of #242. That change moves to 0.4.0-beta.23.
+
 #### 0.4.0-beta.21 2026-10-06 ####
 
 This prerelease restores the 0.4.0-beta.19 verb-slot rule of `CommandOccurrence.CommandWords` (#240). It reverts the 0.4.0-beta.20 change (#237).

@@ -1053,7 +1053,7 @@ internal static partial class BashCommandParser
                 _tokens[_position].Kind != BashTokenKind.Word ||
                 !HasExactLiteralValue(_tokens[_position]) ||
                 !string.Equals(
-                    SourceSlice(_source, _tokens[_position]),
+                    BashLineContinuation.Spelling(SourceSlice(_source, _tokens[_position])),
                     _tokens[_position].Value,
                     StringComparison.Ordinal) ||
                 !IsBashIdentifier(_tokens[_position].Value))
@@ -1672,7 +1672,7 @@ internal static partial class BashCommandParser
             string.Equals(clause.Verb.Tokens[0], "export", StringComparison.Ordinal) &&
             tokens.Count > 0 &&
             tokens[0].Kind == BashTokenKind.Word &&
-            string.Equals(SourceSlice(_source, tokens[0]), "export", StringComparison.Ordinal) &&
+            string.Equals(BashLineContinuation.Spelling(SourceSlice(_source, tokens[0])), "export", StringComparison.Ordinal) &&
             clause.Redirects.Count == 0;
 
         /// <summary>
@@ -1692,7 +1692,7 @@ internal static partial class BashCommandParser
             error = null;
             if (tokens.Count == 2 &&
                 tokens[1].Kind == BashTokenKind.Word &&
-                string.Equals(SourceSlice(_source, tokens[1]), "-p", StringComparison.Ordinal))
+                string.Equals(BashLineContinuation.Spelling(SourceSlice(_source, tokens[1])), "-p", StringComparison.Ordinal))
             {
                 exports = new BashExportFacts(assignments, names);
                 return true;
@@ -1720,7 +1720,7 @@ internal static partial class BashCommandParser
 
                 if (token.Kind != BashTokenKind.Word ||
                     !HasExactLiteralValue(token) ||
-                    !string.Equals(SourceSlice(_source, token), token.Value, StringComparison.Ordinal) ||
+                    !string.Equals(BashLineContinuation.Spelling(SourceSlice(_source, token)), token.Value, StringComparison.Ordinal) ||
                     !BashVariableAssignmentGrammar.IsEligibleCommandEnvironmentName(token.Value))
                 {
                     error = "Bash export accepts only bounded names and assignments";
@@ -1944,8 +1944,7 @@ internal static partial class BashCommandParser
             var first = _position;
             if (first + 1 >= _tokens.Count ||
                 !IsOperatorToken(_tokens[first + 1], "(") ||
-                _tokens[first + 1].SourceStart !=
-                    _tokens[first].SourceStart + _tokens[first].SourceLength)
+                !IsAdjacent(_tokens[first], _tokens[first + 1]))
             {
                 return false;
             }
@@ -1973,11 +1972,21 @@ internal static partial class BashCommandParser
 
                 return index + 1 < _tokens.Count &&
                     IsOperatorToken(_tokens[index + 1], ")") &&
-                    _tokens[index + 1].SourceStart == token.SourceStart + token.SourceLength;
+                    IsAdjacent(token, _tokens[index + 1]);
             }
 
             return false;
         }
+
+        /// <summary>
+        /// True when only line continuations come between the two tokens.
+        /// Bash removes them first, so `(\⏎(` is `((` and `;\⏎;` is `;;` (#243).
+        /// </summary>
+        private bool IsAdjacent(BashToken first, BashToken second) =>
+            BashLineContinuation.Skip(
+                _source.AsSpan(),
+                first.SourceStart + first.SourceLength,
+                BashContinuationContext.Unquoted) == second.SourceStart;
 
         private static bool IsOperatorToken(BashToken token, string text) =>
             token.Kind == BashTokenKind.Operator &&
@@ -2103,7 +2112,7 @@ internal static partial class BashCommandParser
             _tokens[_position].Kind == BashTokenKind.Word &&
             HasExactLiteralValue(_tokens[_position]) &&
             string.Equals(
-                SourceSlice(_source, _tokens[_position]),
+                BashLineContinuation.Spelling(SourceSlice(_source, _tokens[_position])),
                 value,
                 StringComparison.Ordinal) &&
             string.Equals(_tokens[_position].Value, value, StringComparison.Ordinal);
@@ -2123,8 +2132,7 @@ internal static partial class BashCommandParser
             _position + 1 < _tokens.Count &&
             _tokens[_position + 1].Kind == BashTokenKind.Operator &&
             _tokens[_position + 1].OperatorText == ";" &&
-            _tokens[_position + 1].SourceStart ==
-                _tokens[_position].SourceStart + _tokens[_position].SourceLength;
+            IsAdjacent(_tokens[_position], _tokens[_position + 1]);
 
         private bool IsAnyWord(string[]? words)
         {
@@ -2235,8 +2243,12 @@ internal static partial class BashCommandParser
                             return false;
                         }
 
-                        if (!raw.StartsWith("$(", StringComparison.Ordinal) ||
-                            raw[raw.Length - 1] != ')')
+                        if (!BashLexer.TryGetCommandSubstitutionBody(
+                                _source,
+                                fragment.SourceStart.Value,
+                                fragment.SourceLength.Value,
+                                out _,
+                                out _))
                         {
                             substitutions = Array.Empty<ShellValueFragment>();
                             error = "unsupported Bash command substitution provenance";
@@ -2307,9 +2319,7 @@ internal static partial class BashCommandParser
         private bool IsAssignmentWord(BashToken token)
         {
             var spelling = _source.Substring(token.SourceStart, token.SourceLength)
-                .Replace("\\\r\n", string.Empty)
-                .Replace("\\\n", string.Empty)
-                .Replace("\\\r", string.Empty);
+                .Replace("\\\n", string.Empty);
             var index = 0;
             if (spelling.Length == 0 || !IsBashIdentifierStart(spelling[index]))
             {
@@ -2368,9 +2378,7 @@ internal static partial class BashCommandParser
             }
 
             var spelling = _source.Substring(token.SourceStart, token.SourceLength)
-                .Replace("\\\r\n", string.Empty)
-                .Replace("\\\n", string.Empty)
-                .Replace("\\\r", string.Empty);
+                .Replace("\\\n", string.Empty);
             var equals = spelling.IndexOf('=');
             var name = equals > 0 ? spelling.Substring(0, equals) : string.Empty;
 
@@ -2619,6 +2627,27 @@ internal static partial class BashCommandParser
                     continue;
                 }
 
+                // The leading `~` of the value (#243). The spelling gate
+                // accepts only a leading tilde, and the state pass reads it
+                // from HOME through the leading-tilde fact. A real assignment
+                // expands it also in POSIX mode, so the lexer's Unknown form
+                // (no proved non-POSIX Bash) is accepted here too.
+                if (fragment.Kind == ShellValueFragmentKind.Expansion &&
+                    fragment.Expansion is
+                    {
+                        Kind: ShellExpansionKind.Tilde,
+                        Name: BashAssignmentWordTilde.ExpansionName,
+                    } ||
+                    fragment is
+                    {
+                        Kind: ShellValueFragmentKind.Opaque,
+                        OpaqueCause: ShellOpaqueCause.Unsupported,
+                        Value: "~",
+                    })
+                {
+                    continue;
+                }
+
                 if (fragment.Kind == ShellValueFragmentKind.Expansion &&
                     fragment.Expansion is { Kind: ShellExpansionKind.Variable, Name: not null } &&
                     fragment.Cardinality == ShellValueCardinality.ExactlyOne)
@@ -2702,8 +2731,18 @@ internal static partial class BashCommandParser
             {
                 var sourceStart = fragment.SourceStart!.Value;
                 var sourceLength = fragment.SourceLength!.Value;
-                var bodyStart = sourceStart + 2;
-                var bodyLength = sourceLength - 3;
+                if (!BashLexer.TryGetCommandSubstitutionBody(
+                        _source,
+                        sourceStart,
+                        sourceLength,
+                        out var bodyStart,
+                        out var bodyLength))
+                {
+                    substitutions = Array.Empty<CommandSubstitutionSyntax>();
+                    error = "unsupported Bash command substitution provenance";
+                    return false;
+                }
+
                 if (!TryParseSubstitutionBody(
                         bodyStart,
                         bodyLength,
@@ -2736,7 +2775,9 @@ internal static partial class BashCommandParser
             out string? error)
         {
             var source = _source.Substring(sourceStart, sourceLength);
-            var relativeTokens = BashLexer.Tokenize(source);
+            var relativeTokens = BashLexer.Tokenize(
+                source,
+                ExpandsAssignmentTilde(_options, _bashCDepth));
             for (var index = 0; index < relativeTokens.Count; index++)
             {
                 if (relativeTokens[index].Kind == BashTokenKind.UnparseableSentinel)
@@ -3368,7 +3409,7 @@ internal static partial class BashCommandParser
 
             foreach (var argument in clause.Args)
             {
-                if (string.Equals(argument.Raw, "-v", StringComparison.Ordinal))
+                if (string.Equals(BashLineContinuation.Spelling(argument.Raw), "-v", StringComparison.Ordinal))
                 {
                     return true;
                 }

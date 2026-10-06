@@ -2358,7 +2358,9 @@ quoted_string   := single-quoted | double-quoted
   separates the heredoc's clause from what follows.
 - `\` followed by a newline is removed before word-boundary analysis. It joins
   adjacent fragments (`r\` + newline + `m` is the command name `rm`); actual
-  surrounding spaces still separate words.
+  surrounding spaces still separate words. Since v0.4.0-beta.22 it is also
+  removed before the lexer reads the next character of an expansion or an
+  operator (see "Bash line continuations").
 - Bash line comments (`#` at a word boundary through end-of-line) are
   whitespace-equivalent at the lexer level — they emit a Comment token
   for source fidelity but are filtered alongside Whitespace by the
@@ -2588,6 +2590,95 @@ substitution also joins into the loop, which is more than Bash does.
 | `[ -f a ] \|\| exit 1; for f in a b; do echo "$f"; done` | parses (unparseable before) |
 | `for d in a b; do break x; done` | unparseable |
 
+### Bash line continuations (v0.4.0-beta.22)
+
+Bash removes a line continuation, a backslash and a newline, before it splits
+the input into tokens (#243). Before v0.4.0-beta.22 the lexer removed it only
+inside a word. It did not remove it before it read the next character of an
+expansion or an operator. `echo "$\⏎(touch /tmp/x)"` gave one `echo`
+occurrence with the literal value `$(touch /tmp/x)`, but Bash runs `touch`.
+0.4.0-beta.3 to 0.4.0-beta.21 have this bug. (`⏎` is a real newline.)
+
+Owner and data. `BashLineContinuation` (lexer) owns the rule. It is
+call-local. Every scan that reads the next character of a multi-character
+construct asks it to skip the continuations first.
+
+| Context | Line continuation |
+|---|---|
+| Unquoted text, `$( )`, `${ }`, `$(( ))`, backticks | removed |
+| Double quotes | removed (backslash + LF only) |
+| Expanding heredoc body or delimiter | removed by Bash; the parser fails closed |
+| Single quotes, `$'…'`, a comment | kept as text |
+| Heredoc body with a quoted delimiter | kept as text |
+
+Schematic flow after `$` (it omits the nesting limit):
+
+```
+next = skip_continuations(source, dollar + 1, context)
+case source[next]:
+  '('  : second = skip_continuations(source, next + 1, context)
+         if source[second] == '(' : exact `$((` -> bounded arithmetic,
+                                    split marker -> fail closed
+         else                     : command substitution; its body
+                                    starts after source[next]
+  '{'  : the parameter name is the body without continuations
+  name : the name continues across continuations (`$n\⏎dir` is `$ndir`)
+  '\'' : ANSI-C string; continuations inside stay text
+  '"'  : locale string -> fail closed
+```
+
+The same rule reads the operators `&&`, `||`, `>>`, `<<`, `<<-`, `<<<`, `&>`,
+and `&>>`, a numeric source descriptor, and a descriptor target such as
+`>&\⏎2`. The readers of authored text use it too: the redirect operator
+analysis, `MayPathnameExpand` and `MayFieldSplit`, `CommandWords`, and option
+names in the per-verb flag tables. `ClauseElement.Raw` and `Arg.Raw` keep the
+exact source slice. The placeholder text of an opaque `$( )` value drops its
+continuations, so a removed backslash does not look like a Windows path.
+
+These forms fail closed: `$(\⏎(` and `$\⏎((` (Bash reads arithmetic, but
+the grammar reads only an exact `$((`), a continuation in an expanding
+heredoc body or delimiter (Bash joins the body lines before it looks for the
+delimiter), a continuation in `$'…'`, and `$\⏎"…"`.
+
+Reserved words. A reserved word, a keyword, or a literal check reads the
+spelling without line continuations: `t\⏎ime touch x` and `{\⏎ touch x; }`
+fail closed like `time touch x` and `{ touch x; }`, and `f\⏎i` is `fi`. Two
+operators split by a continuation are one: `(\⏎(` starts an arithmetic
+command (unparseable), and `;\⏎;` ends a case item.
+
+Carriage return. Bash reads a CR as an ordinary word character and `\` + CR as
+an escaped CR, so neither ends or continues a line. Before v0.4.0-beta.22 the
+lexer read CR as a line end and `\` + CRLF as a continuation, which hid
+commands: `echo a\` + CRLF + `touch /tmp/x` and `echo a` + CR + `# ; touch
+/tmp/x` run `touch` in Bash. Now a CR outside quotes, comments, and heredoc
+bodies, and `\` + CR outside single quotes, comments, and heredoc bodies,
+make the source unparseable. This includes CRLF line endings. A comment ends
+only at LF, and a heredoc line with a trailing CR is not its delimiter, as in
+Bash. A CR inside single or double quotes is text.
+
+Inline option values. For a Bash `--name=value` word, the value argument of
+`CommandOccurrence.Arguments` is the part after the option and its `=` in the
+decoded word that Bash passes (or in each proved value of that word). Before
+v0.4.0-beta.22 an escape, a quote, or a continuation gave the whole word or the
+authored spelling: `curl --data=@p\.json` gave `--data=@p.json`, and
+`curl --data=\a""` gave `--data=a`. A value that does not start with the
+option and `=` is Unknown.
+
+| Source | Result |
+|---|---|
+| `echo "$\⏎(touch /tmp/x)"` | occurrences `touch` (substitution) and `echo` |
+| `x="$\⏎(touch /tmp/x)"` | occurrence `touch` |
+| `true &\⏎& touch /tmp/x` | occurrences `true` and `touch` |
+| `n=build; rm -rf "$n\⏎dir/"` | not `builddir/`: Bash reads `$ndir` |
+| `n=build; cat "$\⏎n/"` | value `build/` |
+| `echo a >\⏎> out` | append redirect to `/work/out` |
+| `echo '$\⏎(touch /tmp/x)'` | one `echo`; the value keeps `\⏎` |
+| `echo a # c \⏎touch /tmp/x` | `echo a` and `touch`: a comment does not continue |
+| `echo "$(\⏎(1+2))"` | unparseable |
+| `echo a\` + CRLF + `touch /tmp/x` | unparseable |
+| `echo a` + CR + `# ; touch /tmp/x` | unparseable |
+| `curl --data=@p\.json` | value argument `@p.json` |
+
 ### Bash ANSI-C and locale quotes (v0.4.0-beta.19)
 
 Bash decodes the backslash escapes of an ANSI-C string `$'…'` and then uses
@@ -2760,8 +2851,11 @@ The lexer produces tokens consumed by the parser. Token kinds:
   is flagged as a **statement separator**; the parser retains those
   tokens past `FilterSignificant` and splits clauses on them per §4. A
   pure space/tab run carries no flag and is discarded after splitting.
-- **CONTINUATION** — `\` + `\n` (or `\r\n`). Removed before word-boundary
-  analysis; adjacent lexical fragments remain one authored word.
+- **CONTINUATION** — `\` + `\n`. Removed before word-boundary
+  analysis; adjacent lexical fragments remain one authored word. A scan that
+  reads the second character of a construct (`$(`, `${`, `$name`, `&&`, `>>`,
+  `<<`) skips continuations first (v0.4.0-beta.22, #243). Single quotes,
+  `$'…'`, comments, and heredoc bodies keep them.
 - **OPAQUE_SUBSTITUTION** — `$(cmd)` or backtick `` `cmd` ``. The full
   substitution slice (including delimiters) becomes a single token.
   Boundary tracking handles nested same-kind regions, nested quotes,
@@ -2826,23 +2920,27 @@ Operators terminate the current token. `cd /tmp&&ls` lexes as
 must handle this. A numeric descriptor is an operator prefix only when its
 digits begin at a shell-token boundary and become adjacent to `<`, `>`, `>>`,
 `<<`, `<<-`, or `<<<` after Bash removes unquoted line continuations.
-Continuations may join digit fragments or the descriptor and operator; LF and
-CRLF spellings retain their authored span while producing the same descriptor.
+Continuations may join digit fragments or the descriptor and operator; the
+authored span keeps them while the descriptor is the same. A `\` + CR is not a
+continuation and fails closed (v0.4.0-beta.22).
 Digits joined to an ordinary, quoted, or escaped word remain part of that word;
 `command3>file` therefore uses command name `command3` and a default-source `>`
 redirect.
 
 ### Comment handling
 
-- An unquoted `#` that appears at a **word boundary** starts a comment
-  that runs to (but does not include) the next newline. A word boundary
-  is: start of input, or the position immediately after a whitespace
-  run, a newline, an operator (`&&`, `||`, `;`, `|`, `>`, `>>`, `<`,
-  a numeric descriptor adjacent to `>`, `>>`, `<`, `<<`, `<<-`, or `<<<`,
-  `&>`, `&>>`, `(`, `)`, `<<`, `<<-`, `<<<`), a quoted string, or an opaque
-  substitution. Equivalently: `#` is comment-start everywhere the
-  outer lexer dispatch loop sits, because every other lexer rule has
-  already consumed its territory before `#` is considered.
+- An unquoted `#` that begins a word starts a comment that runs to (but
+  does not include) the next LF. A `#` begins a word at the start of
+  input, or immediately after a whitespace run, a newline, or an operator
+  (`&&`, `||`, `;`, `|`, `>`, `>>`, `<`, a numeric descriptor adjacent to
+  `>`, `>>`, `<`, `<<`, `<<-`, or `<<<`, `&>`, `&>>`, `(`, `)`, `<<`,
+  `<<-`, `<<<`).
+- Directly after a quoted string, `$'…'`, or an opaque substitution
+  (`$(…)`, `$((…))`), also across a line continuation, `#` is word text
+  (v0.4.0-beta.22, #243). Bash runs `touch` in `echo "a"# ; touch x`; the
+  argument is `a#`. Before v0.4.0-beta.22 the lexer started a comment there
+  and hid the next command. The same rule holds when a substitution body is
+  parsed again.
 - `#` **inside** single or double quotes is a literal character (no
   comment).
 - `#` in the **interior** of an unquoted word (e.g. `abc#def`) is a
@@ -3194,6 +3292,26 @@ a normalized absolute path. Resolution order:
    `~/foo` → `<home>/foo`. The complete tilde prefix must be unquoted;
    quoted or escaped slash spellings remain literal, while backslash-newline
    is removed before this test. `~user` not supported → `DynamicSkip`.
+   Since v0.4.0-beta.22 (#243), a word whose text before the first unquoted
+   `=` (or `+=`) is a variable name is assignment-shaped. Outside POSIX mode
+   Bash expands a `~` directly after that `=` and after each later unquoted
+   `:`, in arguments, `for` and `case` words, and redirect targets:
+   `make PREFIX=~/x` passes `PREFIX=<home>/x`, and `ls a=b:~/y` passes
+   `a=b:<home>/y`. The prefix ends at `/`, `:`, or the end of the word. A
+   quoted or escaped prefix (`a=~"/x"`, `a=~\/x`), a later `=`
+   (`a=b=~/x`), and a here-string keep the text. `~user`, `~+`, and a `~`
+   after a quoted part of the word (`a="b":~/x`) are not proved, so the value
+   is Unknown. The value is never exact with a literal `~` that Bash expands.
+   The expansion is POSIX-dependent: POSIX-mode Bash and dash keep the text.
+   The parser expands it only when all of these hold: (a) the word is in the
+   submitted source, not in a decoded `sh -c`, `bash -c`, or
+   `bash --posix -c` child; (b) the mode is
+   `BashInitialStateMode.FreshNonInteractiveNoStartup`, which excludes an
+   inherited POSIX mode (`POSIXLY_CORRECT`, `SHELLOPTS`, `--posix`); and (c)
+   HOME is a launch-proved value. In every other case the value is Unknown,
+   neither the text nor an expansion. A subscripted name (`a[0]=~/x`) also
+   gives Unknown. A real assignment (`x=~/a`) expands its leading tilde in
+   every mode and is not affected.
 
 2. **Env-var substitution.** `$VAR` and `${VAR}` are **not expanded**
    even if the value is in `Environment`. We treat any env var reference

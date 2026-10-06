@@ -194,7 +194,6 @@ public class BashLexerTests
 
     [Theory]
     [InlineData("command 3\\\n>out", "3>")]
-    [InlineData("command 3\\\r\n>out", "3>")]
     [InlineData("command 1\\\n0>&2-", "10>")]
     public void Unquoted_line_continuation_is_removed_before_descriptor_recognition(
         string input,
@@ -881,13 +880,17 @@ public class BashLexerTests
         Assert.Equal(3, tokens[1].SourceLength);
     }
 
-    [Fact]
-    public void Crlf_newline_is_a_flagged_statement_separator()
+    [Theory]
+    [InlineData("a\r\nb")]
+    [InlineData("a\rb")]
+    [InlineData("a\\\r\nb")]
+    public void Carriage_return_outside_quotes_fails_closed(string input)
     {
-        var tokens = BashLexer.Tokenize("a\r\nb");
-        Assert.Equal(3, tokens.Count);
-        Assert.Equal(BashTokenKind.Whitespace, tokens[1].Kind);
-        Assert.True(tokens[1].IsStatementSeparator);
+        // Bash reads CR as a word character, not a line end (#243). Before
+        // 0.4.0-beta.22 CRLF was a separator and `\` + CRLF a continuation,
+        // so `echo a\` + CRLF + `touch x` hid `touch`.
+        var tokens = BashLexer.Tokenize(input);
+        Assert.Equal(BashTokenKind.UnparseableSentinel, tokens[^1].Kind);
     }
 
     [Fact]

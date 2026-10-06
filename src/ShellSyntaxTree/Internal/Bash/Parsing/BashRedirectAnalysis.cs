@@ -78,7 +78,9 @@ internal static class BashRedirectAnalysis
             return Incomplete(redirectIndex);
         }
 
-        var authoredTarget = element.Raw.Substring(length).TrimStart();
+        var authoredTarget = BashLineContinuation.Remove(
+                element.Raw.AsSpan(length), BashContinuationContext.Unquoted)
+            .TrimStart();
         if (operation == RedirectOperation.HereDocument)
         {
             return AnalyzeHereDocument(
@@ -87,7 +89,8 @@ internal static class BashRedirectAnalysis
                 sourceTokens,
                 element,
                 redirectSource,
-                stripLeadingTabs: element.Raw.AsSpan(0, length)
+                stripLeadingTabs: BashLineContinuation.Remove(
+                        element.Raw.AsSpan(0, length), BashContinuationContext.Unquoted)
                     .EndsWith("<<-", StringComparison.Ordinal));
         }
 
@@ -166,6 +169,33 @@ internal static class BashRedirectAnalysis
         for (var index = 0; index < fragments.Length; index++)
         {
             var fragment = value.Fragments[index];
+
+            // Bash does not apply the assignment-word tilde rule to a
+            // here-string: `<<< a=~/x` passes `a=~/x` (#243).
+            if (fragment.Expansion is
+                {
+                    Kind: ShellExpansionKind.Tilde,
+                    Name: BashAssignmentWordTilde.ExpansionName,
+                } ||
+                fragment is
+                {
+                    Kind: ShellValueFragmentKind.Opaque,
+                    OpaqueCause: ShellOpaqueCause.Unsupported,
+                    Value: "~",
+                })
+            {
+                changed = true;
+                fragments[index] = fragment with
+                {
+                    Kind = ShellValueFragmentKind.Literal,
+                    AllowedTransforms = ShellLexicalTransform.None,
+                    Expansion = null,
+                    Cardinality = ShellValueCardinality.ExactlyOne,
+                    OpaqueCause = ShellOpaqueCause.None,
+                };
+                continue;
+            }
+
             if (fragment.Expansion is { Kind: ShellExpansionKind.Glob })
             {
                 changed = true;
@@ -316,17 +346,17 @@ internal static class BashRedirectAnalysis
         operation = RedirectOperation.Unknown;
         length = 0;
 
-        if (raw.StartsWith("&>>", StringComparison.Ordinal))
+        // The lexer reads an operator across a line continuation, so `>\⏎>`
+        // is `>>` (#243). Each match below skips continuations too.
+        if (Match(raw, 0, "&>>", out length))
         {
             operation = RedirectOperation.CombinedOutputAppend;
-            length = 3;
             return true;
         }
 
-        if (raw.StartsWith("&>", StringComparison.Ordinal))
+        if (Match(raw, 0, "&>", out length))
         {
             operation = RedirectOperation.CombinedOutput;
-            length = 2;
             return true;
         }
 
@@ -341,9 +371,11 @@ internal static class BashRedirectAnalysis
                 continue;
             }
 
-            if (TrySkipLineContinuation(raw, operatorStart, out var afterContinuation))
+            var continuation = BashLineContinuation.LengthAt(
+                raw.AsSpan(), operatorStart, BashContinuationContext.Unquoted);
+            if (continuation > 0)
             {
-                operatorStart = afterContinuation;
+                operatorStart += continuation;
                 continue;
             }
 
@@ -368,89 +400,66 @@ internal static class BashRedirectAnalysis
             else
             {
                 source = new RedirectSourceFacts();
-                if (raw.AsSpan(operatorStart).StartsWith("<<<", StringComparison.Ordinal))
+                if (Match(raw, operatorStart, "<<<", out length))
                 {
                     operation = RedirectOperation.HereString;
-                    length = operatorStart + 3;
                 }
-                else if (raw.AsSpan(operatorStart).StartsWith("<<-", StringComparison.Ordinal))
+                else if (Match(raw, operatorStart, "<<-", out length) ||
+                         Match(raw, operatorStart, "<<", out length))
                 {
                     operation = RedirectOperation.HereDocument;
-                    length = operatorStart + 3;
-                }
-                else if (raw.AsSpan(operatorStart).StartsWith("<<", StringComparison.Ordinal))
-                {
-                    operation = RedirectOperation.HereDocument;
-                    length = operatorStart + 2;
                 }
 
                 return true;
             }
         }
 
-        if (raw.AsSpan(operatorStart).StartsWith(">>", StringComparison.Ordinal))
+        if (Match(raw, operatorStart, ">>", out length))
         {
             operation = RedirectOperation.FileAppend;
-            length = operatorStart + 2;
             return true;
         }
 
-        if (operatorStart < raw.Length && raw[operatorStart] == '>')
+        if (Match(raw, operatorStart, ">", out length))
         {
             operation = RedirectOperation.FileOutput;
-            length = operatorStart + 1;
             return true;
         }
 
-        if (raw.AsSpan(operatorStart).StartsWith("<<<", StringComparison.Ordinal))
+        if (Match(raw, operatorStart, "<<<", out length))
         {
             operation = RedirectOperation.HereString;
-            length = operatorStart + 3;
             return true;
         }
 
-        if (raw.AsSpan(operatorStart).StartsWith("<<-", StringComparison.Ordinal))
+        if (Match(raw, operatorStart, "<<-", out length) ||
+            Match(raw, operatorStart, "<<", out length))
         {
             operation = RedirectOperation.HereDocument;
-            length = operatorStart + 3;
             return true;
         }
 
-        if (raw.AsSpan(operatorStart).StartsWith("<<", StringComparison.Ordinal))
-        {
-            operation = RedirectOperation.HereDocument;
-            length = operatorStart + 2;
-            return true;
-        }
-
-        if (operatorStart < raw.Length && raw[operatorStart] == '<')
+        if (Match(raw, operatorStart, "<", out length))
         {
             operation = RedirectOperation.FileInput;
-            length = operatorStart + 1;
             return true;
         }
 
+        length = 0;
         source = new RedirectSourceFacts();
         return false;
     }
 
-    private static bool TrySkipLineContinuation(
-        string source,
-        int index,
-        out int afterContinuation)
+    private static bool Match(string raw, int start, string expected, out int end)
     {
-        afterContinuation = index;
-        if (index + 1 >= source.Length || source[index] != '\\' ||
-            source[index + 1] is not ('\n' or '\r'))
+        if (BashLineContinuation.TryMatch(
+                raw.AsSpan(), start, expected, BashContinuationContext.Unquoted, out end))
         {
-            return false;
+            return true;
         }
 
-        afterContinuation = source[index + 1] == '\r' &&
-            index + 2 < source.Length && source[index + 2] == '\n'
-            ? index + 3
-            : index + 2;
-        return true;
+        end = 0;
+        return false;
     }
 
     private static RedirectAnalysisFacts Incomplete(int redirectIndex) => new()

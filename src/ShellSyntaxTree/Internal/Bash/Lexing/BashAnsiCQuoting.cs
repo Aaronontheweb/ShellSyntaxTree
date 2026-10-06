@@ -31,22 +31,23 @@ namespace ShellSyntaxTree.Internal.Bash.Lexing;
 internal static class BashAnsiCQuoting
 {
     /// <summary>
-    /// Decodes the string that starts with <c>$'</c> at
-    /// <paramref name="start"/> into <paramref name="value"/>.
+    /// Decodes the string whose opening quote is at
+    /// <paramref name="openQuote"/> into <paramref name="value"/>. A line
+    /// continuation can come between the <c>$</c> and the quote (#243).
     /// <paramref name="endExclusive"/> receives the index after the closing
     /// quote. On failure, <paramref name="error"/> gives the reason.
     /// </summary>
     internal static bool TryDecode(
         ReadOnlySpan<char> src,
-        int start,
+        int openQuote,
         ShellValueBuilder value,
         out int endExclusive,
         out string? error)
     {
         endExclusive = src.Length;
         error = null;
-        value.AppendBoundary(start + 2);
-        var index = start + 2;
+        value.AppendBoundary(openQuote + 1);
+        var index = openQuote + 1;
         while (index < src.Length)
         {
             var c = src[index];
@@ -73,17 +74,18 @@ internal static class BashAnsiCQuoting
             index += length;
         }
 
-        error = $"unbalanced quote at position {start + 1}";
+        error = $"unbalanced quote at position {openQuote}";
         return false;
     }
 
     /// <summary>
-    /// Finds the end of a <c>$'…'</c> string without decoding it. A backslash
+    /// Finds the end of a <c>$'…'</c> string, whose opening quote is at
+    /// <paramref name="openQuote"/>, without decoding it. A backslash
     /// escapes the next character, so <c>\'</c> does not end the string.
     /// </summary>
-    internal static bool TryFindEnd(ReadOnlySpan<char> src, int start, out int endExclusive)
+    internal static bool TryFindEnd(ReadOnlySpan<char> src, int openQuote, out int endExclusive)
     {
-        var index = start + 2;
+        var index = openQuote + 1;
         while (index < src.Length)
         {
             if (src[index] == '\\')

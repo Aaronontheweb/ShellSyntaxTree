@@ -4,6 +4,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 using System;
+using ShellSyntaxTree.Internal.Bash.Lexing;
 
 namespace ShellSyntaxTree.Internal.Bash.Parsing;
 
@@ -129,7 +130,7 @@ internal static class BashControlTransferBuiltin
     private static bool IsStatic(ClauseElement element, ClauseElementRole role) =>
         element.Role == role &&
         element.Kind == ArgKind.Literal &&
-        string.Equals(element.Raw, element.Value, StringComparison.Ordinal);
+        string.Equals(BashLineContinuation.Spelling(element.Raw), element.Value, StringComparison.Ordinal);
 
     private static bool IsDecimal(string value)
     {

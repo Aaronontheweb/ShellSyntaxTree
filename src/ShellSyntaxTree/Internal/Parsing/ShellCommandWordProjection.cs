@@ -5,6 +5,7 @@
 // -----------------------------------------------------------------------
 using System;
 using System.Collections.Generic;
+using ShellSyntaxTree.Internal.Bash.Lexing;
 using ShellSyntaxTree.Internal.Resolving;
 
 namespace ShellSyntaxTree.Internal.Parsing;
@@ -297,23 +298,27 @@ internal static class ShellCommandWordProjection
 
     private static bool ExpandsToManyWordsInDoubleQuotes(string raw, int dollar)
     {
-        if (dollar + 1 >= raw.Length)
+        // Bash removes a line continuation before it reads the expansion,
+        // so `"$\⏎@"` is `"$@"` (#243).
+        var next = BashLineContinuation.Skip(
+            raw.AsSpan(), dollar + 1, BashContinuationContext.DoubleQuoted);
+        if (next >= raw.Length)
         {
             return false;
         }
 
-        if (raw[dollar + 1] == '@')
+        if (raw[next] == '@')
         {
             return true;
         }
 
-        if (raw[dollar + 1] != '{')
+        if (raw[next] != '{')
         {
             return false;
         }
 
-        var close = raw.IndexOf('}', dollar + 2);
-        var body = close < 0 ? raw.Substring(dollar + 2) : raw.Substring(dollar + 2, close - dollar - 2);
+        var close = raw.IndexOf('}', next + 1);
+        var body = close < 0 ? raw.Substring(next + 1) : raw.Substring(next + 1, close - next - 1);
         return body.IndexOf('@') >= 0;
     }
 
@@ -324,8 +329,9 @@ internal static class ShellCommandWordProjection
     /// </summary>
     private static WordShape ScanBash(string raw)
     {
-        // A lone `[` has no closing `]`, so it is not a pattern (#212).
-        if (raw == "[")
+        // A lone `[` has no closing `]`, so it is not a pattern (#212). Bash
+        // removes a line continuation, so `[\⏎` is also a lone `[` (#243).
+        if (BashLineContinuation.Remove(raw.AsSpan(), BashContinuationContext.Unquoted) == "[")
         {
             return WordShape.Static;
         }
@@ -395,14 +401,18 @@ internal static class ShellCommandWordProjection
                 case '~' when index == 0:
                     shape = Max(shape, WordShape.Expanded);
                     break;
+                case '~' when FollowsAssignmentMark(raw, index):
+                    // Bash can expand `~` after `=` or `:` of an
+                    // assignment-shaped word: `PREFIX=~/x` (#243).
+                    shape = Max(shape, WordShape.Expanded);
+                    break;
                 case '{':
                     braceDepth++;
                     break;
                 case ',' when braceDepth > 0:
                     braceHasList = true;
                     break;
-                case '.' when braceDepth > 0 &&
-                              index + 1 < raw.Length && raw[index + 1] == '.':
+                case '.' when braceDepth > 0 && IsNextLogicalDot(raw, index):
                     braceHasList = true;
                     break;
                 case '}' when braceDepth > 0:
@@ -419,6 +429,27 @@ internal static class ShellCommandWordProjection
 
         // An unterminated quote cannot come from a parsed word.
         return inSingle || inDouble ? WordShape.MaySplit : shape;
+    }
+
+    // The character before `~`, across line continuations, is `=` or `:`.
+    private static bool FollowsAssignmentMark(string raw, int tilde)
+    {
+        var index = tilde - 1;
+        while (index >= 1 && raw[index] == '\n' && raw[index - 1] == '\\')
+        {
+            index -= 2;
+        }
+
+        return index >= 0 && raw[index] is '=' or ':';
+    }
+
+    // `{a.\⏎.c}` is the sequence `{a..c}`: a line continuation between the
+    // dots does not end the `..` (#243).
+    private static bool IsNextLogicalDot(string raw, int index)
+    {
+        var next = BashLineContinuation.Skip(
+            raw.AsSpan(), index + 1, BashContinuationContext.Unquoted);
+        return next < raw.Length && raw[next] == '.';
     }
 
     /// <summary>

@@ -1839,7 +1839,7 @@ internal sealed class BashAbstractStateAnalyzer
 
         foreach (var argument in clause.Args)
         {
-            if (string.Equals(argument.Raw, "-v", StringComparison.Ordinal))
+            if (string.Equals(BashLineContinuation.Spelling(argument.Raw), "-v", StringComparison.Ordinal))
             {
                 return true;
             }
