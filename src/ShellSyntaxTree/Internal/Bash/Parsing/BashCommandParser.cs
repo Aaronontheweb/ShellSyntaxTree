@@ -984,11 +984,12 @@ internal static partial class BashCommandParser
                         // argv entry. Preserve that behavior for an inline option
                         // whose value is quoted or computed:
                         // `--data="@request file"` / `--data=$(generate)`.
-                        // Only an unquoted `=` splits an inline option value.
-                        // A quoted or escaped `=` is plain text, so
-                        // `-F'x=y'` is one argument `-Fx=y`.
-                        var splitsInlineValue =
-                            BashWordEquals.Classify(t) == BashFirstEquals.Plain;
+                        // A program splits `--name=value` at the first `=` of
+                        // the word that it receives, whatever the quotes were:
+                        // `--file\=/x` and `--file'='/x` are `--file=/x`. An
+                        // `=` in an expansion (`--$(echo a=b)`) gives no
+                        // known split point, so that word is not split.
+                        var splitsInlineValue = BashWordEquals.SplitsInlineValue(t);
                         if (splitsInlineValue
                             && NativeFlagSyntax.TrySplitEqualsPrefix(
                                 t.Value, out var adjacentFlagPart, out var adjacentValuePrefix)
@@ -1286,6 +1287,16 @@ internal static partial class BashCommandParser
 
                 case BashTokenKind.QuotedString:
                     {
+                        // A fully quoted `"--file=/x"` is the same argv entry
+                        // as `--file=/x`, so it gets the same option and value
+                        // facts.
+                        if (IsFlag(t.Value) &&
+                            BashWordEquals.SplitsInlineValue(t) &&
+                            TrySplitInlineFlag(t, out _, out _))
+                        {
+                            goto case BashTokenKind.Word;
+                        }
+
                         var sourceRaw = SourceSlice(source, t);
 
                         // Quoted strings never act as flags (a leading dash in

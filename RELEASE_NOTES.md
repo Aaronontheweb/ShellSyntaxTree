@@ -1,19 +1,19 @@
 #### 0.4.0-beta.24 2026-10-07 ####
 
-This prerelease fixes Bash words with a quoted `=`.
+This prerelease fixes Bash option words with a quoted `=`.
 
 ## Fixed
 
-- Only an unquoted `=` splits a Bash word into an option and its inline value. A quoted or escaped `=` is plain text, as in Bash. Before, the parser split the word at a quoted `=`, and then it failed: `awk -F'[= ]' '{print $2}' f`, `awk -F'x=y' 1 /tmp/x`, `cat -F'= ' f`, `echo -F'[= ]'`, and `cat -F"x=y" f` were unparseable (0.4.0-beta.3 to 0.4.0-beta.23). Each word is now one argument with the exact value that Bash passes, for example `-F[= ]` and `-Fx=y`. This applies in every initial state mode.
-- A word with only an escaped `=` is now one argument too. `curl --output\=/tmp/x` gave the arguments `--output` and `/tmp/x`. It now gives one argument `--output=/tmp/x`, with the same facts as the fully quoted word `"--output=/tmp/x"`.
-- A word with a quoted part before an unquoted `=` and a quoted value was unparseable: `cat --'x'='y' f`, `curl --'output'='/tmp/x' u`, and `tool -"o"="$n"`. The option argument has the decoded name and the value argument has the authored spelling, and the projection did not pair them. It now pairs them when the decoded word starts with the option and `=` and the authored word ends with `=` and the value spelling. `curl --'output'='/tmp/x'` gives the option `--output` and the path value `/tmp/x`.
-- `BashWordEquals` owns the test. The lexer records it for each word before a brace expansion replaces the word value, and the parser keeps it when it joins adjacent word parts. The assignment-word tilde rule of 0.4.0-beta.22 counts only unquoted, unescaped characters, so it uses the same test: `make PREFIX'='~/x` keeps the text `PREFIX=~/x`.
+- A program never sees shell quotes, and it splits an option word at the first `=` of the word that it receives. The parser split a word with a quoted `=` there too, but then the projection did not pair the option and the value, so the source was unparseable (0.4.0-beta.3 to 0.4.0-beta.23): `awk -F'[= ]' '{print $2}' f`, `awk -F'x=y' 1 /tmp/x`, `cat -F'= ' f`, `cat -F"x=y" f`, `cat --'x'='y' f`, and `tar --file'='/home/u/.bashrc -c x`. The projection now pairs them when the decoded word starts with the option and `=` and the authored word ends with `=` and the value spelling. Each part has the text of the split that the program reads: `-Fx` and `y`.
+- A fully quoted option word (`"--file=/x"`, `'--file=/x'`, `$'--file=/x'`) was one argument with no path fact for the value. Bash passes the same word as for `--file=/x`. It now gets the same option, value, and path facts: `tar "--file=/home/u/.bashrc" -c x` gives the path `/home/u/.bashrc`.
+- An `=` in an expansion or a substitution gave a wrong exact option part: `cat --$(echo a=b) f` gave `--$(echo a`, and `cat --$((1==1))=b f` gave `--$((1`. The split point is not known, so the word is now one Unknown argument.
+- `BashWordEquals` owns the test: the parser splits at the first `=` of the decoded word only when that `=` is word text, quoted or not. The lexer records it for each word before a brace expansion replaces the word value, and the parser keeps it when it joins adjacent word parts.
 
 ## Security and compatibility
 
-- Not changed: `--foo='x=y'` (the `=` after the option is unquoted) still gives `--foo` and `x=y`. `-D'x'=y` gives `-Dx` and `y`. `--file={a,b}` still splits.
-- The program can still read an option and a value from a word with a quoted `=`. A consumer that needs that split reads the exact value of the argument, as for a fully quoted word.
-- Output comparison against 0.4.0-beta.23: 5,085 inputs, 56,492 records in each of two launch modes. 368 records change, in 32 inputs. Each input has a quoted or escaped `=` in an option word, or a quoted option name with a quoted value. 30 inputs go from unparseable to parsed. In 2 inputs (`--name\=value`), two arguments become one.
+- Not changed: `--file=/x`, `--file\=/x`, `--foo='x=y'`, `-D'x'=y`, and `--file={a,b}` split as before, with the same path facts.
+- The assignment-word tilde rule does not change: Bash expands `~` only after an unquoted `=`, so `make PREFIX'='~/x` keeps the text.
+- Output comparison against 0.4.0-beta.23: 5,114 inputs, 56,840 records in each of two launch modes. 544 records change, in 47 inputs. 39 inputs with a quoted `=` or a quoted option name go from unparseable to parsed. 6 fully quoted option words now split, with the path facts of the unquoted form. 2 inputs with an `=` in a substitution give one Unknown argument.
 - Public API: no change.
 
 #### 0.4.0-beta.23 2026-10-06 ####

@@ -2835,31 +2835,6 @@ authored spelling: `curl --data=@p\.json` gave `--data=@p.json`, and
 `curl --data=\a""` gave `--data=a`. A value that does not start with the
 option and `=` is Unknown.
 
-Quoted `=`. Only an unquoted `=` splits a Bash word into an option and its
-inline value. The first `=` of the decoded word must be unquoted, unescaped
-word text; a quoted or escaped `=`, or one in an expansion, is plain text.
-This is the Bash rule for `name=value` words, and the assignment-word tilde
-rule uses the same test. `BashWordEquals` owns the test. The lexer records it
-for each word, and the parser keeps it when it joins adjacent word parts.
-Before v0.4.0-beta.24 the parser split at a quoted `=` and failed, so
-`awk -F'[= ]' '{print $2}' f` was unparseable.
-
-| Source | Arguments |
-|---|---|
-| `awk -F'[= ]' '{print $2}' f` | `-F[= ]`, `{print $2}`, `f` |
-| `cat -F"x=y" f` | `-Fx=y`, `f` |
-| `echo -F'x=y'=z` | `-Fx=y=z` |
-| `curl --output\=/tmp/x` | `--output=/tmp/x` (as for `"--output=/tmp/x"`) |
-| `cat --foo='x=y' f` | `--foo`, `x=y`, `f` (the `=` is unquoted) |
-| `cat -D'x'=y f` | `-Dx`, `y`, `f` |
-| `make PREFIX'='~/x` | `PREFIX=~/x` (no tilde expansion) |
-| `cat --'x'='y' f` | `--x`, `y`, `f` (unparseable before v0.4.0-beta.24) |
-
-A quoted option name with a quoted value (`--'x'='y'`) gives the option
-argument with the decoded name and the value argument with the authored
-spelling. The projection pairs them when the decoded word starts with the
-option and `=`, and the authored word ends with `=` and the value spelling.
-
 | Source | Result |
 |---|---|
 | `echo "$\⏎(touch /tmp/x)"` | occurrences `touch` (substitution) and `echo` |
@@ -2874,6 +2849,38 @@ option and `=`, and the authored word ends with `=` and the value spelling.
 | `echo a\` + CRLF + `touch /tmp/x` | unparseable |
 | `echo a` + CR + `# ; touch /tmp/x` | unparseable |
 | `curl --data=@p\.json` | value argument `@p.json` |
+
+Quoted `=` in an option word (v0.4.0-beta.24). A program never sees shell
+quotes, and it splits an option word at the first `=` of the word that it
+receives. So the parser splits a Bash word into an option and its inline value
+at the first `=` of the decoded word when that `=` is word text, quoted or
+not: `--file\=/x`, `--file'='/x`, `--fi'le=/x'`, and the fully quoted
+`"--file=/x"` get the same option, value, and path facts as `--file=/x`. When
+the first `=` of the decoded spelling is in an expansion or a substitution
+(`--$(echo a=b)`, `--$((1==1))=b`), the split point is not known, and the word
+stays one argument. `BashWordEquals` owns the test. The lexer records it for
+each word before a brace expansion replaces the word value, and the parser
+keeps it when it joins adjacent word parts.
+
+Before v0.4.0-beta.24 a quoted `=` made the source unparseable
+(`awk -F'[= ]' '{print $2}' f`, from v0.4.0-beta.3), and a fully quoted
+`"--file=/x"` was one argument with no option path fact. The `Raw` of the value
+argument is the authored text after the `=` (`y'` for `-F'x=y'`). The
+projection pairs the option and the value when the decoded word starts with
+the option and `=`, and the authored word ends with `=` and the value spelling.
+
+The assignment-word tilde rule is different: Bash expands `~` only after an
+unquoted, unescaped `=` of an assignment-shaped word. `make PREFIX'='~/x`
+keeps the text `PREFIX=~/x`.
+
+| Source | Arguments |
+|---|---|
+| `awk -F'[= ]' '{print $2}' f` | `-F[`, ` ]`, `{print $2}`, `f` |
+| `awk -F'x=y' 1 /tmp/x` | `-Fx`, `y`, `1`, `/tmp/x` |
+| `tar --file\=/home/u/.bashrc -c x` | `--file`, path `/home/u/.bashrc`, `-c`, `x` |
+| `tar "--file=/home/u/.bashrc" -c x` | `--file`, path `/home/u/.bashrc`, `-c`, `x` |
+| `cat --'x'='y' f` | `--x`, `y`, `f` |
+| `cat --$(echo a=b) f` | one Unknown argument, `f` |
 
 ### Bash ANSI-C and locale quotes (v0.4.0-beta.19)
 
