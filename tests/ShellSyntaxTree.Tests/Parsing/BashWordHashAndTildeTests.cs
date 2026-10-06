@@ -324,6 +324,7 @@ public class BashWordHashAndTildeTests
     [Theory]
     [InlineData("make install PREFIX=~/x a=~+")]
     [InlineData("make install a=\\\n~")]
+    [InlineData("make install a=\\\n~+")]
     public void Assignment_word_tilde_is_not_a_static_command_word(string source)
     {
         var words = Parser.Parse(source).Commands.Single().CommandWords;
