@@ -1621,9 +1621,10 @@ depth:
   the source once more with another `HomeDirectory`, and an occurrence whose
   exact directory changes gets no twins. When the launch facts export `HOME`
   but `HOME` is not live at the occurrence, the occurrence gets no twins.
-- Under `BashInitialStateMode.Unknown`, the parser can report an exact value
-  for a word that Bash expands (`-o"$n"` gives `-o$n`). The projection gives
-  no twins in that mode.
+- Under `BashInitialStateMode.Unknown`, the projection gives no twins. Before
+  v0.4.0-beta.24 the parser could report an exact value for a word that Bash
+  expands (`-o"$n"` gave `-o$n`, #245). That value is now Unknown, but the
+  state of that mode is not proved, so the projection still gives no twins.
 
 The budget is checked before a twin text is built. A twin text is one simple
 command with no loop, so its parse costs about as much as its length. The
@@ -2885,6 +2886,26 @@ tilde, and the value got the path `/home/u/x`.
 | `tar "--file=/home/u/.bashrc" -c x` | `--file`, path `/home/u/.bashrc`, `-c`, `x` |
 | `cat --'x'='y' f` | `--x`, `y`, `f` |
 | `cat --$(echo a=b) f` | one Unknown argument, `f` |
+
+Option words with an expansion (v0.4.0-beta.24, #245). The parser gives every
+Bash option word the Literal kind, also when the word has an expansion. The
+value of such a word comes from the state analysis. When the analysis does not
+prove it, the value is Unknown, not the raw spelling. Before v0.4.0-beta.24
+the projection used the raw spelling: under `BashInitialStateMode.Unknown`,
+`for n in a x; do tool -o"$n"; done` gave the exact value `-o$n`, but Bash
+passes `-oa` and `-ox`. For a `--name=value` word, the option part is Unknown
+when its decoded parts have an expansion (`--$n=x`, `--"$1"=x`, `--*=x`,
+`"--$x=y"`), in every mode. The value part is then Unknown too, because the
+program splits the word at the first `=` of the expanded text: with
+`n='a=b'`, Bash passes `--a=b=x`. A brace expansion after the `=`
+(`--file={a,b}`, `--'a'={p,q}`) keeps the exact option name.
+
+| Source | Mode | Value |
+|---|---|---|
+| `for n in a x; do tool -o"$n"; done` | Unknown | Unknown (was `-o$n`); authored `-oa`, `-ox` |
+| `for n in a x; do tool -o"$n"; done` | Isolated, Fresh | `-oa`, `-ox` (not changed) |
+| `n=a; tool --"$n"=x` | Fresh | option Unknown (was `--$n`), value Unknown |
+| `cat --file={/etc/shadow,x}` | any | option `--file`, value Unknown (not changed) |
 
 ### Bash ANSI-C and locale quotes (v0.4.0-beta.19)
 

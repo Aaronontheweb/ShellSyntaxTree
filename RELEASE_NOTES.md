@@ -1,6 +1,6 @@
 #### 0.4.0-beta.24 2026-10-07 ####
 
-This prerelease fixes Bash option words with a quoted `=`.
+This prerelease fixes Bash option words with a quoted `=` or with an unproved expansion.
 
 ## Fixed
 
@@ -8,6 +8,8 @@ This prerelease fixes Bash option words with a quoted `=`.
 - A fully quoted option word (`"--file=/x"`, `'--file=/x'`, `$'--file=/x'`) was one argument with no path fact for the value. Bash passes the same word as for `--file=/x`. It now gets the same option, value, and path facts: `tar "--file=/home/u/.bashrc" -c x` gives the path `/home/u/.bashrc`.
 - A `~` that starts a word part after a quote was a home-directory tilde. Bash keeps such a `~` as text, because it follows a quote, not the start of the word. `tar --file'='~/x -c x` passes `--file=~/x`, and tar opens `./~/x`, but the parser gave the path `/home/u/x`. `tar --file'='~root/../../etc/cron.d/x` gave no path fact. The value now has the facts of the unquoted `--file=~/x`: the path `/work/~/x`, and `/etc/cron.d/x`. `ls ''~/*` lists the folder `~` in the working directory.
 - An `=` in an expansion or a substitution gave a wrong exact option part: `cat --$(echo a=b) f` gave `--$(echo a`, and `cat --$((1==1))=b f` gave `--$((1`. The split point is not known, so the word is now one Unknown argument.
+- An option word with an expansion gave its raw spelling as the exact value when the parser did not prove the value (#245). Under `BashInitialStateMode.Unknown`, `for n in a x; do tool -o"$n"; done` gave `-o$n`, but Bash passes `-oa` and `-ox`. The same held for `git -C"$n" status`, `-xo"$n"`, `-o"${n}"`, `-o"$n"x`, `-o$n`, and `-"$n"`. The value is now Unknown. The authored value keeps the set that the loop gives. The parser gives every option word the Literal kind, so the projection now reads the decoded word parts instead of the kind.
+- The option part of a `--name=value` word with an expansion had the same bug in every mode: `--$n=x`, `--"$1"=x`, `--$(id)=x`, `--*=x`, and `"--$x=y"` gave the exact option `--$n`, `--$1`, `--$(id)`, `--*`, and `--$x`. The option part and the value part are now Unknown. The program splits the word at the first `=` of the expanded text, so the value part is not proved either: with `n='a=b'`, Bash passes `--a=b=x`.
 - `BashWordEquals` owns the test: the parser splits at the first `=` of the decoded word only when that `=` is word text, quoted or not. The lexer records it for each word before a brace expansion replaces the word value, and the parser keeps it when it joins adjacent word parts.
 
 ## Security and compatibility
@@ -15,6 +17,8 @@ This prerelease fixes Bash option words with a quoted `=`.
 - Not changed: `--file=/x`, `--file\=/x`, `--foo='x=y'`, `-D'x'=y`, and `--file={a,b}` split as before, with the same path facts.
 - The assignment-word tilde rule does not change: Bash expands `~` only after an unquoted `=`, so `make PREFIX'='~/x` keeps the text.
 - Output comparison against 0.4.0-beta.23: 5,151 inputs, 57,284 records in each of two launch modes. 616 records change, in 53 inputs (618 and 54 with launch facts). 45 inputs with a quoted `=` or a quoted option name go from unparseable to parsed. 6 fully quoted option words now split, with the path facts of the unquoted form. 2 inputs with an `=` in a substitution give one Unknown argument. `ls ''~/*` with launch facts gets a path pattern.
+- Output comparison of the #245 fix against the quoted-`=` fix: COMPARISON_PLACEHOLDER
+- Literal twins: the projection still gives no twins under `BashInitialStateMode.Unknown`, because that state is not proved.
 - Public API: no change.
 
 #### 0.4.0-beta.23 2026-10-06 ####
