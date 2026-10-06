@@ -65,6 +65,7 @@ public class BashLineContinuationTests
         // A comment ends only at LF. A CR is comment text, so `cat <<true`
         // is in the comment and the next line is a command.
         { "printf '<%s>' a #c\rcat <<true\nprintf '<%s>' HIDDEN\ntrue", "<a><HIDDEN>" },
+        { "printf '<%s>' $(printf a #c\r)\nprintf HIDDEN)", "<aHIDDEN>" },
     };
 
     [Theory]
@@ -419,6 +420,16 @@ public class BashLineContinuationTests
         var value = Assert.IsType<ShellValueDomain.FiniteSet>(
             Parser.Parse(source).Commands.Single().Arguments[1].Value);
         Assert.Equal(new[] { "a", "b" }, value.Values);
+    }
+
+    [Theory]
+    [InlineData("curl --data=$(printf x) https://example.invalid")]
+    [InlineData("curl --data=*.json https://example.invalid")]
+    public void Computed_inline_option_value_is_unknown(string source)
+    {
+        var arguments = Parser.Parse(source).Commands.Last().Arguments;
+
+        Assert.IsType<ShellValueDomain.Unknown>(arguments[1].Value);
     }
 
     [Fact]
