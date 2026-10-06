@@ -1,6 +1,6 @@
 #### 0.4.0-beta.22 2026-10-06 ####
 
-This prerelease fixes a security bug. A Bash line continuation could hide a command from `Parse` (#243). In the examples, `⏎` is a real newline.
+This prerelease fixes security bugs. A Bash line continuation or a carriage return could hide a command from `Parse` (#243). In the examples, `⏎` is a real newline and CR is a carriage return.
 
 ## Fixed
 
@@ -8,12 +8,20 @@ This prerelease fixes a security bug. A Bash line continuation could hide a comm
 - The lexer now skips line continuations before it reads the next character of `$(`, `$((`, `${`, `$name`, `$'`, `$"`, the operators `&&`, `||`, `>>`, `<<`, `<<-`, `<<<`, `&>`, and `&>>`, a numeric descriptor, and a descriptor target (`>&\⏎2`). This applies in unquoted text, in double quotes, and in the substitution boundary scan. `BashLineContinuation` owns the rule.
 - Bash keeps a line continuation in single quotes, in `$'…'`, in a comment, and in a heredoc body with a quoted delimiter. These stay literal.
 - Values: `n=build; rm -rf "$n\⏎dir/"` gave the exact value `builddir/`. Bash reads the variable `ndir`, so it runs `rm -rf /`. The value is now unknown. `"$\⏎n/"` gives `build/`, `"${\⏎x}"` gives the value of `x`, and `x$\⏎'y'` gives `xy`.
+- A carriage return could hide a command. Bash reads CR as a word character and `\` + CR as an escaped CR. The lexer read CR as a line end and `\` + CRLF as a line continuation. `echo a\` + CRLF + `touch /tmp/x` and `echo a` + CR + `# ; touch /tmp/x` run `touch` in Bash, but `Parse` gave no `touch` occurrence. A comment now ends only at LF, and a heredoc line with a trailing CR is not its delimiter, as in Bash.
+- The value argument of a Bash `--name=value` word is now the part after the first `=` of the decoded word that Bash passes. `curl --data=@p\.json` gave the value `--data=@p.json`, `curl --data=\a""` gave `--data=a`, and `curl --data="a b"` gave `"a b"` with the quotes. Bash passes `@p.json`, `a`, and `a b`. A value that the parser cannot take from the decoded word is Unknown.
 - Readers of authored text use the same rule: the redirect operator analysis (`>\⏎>` is an append), `MayPathnameExpand` and `MayFieldSplit` (`"$\⏎@"`, `{a.\⏎.c}`), `CommandWords`, and option names in the per-verb flag tables (`curl -\⏎o /tmp/out` binds the path). `Raw` keeps the exact source slice.
 
 ## Fail closed
 
 - `$(\⏎(` and `$\⏎((`: Bash reads arithmetic, but the grammar reads only an exact `$((` marker. Before, the parser read a subshell that runs `1+2`.
 - As before: a line continuation in an expanding heredoc body or delimiter (Bash joins the body lines before it looks for the delimiter), and in `$'…'`.
+- New: a CR outside quotes, comments, and heredoc bodies, and `\` + CR outside single quotes, comments, and heredoc bodies. This includes CRLF line endings. Bash passes the CR to the program, so a CRLF script does not run as written.
+
+## Changed tests
+
+- Removed the tests that pinned the old CR rules: `command 3\` + CRLF + `>out` and `>&1` (a descriptor across `\` + CRLF), `cat ~\` + CRLF + `/x`, a CRLF heredoc body, `\` + CRLF before a comment in `$( )`, and CRLF as a statement separator. Bash does not read these sources the way the tests claimed. The LF forms stay pinned.
+- Corpus entries 166 and 288: the value argument of `curl --data=…` is now `@$HOME.json`, not the whole word.
 
 ## Security and compatibility
 

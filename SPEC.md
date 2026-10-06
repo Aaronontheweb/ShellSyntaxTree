@@ -2640,6 +2640,24 @@ the grammar reads only an exact `$((`), a continuation in an expanding
 heredoc body or delimiter (Bash joins the body lines before it looks for the
 delimiter), a continuation in `$'…'`, and `$\⏎"…"`.
 
+Carriage return. Bash reads a CR as an ordinary word character and `\` + CR as
+an escaped CR, so neither ends or continues a line. Before v0.4.0-beta.22 the
+lexer read CR as a line end and `\` + CRLF as a continuation, which hid
+commands: `echo a\` + CRLF + `touch /tmp/x` and `echo a` + CR + `# ; touch
+/tmp/x` run `touch` in Bash. Now a CR outside quotes, comments, and heredoc
+bodies, and `\` + CR outside single quotes, comments, and heredoc bodies,
+make the source unparseable. This includes CRLF line endings. A comment ends
+only at LF, and a heredoc line with a trailing CR is not its delimiter, as in
+Bash. A CR inside single or double quotes is text.
+
+Inline option values. For a Bash `--name=value` word, the value argument of
+`CommandOccurrence.Arguments` is the part after the option and its `=` in the
+decoded word that Bash passes (or in each proved value of that word). Before
+v0.4.0-beta.22 an escape, a quote, or a continuation gave the whole word or the
+authored spelling: `curl --data=@p\.json` gave `--data=@p.json`, and
+`curl --data=\a""` gave `--data=a`. A value that does not start with the
+option and `=` is Unknown.
+
 | Source | Result |
 |---|---|
 | `echo "$\⏎(touch /tmp/x)"` | occurrences `touch` (substitution) and `echo` |
@@ -2651,6 +2669,9 @@ delimiter), a continuation in `$'…'`, and `$\⏎"…"`.
 | `echo '$\⏎(touch /tmp/x)'` | one `echo`; the value keeps `\⏎` |
 | `echo a # c \⏎touch /tmp/x` | `echo a` and `touch`: a comment does not continue |
 | `echo "$(\⏎(1+2))"` | unparseable |
+| `echo a\` + CRLF + `touch /tmp/x` | unparseable |
+| `echo a` + CR + `# ; touch /tmp/x` | unparseable |
+| `curl --data=@p\.json` | value argument `@p.json` |
 
 ### Bash ANSI-C and locale quotes (v0.4.0-beta.19)
 
@@ -2824,7 +2845,7 @@ The lexer produces tokens consumed by the parser. Token kinds:
   is flagged as a **statement separator**; the parser retains those
   tokens past `FilterSignificant` and splits clauses on them per §4. A
   pure space/tab run carries no flag and is discarded after splitting.
-- **CONTINUATION** — `\` + `\n` (or `\r\n`). Removed before word-boundary
+- **CONTINUATION** — `\` + `\n`. Removed before word-boundary
   analysis; adjacent lexical fragments remain one authored word. A scan that
   reads the second character of a construct (`$(`, `${`, `$name`, `&&`, `>>`,
   `<<`) skips continuations first (v0.4.0-beta.22, #243). Single quotes,
@@ -2893,8 +2914,9 @@ Operators terminate the current token. `cd /tmp&&ls` lexes as
 must handle this. A numeric descriptor is an operator prefix only when its
 digits begin at a shell-token boundary and become adjacent to `<`, `>`, `>>`,
 `<<`, `<<-`, or `<<<` after Bash removes unquoted line continuations.
-Continuations may join digit fragments or the descriptor and operator; LF and
-CRLF spellings retain their authored span while producing the same descriptor.
+Continuations may join digit fragments or the descriptor and operator; the
+authored span keeps them while the descriptor is the same. A `\` + CR is not a
+continuation and fails closed (v0.4.0-beta.22).
 Digits joined to an ordinary, quoted, or escaped word remain part of that word;
 `command3>file` therefore uses command name `command3` and a default-source `>`
 redirect.
