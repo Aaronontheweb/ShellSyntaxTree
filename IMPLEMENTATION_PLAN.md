@@ -10,6 +10,12 @@ priorities.
 
 ---
 
+## NOW (0.4.0-beta.20 option value in the verb slot)
+
+- [x] Skip a plain word directly after an option in the verb slot of `CommandWords` (#237). Keep bare `--` without a value in the verb slot.
+- [x] Prove that only `CommandWords` changes, and only for inputs with an option before the verb. Run manual mutants and the Netclaw call replay.
+- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.20` and verify NuGet publication.
+
 ## Completed (0.4.0-beta.19 ANSI-C quotes and expansion facts)
 
 - [x] Decode `$'…'` exactly for ASCII escapes. Fail closed on other escapes and on `$"…"` (#232).

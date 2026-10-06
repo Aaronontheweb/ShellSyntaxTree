@@ -1,3 +1,21 @@
+#### 0.4.0-beta.20 2026-10-05 ####
+
+This prerelease applies the option-value rule to the verb slot of `CommandOccurrence.CommandWords` (#237).
+
+## Changed
+
+- A plain word directly after an option is that option's value everywhere, also in the verb slot. The next plain word is the verb. `ilspycmd -t Mattermost.MattermostClient /p/x.dll` gave `ilspycmd Mattermost.MattermostClient`. It now gives `ilspycmd`.
+- More examples: `kubectl -n prod get pods` gives `kubectl get pods`, `git -c user.name=x commit -m msg` gives `git commit`, and `dotnet --verbosity q build Foo.sln` gives `dotnet build Foo.sln`.
+- No change: an option with an inline value (`cmd --flag=value sub` gives `cmd sub`), a value or a path after an option (`gh -R o/r pr view` gives `gh pr view`), and bare `--` in the verb slot (`git -- push` gives `git push`).
+
+## Security and compatibility
+
+- Accepted trade-off (owner decision): the rules do not know which options take a value. A switch without a value hides the plain word after it. `docker --debug run` gives `docker`, and `git --no-pager log -1` gives `git`. A wrapper is affected too: `xargs -0 rm` gives `xargs`, and `env -i rm` gives `env`. A consumer must not let a grant for a wrapper cover the program that the wrapper runs.
+- Fail closed as before: a dynamic word or a bare glob in the verb slot gives `Unknown`, also after an option (`cmd -x $v sub`, `cmd -x * sub`). A word with an unproved value that does not start with `-` is dynamic, so `cmd "$o" value sub` with an unknown `o` gives `Unknown`.
+- An output comparison against 0.4.0-beta.19 over 6,057 inputs (109,960 records in two launch modes) found changes only in `CommandWords`, and only in 186 inputs with an option before the verb. In 166 word lists the projection drops the old verb-slot word. In 22 PowerShell word lists a script block or an expansion moves into the verb slot, so the words become `Unknown`.
+- A replay of 11,063 Netclaw shell calls changes the words of 1,581 calls. Most are `find . -type f`, `grep -v obj`, `jq -r .x`, and `curl -w FORMAT`. The option value no longer becomes a command word.
+- Public API: no change.
+
 #### 0.4.0-beta.19 2026-10-05 ####
 
 This prerelease decodes Bash ANSI-C quotes and publishes pathname-expansion and field-splitting facts for each argument (#232).
