@@ -437,7 +437,8 @@ public class BashLiteralTwinProjectionTests
     [Fact]
     public void A_command_without_an_exact_directory_gives_no_twins()
     {
-        Assert.False(Parser.TryProjectLiteralTwins(
+        // The launch facts prove HOME, so only the exact-directory gate applies.
+        Assert.False(LaunchParser.TryProjectLiteralTwins(
             "cd \"$TARGET\"; for n in a b; do cat \"$n\"; done", out _));
     }
 
@@ -446,6 +447,62 @@ public class BashLiteralTwinProjectionTests
     {
         Assert.False(Parser.TryProjectLiteralTwins(
             "for n in a b; do FOO=1 cat \"$n\"; done", out _));
+    }
+
+    [Theory]
+    [InlineData("for n in a x; do tool '$n' -o\"$n\"; done")]
+    [InlineData("for n in a x; do git -C\"$n\" status; done")]
+    [InlineData("for n in a x; do tool -xo\"$n\"; done")]
+    [InlineData("for n in a x; do tool -o\"${n}\"; done")]
+    [InlineData("for n in a x; do tool -o\"$n\"x; done")]
+    [InlineData("for f in a.txt b.txt; do cat \"$f\"; done")]
+    public void The_unknown_initial_state_gives_no_twins(string source)
+    {
+        // With an unknown initial state, the parser can report `-o$n` as an
+        // exact value, but Bash passes `-oa`.
+        var unknown = new BashParser(new BashParserOptions
+        {
+            WorkingDirectory = WorkingDirectory,
+            HomeDirectory = "/home/agent",
+            PublishAuthoredSourceFacts = true,
+        });
+
+        Assert.False(unknown.TryProjectLiteralTwins(source, out var projection));
+        Assert.Null(projection);
+    }
+
+    [Theory]
+    [InlineData("cd && for n in a; do cmd \"$n\"; done")]
+    [InlineData("cd -L && for n in a; do cmd \"$n\"; done")]
+    [InlineData("cd -- && for n in a; do cmd \"$n\"; done")]
+    [InlineData("builtin cd && for n in a; do cmd \"$n\"; done")]
+    [InlineData("command cd && for n in a; do cmd \"$n\"; done")]
+    [InlineData("cd >/dev/null && for n in a; do cmd \"$n\"; done")]
+    [InlineData("if cd; then for n in a; do cmd \"$n\"; done; fi")]
+    [InlineData("for d in x; do cd && cmd \"$d\"; done")]
+    public void A_directory_from_an_unproved_home_gives_no_twins(string source)
+    {
+        // Without launch facts, `cd` goes to the HomeDirectory assumption in
+        // the parse, but Bash goes to its real HOME.
+        Assert.False(Parser.TryProjectLiteralTwins(source, out _));
+        var isolated = CreateParser(BashInitialStateMode.IsolatedNonInteractive);
+        Assert.False(isolated.TryProjectLiteralTwins(source, out _));
+
+        // A live launch HOME proves the directory.
+        Assert.True(LaunchParser.TryProjectLiteralTwins(source, out var projection));
+        Assert.StartsWith("/home/agent",
+            Assert.Single(Assert.Single(projection!.Commands).Twins).WorkingDirectory);
+    }
+
+    [Fact]
+    public void A_directory_below_the_home_directory_keeps_its_twins_when_it_does_not_come_from_home()
+    {
+        // An absolute cd names the directory. The home assumption plays no
+        // part, so the occurrence keeps its twins without launch facts.
+        Assert.True(Parser.TryProjectLiteralTwins(
+            "cd /home/agent/repo && for n in a b; do cmd \"$n\"; done", out var projection));
+        Assert.All(Assert.Single(projection!.Commands).Twins,
+            twin => Assert.Equal("/home/agent/repo", twin.WorkingDirectory));
     }
 
     private static bool Project(

@@ -1547,11 +1547,14 @@ command, so read the structure from `SourceOccurrence`.
 The projection uses this schematic flow:
 
 ```text
+give nothing when the initial state mode is Unknown
 give nothing when the source has a backslash-newline, a carriage return,
     `=~`, or `:~`
 for each occurrence of the full parse:
     give nothing unless the occurrence is complete
     give nothing unless its directory is exact
+    without a live launch HOME, give nothing when its directory changes
+        in one more parse with another HomeDirectory
     give nothing when it has an assignment prefix (`X=1 cmd`)
     give nothing when the source has `~` or `HOME` and no live launch HOME
     give nothing unless each word has a span in the submitted source
@@ -1609,6 +1612,15 @@ a loop list, so these guards read the full source:
 - Without a live launch `HOME`, the home directory is the caller assumption
   `HomeDirectory`. When the source has `~` or `HOME`, an occurrence gets twins
   only with a live launch `HOME`.
+- A `cd` without an operand (also `cd --`, `builtin cd`, `if cd; then`) goes
+  to `$HOME`. Without a live launch `HOME`, the parser takes that directory
+  from `HomeDirectory`. The projection does not read the `cd` forms. It parses
+  the source once more with another `HomeDirectory`, and an occurrence whose
+  exact directory changes gets no twins. When the launch facts export `HOME`
+  but `HOME` is not live at the occurrence, the occurrence gets no twins.
+- Under `BashInitialStateMode.Unknown`, the parser can report an exact value
+  for a word that Bash expands (`-o"$n"` gives `-o$n`). The projection gives
+  no twins in that mode.
 
 The budget is checked before a twin text is built. A twin text is one simple
 command with no loop, so its parse costs about as much as its length. The

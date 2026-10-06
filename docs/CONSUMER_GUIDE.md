@@ -1025,7 +1025,9 @@ Rules for a consumer:
 - An unquoted word gets twins only under `FreshNonInteractiveNoStartup`
   with `PublishAuthoredSourceFacts`, and only when no value can split or glob.
 - A source with `~` or `HOME` gets twins only with a live launch `HOME` in
-  `LaunchEnvironment`.
+  `LaunchEnvironment`. A command whose directory comes from `HOME` (after a
+  `cd` without an operand) also needs a live launch `HOME`.
+- The projection gives no twins under `BashInitialStateMode.Unknown`.
 
 Warnings:
 

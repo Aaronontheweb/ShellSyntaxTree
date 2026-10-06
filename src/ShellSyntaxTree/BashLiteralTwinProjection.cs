@@ -209,7 +209,11 @@ internal static class BashLiteralTwinAnalyzer
         projection = null;
         cost = default;
         var source = parsed.Source;
-        if (HasUnmodeledText(source))
+        // SECURITY: with an unknown initial state, the parser can report an
+        // exact value for a word that Bash expands (`-o"$n"` gives `-o$n`).
+        // A twin would turn that value into a literal word.
+        if (options.InitialStateMode == BashInitialStateMode.Unknown ||
+            HasUnmodeledText(source))
         {
             return false;
         }
@@ -218,10 +222,15 @@ internal static class BashLiteralTwinAnalyzer
         var mentionsHome = source.IndexOf('~') >= 0 ||
                            source.IndexOf("HOME", StringComparison.Ordinal) >= 0;
         var candidates = new List<Candidate>();
+        ParsedCommand? otherHomeParse = null;
         for (var index = 0; index < parsed.Commands.Count; index++)
         {
-            if (TryCreateCandidate(source, index, parsed.Commands[index], options,
-                    mentionsHome, out var candidate))
+            var occurrence = parsed.Commands[index];
+            if (TryCreateCandidate(source, index, occurrence, options,
+                    mentionsHome, out var candidate) &&
+                (HasLiveHome(occurrence) ||
+                 HasHomeIndependentDirectory(parsed, options, index, candidate.Directory,
+                     ref otherHomeParse)))
             {
                 candidates.Add(candidate);
             }
@@ -271,6 +280,61 @@ internal static class BashLiteralTwinAnalyzer
         };
         return true;
     }
+
+    /// <summary>
+    /// Returns true when the exact directory of the occurrence does not come
+    /// from the home directory that the caller assumes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// SECURITY: a <c>cd</c> without an operand (also <c>cd --</c>,
+    /// <c>builtin cd</c>, and <c>if cd; then</c>) changes to <c>$HOME</c>.
+    /// Without a live launch <c>HOME</c>, the parser takes that directory from
+    /// <see cref="ShellParserOptions.HomeDirectory"/>, but Bash uses its real
+    /// <c>HOME</c>. A twin would then claim a wrong directory.
+    /// </para>
+    /// <para>
+    /// The check does not read the <c>cd</c> forms. It parses the source once
+    /// more with another home directory. When the exact directory of the
+    /// occurrence changes, the directory depends on the home directory, and
+    /// the occurrence gets no twins. The check costs at most one more parse
+    /// for each call. When the launch facts export <c>HOME</c>, the parser
+    /// needs that value as the home directory, so an occurrence without a live
+    /// <c>HOME</c> gets no twins.
+    /// </para>
+    /// </remarks>
+    private static bool HasHomeIndependentDirectory(
+        ParsedCommand parsed,
+        BashParserOptions options,
+        int index,
+        string directory,
+        ref ParsedCommand? otherHomeParse)
+    {
+        if (options.LaunchEnvironment?.ExportedVariables.ContainsKey("HOME") == true)
+        {
+            return false;
+        }
+
+        if (otherHomeParse is null)
+        {
+            var otherHome = string.Equals(options.HomeDirectory, FirstOtherHome,
+                StringComparison.Ordinal)
+                ? SecondOtherHome
+                : FirstOtherHome;
+            otherHomeParse = new BashParser(options with { HomeDirectory = otherHome })
+                .Parse(parsed.Source);
+        }
+
+        return !otherHomeParse.IsUnparseable &&
+               otherHomeParse.Commands.Count == parsed.Commands.Count &&
+               otherHomeParse.Commands[index].WorkingDirectory is ShellValueDomain.Exact
+                   { Value: var otherDirectory } &&
+               string.Equals(otherDirectory, directory, StringComparison.Ordinal);
+    }
+
+    private const string FirstOtherHome = "/nonexistent/shellsyntaxtree-twin-home-1";
+
+    private const string SecondOtherHome = "/nonexistent/shellsyntaxtree-twin-home-2";
 
     /// <summary>
     /// Returns true when the source has text that the Bash lexer does not
