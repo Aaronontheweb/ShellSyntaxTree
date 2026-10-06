@@ -47,9 +47,10 @@ public class BashLineContinuationTests
         { "printf '<%s>' \"$(printf '%s' \"$\\\n(printf HIDDEN)\")\"", "<HIDDEN>" },
         { "printf '<%s>' $(printf '%s' $\\\n(printf HIDDEN))", "<HIDDEN>" },
 
-        // The substitution boundary scan reads `$\⏎(` too: the `)` in the
-        // quoted argument must not end the outer `$(`.
-        { "printf '<%s>' \"$(printf '%s' \"$\\\n(printf ')%s' HIDDEN)\")\"", "<)HIDDEN>" },
+        // The substitution boundary scan reads `$\⏎(` too: the inner `$(`
+        // leaves the double quotes, so `"%s)"` opens new quotes and its `)`
+        // must not end the outer `$(`.
+        { "printf '<%s>' \"$(printf '%s' \"$\\\n(printf \"%s)\" HIDDEN)\")\"", "<HIDDEN)>" },
 
         // An operator can continue across a line.
         { "true &\\\n& printf '<%s>' HIDDEN", "<HIDDEN>" },
