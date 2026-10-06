@@ -2835,6 +2835,25 @@ authored spelling: `curl --data=@p\.json` gave `--data=@p.json`, and
 `curl --data=\a""` gave `--data=a`. A value that does not start with the
 option and `=` is Unknown.
 
+Quoted `=`. Only an unquoted `=` splits a Bash word into an option and its
+inline value. The first `=` of the decoded word must be unquoted, unescaped
+word text; a quoted or escaped `=`, or one in an expansion, is plain text.
+This is the Bash rule for `name=value` words, and the assignment-word tilde
+rule uses the same test. `BashWordEquals` owns the test. The lexer records it
+for each word, and the parser keeps it when it joins adjacent word parts.
+Before v0.4.0-beta.24 the parser split at a quoted `=` and failed, so
+`awk -F'[= ]' '{print $2}' f` was unparseable.
+
+| Source | Arguments |
+|---|---|
+| `awk -F'[= ]' '{print $2}' f` | `-F[= ]`, `{print $2}`, `f` |
+| `cat -F"x=y" f` | `-Fx=y`, `f` |
+| `echo -F'x=y'=z` | `-Fx=y=z` |
+| `curl --output\=/tmp/x` | `--output=/tmp/x` (as for `"--output=/tmp/x"`) |
+| `cat --foo='x=y' f` | `--foo`, `x=y`, `f` (the `=` is unquoted) |
+| `cat -D'x'=y f` | `-Dx`, `y`, `f` |
+| `make PREFIX'='~/x` | `PREFIX=~/x` (no tilde expansion) |
+
 | Source | Result |
 |---|---|
 | `echo "$\⏎(touch /tmp/x)"` | occurrences `touch` (substitution) and `echo` |

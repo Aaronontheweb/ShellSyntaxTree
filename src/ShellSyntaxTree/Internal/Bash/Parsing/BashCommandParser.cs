@@ -362,6 +362,7 @@ internal static partial class BashCommandParser
                     null)
                 {
                     ResolverValue = ShellValue.Concat(new[] { previousValue, currentValue }),
+                    FirstEquals = BashWordEquals.Join(previous, t),
                 };
                 joinsAcrossContinuation = false;
                 continue;
@@ -983,7 +984,13 @@ internal static partial class BashCommandParser
                         // argv entry. Preserve that behavior for an inline option
                         // whose value is quoted or computed:
                         // `--data="@request file"` / `--data=$(generate)`.
-                        if (NativeFlagSyntax.TrySplitEqualsPrefix(
+                        // Only an unquoted `=` splits an inline option value.
+                        // A quoted or escaped `=` is plain text, so
+                        // `-F'x=y'` is one argument `-Fx=y`.
+                        var splitsInlineValue =
+                            BashWordEquals.Classify(t) == BashFirstEquals.Plain;
+                        if (splitsInlineValue
+                            && NativeFlagSyntax.TrySplitEqualsPrefix(
                                 t.Value, out var adjacentFlagPart, out var adjacentValuePrefix)
                             && NativeArgumentFragmentClassifier.TryClassify(
                                 source,
@@ -1084,7 +1091,8 @@ internal static partial class BashCommandParser
                         // flag half is a Literal arg with IsFlag=true (Raw
                         // starts with '-'); the value half is classified per
                         // the flag-value path rule.
-                        if (TrySplitInlineFlag(
+                        if (splitsInlineValue
+                            && TrySplitInlineFlag(
                                 t, out var flagPart, out var valuePart))
                         {
                             var rawEquals = spelling.IndexOf('=');
@@ -1679,6 +1687,7 @@ internal static partial class BashCommandParser
 
     private static bool IsInlineNativeArgumentPrefix(BashToken token) =>
         token.Kind == BashTokenKind.Word
+        && BashWordEquals.Classify(token) == BashFirstEquals.Plain
         && NativeFlagSyntax.TrySplitEqualsPrefix(token.Value, out _, out _);
 
     private static bool IsFdDupTarget(string value)

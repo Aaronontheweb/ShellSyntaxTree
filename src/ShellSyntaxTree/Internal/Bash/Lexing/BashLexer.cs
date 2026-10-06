@@ -1699,9 +1699,13 @@ internal static class BashLexer
             return start + 1;
         }
 
-        tokens.Add(new BashToken(
+        var word = new BashToken(
             BashTokenKind.Word, resolverValue.Decoded, null, start, i - start, null)
-        { ResolverValue = resolverValue });
+        { ResolverValue = resolverValue };
+
+        // Keep where the first `=` comes from. A brace expansion later
+        // replaces the value fragments of the whole word.
+        tokens.Add(word with { FirstEquals = BashWordEquals.Classify(word) });
         return i;
     }
 

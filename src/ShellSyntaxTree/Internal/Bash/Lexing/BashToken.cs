@@ -99,4 +99,13 @@ internal readonly record struct BashToken(
     /// <c>false</c> for plain space/tab whitespace and every other kind.
     /// </summary>
     public bool IsStatementSeparator { get; init; }
+
+    /// <summary>
+    /// Where the first <c>=</c> of the word comes from. The lexer sets it on
+    /// a word before a brace expansion replaces the value fragments. The
+    /// parser sets it on a word that it joins from adjacent parts, because
+    /// the joined word no longer shows its quotes. Null on other tokens.
+    /// Read it through <see cref="BashWordEquals.Classify"/>.
+    /// </summary>
+    public BashFirstEquals? FirstEquals { get; init; }
 }
