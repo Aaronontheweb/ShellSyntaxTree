@@ -1,6 +1,6 @@
 #### 0.4.0-beta.24 2026-10-07 ####
 
-This prerelease fixes Bash option words with a quoted `=` or with an unproved expansion.
+This prerelease fixes Bash option words with a quoted `=` or with an unproved expansion. It also adds a complete launch environment, so a Bash assignment that is not exported can prove that it does not reach a child process.
 
 ## Fixed
 
@@ -12,6 +12,14 @@ This prerelease fixes Bash option words with a quoted `=` or with an unproved ex
 - The option part of a `--name=value` word with an expansion had the same bug in every mode: `--$n=x`, `--"$1"=x`, `--$(id)=x`, `--*=x`, and `"--$x=y"` gave the exact option `--$n`, `--$1`, `--$(id)`, `--*`, and `--$x`. The option part and the value part are now Unknown. The program splits the word at the first `=` of the expanded text, so the value part is not proved either: with `n='a=b'`, Bash passes `--a=b=x`.
 - `BashWordEquals` owns the test: the parser splits at the first `=` of the decoded word only when that `=` is word text, quoted or not. The lexer records it for each word before a brace expansion replaces the word value, and the parser keeps it when it joins adjacent word parts.
 
+## Added
+
+- `ShellLaunchEnvironment.FromCompleteEnvironmentNames`, `ShellLaunchEnvironment.WithCompleteEnvironmentNames`, and `ShellLaunchEnvironment.CompleteEnvironmentNames`. A caller can declare the complete set of environment names that the shell receives. Values are not needed.
+- With that declaration under `FreshNonInteractiveNoStartup`, a Bash `ShellState` assignment has `MayAffectProcessEnvironment=false` when the name is not in the environment, no `export` marks it on any path to the command, the command is in the top-level shell, and the name is not one that Bash exports by itself (`PWD`, `OLDPWD`, `SHLVL`, `_`). Bash passes such a variable to no child process. Before, the fact was always true. Example: in `b=$(git branch --show-current); git log origin/$b..HEAD`, the `b` fact of `git log` is now false.
+- `export` on one branch makes the fact true after the branches meet (`if c; then export b; fi; b=1; env`). An `export` in a pipeline stage, a background job, or a command substitution runs in a subshell and does not count. `set -a`, `declare -x`, `typeset -x`, `local -x`, `export -n`, `eval`, `source`, functions, and `command export` stay unparseable.
+- Names ignore case, so a name that differs only in case keeps the fact true.
+- A decoded `bash -c` child now lists an assignment that only some paths export, with an `Unknown` effective value. Before, it listed nothing, but the child gets the variable on those paths.
+
 ## Security and compatibility
 
 - Not changed: `--file=/x`, `--file\=/x`, `--foo='x=y'`, `-D'x'=y`, and `--file={a,b}` split as before, with the same path facts.
@@ -19,7 +27,8 @@ This prerelease fixes Bash option words with a quoted `=` or with an unproved ex
 - Output comparison against 0.4.0-beta.23: 5,151 inputs, 57,284 records in each of two launch modes. 616 records change, in 53 inputs (618 and 54 with launch facts). 45 inputs with a quoted `=` or a quoted option name go from unparseable to parsed. 6 fully quoted option words now split, with the path facts of the unquoted form. 2 inputs with an `=` in a substitution give one Unknown argument. `ls ''~/*` with launch facts gets a path pattern.
 - Output comparison of the #245 fix against the quoted-`=` fix: 5,166 inputs, 57,464 records in each of two launch modes. 254 records change, in 40 inputs. Each change is an exact value that becomes Unknown: the issue sources under the Unknown mode, and option parts with an expansion or a brace expansion in every mode. No input changes between parsed and unparseable. A quoted or escaped option name before a brace value keeps its exact name (`--'a'={p,q}` gives `--a`).
 - Literal twins: the projection still gives no twins under `BashInitialStateMode.Unknown`, because that state is not proved.
-- Public API: no change.
+- Complete launch environment: comparison against #247 (5,238 inputs, 58,328 records in each of two launch modes). Without the declaration, 4 records change, in 1 input: a decoded `bash -c` child after an `export` on one branch now lists the assignment with an `Unknown` value. With a declared complete environment, only `MayAffectProcessEnvironment` of Bash `ShellState` facts changes, from true to false, and only under `FreshNonInteractiveNoStartup` (142 inputs). Public API: additive.
+- Public API: additive (the complete launch environment).
 
 #### 0.4.0-beta.23 2026-10-06 ####
 

@@ -139,6 +139,13 @@ public sealed class ShellLaunchEnvironment
         IEnumerable<string> unsetVariables);
     public IReadOnlyDictionary<string, string> ExportedVariables { get; }
     public IReadOnlyList<string> UnsetVariables { get; }
+
+    // v0.4.0-beta.24: the complete set of environment names (names only).
+    public static ShellLaunchEnvironment FromCompleteEnvironmentNames(
+        IEnumerable<string> environmentNames);
+    public ShellLaunchEnvironment WithCompleteEnvironmentNames(
+        IEnumerable<string> environmentNames);
+    public IReadOnlyCollection<string>? CompleteEnvironmentNames { get; }
 }
 
 /// <summary>Declares which ambient Bash variable facts the caller can prove.</summary>
@@ -823,8 +830,38 @@ Every occurrence carries each accepted shell-state assignment that can affect
 it, followed by its direct command-environment prefixes in source order. The
 authored value describes the exact decoded right-hand side. The effective value
 is exact only under the matching shell-specific initial-state contract. A Bash
-`ShellState` fact sets `MayAffectProcessEnvironment=true` because an ordinary
-inherited variable retains its export attribute after assignment. A PowerShell
+`ShellState` fact sets `MayAffectProcessEnvironment=true` by default, because
+an ordinary inherited variable retains its export attribute after assignment.
+It is false only when the parser proves that the name has no export attribute
+at that occurrence (v0.4.0-beta.24). All of these must hold:
+
+- the initial-state mode is `FreshNonInteractiveNoStartup`, which excludes an
+  inherited `allexport` and startup files;
+- the caller declared the complete launch environment
+  (`ShellLaunchEnvironment.CompleteEnvironmentNames`) and the name is not in
+  it. The comparison ignores case, so a name that differs only in case keeps
+  the fact true;
+- no bounded `export` of the name runs on any path to the occurrence (paths
+  join by union). An `export` in a pipeline stage, a background job, or a
+  command substitution runs in a subshell and does not count. `set -a`,
+  `declare`, `typeset`, `local`, `readonly`, `export -n`, `eval`, `source`,
+  `.`, functions, and an `export` that `command` or `builtin` runs make the
+  source unparseable;
+- the occurrence is in the top-level shell, not in a decoded `bash -c` child;
+- the name is not one that Bash exports by itself: `PWD`, `OLDPWD`, `SHLVL`,
+  and `_` (GNU Bash 5.2). The assignment name gate also rejects them.
+
+| Source (complete environment `PATH`) | `MayAffectProcessEnvironment` at `env` |
+|---|---|
+| `b=$(echo new); env` | false: Bash does not pass `b` |
+| `b=$(echo new); env` with `b` in the environment | true: Bash passes `b=new` |
+| `b=1; export b; env` | true |
+| `if false; then export b; fi; b=1; env` | true: one path exports `b` |
+| `b=1; export b \| true; env` | false: the export runs in a subshell |
+| `b=1 env` | true (`CommandEnvironment`) |
+| any source without a declared complete environment | true |
+
+A PowerShell
 ordinary variable assignment sets it to false. A `CommandEnvironment` fact
 sets it to true because the prefix supplies the value to that command. All
 names remain visible because any executable can interpret an environment

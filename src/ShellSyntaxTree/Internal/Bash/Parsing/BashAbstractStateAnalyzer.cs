@@ -74,7 +74,8 @@ internal sealed class BashAbstractStateAnalyzer
             hasCompatibilityAttribution: false,
             new BashLoopBindingContext(),
             assignments: null,
-            exportedNames: null);
+            exportedNames: null,
+            childEnvironment: BashChildEnvironment.TopLevel);
         analyzer.AnalyzeBlock(syntax, initial);
 
         // Every arithmetic expansion must have a proved state. One in a
@@ -2171,7 +2172,8 @@ internal sealed class BashAbstractStateAnalyzer
                 hasCompatibilityAttribution: true,
                 bindings: new BashLoopBindingContext(),
                 assignments: null,
-                exportedNames: null);
+                exportedNames: null,
+                childEnvironment: BashChildEnvironment.TopLevel);
         }
 
         var clause = RewriteClause(simple.Clause, input, sourceFacts.CwdPathDependencies);
@@ -2309,7 +2311,16 @@ internal sealed class BashAbstractStateAnalyzer
 
         var assignments = new List<ShellVariableAssignment>(
             input.Assignments.Count + environmentAssignments.Count);
-        assignments.AddRange(input.Assignments);
+        foreach (var assignment in input.Assignments)
+        {
+            assignments.Add(
+                assignment.Scope == ShellVariableAssignmentScope.ShellState &&
+                assignment.MayAffectProcessEnvironment &&
+                IsProvedOutsideChildEnvironment(assignment.Name, input)
+                    ? assignment with { MayAffectProcessEnvironment = false }
+                    : assignment);
+        }
+
         for (var index = 0; index < environmentAssignments.Count; index++)
         {
             var assignment = environmentAssignments[index];
@@ -2326,6 +2337,41 @@ internal sealed class BashAbstractStateAnalyzer
 
         return assignments;
     }
+
+    /// <summary>
+    /// True when a shell-state assignment to <paramref name="name"/> cannot
+    /// reach the environment of a child process of this command.
+    /// </summary>
+    /// <remarks>
+    /// SECURITY: Bash passes a variable to a child process only when the
+    /// variable has the export attribute. Bash gives that attribute to every
+    /// name that it imports from its environment, to every name after
+    /// <c>export</c>, <c>declare -x</c>, or <c>set -a</c>, and to its own
+    /// <c>PWD</c>, <c>OLDPWD</c>, <c>SHLVL</c>, and <c>_</c>. So the fact
+    /// needs all of these:
+    /// <list type="bullet">
+    ///   <item>the fresh-process mode, which excludes an inherited
+    ///         <c>allexport</c> (<c>SHELLOPTS</c>) and startup files;</item>
+    ///   <item>a caller-declared complete environment that does not hold the
+    ///         name;</item>
+    ///   <item>no <c>export</c> of the name on any path to the command (the
+    ///         parser fails closed on <c>set</c>, <c>declare</c>,
+    ///         <c>typeset</c>, <c>local</c>, <c>readonly</c>, <c>eval</c>,
+    ///         <c>source</c>, and functions);</item>
+    ///   <item>the top-level shell: a decoded <c>bash -c</c> child can get
+    ///         other names from a program such as <c>env b=1</c>;</item>
+    ///   <item>a name that Bash does not export by itself.</item>
+    /// </list>
+    /// In every other case the fact stays true.
+    /// </remarks>
+    private bool IsProvedOutsideChildEnvironment(string name, BashAbstractState input) =>
+        _options.InitialStateMode == BashInitialStateMode.FreshNonInteractiveNoStartup &&
+        _options.LaunchEnvironment is { } launch &&
+        launch.IsAbsentFromCompleteEnvironment(name) &&
+        !input.ChildEnvironment.IsChildProcess &&
+        !input.ChildEnvironment.MayBeExported(name) &&
+        !BashChildEnvironment.IsExportedByBash(name) &&
+        BashVariableAssignmentGrammar.IsEligibleCommandEnvironmentName(name);
 
     private IReadOnlyList<EffectiveArgumentFacts> CreateEffectiveArguments(Clause clause)
         => CreateArguments(_effectiveArguments, clause);
@@ -3170,13 +3216,15 @@ internal sealed class BashAbstractStateAnalyzer
             bool hasCompatibilityAttribution,
             BashLoopBindingContext bindings,
             IReadOnlyList<ShellVariableAssignment>? assignments,
-            IReadOnlyCollection<string>? exportedNames)
+            IReadOnlyCollection<string>? exportedNames,
+            BashChildEnvironment childEnvironment)
         {
             WorkingDirectory = workingDirectory;
             HasCompatibilityAttribution = hasCompatibilityAttribution;
             Bindings = bindings;
             Assignments = assignments ?? Array.Empty<ShellVariableAssignment>();
             ExportedNames = exportedNames ?? Array.Empty<string>();
+            ChildEnvironment = childEnvironment;
         }
 
         internal string? WorkingDirectory { get; }
@@ -3198,8 +3246,14 @@ internal sealed class BashAbstractStateAnalyzer
         /// </summary>
         internal IReadOnlyCollection<string> ExportedNames { get; }
 
+        /// <summary>
+        /// What can reach the environment of a child process: the names that
+        /// an <c>export</c> marked on at least one path to this point.
+        /// </summary>
+        internal BashChildEnvironment ChildEnvironment { get; }
+
         internal BashAbstractState WithUnknownCwd() =>
-            new(null, true, Bindings, Assignments, ExportedNames);
+            new(null, true, Bindings, Assignments, ExportedNames, ChildEnvironment);
 
         internal BashAbstractState WithBinding(
             string name,
@@ -3209,7 +3263,8 @@ internal sealed class BashAbstractStateAnalyzer
                 HasCompatibilityAttribution,
                 Bindings.WithBinding(name, domain),
                 Assignments,
-                ExportedNames);
+                ExportedNames,
+                ChildEnvironment);
 
         internal BashAbstractState WithAssignment(ShellVariableAssignment assignment)
         {
@@ -3223,19 +3278,27 @@ internal sealed class BashAbstractStateAnalyzer
             }
 
             assignments.Add(assignment);
-            return new(WorkingDirectory, HasCompatibilityAttribution, Bindings, assignments, ExportedNames);
+            return new(WorkingDirectory, HasCompatibilityAttribution, Bindings, assignments, ExportedNames, ChildEnvironment);
         }
 
         internal BashAbstractState WithExportedNames(IReadOnlyList<string> names)
         {
             var exported = new HashSet<string>(ExportedNames, StringComparer.Ordinal);
             exported.UnionWith(names);
-            return new(WorkingDirectory, HasCompatibilityAttribution, Bindings, Assignments, exported);
+            return new(
+                WorkingDirectory,
+                HasCompatibilityAttribution,
+                Bindings,
+                Assignments,
+                exported,
+                ChildEnvironment.WithExportedNames(names));
         }
 
         /// <summary>
         /// The state that a new Bash child process starts with. It keeps only
-        /// the exported shell-state assignments, and no binding.
+        /// the exported shell-state assignments, and no binding. An
+        /// assignment that only some paths export stays too, with an Unknown
+        /// effective value: on the other paths the child does not get it.
         /// </summary>
         internal BashAbstractState ForChildProcess()
         {
@@ -3246,6 +3309,14 @@ internal sealed class BashAbstractStateAnalyzer
                 {
                     assignments.Add(assignment);
                 }
+                else if (ChildEnvironment.MayBeExported(assignment.Name))
+                {
+                    assignments.Add(assignment with
+                    {
+                        EffectiveValue = new ShellValueDomain.Unknown(),
+                        MayAffectProcessEnvironment = true,
+                    });
+                }
             }
 
             return new(
@@ -3253,16 +3324,17 @@ internal sealed class BashAbstractStateAnalyzer
                 HasCompatibilityAttribution,
                 Bindings.WithoutBindings(),
                 assignments,
-                ExportedNames);
+                ExportedNames,
+                ChildEnvironment.ForChildProcess());
         }
 
         internal BashAbstractState WithCwd(
             string? workingDirectory,
             bool hasCompatibilityAttribution) =>
-            new(workingDirectory, hasCompatibilityAttribution, Bindings, Assignments, ExportedNames);
+            new(workingDirectory, hasCompatibilityAttribution, Bindings, Assignments, ExportedNames, ChildEnvironment);
 
         internal BashAbstractState WithoutCompatibilityAttribution() =>
-            new(WorkingDirectory, WorkingDirectory is null, Bindings, Assignments, ExportedNames);
+            new(WorkingDirectory, WorkingDirectory is null, Bindings, Assignments, ExportedNames, ChildEnvironment);
 
         internal ShellValueDomainFacts ToDomain() =>
             WorkingDirectory is null
@@ -3278,7 +3350,8 @@ internal sealed class BashAbstractStateAnalyzer
             HasCompatibilityAttribution == other.HasCompatibilityAttribution &&
             Bindings.StateEquals(other.Bindings) &&
             AssignmentsEqual(Assignments, other.Assignments) &&
-            NamesEqual(ExportedNames, other.ExportedNames);
+            NamesEqual(ExportedNames, other.ExportedNames) &&
+            ChildEnvironment.StateEquals(other.ChildEnvironment);
 
         internal static BashAbstractState Join(
             BashAbstractState left,
@@ -3292,7 +3365,8 @@ internal sealed class BashAbstractStateAnalyzer
                 left.HasCompatibilityAttribution || right.HasCompatibilityAttribution,
                 BashLoopBindingContext.JoinState(left.Bindings, right.Bindings),
                 JoinAssignments(left.Assignments, right.Assignments),
-                IntersectNames(left.ExportedNames, right.ExportedNames));
+                IntersectNames(left.ExportedNames, right.ExportedNames),
+                BashChildEnvironment.Join(left.ChildEnvironment, right.ChildEnvironment));
 
         internal static BashAbstractState Widen(
             BashAbstractState left,
@@ -3306,7 +3380,8 @@ internal sealed class BashAbstractStateAnalyzer
                 left.HasCompatibilityAttribution || right.HasCompatibilityAttribution,
                 BashLoopBindingContext.WidenState(left.Bindings, right.Bindings),
                 JoinAssignments(left.Assignments, right.Assignments),
-                IntersectNames(left.ExportedNames, right.ExportedNames));
+                IntersectNames(left.ExportedNames, right.ExportedNames),
+                BashChildEnvironment.Join(left.ChildEnvironment, right.ChildEnvironment));
 
         private static bool Contains(IReadOnlyCollection<string> names, string name)
         {

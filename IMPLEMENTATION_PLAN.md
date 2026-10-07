@@ -15,6 +15,7 @@ priorities.
 - [x] Pair an option and its value when the `=` or the name is quoted (`-F'x=y'`, `--'x'='y'`). The source was unparseable.
 - [x] Review of #246: a quoted or escaped `=` keeps the path facts of the unquoted form. Split a fully quoted `"--file=/x"` too. Do not split at an `=` in an expansion.
 - [x] Give no exact value to an option word with an unproved expansion (#245). Under the Unknown mode `-o"$n"` gave `-o$n`. The option part of `--$n=x` gave `--$n` in every mode.
+- [x] Add a complete launch environment (names only). Prove `MayAffectProcessEnvironment=false` for a Bash `ShellState` assignment that is not exported (Netclaw F3).
 - [ ] Merge the PRs after Linux and Windows CI. Tag `0.4.0-beta.24` and verify NuGet publication.
 
 ## Completed (0.4.0-beta.23 literal twins of loop values)
