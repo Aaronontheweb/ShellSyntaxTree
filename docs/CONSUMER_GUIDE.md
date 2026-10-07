@@ -290,6 +290,8 @@ Bash assignment facts require the stronger
 Ordinary inherited environment entries can remain. Bash imports them as
 exported scalar values. An assignment-only statement can preserve that export
 attribute, so its `ShellState` fact sets `MayAffectProcessEnvironment=true`.
+To get `false` for a name that is not in the environment, declare the complete
+set of environment names (see "Declaring the complete launch environment").
 Use `Unknown` when the launcher cannot prove every condition.
 The catalog covers supported GNU Bash 5.2 and 5.3 releases. Use `Unknown` on a
 later Bash release until ShellSyntaxTree reviews its special-variable catalog.
@@ -366,7 +368,11 @@ order. A Bash
 `ShellState` assignment appears on every later occurrence that it reaches on
 every path, one fact for each name (0.4.0-beta.12). A bounded `export
 NAME=value` gives the same `ShellState` fact (0.4.0-beta.16). A decoded
-`bash -c` child lists only the assignments that every path to it exports.
+`bash -c` child lists each assignment that can reach it (0.4.0-beta.24): one
+that a path exports, and one to a name that the launch environment can hold.
+The value is exact when every path exports the name or the declared complete
+environment holds it, and `Unknown` otherwise. Before, the child listed only
+the assignments that every path exported.
 A read of an unassigned name gives an `Unknown` value. A value that the parser
 cannot prove, such as `x=$(cmd)`, has an `Unknown` `EffectiveValue`, and the
 commands in the substitution are their own occurrences. The narrow
@@ -482,6 +488,56 @@ Rules for consumers:
   exact slice for each directory.
 
 These facts are parser inputs. They do not grant authority.
+
+### Declaring the complete launch environment
+
+A Bash `ShellState` assignment (`b=$(git branch --show-current)`) reaches the
+environment of a child process only when the name has the export attribute.
+Bash gives that attribute to every name that it imports from its environment.
+So the parser can prove that an assignment does not reach a child process only
+when it knows every name in the environment of the shell (0.4.0-beta.24).
+Values are not needed:
+
+```csharp
+// The same environment that the launcher gives the shell process.
+var names = startInfo.Environment.Keys;
+var launch = ShellLaunchEnvironment.FromCompleteEnvironmentNames(names);
+
+// Or add the names to value facts:
+var launchWithValues = new ShellLaunchEnvironment(exported, unset)
+    .WithCompleteEnvironmentNames(names);
+```
+
+With a complete environment under `FreshNonInteractiveNoStartup`, the
+`ShellState` fact of a name that is not in the environment, and that no
+`export` marks on any path, has `MayAffectProcessEnvironment=false`:
+
+| Source | Fact at the last command |
+|---|---|
+| `b=$(git branch --show-current); git log origin/$b..HEAD` | `b`: false |
+| `st=$(git status --short); echo "$st"` | `st`: false |
+| `b=1; export b; env` | `b`: true |
+| `if c; then export b; fi; b=1; env` | `b`: true |
+| `b=1 env` | `b`: true (`CommandEnvironment`) |
+
+Rules for consumers:
+
+- Declare only the exact set of names that the launcher passes. A missing
+  name gives a false fact for a variable that Bash passes. The set must not
+  drift: take it from the same snapshot that the launcher uses.
+- The absence check ignores case, so on Windows a name that differs only in
+  case keeps the fact true. A name that is not a shell identifier (`=C:`) is
+  allowed. A name in `UnsetVariables` must not be in the set (an ordinal
+  compare: `B` set and `b` unset is valid).
+- If the set holds `SHELLOPTS`, `BASH_ENV`, a `BASH_FUNC_*` name, `BASHOPTS`,
+  `ENV`, `POSIXLY_CORRECT`, or `BASH_COMPAT`, every fact stays true. These
+  names break the fresh-process contract; the first three can export every
+  variable.
+- `MayAffectProcessEnvironment=false` says only that the child process does
+  not get the variable in its environment. A later word that reads the
+  variable still depends on it; its value shows that (`Unknown` for
+  `x=$(cmd)`).
+- Without the declaration, every Bash `ShellState` fact stays true, as before.
 
 With launch facts, a leading `~` in the program word also expands
 (0.4.0-beta.11): `~/.dotnet/tools/ilspycmd -h` gives the command words

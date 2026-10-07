@@ -235,13 +235,38 @@ public class PublicApiSnapshotTests
         Assert.Equal(
             new[]
             {
+                ("CompleteEnvironmentNames", typeof(IReadOnlyCollection<string>), false),
                 ("ExportedVariables", typeof(IReadOnlyDictionary<string, string>), false),
                 ("UnsetVariables", typeof(IReadOnlyList<string>), false),
             },
             properties);
-        Assert.All(
-            DeclaredPublicMethodNames(t),
-            name => Assert.StartsWith("get_", name, StringComparison.Ordinal));
+        AssertReferenceNullability(
+            t.GetProperty(nameof(ShellLaunchEnvironment.CompleteEnvironmentNames))!,
+            NullabilityState.Nullable);
+
+        // 0.4.0-beta.24: the complete set of environment names (names only).
+        Assert.Equal(
+            new[] { "WithCompleteEnvironmentNames" },
+            DeclaredPublicMethodNames(t)
+                .Where(name => !name.StartsWith("get_", StringComparison.Ordinal))
+                .ToArray());
+        var withNames = t.GetMethod(nameof(ShellLaunchEnvironment.WithCompleteEnvironmentNames))!;
+        Assert.Equal(typeof(ShellLaunchEnvironment), withNames.ReturnType);
+        Assert.Equal(
+            new[] { typeof(IEnumerable<string>) },
+            withNames.GetParameters().Select(p => p.ParameterType).ToArray());
+        var factory = t.GetMethod(
+            nameof(ShellLaunchEnvironment.FromCompleteEnvironmentNames),
+            BindingFlags.Public | BindingFlags.Static)!;
+        Assert.Equal(typeof(ShellLaunchEnvironment), factory.ReturnType);
+        Assert.Equal(
+            new[] { typeof(IEnumerable<string>) },
+            factory.GetParameters().Select(p => p.ParameterType).ToArray());
+        Assert.Equal(
+            new[] { "FromCompleteEnvironmentNames" },
+            t.GetMethods(BindingFlags.Public | BindingFlags.Static | BindingFlags.DeclaredOnly)
+                .Select(m => m.Name)
+                .ToArray());
     }
 
     // -------- BashParserOptions --------
