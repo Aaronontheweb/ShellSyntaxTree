@@ -190,6 +190,95 @@ public class BashQuotedEqualsTests
         Assert.Equal("/home/u/.bashrc", actual.Arguments[1].Argument.Resolved);
     }
 
+    public static TheoryData<string, string> TildeValueSpellings()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (var value in new[] { "~/x", "~root/../../etc/cron.d/x", "~+/x", "~nosuchuser/x" })
+        {
+            foreach (var separator in new[] { "'='", "\"=\"", "$'='", "\\=" })
+            {
+                data.Add("tar --file" + separator + value + " -c x", value);
+            }
+
+            data.Add("tar --fil\"e=\"" + value + " -c x", value);
+            data.Add("tar '--file='" + value + " -c x", value);
+        }
+
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(TildeValueSpellings))]
+    public void Tilde_after_a_quoted_equals_is_text_in_the_value(string source, string value)
+    {
+        // Review round 2 of #246: Bash expands `~` only at the start of a
+        // word or after an unquoted `=` of an assignment-shaped word. After
+        // a quoted `=`, the program gets `--file=~/x`, and tar opens the
+        // value relative to its working directory, as for the unquoted
+        // `--file=~/x`.
+        var logged = BashOracle.LoggedCommands(source);
+        if (logged is not null)
+        {
+            Assert.Equal(new[] { "tar", "--file=" + value, "-c", "x" }, Assert.Single(logged));
+        }
+
+        var parser = CreateParser(BashInitialStateMode.FreshNonInteractiveNoStartup);
+        var expected = parser.Parse("tar --file=" + value + " -c x").Commands.Single().Arguments[1];
+        var actual = parser.Parse(source).Commands.Single().Arguments[1];
+        Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(actual.Value).Value);
+        Assert.Equal(expected.Argument.IsPath, actual.Argument.IsPath);
+        Assert.Equal(expected.Argument.Resolved, actual.Argument.Resolved);
+        Assert.True(actual.Argument.IsPath);
+    }
+
+    [Theory]
+    [InlineData("--file'='~root/../out.tar", "~root/../out.tar")]
+    [InlineData("--file\"=\"~/x", "~/x")]
+    [InlineData("--file=~/x", "~/x")]
+    public void Tilde_value_names_the_file_relative_to_the_working_directory(string word, string value)
+    {
+        // A harmless stand-in for tar: Bash prints the full path of the
+        // file that a program opens for the value, in a scratch folder.
+        if (!BashOracle.IsAvailable())
+        {
+            return;
+        }
+
+        var scratch = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sst-tilde-" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(System.IO.Path.Combine(scratch, "~root"));
+        try
+        {
+            var startInfo = new System.Diagnostics.ProcessStartInfo("bash")
+            {
+                WorkingDirectory = scratch,
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            };
+            startInfo.ArgumentList.Add("--noprofile");
+            startInfo.ArgumentList.Add("--norc");
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("set -- " + word + "; realpath -m -- \"${1#--file=}\"");
+            startInfo.Environment["HOME"] = BashOracle.Home;
+            using var process = System.Diagnostics.Process.Start(startInfo)!;
+            var opened = process.StandardOutput.ReadToEnd().Trim();
+            Assert.True(process.WaitForExit(10_000));
+
+            var parser = new BashParser(new BashParserOptions
+            {
+                HomeDirectory = BashOracle.Home,
+                WorkingDirectory = scratch,
+                InitialStateMode = BashInitialStateMode.FreshNonInteractiveNoStartup,
+            });
+            var argument = parser.Parse("tar " + word + " -c x").Commands.Single().Arguments[1];
+            Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(argument.Value).Value);
+            Assert.Equal(opened, argument.Argument.Resolved);
+        }
+        finally
+        {
+            System.IO.Directory.Delete(scratch, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("git --git-dir\\=/tmp/x push")]
     [InlineData("git --git-dir'='/tmp/x push")]

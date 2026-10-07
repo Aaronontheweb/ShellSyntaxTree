@@ -2871,7 +2871,11 @@ the option and `=`, and the authored word ends with `=` and the value spelling.
 
 The assignment-word tilde rule is different: Bash expands `~` only after an
 unquoted, unescaped `=` of an assignment-shaped word. `make PREFIX'='~/x`
-keeps the text `PREFIX=~/x`.
+keeps the text `PREFIX=~/x`. A `~` that starts a word part after a quote,
+`$'…'`, or a substitution is text too, because it does not start the word:
+the value of `tar --file'='~/x` is `~/x`, with the path `/work/~/x`, as for
+`--file=~/x`. Before v0.4.0-beta.24 the lexer read it as a home-directory
+tilde, and the value got the path `/home/u/x`.
 
 | Source | Arguments |
 |---|---|
