@@ -1537,7 +1537,8 @@ internal static class BashLexer
         // necessary. SPEC §5 explicitly says `echo \$HOME` produces a
         // Literal token.)
         var value = new ShellValueBuilder();
-        var assignmentTilde = new BashAssignmentWordTilde(StartsNewWord(tokens, start));
+        var isWordStart = StartsNewWord(tokens, start);
+        var assignmentTilde = new BashAssignmentWordTilde(isWordStart);
         var i = start;
         while (i < src.Length)
         {
@@ -1632,7 +1633,12 @@ internal static class BashLexer
             {
                 assignmentTildeKind = BashAssignmentTildeKind.Unknown;
             }
-            if (c == '~' && i == start)
+            // A `~` that starts this token after a quoted part, `$'…'`, or a
+            // substitution of the same word directly follows a quote or a
+            // `)`, so Bash keeps it as text: `--file'='~/x` passes
+            // `--file=~/x`, and `'a'~/x` passes `a~/x`. Only a `~` at the
+            // start of the word expands here.
+            if (c == '~' && i == start && isWordStart)
             {
                 value.AppendExpansion(
                     "~",
@@ -1699,9 +1705,13 @@ internal static class BashLexer
             return start + 1;
         }
 
-        tokens.Add(new BashToken(
+        var word = new BashToken(
             BashTokenKind.Word, resolverValue.Decoded, null, start, i - start, null)
-        { ResolverValue = resolverValue });
+        { ResolverValue = resolverValue };
+
+        // Keep where the first `=` comes from. A brace expansion later
+        // replaces the value fragments of the whole word.
+        tokens.Add(word with { FirstEquals = BashWordEquals.Classify(word) });
         return i;
     }
 

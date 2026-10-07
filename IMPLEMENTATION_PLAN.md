@@ -10,7 +10,13 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.23 literal twins of loop values)
+## NOW (0.4.0-beta.24 Netclaw 0.27.2 parser fixes)
+
+- [x] Pair an option and its value when the `=` or the name is quoted (`-F'x=y'`, `--'x'='y'`). The source was unparseable.
+- [x] Review of #246: a quoted or escaped `=` keeps the path facts of the unquoted form. Split a fully quoted `"--file=/x"` too. Do not split at an `=` in an expansion.
+- [ ] Merge the PRs after Linux and Windows CI. Tag `0.4.0-beta.24` and verify NuGet publication.
+
+## Completed (0.4.0-beta.23 literal twins of loop values)
 
 - [x] Add `BashParser.TryProjectLiteralTwins`. Write each changeable argument word as one proved literal value.
 - [x] Give no twins for an incomplete occurrence, a verb word that is not static, a word without a complete finite value set, an unquoted value that can split or glob, a redirect that depends on a value, and combinations over the limit. Kill a hand mutant of each gate with a test.
@@ -18,7 +24,7 @@ priorities.
 - [x] Review round 2: check `=~` and `:~` in the full source. Parse each twin as one command in its exact directory, and check the budget before a twin is built.
 - [x] Verification round: give no twins under the Unknown initial state, and for a directory that comes from an unproved `HOME`.
 - [x] Rebase on 0.4.0-beta.22 (#243). Keep the line-text guards. Run the twin tests, the real-Bash comparison, and the twin probe again.
-- [ ] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.23` and verify NuGet publication.
+- [x] Merge the PR after Linux and Windows CI. Tag `0.4.0-beta.23`.
 
 ## Completed (0.4.0-beta.22 Bash line continuations, security)
 

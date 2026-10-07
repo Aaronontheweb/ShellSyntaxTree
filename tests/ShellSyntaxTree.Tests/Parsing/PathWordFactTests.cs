@@ -192,7 +192,6 @@ public class PathWordFactTests
     [InlineData("ls $HOME/*")]
     [InlineData("ls ~*")]
     [InlineData("ls ~user/*")]
-    [InlineData("ls ''~/*")]
     [InlineData("ls -- -*")]
     public void Glob_word_with_an_unsupported_part_stays_unresolved(string source)
     {
@@ -206,6 +205,19 @@ public class PathWordFactTests
         Assert.All(
             parsed.Commands.SelectMany(c => c.Arguments),
             a => Assert.IsNotType<ShellValueDomain.PathPattern>(a.Value));
+    }
+
+    [Fact]
+    public void Tilde_after_a_quote_is_a_literal_folder_in_a_glob()
+    {
+        // Bash keeps a `~` that follows a quote as text (0.4.0-beta.24):
+        // `ls ''~/*` lists the folder named `~` in the working directory.
+        // Before, the parser left the word unresolved.
+        var value = Bash(Launch).Parse("ls ''~/*").Commands.Single().Arguments.Single().Value;
+
+        var pattern = Assert.IsType<ShellValueDomain.PathPattern>(value);
+        Assert.EndsWith("/~/*", pattern.Pattern, System.StringComparison.Ordinal);
+        Assert.DoesNotContain(BashOracle.Home, pattern.Pattern, System.StringComparison.Ordinal);
     }
 
     [Theory]
