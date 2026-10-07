@@ -17,7 +17,7 @@ This prerelease fixes Bash option words with a quoted `=` or with an unproved ex
 - Not changed: `--file=/x`, `--file\=/x`, `--foo='x=y'`, `-D'x'=y`, and `--file={a,b}` split as before, with the same path facts.
 - The assignment-word tilde rule does not change: Bash expands `~` only after an unquoted `=`, so `make PREFIX'='~/x` keeps the text.
 - Output comparison against 0.4.0-beta.23: 5,151 inputs, 57,284 records in each of two launch modes. 616 records change, in 53 inputs (618 and 54 with launch facts). 45 inputs with a quoted `=` or a quoted option name go from unparseable to parsed. 6 fully quoted option words now split, with the path facts of the unquoted form. 2 inputs with an `=` in a substitution give one Unknown argument. `ls ''~/*` with launch facts gets a path pattern.
-- Output comparison of the #245 fix against the quoted-`=` fix: COMPARISON_PLACEHOLDER
+- Output comparison of the #245 fix against the quoted-`=` fix: 5,166 inputs, 57,464 records in each of two launch modes. 254 records change, in 40 inputs. Each change is an exact value that becomes Unknown: the issue sources under the Unknown mode, and option parts with an expansion or a brace expansion in every mode. No input changes between parsed and unparseable. A quoted or escaped option name before a brace value keeps its exact name (`--'a'={p,q}` gives `--a`).
 - Literal twins: the projection still gives no twins under `BashInitialStateMode.Unknown`, because that state is not proved.
 - Public API: no change.
 

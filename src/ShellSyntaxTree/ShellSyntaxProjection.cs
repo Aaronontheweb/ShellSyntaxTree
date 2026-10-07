@@ -1454,7 +1454,7 @@ internal static class ShellSyntaxProjection
                     ? word
                     : null;
                 var wordIsDynamic = authoredWord is not null &&
-                                    HasDynamicFragment(authoredWord, count, element.Raw);
+                                    HasDynamicFragment(authoredWord, count);
                 for (var offset = 0; offset < count; offset++)
                 {
                     var argument = authoredArguments[argumentIndex + offset];
@@ -1555,23 +1555,42 @@ internal static class ShellSyntaxProjection
         /// only the option part before the first <c>=</c> counts, because the
         /// value part has its own overlay.
         /// </summary>
-        private static bool HasDynamicFragment(ShellValue word, int count, string raw)
+        private static bool HasDynamicFragment(ShellValue word, int count)
         {
             foreach (var fragment in word.Fragments)
             {
-                if (fragment.Kind != ShellValueFragmentKind.Literal)
+                if (fragment.Kind == ShellValueFragmentKind.Literal)
                 {
-                    // The lexer replaces each word part of a brace word with
-                    // one opaque fragment, so the fragments do not show the
-                    // option part. A plain authored option name before the
-                    // first `=` (`--file={a,b}`) is static.
-                    return !(count == 2 &&
-                             fragment.Kind == ShellValueFragmentKind.Opaque &&
-                             fragment.OpaqueCause == ShellOpaqueCause.BraceExpansion &&
-                             HasPlainOptionName(raw));
+                    if (count == 2 && fragment.Value.IndexOf('=') >= 0)
+                    {
+                        return false;
+                    }
+
+                    continue;
                 }
 
-                if (count == 2 && fragment.Value.IndexOf('=') >= 0)
+                // The lexer replaces each unquoted part of a brace word with
+                // one opaque fragment that keeps the decoded text of the part
+                // (#245 review). An option name before the first `=` of that
+                // text is static when it has no expansion or pattern
+                // character: `--file={a,b}` and `--'a'={p,q}` keep `--file`
+                // and `--a`. An escaped character decodes to the same text,
+                // so such a name stays Unknown.
+                if (count != 2 ||
+                    fragment.Kind != ShellValueFragmentKind.Opaque ||
+                    fragment.OpaqueCause != ShellOpaqueCause.BraceExpansion)
+                {
+                    return true;
+                }
+
+                var equals = fragment.Value.IndexOf('=');
+                var name = equals >= 0 ? fragment.Value.Substring(0, equals) : fragment.Value;
+                if (name.IndexOfAny(BraceWordDynamicCharacters) >= 0)
+                {
+                    return true;
+                }
+
+                if (equals >= 0)
                 {
                     return false;
                 }
@@ -1580,26 +1599,8 @@ internal static class ShellSyntaxProjection
             return false;
         }
 
-        private static bool HasPlainOptionName(string raw)
-        {
-            var equals = raw.IndexOf('=');
-            if (equals <= 0)
-            {
-                return false;
-            }
-
-            for (var index = 0; index < equals; index++)
-            {
-                var character = raw[index];
-                if (!(character is '-' or '_' or '.' ||
-                      character is >= 'a' and <= 'z' or >= 'A' and <= 'Z' or >= '0' and <= '9'))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
+        private static readonly char[] BraceWordDynamicCharacters =
+            { '$', '`', '*', '?', '[', '{', '}', '~', '\\' };
 
         private static bool IsInlineArgumentPair(
             ClauseElement element,

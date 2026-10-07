@@ -103,6 +103,14 @@ public class BashDynamicOptionWordTests
     [InlineData("tool --*=x")]
     [InlineData("for n in a x; do tool --$n={a,b}; done")]
     [InlineData("for n in a x; do tool -\"$n\"x={a,b}; done")]
+    // A brace expansion in the option name.
+    [InlineData("tool --{a,b}=x")]
+    [InlineData("tool --x{,=}y")]
+    [InlineData("tool --x{1..2}=a")]
+    [InlineData("tool -F{a,b=c}")]
+    [InlineData("tool \"--$1\"={a,b}")]
+    [InlineData("tool \"--$1=x\"")]
+    [InlineData("for v in q; do tool \"--$v=x\"; done")]
     public void Option_part_with_an_expansion_gives_no_exact_pair(string source)
     {
         // The option part was the exact raw text `--$n` in every mode. The
@@ -134,8 +142,23 @@ public class BashDynamicOptionWordTests
     [InlineData("cat --\"x\"=y", "--x")]
     [InlineData("cat --x='$n'", "--x")]
     [InlineData("for n in a; do cat --file=\"$n\"; done", "--file")]
+    // Review of #247: a quoted or escaped name before a brace value.
+    [InlineData("cat --'a'={p,q}", "--a")]
+    [InlineData("cat \"--a\"={p,q}", "--a")]
+    [InlineData("cat '--a'={p,q}", "--a")]
+    [InlineData("cat $'--a'={p,q}", "--a")]
+    [InlineData("cat -'F'x={p,q}", "-Fx")]
+    [InlineData("cat --a\\b={p,q}", "--ab")]
     public void Static_option_part_keeps_its_exact_value(string source, string option)
     {
+        var logged = BashOracle.LoggedCommands(source);
+        if (logged is not null)
+        {
+            Assert.All(
+                Assert.Single(logged).Skip(1),
+                word => Assert.StartsWith(option + "=", word, System.StringComparison.Ordinal));
+        }
+
         foreach (var mode in Modes)
         {
             var arguments = CreateParser(mode).Parse(source).Commands.Single().Arguments;
@@ -151,6 +174,7 @@ public class BashDynamicOptionWordTests
             "-o\"$n\"", "-o$n", "--$n=x", "--o=\"$n\"", "-\"$n\"", "x\"$n\"", "\"$n\"",
             "-o'$n'", "-o\\$n", "--o=$n", "-o\"$n\"-\"$n\"", "--$n", "--\"$n\"",
             "-o\"${n}\"", "-o\"${n}\"x", "--\"$n\"=\"$n\"", "-o\"$n\"=x", "--o\"=\"$n",
+            "--o\\=$n", "--o'='\"$n\"", "--o$'='$n", "\"--o=$n\"", "\"--$n=x\"", "--'o'\\=\"$n\"",
         };
         foreach (var word in words)
         {
