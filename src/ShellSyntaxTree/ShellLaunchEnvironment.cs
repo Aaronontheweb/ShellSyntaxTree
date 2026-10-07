@@ -47,6 +47,10 @@ public sealed class ShellLaunchEnvironment
     // entry. A wider match can only keep MayAffectProcessEnvironment true.
     private readonly HashSet<string>? _completeNames;
 
+    // The same names with an ordinal compare: a name in this set is proved
+    // to be in the environment, so Bash exports it.
+    private readonly HashSet<string>? _exactCompleteNames;
+
     /// <summary>Creates launcher-proved environment facts.</summary>
     /// <param name="exportedVariables">
     /// Variables that are set, exported, and scalar, with their exact values.
@@ -130,16 +134,25 @@ public sealed class ShellLaunchEnvironment
         IReadOnlyList<string> unsetVariables,
         HashSet<string> revokedNames,
         bool allRevoked,
-        HashSet<string>? completeNames)
+        HashSet<string>? exactCompleteNames)
     {
         ExportedVariables = exportedVariables;
         UnsetVariables = unsetVariables;
         _revokedNames = revokedNames;
         _allRevoked = allRevoked;
-        _completeNames = completeNames;
-        CompleteEnvironmentNames = completeNames is null
-            ? null
-            : new ReadOnlyCollection<string>(SortedNames(completeNames));
+        _exactCompleteNames = exactCompleteNames;
+        if (exactCompleteNames is not null)
+        {
+            _completeNames = new HashSet<string>(exactCompleteNames, StringComparer.OrdinalIgnoreCase);
+            CompleteEnvironmentNames = new ReadOnlyCollection<string>(SortedNames(exactCompleteNames));
+            foreach (var name in exactCompleteNames)
+            {
+                if (IsStartupOverrideName(name))
+                {
+                    DeclaresStartupOverride = true;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -179,7 +192,7 @@ public sealed class ShellLaunchEnvironment
             throw new ArgumentNullException(nameof(environmentNames));
         }
 
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = new HashSet<string>(StringComparer.Ordinal);
         foreach (var name in environmentNames)
         {
             if (name is null)
@@ -219,6 +232,33 @@ public sealed class ShellLaunchEnvironment
             _allRevoked,
             names);
     }
+
+    /// <summary>
+    /// True when the declared environment holds a name that Bash reads at
+    /// startup and that can export variables or change options:
+    /// <c>SHELLOPTS</c> (<c>allexport</c>), <c>BASH_ENV</c> (a startup file),
+    /// and <c>BASH_FUNC_*</c> (imported functions) change export in GNU Bash
+    /// 5.2. <c>BASHOPTS</c>, <c>ENV</c>, <c>POSIXLY_CORRECT</c>, and
+    /// <c>BASH_COMPAT</c> are also outside the fresh-process contract. The
+    /// compare ignores case.
+    /// </summary>
+    internal bool DeclaresStartupOverride { get; }
+
+    /// <summary>
+    /// True when the caller declared the complete environment and it holds
+    /// exactly this name, so Bash imported it as an exported variable.
+    /// </summary>
+    internal bool IsInCompleteEnvironment(string name) =>
+        _exactCompleteNames is not null && _exactCompleteNames.Contains(name);
+
+    private static bool IsStartupOverrideName(string name) =>
+        string.Equals(name, "SHELLOPTS", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(name, "BASHOPTS", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(name, "BASH_ENV", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(name, "ENV", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(name, "POSIXLY_CORRECT", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(name, "BASH_COMPAT", StringComparison.OrdinalIgnoreCase) ||
+        name.StartsWith("BASH_FUNC_", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gets the declared complete set of environment names, sorted by ordinal
@@ -339,14 +379,14 @@ public sealed class ShellLaunchEnvironment
         }
 
         var revoked = new HashSet<string>(_revokedNames, StringComparer.Ordinal) { name };
-        return new ShellLaunchEnvironment(ExportedVariables, UnsetVariables, revoked, false, _completeNames);
+        return new ShellLaunchEnvironment(ExportedVariables, UnsetVariables, revoked, false, _exactCompleteNames);
     }
 
     /// <summary>Returns facts in which no name is trusted.</summary>
     internal ShellLaunchEnvironment RevokeAll() =>
         _allRevoked
             ? this
-            : new ShellLaunchEnvironment(ExportedVariables, UnsetVariables, _revokedNames, true, _completeNames);
+            : new ShellLaunchEnvironment(ExportedVariables, UnsetVariables, _revokedNames, true, _exactCompleteNames);
 
     private bool ContainsUnset(string name)
     {

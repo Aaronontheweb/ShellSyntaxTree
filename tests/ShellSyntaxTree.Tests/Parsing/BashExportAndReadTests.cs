@@ -280,9 +280,13 @@ public class BashExportAndReadTests
     // ------------------------------------------------------------ child process
 
     [Theory]
-    [InlineData("x='a'; bash -c 'cat foo'", new string[0])]
+    // Without a declared complete launch environment, any name can be
+    // inherited, and Bash exports an inherited name. Since 0.4.0-beta.24 the
+    // child lists such an assignment with an Unknown value
+    // (BashChildEnvironmentTests runs this in Bash).
+    [InlineData("x='a'; bash -c 'cat foo'", new[] { "x" })]
     [InlineData("x=a; export x; bash -c 'cat foo'", new[] { "x" })]
-    [InlineData("export x=a y; y=2; z=3; bash -c 'cat foo'", new[] { "x", "y" })]
+    [InlineData("export x=a y; y=2; z=3; bash -c 'cat foo'", new[] { "x", "y", "z" })]
     [InlineData("if c; then export x=1; fi; bash -c 'cat foo'", new string[0])]
     // Exported on one path only: since 0.4.0-beta.24 the child lists the
     // assignment with an Unknown value, because the child gets it on that
@@ -292,8 +296,8 @@ public class BashExportAndReadTests
     public void Child_process_lists_only_exported_assignments(string source, string[] expected)
     {
         // A decoded `bash -c` child is a new process. It gets an assignment
-        // only when a path to it exports the name. A subshell keeps all of
-        // them (#221).
+        // when a path to it exports the name, or when the name can be
+        // inherited. A subshell keeps all of them (#221).
         var parsed = Parser.Parse(source);
 
         Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);

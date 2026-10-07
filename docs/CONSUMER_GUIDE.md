@@ -368,9 +368,11 @@ order. A Bash
 `ShellState` assignment appears on every later occurrence that it reaches on
 every path, one fact for each name (0.4.0-beta.12). A bounded `export
 NAME=value` gives the same `ShellState` fact (0.4.0-beta.16). A decoded
-`bash -c` child lists the assignments that every path to it exports. An
-assignment that only some paths export is listed too, with an `Unknown`
-effective value (0.4.0-beta.24).
+`bash -c` child lists each assignment that can reach it (0.4.0-beta.24): one
+that a path exports, and one to a name that the launch environment can hold.
+The value is exact when every path exports the name or the declared complete
+environment holds it, and `Unknown` otherwise. Before, the child listed only
+the assignments that every path exported.
 A read of an unassigned name gives an `Unknown` value. A value that the parser
 cannot prove, such as `x=$(cmd)`, has an `Unknown` `EffectiveValue`, and the
 commands in the substitution are their own occurrences. The narrow
@@ -523,9 +525,14 @@ Rules for consumers:
 - Declare only the exact set of names that the launcher passes. A missing
   name gives a false fact for a variable that Bash passes. The set must not
   drift: take it from the same snapshot that the launcher uses.
-- The names ignore case, so on Windows a name that differs only in case
-  keeps the fact true. A name that is not a shell identifier (`=C:`) is
-  allowed. A name in `UnsetVariables` must not be in the set.
+- The absence check ignores case, so on Windows a name that differs only in
+  case keeps the fact true. A name that is not a shell identifier (`=C:`) is
+  allowed. A name in `UnsetVariables` must not be in the set (an ordinal
+  compare: `B` set and `b` unset is valid).
+- If the set holds `SHELLOPTS`, `BASH_ENV`, a `BASH_FUNC_*` name, `BASHOPTS`,
+  `ENV`, `POSIXLY_CORRECT`, or `BASH_COMPAT`, every fact stays true. These
+  names break the fresh-process contract; the first three can export every
+  variable.
 - `MayAffectProcessEnvironment=false` says only that the child process does
   not get the variable in its environment. A later word that reads the
   variable still depends on it; its value shows that (`Unknown` for

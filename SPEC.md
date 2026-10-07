@@ -841,6 +841,10 @@ at that occurrence (v0.4.0-beta.24). All of these must hold:
   (`ShellLaunchEnvironment.CompleteEnvironmentNames`) and the name is not in
   it. The comparison ignores case, so a name that differs only in case keeps
   the fact true;
+- the declared environment holds no startup override: `SHELLOPTS`,
+  `BASH_ENV`, or a `BASH_FUNC_*` name (each can export variables in GNU Bash
+  5.2), or `BASHOPTS`, `ENV`, `POSIXLY_CORRECT`, or `BASH_COMPAT`, which the
+  fresh-process contract also excludes;
 - no bounded `export` of the name runs on any path to the occurrence (paths
   join by union). An `export` in a pipeline stage, a background job, or a
   command substitution runs in a subshell and does not count. `set -a`,
@@ -860,6 +864,17 @@ at that occurrence (v0.4.0-beta.24). All of these must hold:
 | `b=1; export b \| true; env` | false: the export runs in a subshell |
 | `b=1 env` | true (`CommandEnvironment`) |
 | any source without a declared complete environment | true |
+| `b=1; env` with `SHELLOPTS` in the environment | true |
+
+A decoded `bash -c` child lists each shell-state assignment that can reach
+it: one that a path exports, and one to a name that the launch environment
+can hold, because Bash exports every name that it imports. The value is the
+assigned value when every path exports the name or the declared environment
+holds the exact name, and Unknown otherwise. Only an assignment to a name
+proved absent at launch that no path exports is not listed. Before
+v0.4.0-beta.24 the child listed only the assignments that every path
+exported, so `GIT_DIR=/tmp/x; bash -c 'git status'` gave the child no
+`GIT_DIR` fact, but git gets the value when `GIT_DIR` is inherited.
 
 A PowerShell
 ordinary variable assignment sets it to false. A `CommandEnvironment` fact

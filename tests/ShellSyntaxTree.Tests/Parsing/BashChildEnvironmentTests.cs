@@ -182,6 +182,107 @@ public class BashChildEnvironmentTests
     }
 
     [Theory]
+    // Bash exports every name that it imports, so a child gets the new
+    // value of an inherited name (review of #248).
+    [InlineData("GIT_DIR=/tmp/nope; bash -c 'env'", "PATH,GIT_DIR", "GIT_DIR", "/tmp/nope", true)]
+    [InlineData("b=1; bash -c 'env'", "PATH,b", "b", "1", true)]
+    // Absent from the declared environment and not exported: no fact.
+    [InlineData("b=1; bash -c 'env'", "PATH", "b", null, false)]
+    // `B` is another name on Linux; the child does not get `b`, but the
+    // parser cannot prove which name the shell sees on Windows.
+    [InlineData("b=1; bash -c 'env'", "PATH,B", "b", null, true)]
+    public void Decoded_child_gets_an_inherited_name(
+        string source,
+        string launchNames,
+        string name,
+        string? value,
+        bool listed)
+    {
+        var names = launchNames.Split(',');
+        var reaches = RunInExactEnvironment(source, names, name);
+        if (reaches is not null && !launchNames.Contains('B'))
+        {
+            Assert.Equal(listed, reaches.Value);
+        }
+
+        var parsed = CreateParser(names).Parse(source);
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var child = parsed.Commands.Last();
+        var assignment = child.Assignments.SingleOrDefault(a => a.Name == name);
+        Assert.Equal(listed, assignment is not null);
+        if (assignment is not null)
+        {
+            Assert.True(assignment.MayAffectProcessEnvironment);
+            if (value is null)
+            {
+                Assert.IsType<ShellValueDomain.Unknown>(assignment.EffectiveValue);
+            }
+            else
+            {
+                Assert.Equal(value, Assert.IsType<ShellValueDomain.Exact>(assignment.EffectiveValue).Value);
+            }
+        }
+    }
+
+    [Theory]
+    // A startup override in the declared environment can export every
+    // variable: `SHELLOPTS=allexport`, a `BASH_ENV` file with `set -a`, or
+    // an imported function. The fact stays true (review of #248).
+    [InlineData("SHELLOPTS")]
+    [InlineData("BASH_ENV")]
+    [InlineData("BASH_FUNC_env%%")]
+    [InlineData("BASHOPTS")]
+    [InlineData("ENV")]
+    [InlineData("POSIXLY_CORRECT")]
+    [InlineData("BASH_COMPAT")]
+    [InlineData("bash_func_x%%")]
+    public void Startup_override_in_the_environment_keeps_the_fact_true(string overrideName)
+    {
+        var parsed = CreateParser(new[] { "PATH", overrideName }).Parse("b=1; env");
+
+        Assert.True(parsed.Commands.Single().Assignments.Single().MayAffectProcessEnvironment);
+    }
+
+    [Theory]
+    [InlineData("SHELLOPTS=allexport")]
+    [InlineData("BASH_ENV=SETA")]
+    [InlineData("BASH_FUNC_env%%=() { export b; command env; }")]
+    public void Startup_override_exports_the_variable_in_bash(string entry)
+    {
+        if (!BashOracle.IsAvailable())
+        {
+            return;
+        }
+
+        var scratch = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "sst-seta-" + Guid.NewGuid().ToString("N"));
+        System.IO.File.WriteAllText(scratch, "set -a\n");
+        try
+        {
+            var startInfo = new ProcessStartInfo("env")
+            {
+                RedirectStandardOutput = true,
+                UseShellExecute = false,
+            };
+            startInfo.ArgumentList.Add("-i");
+            startInfo.ArgumentList.Add("PATH=/usr/bin:/bin");
+            startInfo.ArgumentList.Add(entry.Replace("SETA", scratch, StringComparison.Ordinal));
+            startInfo.ArgumentList.Add("bash");
+            startInfo.ArgumentList.Add("--noprofile");
+            startInfo.ArgumentList.Add("--norc");
+            startInfo.ArgumentList.Add("-c");
+            startInfo.ArgumentList.Add("b=1; env");
+            using var process = Process.Start(startInfo)!;
+            var output = process.StandardOutput.ReadToEnd();
+            Assert.True(process.WaitForExit(10_000));
+            Assert.Contains("\nb=1\n", "\n" + output, StringComparison.Ordinal);
+        }
+        finally
+        {
+            System.IO.File.Delete(scratch);
+        }
+    }
+
+    [Theory]
     // Bash exports the variable, or the parser cannot see it. Each source
     // fails closed, so it has no assignment fact.
     [InlineData("set -a; b=1; env")]
@@ -269,7 +370,15 @@ public class BashChildEnvironmentTests
 
         // Windows keeps hidden names such as `=C:`; they are allowed.
         var facts = ShellLaunchEnvironment.FromCompleteEnvironmentNames(new[] { "=C:", "PATH", "Path" });
-        Assert.Equal(new[] { "=C:", "PATH" }, facts.CompleteEnvironmentNames);
+        Assert.Equal(new[] { "=C:", "PATH", "Path" }, facts.CompleteEnvironmentNames);
+
+        // Review of #248: on Linux, `B` and `b` are two names. A launch with
+        // `B` set and `b` unset is valid.
+        var mixed = new ShellLaunchEnvironment(
+                Array.Empty<KeyValuePair<string, string>>(),
+                new[] { "b" })
+            .WithCompleteEnvironmentNames(new[] { "PATH", "B" });
+        Assert.Equal(new[] { "B", "PATH" }, mixed.CompleteEnvironmentNames);
         Assert.Null(new ShellLaunchEnvironment(
             Array.Empty<KeyValuePair<string, string>>(),
             Array.Empty<string>()).CompleteEnvironmentNames);

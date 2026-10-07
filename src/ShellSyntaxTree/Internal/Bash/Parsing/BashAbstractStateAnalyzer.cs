@@ -765,7 +765,9 @@ internal sealed class BashAbstractStateAnalyzer
         {
             // A decoded command string runs in a new Bash process. It gets
             // only the exported assignments of its parent (#221).
-            childInput = childInput.ForChildProcess();
+            childInput = childInput.ForChildProcess(
+                IsProvedAbsentAtLaunch,
+                IsProvedInLaunchEnvironment);
         }
 
         var inner = AnalyzeBlock(body, childInput);
@@ -2365,13 +2367,27 @@ internal sealed class BashAbstractStateAnalyzer
     /// In every other case the fact stays true.
     /// </remarks>
     private bool IsProvedOutsideChildEnvironment(string name, BashAbstractState input) =>
+        IsProvedAbsentAtLaunch(name) &&
+        !input.ChildEnvironment.IsChildProcess &&
+        !input.ChildEnvironment.MayBeExported(name);
+
+    /// <summary>
+    /// True when Bash cannot have imported <paramref name="name"/> as an
+    /// exported variable: the fresh-process mode, a declared complete
+    /// environment without the name and without a startup override, and a
+    /// name that Bash does not export by itself.
+    /// </summary>
+    private bool IsProvedAbsentAtLaunch(string name) =>
         _options.InitialStateMode == BashInitialStateMode.FreshNonInteractiveNoStartup &&
         _options.LaunchEnvironment is { } launch &&
+        !launch.DeclaresStartupOverride &&
         launch.IsAbsentFromCompleteEnvironment(name) &&
-        !input.ChildEnvironment.IsChildProcess &&
-        !input.ChildEnvironment.MayBeExported(name) &&
         !BashChildEnvironment.IsExportedByBash(name) &&
         BashVariableAssignmentGrammar.IsEligibleCommandEnvironmentName(name);
+
+    private bool IsProvedInLaunchEnvironment(string name) =>
+        _options.LaunchEnvironment is { } launch &&
+        launch.IsInCompleteEnvironment(name);
 
     private IReadOnlyList<EffectiveArgumentFacts> CreateEffectiveArguments(Clause clause)
         => CreateArguments(_effectiveArguments, clause);
@@ -3295,21 +3311,34 @@ internal sealed class BashAbstractStateAnalyzer
         }
 
         /// <summary>
-        /// The state that a new Bash child process starts with. It keeps only
-        /// the exported shell-state assignments, and no binding. An
-        /// assignment that only some paths export stays too, with an Unknown
-        /// effective value: on the other paths the child does not get it.
+        /// The state that a new Bash child process starts with. It keeps the
+        /// shell-state assignments that can reach the child, and no binding:
+        /// <list type="bullet">
+        ///   <item>an assignment that every path exports, or that is to a
+        ///         name proved in the launch environment (Bash exports an
+        ///         imported name), with its value;</item>
+        ///   <item>an assignment that only some paths export, or to a name
+        ///         that the launch environment can hold, with an Unknown
+        ///         effective value: on the other paths, or when the name was
+        ///         not imported, the child does not get it.</item>
+        /// </list>
+        /// Only an assignment to a name proved absent at launch that no
+        /// path exports is dropped.
         /// </summary>
-        internal BashAbstractState ForChildProcess()
+        internal BashAbstractState ForChildProcess(
+            Func<string, bool> isProvedAbsentAtLaunch,
+            Func<string, bool> isProvedInLaunchEnvironment)
         {
             var assignments = new List<ShellVariableAssignment>();
             foreach (var assignment in Assignments)
             {
-                if (Contains(ExportedNames, assignment.Name))
+                if (Contains(ExportedNames, assignment.Name) ||
+                    isProvedInLaunchEnvironment(assignment.Name))
                 {
-                    assignments.Add(assignment);
+                    assignments.Add(assignment with { MayAffectProcessEnvironment = true });
                 }
-                else if (ChildEnvironment.MayBeExported(assignment.Name))
+                else if (ChildEnvironment.MayBeExported(assignment.Name) ||
+                         !isProvedAbsentAtLaunch(assignment.Name))
                 {
                     assignments.Add(assignment with
                     {
