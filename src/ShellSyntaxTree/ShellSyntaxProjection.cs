@@ -1412,6 +1412,9 @@ internal static class ShellSyntaxProjection
                 authoredDomains.Add(authored[index].ClauseElementIndex, authored[index].Value);
             }
 
+            var authoredWords = language == ShellProjectionLanguage.Bash
+                ? IndexAuthoredWords(provenance)
+                : null;
             var projected = new List<AnalyzedArgument>(authoredArguments.Count);
             var argumentIndex = 0;
             for (var elementOffset = 0; elementOffset < elementIndices.Count; elementOffset++)
@@ -1438,6 +1441,20 @@ internal static class ShellSyntaxProjection
                                       !authoredArguments[argumentIndex].IsFlag
                     ? 0
                     : 1;
+
+                // The parser gives an option word the Literal kind, also when
+                // the word has an expansion (`-o"$n"`, `--$n=x`). Without a
+                // proved value, such a word has no exact value: its raw
+                // spelling is not what Bash passes (#245). When the option
+                // part of `--name=value` has an expansion, the program can
+                // also split the word at an `=` in the expanded text, so the
+                // value part is not proved either.
+                var authoredWord = authoredWords is not null &&
+                                   authoredWords.TryGetValue(elementIndex, out var word)
+                    ? word
+                    : null;
+                var wordIsDynamic = authoredWord is not null &&
+                                    HasDynamicFragment(authoredWord, count);
                 for (var offset = 0; offset < count; offset++)
                 {
                     var argument = authoredArguments[argumentIndex + offset];
@@ -1460,11 +1477,15 @@ internal static class ShellSyntaxProjection
                         ? InlineOptionValue(
                             hasEffectiveValue
                                 ? ToPublicDomain(domain!)
-                                : WholeInlineOptionWord(argument, element),
+                                : wordIsDynamic
+                                    ? new ShellValueDomain.Unknown()
+                                    : WholeInlineOptionWord(argument, element),
                             inlineOptionPrefix)
                         : hasEffectiveValue
                             ? ToPublicDomain(domain!)
-                            : DefaultArgumentDomain(argument, element, count == 1);
+                            : wordIsDynamic
+                                ? new ShellValueDomain.Unknown()
+                                : DefaultArgumentDomain(argument, element, count == 1);
                     var hasAuthoredValue = authoredDomains.TryGetValue(
                                                elementIndex,
                                                out var authoredDomain) &&
@@ -1512,6 +1533,74 @@ internal static class ShellSyntaxProjection
             return arguments.Count == projected.Count &&
                    AuthoredOperandSemanticsProjection.HasValidDomains(arguments);
         }
+
+        private static Dictionary<int, ShellValue> IndexAuthoredWords(
+            IReadOnlyList<ShellValueElementProvenance> provenance)
+        {
+            var words = new Dictionary<int, ShellValue>();
+            foreach (var item in provenance)
+            {
+                if (!words.ContainsKey(item.ClauseElementIndex))
+                {
+                    words.Add(item.ClauseElementIndex, item.Value);
+                }
+            }
+
+            return words;
+        }
+
+        /// <summary>
+        /// True when the authored word has a part that the shell expands. For
+        /// an inline <c>--name=value</c> pair (<paramref name="count"/> 2),
+        /// only the option part before the first <c>=</c> counts, because the
+        /// value part has its own overlay.
+        /// </summary>
+        private static bool HasDynamicFragment(ShellValue word, int count)
+        {
+            foreach (var fragment in word.Fragments)
+            {
+                if (fragment.Kind == ShellValueFragmentKind.Literal)
+                {
+                    if (count == 2 && fragment.Value.IndexOf('=') >= 0)
+                    {
+                        return false;
+                    }
+
+                    continue;
+                }
+
+                // The lexer replaces each unquoted part of a brace word with
+                // one opaque fragment that keeps the decoded text of the part
+                // (#245 review). An option name before the first `=` of that
+                // text is static when it has no expansion or pattern
+                // character: `--file={a,b}` and `--'a'={p,q}` keep `--file`
+                // and `--a`. An escaped character decodes to the same text,
+                // so such a name stays Unknown.
+                if (count != 2 ||
+                    fragment.Kind != ShellValueFragmentKind.Opaque ||
+                    fragment.OpaqueCause != ShellOpaqueCause.BraceExpansion)
+                {
+                    return true;
+                }
+
+                var equals = fragment.Value.IndexOf('=');
+                var name = equals >= 0 ? fragment.Value.Substring(0, equals) : fragment.Value;
+                if (name.IndexOfAny(BraceWordDynamicCharacters) >= 0)
+                {
+                    return true;
+                }
+
+                if (equals >= 0)
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        private static readonly char[] BraceWordDynamicCharacters =
+            { '$', '`', '*', '?', '[', '{', '}', '~', '\\' };
 
         private static bool IsInlineArgumentPair(
             ClauseElement element,

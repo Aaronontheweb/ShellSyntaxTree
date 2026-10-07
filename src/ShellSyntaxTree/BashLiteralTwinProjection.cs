@@ -209,9 +209,10 @@ internal static class BashLiteralTwinAnalyzer
         projection = null;
         cost = default;
         var source = parsed.Source;
-        // SECURITY: with an unknown initial state, the parser can report an
-        // exact value for a word that Bash expands (`-o"$n"` gives `-o$n`).
-        // A twin would turn that value into a literal word.
+        // SECURITY: with an unknown initial state, the parser does not prove
+        // the values of a word that Bash expands. Before 0.4.0-beta.24 it gave
+        // `-o"$n"` the exact value `-o$n` (#245). A twin would turn an
+        // unproved value into a literal word, so that mode gets no twins.
         if (options.InitialStateMode == BashInitialStateMode.Unknown ||
             HasUnmodeledText(source))
         {

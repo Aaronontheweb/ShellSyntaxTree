@@ -123,14 +123,15 @@ public class BashLiteralTwinBashDifferentialTests
         Assert.NotEqual(parserValue, bashValue);
     }
 
-    // With an unknown initial state, the parser reports `-o$n` as an exact
-    // value, but Bash passes `-oa`. The projection gives no twins in that mode.
+    // With an unknown initial state, the parser does not prove the value of
+    // `-o"$n"`, and Bash passes `-oa`. Before 0.4.0-beta.24 the parser gave
+    // the exact value `-o$n` (#245). The projection gives no twins in that
+    // mode.
     [BashTheory]
-    [InlineData("for n in a; do tool -o\"$n\"; done", "-o$n", "-oa")]
-    [InlineData("for n in a; do tool -o\"${n}\"; done", "-o${n}", "-oa")]
-    public void Bash_changes_a_word_that_the_unknown_state_reports_as_exact(
+    [InlineData("for n in a; do tool -o\"$n\"; done", "-oa")]
+    [InlineData("for n in a; do tool -o\"${n}\"; done", "-oa")]
+    public void Bash_changes_a_word_that_the_unknown_state_does_not_prove(
         string source,
-        string parserValue,
         string bashValue)
     {
         var unknown = new BashParser(new BashParserOptions
@@ -142,7 +143,7 @@ public class BashLiteralTwinBashDifferentialTests
 
         Assert.False(unknown.TryProjectLiteralTwins(source, out _));
         var argument = Assert.Single(Assert.Single(unknown.Parse(source).Commands).Arguments);
-        Assert.Equal(parserValue, Assert.IsType<ShellValueDomain.Exact>(argument.Value).Value);
+        Assert.IsType<ShellValueDomain.Unknown>(argument.Value);
         Assert.Equal("tool\u001f" + bashValue, Assert.Single(RunArgv(source, "tool")));
     }
 
