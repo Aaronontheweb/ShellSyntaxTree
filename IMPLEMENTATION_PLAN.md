@@ -10,13 +10,27 @@ priorities.
 
 ---
 
-## NOW (0.4.0-beta.24 Netclaw 0.27.2 parser fixes)
+## NOW (0.4.0 stable)
+
+- [ ] Publish `0.4.0` stable from the reviewed release metadata after the
+      release PR passes Linux and Windows CI. Derive the bare SemVer tag from
+      the merged MSBuild `Version`, observe the tag-driven NuGet workflow, and
+      verify the package, symbols package, and non-prerelease GitHub release.
+
+## Completed (0.4.0-beta.24 Netclaw 0.27.2 parser fixes)
 
 - [x] Pair an option and its value when the `=` or the name is quoted (`-F'x=y'`, `--'x'='y'`). The source was unparseable.
 - [x] Review of #246: a quoted or escaped `=` keeps the path facts of the unquoted form. Split a fully quoted `"--file=/x"` too. Do not split at an `=` in an expansion.
 - [x] Give no exact value to an option word with an unproved expansion (#245). Under the Unknown mode `-o"$n"` gave `-o$n`. The option part of `--$n=x` gave `--$n` in every mode.
 - [x] Add a complete launch environment (names only). Prove `MayAffectProcessEnvironment=false` for a Bash `ShellState` assignment that is not exported (Netclaw F3).
-- [ ] Merge the PRs after Linux and Windows CI. Tag `0.4.0-beta.24` and verify NuGet publication.
+- [x] Merge the PRs after Linux and Windows CI. Tag `0.4.0-beta.24` and verify NuGet publication. Done: tag on merge `49c54a1`, run 39352166574 published the package and the prerelease.
+
+## NOW (0.4.0 stable)
+
+- [ ] Publish `0.4.0` stable from the reviewed release metadata after the
+      release PR passes Linux and Windows CI. Derive the bare SemVer tag from
+      the merged MSBuild `Version`, observe the tag-driven NuGet workflow, and
+      verify the package, symbols package, and non-prerelease GitHub release.
 
 ## Completed (0.4.0-beta.23 literal twins of loop values)
 
