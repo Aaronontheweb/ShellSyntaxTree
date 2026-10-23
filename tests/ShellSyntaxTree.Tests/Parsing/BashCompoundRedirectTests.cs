@@ -215,6 +215,22 @@ public sealed class BashCompoundRedirectTests
     }
 
     [Fact]
+    public void Compound_redirect_for_loop_target_uses_entry_directory_before_body_cd()
+    {
+        const string source = "cd /safe && for x in one; do cd /other; done < input.txt";
+
+        var parsed = ParseWithCompoundRedirects(source);
+
+        Assert.False(parsed.IsUnparseable, parsed.UnparseableReason);
+        var wrapper = FindCompoundWrapper(parsed.Syntax);
+        Assert.Equal("/safe", Assert.IsType<ShellValueDomain.Exact>(
+            wrapper.WorkingDirectory).Value);
+        var redirect = AssertCompoundRedirect(wrapper);
+        Assert.Equal("/safe/input.txt", Assert.IsType<ShellValueDomain.Exact>(
+            Assert.IsType<FileRedirectAnalysis>(redirect.Analysis).Target).Value);
+    }
+
+    [Fact]
     public void Compound_redirect_failure_keeps_input_state_for_following_sequence()
     {
         var parsed = ParseWithCompoundRedirects(
