@@ -10,12 +10,17 @@ priorities.
 
 ---
 
-## NOW (0.4.0 stable)
+## Completed (0.4.0 stable publication)
 
-- [ ] Publish `0.4.0` stable from the reviewed release metadata after the
+- [x] Publish `0.4.0` stable from the reviewed release metadata after the
       release PR passes Linux and Windows CI. Derive the bare SemVer tag from
       the merged MSBuild `Version`, observe the tag-driven NuGet workflow, and
       verify the package, symbols package, and non-prerelease GitHub release.
+      Done: PR #251 merged to dev at `e3aadcc`, Linux and Windows CI green.
+      Tag `0.4.0` on `e3aadcc`; workflow run 40017484177 published
+      `ShellSyntaxTree.0.4.0` and the symbols package to nuget.org (feed shows
+      `0.4.0`, package serves HTTP 200) and the non-prerelease GitHub release
+      2026-10-23T20:14:09Z.
 
 ## Completed (0.4.0-beta.24 Netclaw 0.27.2 parser fixes)
 
@@ -24,13 +29,6 @@ priorities.
 - [x] Give no exact value to an option word with an unproved expansion (#245). Under the Unknown mode `-o"$n"` gave `-o$n`. The option part of `--$n=x` gave `--$n` in every mode.
 - [x] Add a complete launch environment (names only). Prove `MayAffectProcessEnvironment=false` for a Bash `ShellState` assignment that is not exported (Netclaw F3).
 - [x] Merge the PRs after Linux and Windows CI. Tag `0.4.0-beta.24` and verify NuGet publication. Done: tag on merge `49c54a1`, run 39352166574 published the package and the prerelease.
-
-## NOW (0.4.0 stable)
-
-- [ ] Publish `0.4.0` stable from the reviewed release metadata after the
-      release PR passes Linux and Windows CI. Derive the bare SemVer tag from
-      the merged MSBuild `Version`, observe the tag-driven NuGet workflow, and
-      verify the package, symbols package, and non-prerelease GitHub release.
 
 ## Completed (0.4.0-beta.23 literal twins of loop values)
 
