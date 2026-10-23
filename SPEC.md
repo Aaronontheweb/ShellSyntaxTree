@@ -573,6 +573,13 @@ required to preserve that reference identity. For an unparseable result,
 `Commands` and `Clauses` are empty even when `Syntax` retains partial evidence
 for diagnostics.
 
+`ShellSyntaxNode.GetChildren()` returns direct parser-owned child references,
+including children of internal node types. It reports structural reachability
+only. It does not report execution order, parse completeness, or authority. A
+consumer may use it to inspect diagnostic partial syntax, but the consumer
+must reject an unparseable result as policy evidence. The method throws when a
+required child is missing or when a node type is unsupported.
+
 Diagnostic syntax is non-exhaustive. It never supplies approval, grant, path,
 cwd, state, ordering, execution-region, or value authority. A security
 consumer may use a direct-source `SimpleCommandSyntax.Clause` only as an
@@ -606,6 +613,7 @@ public abstract record ShellSyntaxNode
 
     public int? SourceStart { get; internal init; }
     public int? SourceLength { get; internal init; }
+    public IReadOnlyList<ShellSyntaxNode> GetChildren();
 }
 
 public sealed record ShellBlockSyntax : ShellSyntaxNode

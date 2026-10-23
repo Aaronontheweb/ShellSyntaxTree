@@ -20,6 +20,25 @@ public class PublicApiSnapshotTests
 {
     private static readonly Assembly LibAssembly = typeof(BashParser).Assembly;
 
+    [Fact]
+    public void ShellSyntaxNode_has_expected_child_traversal_method()
+    {
+        var type = typeof(ShellSyntaxNode);
+        var method = type.GetMethod(
+            nameof(ShellSyntaxNode.GetChildren),
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly,
+            binder: null,
+            types: Type.EmptyTypes,
+            modifiers: null);
+
+        Assert.NotNull(method);
+        Assert.True(method!.IsPublic);
+        Assert.False(method.IsStatic);
+        Assert.Equal(typeof(IReadOnlyList<ShellSyntaxNode>), method.ReturnType);
+        Assert.Empty(method.GetParameters());
+        AssertReferenceNullability(method.ReturnParameter, NullabilityState.NotNull);
+    }
+
     // -------- IShellParser --------
 
     [Fact]

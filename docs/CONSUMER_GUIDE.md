@@ -218,6 +218,11 @@ The stable v0.3 migration rules are:
 
 1. Check `IsUnparseable` first. An unparseable result has empty `Commands` and
    `Clauses`; any partial `Syntax` is diagnostic only.
+   `ShellSyntaxNode.GetChildren()` can visit nodes that the partial tree
+   retains. It does not make the result complete or provide authorization
+   evidence. It returns direct parser-owned references and describes structure
+   only, with no execution-order or authority meaning. It throws when a
+   required child is missing or a node type is unsupported.
 2. Authorize every `CommandOccurrence`, including iterator, loop-body,
    substitution, and execution-region commands. Do not recursively walk
    `Syntax` to discover commands.

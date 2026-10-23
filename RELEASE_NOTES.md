@@ -10,6 +10,7 @@ default, so existing consumers keep the old fail-closed result.
 - `BashParserOptions.ParseCompoundRedirects`, `RedirectedCompoundSyntax`, and
   `CompoundRedirect` for `for`, `while`, `until`, `if`, and subshell commands.
 - The `CompoundCommand` ancestry region for each wrapped command.
+- `ShellSyntaxNode.GetChildren()` for read-only traversal of direct syntax children.
 
 ## Security and compatibility
 

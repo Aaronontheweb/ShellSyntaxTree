@@ -44,6 +44,12 @@ public class PublicContractSnapshotTests
             typeof(ShellSyntaxNode),
             (nameof(ShellSyntaxNode.SourceStart), typeof(int?)),
             (nameof(ShellSyntaxNode.SourceLength), typeof(int?)));
+        var getChildren = typeof(ShellSyntaxNode).GetMethod(
+            nameof(ShellSyntaxNode.GetChildren),
+            Type.EmptyTypes);
+        Assert.NotNull(getChildren);
+        Assert.Equal(typeof(IReadOnlyList<ShellSyntaxNode>), getChildren!.ReturnType);
+        Assert.Empty(getChildren.GetParameters());
         AssertResultRecord(
             typeof(ShellBlockSyntax),
             (nameof(ShellBlockSyntax.Statements), typeof(IReadOnlyList<ShellSyntaxNode>)));
