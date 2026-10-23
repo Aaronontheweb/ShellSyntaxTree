@@ -1229,7 +1229,7 @@ internal static partial class BashCommandParser
 
         private static bool IsRedirectOperatorText(string? text)
         {
-            if (string.IsNullOrEmpty(text))
+            if (text is null || text.Length == 0)
             {
                 return false;
             }
