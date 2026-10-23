@@ -47,4 +47,10 @@ public sealed record BashParserOptions : ShellParserOptions
     /// separately from effective runtime-value facts. The default is false.
     /// </summary>
     public bool PublishAuthoredSourceFacts { get; init; }
+
+    /// <summary>
+    /// Gets whether supported redirects on compound Bash commands are modeled.
+    /// The default is false so consumers keep the existing unparseable result.
+    /// </summary>
+    public bool ParseCompoundRedirects { get; init; }
 }

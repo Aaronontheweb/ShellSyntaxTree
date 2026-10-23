@@ -286,13 +286,14 @@ public class PublicApiSnapshotTests
         AssertInitProperty(t, "WorkingDirectory", typeof(string), nullable: true);
         AssertInitProperty(t, "InitialStateMode", typeof(BashInitialStateMode));
         AssertInitProperty(t, "PublishAuthoredSourceFacts", typeof(bool));
+        AssertInitProperty(t, "ParseCompoundRedirects", typeof(bool));
 
         var declaredProps = DeclaredInstanceProps(t)
             .Where(p => p.Name != "EqualityContract")
             .Select(p => p.Name)
             .ToArray();
         Assert.Equal(
-            new[] { "InitialStateMode", "PublishAuthoredSourceFacts" },
+            new[] { "InitialStateMode", "PublishAuthoredSourceFacts", "ParseCompoundRedirects" },
             declaredProps);
     }
 
@@ -727,6 +728,7 @@ public class PublicApiSnapshotTests
             nameof(CommandOccurrence),
             nameof(CommandOccurrenceRole),
             nameof(CommandSubstitutionSyntax),
+            nameof(CompoundRedirect),
             nameof(CompoundOperator),
             nameof(ConditionalBranchSyntax),
             nameof(ConditionalSyntax),
@@ -749,6 +751,7 @@ public class PublicApiSnapshotTests
             nameof(IShellParser),
             nameof(ParsedCommand),
             nameof(PipelineSyntax),
+            nameof(RedirectedCompoundSyntax),
             nameof(PwshParser),
             nameof(PwshDialect),
             nameof(PwshInitialStateMode),

@@ -69,6 +69,16 @@ public class PublicContractSnapshotTests
             (nameof(GroupSyntax.GroupKind), typeof(ShellGroupKind)),
             (nameof(GroupSyntax.Body), typeof(ShellBlockSyntax)));
         AssertResultRecord(
+            typeof(RedirectedCompoundSyntax),
+            (nameof(RedirectedCompoundSyntax.Command), typeof(ShellSyntaxNode)),
+            (nameof(RedirectedCompoundSyntax.Redirects), typeof(IReadOnlyList<CompoundRedirect>)),
+            (nameof(RedirectedCompoundSyntax.WorkingDirectory), typeof(ShellValueDomain)));
+        AssertResultRecord(
+            typeof(CompoundRedirect),
+            (nameof(CompoundRedirect.Analysis), typeof(RedirectAnalysis)),
+            (nameof(CompoundRedirect.SourceStart), typeof(int)),
+            (nameof(CompoundRedirect.SourceLength), typeof(int)));
+        AssertResultRecord(
             typeof(ForEachSyntax),
             (nameof(ForEachSyntax.BindingName), typeof(string)),
             (nameof(ForEachSyntax.BindingSource), typeof(ShellSourceFragment)),
@@ -179,7 +189,9 @@ public class PublicContractSnapshotTests
         AssertEnum<CommandAncestryRegion>(
             "Unknown", "Root", "Statement", "PipelineStage", "GroupBody",
             "Iterator", "LoopBody", "Substitution", "ExecutionRegion",
-            "Condition", "Branch");
+            "Condition", "Branch", "CompoundCommand");
+        Assert.Equal(10, (int)CommandAncestryRegion.Branch);
+        Assert.Equal(11, (int)CommandAncestryRegion.CompoundCommand);
     }
 
     [Fact]

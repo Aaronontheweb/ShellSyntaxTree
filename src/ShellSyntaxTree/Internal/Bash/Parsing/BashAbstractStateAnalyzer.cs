@@ -124,6 +124,7 @@ internal sealed class BashAbstractStateAnalyzer
             CommandListSyntax list => AnalyzeList(list, input),
             PipelineSyntax pipeline => AnalyzePipeline(pipeline, input),
             GroupSyntax group => AnalyzeGroup(group, input),
+            RedirectedCompoundSyntax redirected => AnalyzeRedirectedCompound(redirected, input),
             CommandSubstitutionSyntax substitution => AnalyzeIsolatedBody(
                 substitution.Body,
                 input,
@@ -137,6 +138,19 @@ internal sealed class BashAbstractStateAnalyzer
             ShellAssignmentSyntax assignment => AnalyzeAssignment(assignment, input),
             _ => BashFlowResult.Both(input.WithUnknownCwd()),
         };
+
+    private BashFlowResult AnalyzeRedirectedCompound(
+        RedirectedCompoundSyntax redirected,
+        BashAbstractState input)
+    {
+        // Bash evaluates the outer redirects before it evaluates the compound
+        // command, its condition, or its body.
+        AnalyzeSimple(new SimpleCommandSyntax { Clause = redirected.RedirectClause }, input);
+        var body = AnalyzeNode(redirected.Command, input);
+        return new BashFlowResult(
+            body.OnSuccess,
+            BashAbstractState.JoinNullable(input, body.OnFailure));
+    }
 
     private BashFlowResult AnalyzeAssignment(
         ShellAssignmentSyntax syntax,
@@ -1351,6 +1365,9 @@ internal sealed class BashAbstractStateAnalyzer
             case GroupSyntax group:
                 RecordUnvisitedBindingArguments(group.Body, bindingName);
                 break;
+            case RedirectedCompoundSyntax redirected:
+                RecordUnvisitedBindingArguments(redirected.Command, bindingName);
+                break;
             case ForEachSyntax forEach:
                 RecordUnvisitedBindingArguments(forEach.IteratorCommands, bindingName);
                 RecordUnvisitedBindingArguments(forEach.Body, bindingName);
@@ -2069,6 +2086,7 @@ internal sealed class BashAbstractStateAnalyzer
                 Items = RewriteItems(list.Items, facts),
             },
             GroupSyntax group => group with { Body = RewriteBlock(group.Body, facts) },
+            RedirectedCompoundSyntax redirected => RewriteRedirectedCompound(redirected, facts),
             ForEachSyntax forEach => RewriteForEach(forEach, facts),
             ConditionLoopSyntax loop => loop with
             {
@@ -2096,6 +2114,33 @@ internal sealed class BashAbstractStateAnalyzer
             },
             _ => node,
         };
+
+    private RedirectedCompoundSyntax RewriteRedirectedCompound(
+        RedirectedCompoundSyntax redirected,
+        Dictionary<Clause, CommandOccurrenceFacts> facts)
+    {
+        var synthetic = RewriteSimple(
+            new SimpleCommandSyntax { Clause = redirected.RedirectClause },
+            facts);
+        if (!facts.TryGetValue(synthetic.Clause, out var redirectFacts) ||
+            !ShellSyntaxProjection.TryProjectCompoundRedirects(
+                synthetic.Clause,
+                redirectFacts.Redirects,
+                redirected.RedirectSpans,
+                out var redirects))
+        {
+            _isComplete = false;
+            return redirected;
+        }
+
+        return redirected with
+        {
+            Command = RewriteNode(redirected.Command, facts),
+            RedirectClause = synthetic.Clause,
+            Redirects = redirects,
+            WorkingDirectory = ShellSyntaxProjection.ToPublicDomain(redirectFacts.WorkingDirectory),
+        };
+    }
 
     private IReadOnlyList<CaseItemSyntax> RewriteCaseItems(
         IReadOnlyList<CaseItemSyntax> items,

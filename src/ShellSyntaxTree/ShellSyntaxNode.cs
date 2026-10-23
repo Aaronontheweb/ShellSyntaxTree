@@ -25,6 +25,7 @@ public abstract record ShellSyntaxNode
         PipelineSyntax => ShellSyntaxKind.Pipeline,
         CommandListSyntax => ShellSyntaxKind.CommandList,
         GroupSyntax => ShellSyntaxKind.Group,
+        RedirectedCompoundSyntax => ShellSyntaxKind.RedirectedCompound,
         ForEachSyntax => ShellSyntaxKind.ForEach,
         CommandSubstitutionSyntax => ShellSyntaxKind.CommandSubstitution,
         ExecutionRegionSyntax => ShellSyntaxKind.ExecutionRegion,
@@ -50,6 +51,7 @@ internal enum ShellSyntaxKind
     Pipeline,
     CommandList,
     Group,
+    RedirectedCompound,
     ForEach,
     CommandSubstitution,
     ExecutionRegion,
@@ -211,6 +213,54 @@ public sealed record GroupSyntax : ShellSyntaxNode
     public ShellGroupKind GroupKind { get; internal init; }
 
     public ShellBlockSyntax Body { get; internal init; } = null!;
+}
+
+/// <summary>One supported compound command with its outer redirects.</summary>
+public sealed record RedirectedCompoundSyntax : ShellSyntaxNode
+{
+    private IReadOnlyList<CompoundRedirect> _redirects = Array.Empty<CompoundRedirect>();
+
+    internal RedirectedCompoundSyntax()
+    {
+    }
+
+    private protected override object LibraryOwnership => this;
+
+    /// <summary>Gets the original compound command.</summary>
+    public ShellSyntaxNode Command { get; internal init; } = null!;
+
+    /// <summary>Gets outer redirects in authored order.</summary>
+    public IReadOnlyList<CompoundRedirect> Redirects
+    {
+        get => _redirects;
+        internal init => _redirects = PublicCollection.Copy(value);
+    }
+
+    /// <summary>Gets the working directory at the compound command entry.</summary>
+    public ShellValueDomain WorkingDirectory { get; internal init; } = new ShellValueDomain.Unknown();
+
+    internal Clause RedirectClause { get; init; } = null!;
+
+    internal IReadOnlyList<CompoundRedirectSpan> RedirectSpans { get; init; } = Array.Empty<CompoundRedirectSpan>();
+}
+
+internal readonly record struct CompoundRedirectSpan(int SourceStart, int SourceLength);
+
+/// <summary>One redirect owned by a compound command.</summary>
+public sealed record CompoundRedirect
+{
+    internal CompoundRedirect()
+    {
+    }
+
+    /// <summary>Gets the existing analysis for the redirect.</summary>
+    public RedirectAnalysis Analysis { get; internal init; } = null!;
+
+    /// <summary>Gets the source start of the redirect operator.</summary>
+    public int SourceStart { get; internal init; }
+
+    /// <summary>Gets the source length from the operator through its target.</summary>
+    public int SourceLength { get; internal init; }
 }
 
 public enum ShellGroupKind

@@ -66,6 +66,17 @@ The diagram is a responsibility flow, not an execution flow: parsing never
 runs the command, and every decision after `ParsedCommand` belongs to the
 consumer.
 
+`BashParserOptions.ParseCompoundRedirects` defaults to `false`. Keep that
+default unless the consumer also reads `RedirectedCompoundSyntax` and checks
+every outer redirect. When the option is `true`, `ParsedCommand.Commands`
+does not contain redirects that apply to a loop, branch, or subshell. The
+compound syntax node owns those effects. The parser does not grant file
+authority.
+Command substitutions in compound redirect targets stay unparseable.
+Redirects inside decoded `bash -c` source also stay unparseable because the
+child spans do not map to the caller's source. Outer here-docs and here-strings
+stay unparseable because the parser does not model their input ownership.
+
 ## A production-shaped consumer loop
 
 The caller should know which shell will execute the command and select that
