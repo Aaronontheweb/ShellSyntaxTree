@@ -22,17 +22,31 @@ priorities.
       `0.4.0`, package serves HTTP 200) and the non-prerelease GitHub release
       2026-10-23T20:14:09Z.
 
-## In progress (0.5.0-beta.1 compound Bash redirects)
+## Completed (0.5.0-beta.1 opt-in compound Bash redirects)
 
-- [ ] Add the default-off `ParseCompoundRedirects` option and wrapper facts for
+- [x] Add the default-off `ParseCompoundRedirects` option and wrapper facts for
       `for`, `while`, `until`, `if`, and subshell commands. Keep brace groups,
       decoded `bash -c` source, and command-substitution targets unparseable.
-- [ ] Evaluate wrapper facts at the compound entry state. Preserve the input
+- [x] Evaluate wrapper facts at the compound entry state. Preserve the input
       state when a redirect fails before the body runs.
-- [ ] Run parser, corpus, API contract, native Bash `-n`, Slopwatch, and header
-      checks. Keep compound redirect support opt-in for each consumer.
-- [ ] Prepare the `0.5.0-beta.1` local package after validation. Do not tag or
-      publish the package in this change.
+- [x] Run the Release build, parser and Bash corpus tests, API checks, native
+      Bash `-n` controls, headers, Slopwatch, and strict OpenSpec validation.
+      Merged CI run 40055681086 passed on Linux and Windows with 5,271 tests.
+      The corpus replay compared 1,635,245 rows per revision. It had 129
+      reviewed qualification-only changes and no outcome transitions.
+- [x] Complete the Netclaw local-package checks before public release. Security
+      tests had 1,977 passes and one skip. The selected Actor tests had 3,366
+      passes, 41 skips, and one known baseline glob-in-directory-segment failure.
+      The Actor result was not fully green. The local package used source tree
+      `65eab409c1e5f1db448d083bd8ddafef835ce572`, which matches release commit
+      `8ce9d24da81adbbeca75e643e0a20a868e901f2f`.
+- [x] Prepare the private `0.5.0-beta.1` package and source handoff before
+      release. Later, separate authorization led to tag `0.5.0-beta.1` at
+      `8ce9d24da81adbbeca75e643e0a20a868e901f2f`. Publish workflow 40058785172
+      succeeded. The public GitHub and NuGet packages match the reviewed source.
+
+Slopwatch reported only the existing SW005 warning for CS1591 in
+`Directory.Build.props`. The same warning existed at base `ab55b4c`.
 
 ## Completed (0.4.0-beta.24 Netclaw 0.27.2 parser fixes)
 
