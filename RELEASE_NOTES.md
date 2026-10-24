@@ -1,3 +1,25 @@
+#### 0.5.0-beta.1 2026-10-23 ####
+
+This prerelease adds opt-in facts for redirects on supported Bash compound
+commands. The new facts keep the compound owner, redirect source spans, and
+working directory at the command entry. The parser keeps the option false by
+default, so existing consumers keep the old fail-closed result.
+
+## Added
+
+- `BashParserOptions.ParseCompoundRedirects`, `RedirectedCompoundSyntax`, and
+  `CompoundRedirect` for `for`, `while`, `until`, `if`, and subshell commands.
+- The `CompoundCommand` ancestry region for each wrapped command.
+- `ShellSyntaxNode.GetChildren()` for read-only traversal of direct syntax children.
+
+## Security and compatibility
+
+- Outer redirects stay separate from child command occurrences. These parser
+  facts grant no authority.
+- The parser keeps command-substitution targets, decoded `bash -c` redirects,
+  outer here-docs, here-strings, and brace-group redirects unparseable.
+- A failed outer redirect keeps the state at the compound command entry.
+
 #### 0.4.0 2026-10-23 ####
 
 This stable release promotes the 24 prereleases of the v0.4 line (`0.4.0-beta.1` .. `0.4.0-beta.24`). It adds the facts Netclaw needs to read a real command rather than a hand-typed one: a caller-proved launch environment, Bash scopes and assignments, `CommandWords`, glob and split facts, `if`, `while`, `until`, `case`, background lists, bounded arithmetic that stays `Unknown`, and literal twins of loop values. It closes three hidden-command bugs found in the field: a line continuation, a carriage return, or a `#` after a quoted part could hide a command from `Parse` (#243). Each new fact is output, not permission. A form the parser cannot prove stays `Unknown` or unparseable, so the consumer can deny — ShellSyntaxTree never converts uncertainty into authority.

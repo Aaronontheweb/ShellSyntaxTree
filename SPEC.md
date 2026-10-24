@@ -163,6 +163,7 @@ public sealed record BashParserOptions : ShellParserOptions
 {
     public BashInitialStateMode InitialStateMode { get; init; }
     public bool PublishAuthoredSourceFacts { get; init; }
+    public bool ParseCompoundRedirects { get; init; } // false by default
 }
 
 /// <summary>Compatibility option for PowerShell initial host-state analysis.</summary>
@@ -236,6 +237,8 @@ public sealed record SimpleCommandSyntax : ShellSyntaxNode { ... }
 public sealed record PipelineSyntax : ShellSyntaxNode { ... }
 public sealed record CommandListSyntax : ShellSyntaxNode { ... }
 public sealed record CommandListItemSyntax { ... }
+public sealed record RedirectedCompoundSyntax : ShellSyntaxNode { ... } // v0.5.0-beta.1
+public sealed record CompoundRedirect { ... }                           // v0.5.0-beta.1
 public sealed record GroupSyntax : ShellSyntaxNode { ... }
 public sealed record ForEachSyntax : ShellSyntaxNode { ... }
 public sealed record ConditionLoopSyntax : ShellSyntaxNode { ... }      // v0.4.0-beta.13
@@ -313,6 +316,10 @@ The assignment records and the fresh-process initial-state mode target
 `0.4.0-beta.9`. They are caller inputs. They grant no authority. Unlike the
 result types, `ShellLaunchEnvironment` has a public constructor, because the
 caller creates it.
+`BashParserOptions.ParseCompoundRedirects`, `RedirectedCompoundSyntax`, and
+`CompoundRedirect` target `0.5.0-beta.1`. The option defaults to false, so
+existing parser calls retain their prior behavior. An opted-in parse reports
+compound effects in `Syntax`; it does not grant file authority.
 
 That's the entire public API. **Everything else is internal.** The lexer,
 parser internals, verb tables, resolver — all implementation detail.
@@ -566,6 +573,13 @@ required to preserve that reference identity. For an unparseable result,
 `Commands` and `Clauses` are empty even when `Syntax` retains partial evidence
 for diagnostics.
 
+`ShellSyntaxNode.GetChildren()` returns direct parser-owned child references,
+including children of internal node types. It reports structural reachability
+only. It does not report execution order, parse completeness, or authority. A
+consumer may use it to inspect diagnostic partial syntax, but the consumer
+must reject an unparseable result as policy evidence. The method throws when a
+required child is missing or when a node type is unsupported.
+
 Diagnostic syntax is non-exhaustive. It never supplies approval, grant, path,
 cwd, state, ordering, execution-region, or value authority. A security
 consumer may use a direct-source `SimpleCommandSyntax.Clause` only as an
@@ -599,6 +613,7 @@ public abstract record ShellSyntaxNode
 
     public int? SourceStart { get; internal init; }
     public int? SourceLength { get; internal init; }
+    public IReadOnlyList<ShellSyntaxNode> GetChildren();
 }
 
 public sealed record ShellBlockSyntax : ShellSyntaxNode
@@ -606,6 +621,23 @@ public sealed record ShellBlockSyntax : ShellSyntaxNode
     internal ShellBlockSyntax() { }
     private protected override object LibraryOwnership => this;
     public IReadOnlyList<ShellSyntaxNode> Statements { get; internal init; } = [];
+}
+
+public sealed record RedirectedCompoundSyntax : ShellSyntaxNode
+{
+    internal RedirectedCompoundSyntax() { }
+    private protected override object LibraryOwnership => this;
+    public ShellSyntaxNode Command { get; internal init; } = null!;
+    public IReadOnlyList<CompoundRedirect> Redirects { get; internal init; } = [];
+    public ShellValueDomain WorkingDirectory { get; internal init; } = null!;
+}
+
+public sealed record CompoundRedirect
+{
+    internal CompoundRedirect() { }
+    public RedirectAnalysis Analysis { get; internal init; } = null!;
+    public int SourceStart { get; internal init; }
+    public int SourceLength { get; internal init; }
 }
 
 public sealed record SimpleCommandSyntax : ShellSyntaxNode
@@ -762,6 +794,35 @@ public enum ExecutionRegionCardinality
     ZeroOrMore,
 }
 ```
+
+`RedirectedCompoundSyntax` wraps one supported compound command and the
+redirects that Bash applies to that command. Its source span includes the
+wrapped command and its trailing redirects. `Command` keeps the original
+compound node and its own source span. Each `CompoundRedirect` keeps one
+existing redirect analysis and the exact operator-to-target source span.
+The list is in authored order. `WorkingDirectory` is the shell cwd at the
+compound invocation, before its body runs. A redirect on a compound owner
+does not appear in any child `CommandOccurrence.Redirects` list.
+
+`BashParserOptions.ParseCompoundRedirects` defaults to `false`. In that mode,
+a compound redirect keeps the existing unparseable result. In `true` mode,
+the parser may wrap `for`, `while`, `until`, `if`, or subshell nodes when it
+can fully analyze every trailing redirect. Unsupported redirect syntax or an
+incomplete structure still makes the result unparseable. A command
+substitution in a compound redirect target also keeps the result unparseable
+until the parser can expose its executable occurrences and ancestry. Brace
+groups remain unsupported. This option selects parser behavior; it grants no
+authority.
+
+`CommandOccurrence.IsComplete` describes the simple command and its own
+syntax facts. It remains true when the parser proves those facts, even when a
+compound ancestor has a separate redirect effect. A consumer that enables
+`ParseCompoundRedirects` must inspect both the wrapper and each command
+occurrence. Consumers that only read `Commands` must leave the option false.
+The analyzer evaluates each outer redirect at the compound command entry,
+before it evaluates the condition or body. A redirect-open failure keeps the
+entry state as a possible failure result because Bash does not run that body.
+The analyzer does not infer compound redirect values from source assignments.
 
 `ForEachSyntax` shares proved execution structure only. `Iterable.Raw` keeps
 the shell-specific authored expression; it does not claim that Bash words and
@@ -1055,6 +1116,7 @@ public enum CommandOccurrenceRole
     ExecutionRegion,
     Condition,        // v0.4.0-beta.13
     Branch,           // v0.4.0-beta.13
+    CompoundCommand,  // v0.5.0-beta.1; appended to preserve prior values
 }
 
 public sealed record CommandAncestryFrame
@@ -2195,7 +2257,10 @@ public enum HereDocumentExpansionMode
 
 ```
 
-`Authored` references the exact corresponding `Clause.Redirects` leaf.
+`Authored` references the exact source redirect leaf. For a simple command,
+that leaf is the corresponding `Clause.Redirects` item. For a compound
+redirect, that leaf is the corresponding `CompoundRedirect.Analysis.Authored`
+value.
 `RedirectSource` preserves a shell-default stream, an explicit numeric
 descriptor, or PowerShell's `*` selector without erasing shell identity. File
 alternatives are path-relevant; descriptor alternatives are not paths.
@@ -2617,8 +2682,13 @@ quoted_string   := single-quoted | double-quoted
 - Function definitions, assignments outside the bounded v0.4 slice, `select`,
   `[[`, C-style or implicit loops, arithmetic commands `((...))` and `let`,
   process substitution,
-  and a redirect on a compound command remain unparseable because they can
-  hide executable regions outside the bounded grammar below. `while`, `until`,
+  and a redirect on a compound command remain unparseable by default because
+  they can hide executable regions outside the bounded grammar below. With
+  `BashParserOptions.ParseCompoundRedirects=true`, redirects after `for`,
+  `while`, `until`, `if`, and subshell commands use the owner described in §3.
+  Command-substitution targets, decoded `bash -c` spans, outer here-docs,
+  here-strings, brace groups, and unsupported redirect syntax remain
+  unparseable. `while`, `until`,
   `if`, and `case` parse since v0.4.0-beta.13 (see "Bash control flow").
   Single-`&` background lists parse since v0.4.0-beta.14 (see "Bash
   background lists").

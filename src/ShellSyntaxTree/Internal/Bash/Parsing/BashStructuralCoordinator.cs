@@ -553,22 +553,42 @@ internal static partial class BashCommandParser
 
             if (IsOperator("("))
             {
-                return TryParseSubshell(compatibilityOperator, out command, out error);
+                if (!TryParseSubshell(compatibilityOperator, out command, out error))
+                {
+                    return false;
+                }
+
+                return TryWrapCompoundRedirects(command, out command, out error);
             }
 
             if (IsWord("for"))
             {
-                return TryParseForIn(out command, out error);
+                if (!TryParseForIn(out command, out error))
+                {
+                    return false;
+                }
+
+                return TryWrapCompoundRedirects(command, out command, out error);
             }
 
             if (IsWord("while") || IsWord("until"))
             {
-                return TryParseConditionLoop(out command, out error);
+                if (!TryParseConditionLoop(out command, out error))
+                {
+                    return false;
+                }
+
+                return TryWrapCompoundRedirects(command, out command, out error);
             }
 
             if (IsWord("if"))
             {
-                return TryParseIf(out command, out error);
+                if (!TryParseIf(out command, out error))
+                {
+                    return false;
+                }
+
+                return TryWrapCompoundRedirects(command, out command, out error);
             }
 
             if (IsWord("case"))
@@ -794,6 +814,9 @@ internal static partial class BashCommandParser
                     // analysis does not carry them into decoded clauses, so
                     // the child gets none and its variables stay unknown.
                     LaunchEnvironment = null,
+                    // Decoded source spans do not map the new compound
+                    // wrapper's outer redirect spans back to the caller.
+                    ParseCompoundRedirects = false,
                 };
                 var innerResult = ParseInternal(
                     innerCommand!,
@@ -1027,6 +1050,216 @@ internal static partial class BashCommandParser
                 CollectArithmetic(prefixTokens, segmentTokens));
             command = simple;
             return true;
+        }
+
+        private bool TryWrapCompoundRedirects(
+            ShellSyntaxNode? command,
+            out ShellSyntaxNode? wrapped,
+            out string? error)
+        {
+            wrapped = command;
+            error = null;
+            if (!_options.ParseCompoundRedirects ||
+                command is not (GroupSyntax { GroupKind: ShellGroupKind.IsolatedScope } or
+                    ForEachSyntax or ConditionLoopSyntax or ConditionalSyntax))
+            {
+                return true;
+            }
+
+            var redirectStart = _position;
+            while (redirectStart < _tokens.Count &&
+                   _tokens[redirectStart].Kind == BashTokenKind.Whitespace &&
+                   !_tokens[redirectStart].IsStatementSeparator)
+            {
+                redirectStart++;
+            }
+
+            if (redirectStart == _tokens.Count || !IsRedirectOperator(_tokens[redirectStart]))
+            {
+                return true;
+            }
+
+            if (IsCompoundTextInputRedirect(_tokens[redirectStart]))
+            {
+                error = "a here-document or here-string on a compound command is not supported";
+                return false;
+            }
+
+            var end = redirectStart;
+            while (end < _tokens.Count)
+            {
+                var token = _tokens[end];
+                if (IsCompoundTextInputRedirect(token))
+                {
+                    error = "a here-document or here-string on a compound command is not supported";
+                    return false;
+                }
+
+                if (token.Kind == BashTokenKind.Whitespace && token.IsStatementSeparator ||
+                    token.Kind == BashTokenKind.Operator && token.OperatorText is
+                        ";" or ")" or "&&" or "||" or "&" or "|" or "(")
+                {
+                    break;
+                }
+
+                end++;
+            }
+
+            var redirectTokens = new List<BashToken>(end - redirectStart + 1)
+            {
+                new(
+                    BashTokenKind.Word,
+                    ":",
+                    null,
+                    _tokens[redirectStart].SourceStart,
+                    0,
+                    null)
+                {
+                    ResolverValue = ShellValue.Literal(":"),
+                },
+            };
+            for (var index = redirectStart; index < end; index++)
+            {
+                if (_tokens[index].Kind == BashTokenKind.OpaqueSubstitution)
+                {
+                    error = "a command substitution in a compound redirect target is not supported";
+                    return false;
+                }
+
+                redirectTokens.Add(_tokens[index]);
+            }
+
+            if (ContainsNamedParameterExpansion(redirectTokens) &&
+                !AllowsUnknownNamedReads &&
+                !CanPublishBoundedAssignmentFacts(redirectTokens) &&
+                !CanPublishLaunchFacts(redirectTokens))
+            {
+                error = "Bash named parameter expansion requires proved variable-attribute state";
+                return false;
+            }
+
+            var segment = new Segment
+            {
+                PrecedingOperator = CompoundOperator.None,
+                Tokens = redirectTokens,
+            };
+            var options = CurrentOptions();
+            var parsed = ParseClauseSegment(
+                segment,
+                _source,
+                options,
+                _attribution.IsDynamic);
+            if (parsed.Error is not null || parsed.Clauses.Count != 1)
+            {
+                error = parsed.Error ?? "compound redirect parser did not produce one redirect clause";
+                return false;
+            }
+
+            var clause = parsed.Clauses[0];
+            var redirectElements = new List<ClauseElement>();
+            foreach (var element in clause.Elements)
+            {
+                if (element.Role == ClauseElementRole.Redirect)
+                {
+                    if (!TryGetElementValue(
+                            element,
+                            redirectTokens,
+                            out var redirectValue,
+                            skipLeadingOperator: true) ||
+                        redirectValue.HasOpaqueFragment)
+                    {
+                        error = "an opaque expansion in a compound redirect target is not supported";
+                        return false;
+                    }
+
+                    redirectElements.Add(element);
+                }
+                else if (element.Role == ClauseElementRole.Argument)
+                {
+                    error = "compound redirect contains an unsupported trailing operand";
+                    return false;
+                }
+            }
+
+            if (redirectElements.Count == 0 ||
+                redirectElements.Count != clause.Redirects.Count ||
+                redirectElements.Exists(static element =>
+                    element.SourceStart is null || element.SourceLength is null))
+            {
+                error = "compound redirect source spans are incomplete";
+                return false;
+            }
+
+            var start = command.SourceStart ?? _tokens[redirectStart].SourceStart;
+            var finalElement = redirectElements[redirectElements.Count - 1];
+            var sourceEnd = finalElement.SourceStart!.Value + finalElement.SourceLength!.Value;
+            var simple = new SimpleCommandSyntax { Clause = clause };
+            RegisterFacts(
+                simple,
+                redirectTokens,
+                parsed.PathResolutions,
+                options,
+                Array.Empty<BashAssignmentValue?>(),
+                exports: null,
+                arithmeticExpansions: Array.Empty<ShellValueFragment>());
+
+            var spans = new CompoundRedirectSpan[redirectElements.Count];
+            for (var index = 0; index < spans.Length; index++)
+            {
+                spans[index] = new CompoundRedirectSpan(
+                    redirectElements[index].SourceStart!.Value,
+                    redirectElements[index].SourceLength!.Value);
+            }
+
+            wrapped = new RedirectedCompoundSyntax
+            {
+                Command = command,
+                RedirectClause = clause,
+                RedirectSpans = spans,
+                SourceStart = start,
+                SourceLength = sourceEnd - start,
+            };
+            _position = end;
+            return true;
+        }
+
+        private static bool IsRedirectOperator(BashToken token) =>
+            token.Kind == BashTokenKind.Operator &&
+            IsRedirectOperatorText(token.OperatorText);
+
+        private static bool IsRedirectOperatorText(string? text)
+        {
+            if (text is null || text.Length == 0)
+            {
+                return false;
+            }
+
+            var index = 0;
+            while (index < text.Length && text[index] is >= '0' and <= '9')
+            {
+                index++;
+            }
+
+            return text.Substring(index) is
+                "<" or ">" or ">>" or "<<" or "<<-" or "<<<" or "&>" or "&>>" or
+                "<>" or ">|" or "<&" or ">&";
+        }
+
+        private static bool IsCompoundTextInputRedirect(BashToken token)
+        {
+            if (token.Kind != BashTokenKind.Operator || token.OperatorText is null)
+            {
+                return false;
+            }
+
+            var index = 0;
+            while (index < token.OperatorText.Length &&
+                   token.OperatorText[index] is >= '0' and <= '9')
+            {
+                index++;
+            }
+
+            return token.OperatorText.Substring(index) is "<<" or "<<-" or "<<<";
         }
 
         private bool TryParseForIn(

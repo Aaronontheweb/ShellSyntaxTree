@@ -20,6 +20,25 @@ public class PublicApiSnapshotTests
 {
     private static readonly Assembly LibAssembly = typeof(BashParser).Assembly;
 
+    [Fact]
+    public void ShellSyntaxNode_has_expected_child_traversal_method()
+    {
+        var type = typeof(ShellSyntaxNode);
+        var method = type.GetMethod(
+            nameof(ShellSyntaxNode.GetChildren),
+            BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly,
+            binder: null,
+            types: Type.EmptyTypes,
+            modifiers: null);
+
+        Assert.NotNull(method);
+        Assert.True(method!.IsPublic);
+        Assert.False(method.IsStatic);
+        Assert.Equal(typeof(IReadOnlyList<ShellSyntaxNode>), method.ReturnType);
+        Assert.Empty(method.GetParameters());
+        AssertReferenceNullability(method.ReturnParameter, NullabilityState.NotNull);
+    }
+
     // -------- IShellParser --------
 
     [Fact]
@@ -286,13 +305,14 @@ public class PublicApiSnapshotTests
         AssertInitProperty(t, "WorkingDirectory", typeof(string), nullable: true);
         AssertInitProperty(t, "InitialStateMode", typeof(BashInitialStateMode));
         AssertInitProperty(t, "PublishAuthoredSourceFacts", typeof(bool));
+        AssertInitProperty(t, "ParseCompoundRedirects", typeof(bool));
 
         var declaredProps = DeclaredInstanceProps(t)
             .Where(p => p.Name != "EqualityContract")
             .Select(p => p.Name)
             .ToArray();
         Assert.Equal(
-            new[] { "InitialStateMode", "PublishAuthoredSourceFacts" },
+            new[] { "InitialStateMode", "PublishAuthoredSourceFacts", "ParseCompoundRedirects" },
             declaredProps);
     }
 
@@ -727,6 +747,7 @@ public class PublicApiSnapshotTests
             nameof(CommandOccurrence),
             nameof(CommandOccurrenceRole),
             nameof(CommandSubstitutionSyntax),
+            nameof(CompoundRedirect),
             nameof(CompoundOperator),
             nameof(ConditionalBranchSyntax),
             nameof(ConditionalSyntax),
@@ -749,6 +770,7 @@ public class PublicApiSnapshotTests
             nameof(IShellParser),
             nameof(ParsedCommand),
             nameof(PipelineSyntax),
+            nameof(RedirectedCompoundSyntax),
             nameof(PwshParser),
             nameof(PwshDialect),
             nameof(PwshInitialStateMode),

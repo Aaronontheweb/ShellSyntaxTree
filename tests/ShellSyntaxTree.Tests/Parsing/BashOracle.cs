@@ -70,6 +70,18 @@ internal static class BashOracle
         Assert.True(result.ExitCode == 0, $"bash failed: {result.StandardError}");
     }
 
+    internal static void AssertSyntaxOnly(string source)
+    {
+        var result = RunProcess(
+            "bash",
+            new[] { "--noprofile", "--norc", "-n", "-c", source },
+            null,
+            null);
+        Assert.NotNull(result);
+        Assert.Equal(0, result!.Value.ExitCode);
+        Assert.Equal(string.Empty, result.Value.StandardError);
+    }
+
     /// <summary>
     /// The argv of each command that Bash runs for <paramref name="source"/>,
     /// in order. Nothing real runs: every program and <c>echo</c>/<c>printf</c>

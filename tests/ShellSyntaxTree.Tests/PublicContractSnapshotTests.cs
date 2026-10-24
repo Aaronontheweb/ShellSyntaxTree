@@ -44,6 +44,12 @@ public class PublicContractSnapshotTests
             typeof(ShellSyntaxNode),
             (nameof(ShellSyntaxNode.SourceStart), typeof(int?)),
             (nameof(ShellSyntaxNode.SourceLength), typeof(int?)));
+        var getChildren = typeof(ShellSyntaxNode).GetMethod(
+            nameof(ShellSyntaxNode.GetChildren),
+            Type.EmptyTypes);
+        Assert.NotNull(getChildren);
+        Assert.Equal(typeof(IReadOnlyList<ShellSyntaxNode>), getChildren!.ReturnType);
+        Assert.Empty(getChildren.GetParameters());
         AssertResultRecord(
             typeof(ShellBlockSyntax),
             (nameof(ShellBlockSyntax.Statements), typeof(IReadOnlyList<ShellSyntaxNode>)));
@@ -68,6 +74,16 @@ public class PublicContractSnapshotTests
             typeof(GroupSyntax),
             (nameof(GroupSyntax.GroupKind), typeof(ShellGroupKind)),
             (nameof(GroupSyntax.Body), typeof(ShellBlockSyntax)));
+        AssertResultRecord(
+            typeof(RedirectedCompoundSyntax),
+            (nameof(RedirectedCompoundSyntax.Command), typeof(ShellSyntaxNode)),
+            (nameof(RedirectedCompoundSyntax.Redirects), typeof(IReadOnlyList<CompoundRedirect>)),
+            (nameof(RedirectedCompoundSyntax.WorkingDirectory), typeof(ShellValueDomain)));
+        AssertResultRecord(
+            typeof(CompoundRedirect),
+            (nameof(CompoundRedirect.Analysis), typeof(RedirectAnalysis)),
+            (nameof(CompoundRedirect.SourceStart), typeof(int)),
+            (nameof(CompoundRedirect.SourceLength), typeof(int)));
         AssertResultRecord(
             typeof(ForEachSyntax),
             (nameof(ForEachSyntax.BindingName), typeof(string)),
@@ -179,7 +195,9 @@ public class PublicContractSnapshotTests
         AssertEnum<CommandAncestryRegion>(
             "Unknown", "Root", "Statement", "PipelineStage", "GroupBody",
             "Iterator", "LoopBody", "Substitution", "ExecutionRegion",
-            "Condition", "Branch");
+            "Condition", "Branch", "CompoundCommand");
+        Assert.Equal(10, (int)CommandAncestryRegion.Branch);
+        Assert.Equal(11, (int)CommandAncestryRegion.CompoundCommand);
     }
 
     [Fact]

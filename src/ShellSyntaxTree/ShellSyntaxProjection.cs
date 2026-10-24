@@ -667,6 +667,47 @@ internal static class ShellSyntaxProjection
         return walker.TryProject(syntax, out result);
     }
 
+    internal static bool TryProjectCompoundRedirects(
+        Clause clause,
+        IReadOnlyList<RedirectAnalysisFacts> facts,
+        IReadOnlyList<CompoundRedirectSpan> spans,
+        out IReadOnlyList<CompoundRedirect> redirects)
+    {
+        redirects = Array.Empty<CompoundRedirect>();
+        if (clause is null || facts.Count != clause.Redirects.Count ||
+            spans.Count != clause.Redirects.Count ||
+            !ProjectionWalker.AreValidRedirects(clause, facts, occurrenceIsComplete: false))
+        {
+            return false;
+        }
+
+        var projected = new CompoundRedirect[spans.Count];
+        for (var index = 0; index < projected.Length; index++)
+        {
+            if (facts[index].RedirectIndex != index ||
+                !ProjectionWalker.TryCreateRedirectAnalysis(
+                    clause.Redirects[index],
+                    facts[index],
+                    out var analysis))
+            {
+                return false;
+            }
+
+            projected[index] = new CompoundRedirect
+            {
+                Analysis = analysis,
+                SourceStart = spans[index].SourceStart,
+                SourceLength = spans[index].SourceLength,
+            };
+        }
+
+        redirects = projected;
+        return true;
+    }
+
+    internal static ShellValueDomain ToPublicDomain(ShellValueDomainFacts domain) =>
+        ProjectionWalker.ToPublicDomain(domain);
+
     private sealed class ProjectionWalker
     {
         private readonly Func<SimpleCommandSyntax, CommandOccurrenceFacts> _factsFactory;
@@ -749,6 +790,8 @@ internal static class ShellSyntaxProjection
                         childIndex: null,
                         role,
                         nextDepth),
+                RedirectedCompoundSyntax redirected =>
+                    TryVisitRedirectedCompound(redirected, role, nextDepth),
                 ForEachSyntax forEach => TryVisitForEach(forEach, nextDepth),
                 CommandSubstitutionSyntax substitution =>
                     TryVisitCommandSubstitution(
@@ -802,6 +845,40 @@ internal static class ShellSyntaxProjection
             }
 
             return true;
+        }
+
+        private bool TryVisitRedirectedCompound(
+            RedirectedCompoundSyntax redirected,
+            CommandOccurrenceRole role,
+            int structuralDepth)
+        {
+            if (redirected.Command is null ||
+                redirected.RedirectClause is null ||
+                redirected.Redirects is null ||
+                redirected.RedirectSpans is null ||
+                redirected.RedirectSpans.Count != redirected.RedirectClause.Redirects.Count ||
+                redirected.Redirects.Count != redirected.RedirectClause.Redirects.Count)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < redirected.Redirects.Count; index++)
+            {
+                var redirect = redirected.Redirects[index];
+                if (redirect is null || redirect.Analysis is null ||
+                    !IsValidSpan(redirect.SourceStart, redirect.SourceLength))
+                {
+                    return false;
+                }
+            }
+
+            return TryVisitChild(
+                redirected,
+                redirected.Command,
+                CommandAncestryRegion.CompoundCommand,
+                childIndex: null,
+                role,
+                structuralDepth);
         }
 
         private bool TryVisitSimple(
@@ -1193,6 +1270,7 @@ internal static class ShellSyntaxProjection
 
         private static bool CountsTowardStructuralDepth(ShellSyntaxNode node) =>
             node is ForEachSyntax or
+                RedirectedCompoundSyntax or
                 ConditionLoopSyntax or
                 ConditionalSyntax or
                 CaseSyntax or
@@ -1717,7 +1795,7 @@ internal static class ShellSyntaxProjection
             return true;
         }
 
-        private static bool TryCreateRedirectAnalysis(
+        internal static bool TryCreateRedirectAnalysis(
             Redirect authored,
             RedirectAnalysisFacts fact,
             out RedirectAnalysis analysis)
@@ -1820,7 +1898,7 @@ internal static class ShellSyntaxProjection
                 _ => false,
             };
 
-        private static ShellValueDomain ToPublicDomain(ShellValueDomainFacts domain) =>
+        internal static ShellValueDomain ToPublicDomain(ShellValueDomainFacts domain) =>
             domain.Kind switch
             {
                 ShellValueDomainKind.Exact => new ShellValueDomain.Exact(domain.Values[0]),
@@ -1891,7 +1969,7 @@ internal static class ShellSyntaxProjection
             return true;
         }
 
-        private static bool AreValidRedirects(
+        internal static bool AreValidRedirects(
             Clause clause,
             IReadOnlyList<RedirectAnalysisFacts> redirects,
             bool occurrenceIsComplete)

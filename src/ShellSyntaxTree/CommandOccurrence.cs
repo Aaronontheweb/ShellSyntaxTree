@@ -353,6 +353,9 @@ public enum CommandAncestryRegion
     /// (v0.4.0-beta.13).
     /// </summary>
     Branch,
+
+    /// <summary>The command that a compound redirect owner wraps.</summary>
+    CompoundCommand,
 }
 
 /// <summary>One parser-owned join between a compatibility argument and its source.</summary>

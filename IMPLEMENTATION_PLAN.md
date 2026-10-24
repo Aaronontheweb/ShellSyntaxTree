@@ -22,6 +22,18 @@ priorities.
       `0.4.0`, package serves HTTP 200) and the non-prerelease GitHub release
       2026-10-23T20:14:09Z.
 
+## In progress (0.5.0-beta.1 compound Bash redirects)
+
+- [ ] Add the default-off `ParseCompoundRedirects` option and wrapper facts for
+      `for`, `while`, `until`, `if`, and subshell commands. Keep brace groups,
+      decoded `bash -c` source, and command-substitution targets unparseable.
+- [ ] Evaluate wrapper facts at the compound entry state. Preserve the input
+      state when a redirect fails before the body runs.
+- [ ] Run parser, corpus, API contract, native Bash `-n`, Slopwatch, and header
+      checks. Keep compound redirect support opt-in for each consumer.
+- [ ] Prepare the `0.5.0-beta.1` local package after validation. Do not tag or
+      publish the package in this change.
+
 ## Completed (0.4.0-beta.24 Netclaw 0.27.2 parser fixes)
 
 - [x] Pair an option and its value when the `=` or the name is quoted (`-F'x=y'`, `--'x'='y'`). The source was unparseable.

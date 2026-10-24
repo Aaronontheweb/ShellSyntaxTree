@@ -25,6 +25,7 @@ public abstract record ShellSyntaxNode
         PipelineSyntax => ShellSyntaxKind.Pipeline,
         CommandListSyntax => ShellSyntaxKind.CommandList,
         GroupSyntax => ShellSyntaxKind.Group,
+        RedirectedCompoundSyntax => ShellSyntaxKind.RedirectedCompound,
         ForEachSyntax => ShellSyntaxKind.ForEach,
         CommandSubstitutionSyntax => ShellSyntaxKind.CommandSubstitution,
         ExecutionRegionSyntax => ShellSyntaxKind.ExecutionRegion,
@@ -40,6 +41,197 @@ public abstract record ShellSyntaxNode
     public int? SourceStart { get; internal init; }
 
     public int? SourceLength { get; internal init; }
+
+    /// <summary>
+    /// Gets the direct syntax children that the parser owns. The result
+    /// describes structural reachability. It does not describe execution
+    /// order, parse completeness, or authority.
+    /// </summary>
+    /// <exception cref="NotSupportedException">
+    /// The library does not support this syntax node type.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// A required child or child collection is missing.
+    /// </exception>
+    public IReadOnlyList<ShellSyntaxNode> GetChildren() => this switch
+    {
+        ShellBlockSyntax block => ExistingChildren(block.Statements, nameof(block.Statements)),
+        SimpleCommandSyntax simple => CombinedChildren(
+            simple.Substitutions,
+            nameof(simple.Substitutions),
+            simple.ExecutionRegions,
+            nameof(simple.ExecutionRegions)),
+        ShellAssignmentSyntax assignment => CopiedChildren(
+            assignment.Substitutions,
+            nameof(assignment.Substitutions)),
+        PipelineSyntax pipeline => ExistingChildren(pipeline.Stages, nameof(pipeline.Stages)),
+        CommandListSyntax commandList => CommandListChildren(commandList.Items),
+        GroupSyntax group => SingleChild(group.Body, nameof(group.Body)),
+        RedirectedCompoundSyntax redirected => SingleChild(redirected.Command, nameof(redirected.Command)),
+        ForEachSyntax forEach => TwoChildren(
+            forEach.IteratorCommands,
+            nameof(forEach.IteratorCommands),
+            forEach.Body,
+            nameof(forEach.Body)),
+        CommandSubstitutionSyntax substitution => SingleChild(substitution.Body, nameof(substitution.Body)),
+        ExecutionRegionSyntax region => SingleChild(region.Body, nameof(region.Body)),
+        ConditionLoopSyntax loop => TwoChildren(
+            loop.Condition,
+            nameof(loop.Condition),
+            loop.Body,
+            nameof(loop.Body)),
+        ConditionalSyntax conditional => ConditionalChildren(conditional),
+        ConditionalBranchSyntax branch => TwoChildren(
+            branch.Condition,
+            nameof(branch.Condition),
+            branch.Body,
+            nameof(branch.Body)),
+        CaseSyntax caseSyntax => ExistingChildren(caseSyntax.Items, nameof(caseSyntax.Items)),
+        CaseItemSyntax caseItem => SingleChild(caseItem.Body, nameof(caseItem.Body)),
+        _ => throw new NotSupportedException(
+            $"The syntax node type '{GetType().FullName}' is not supported."),
+    };
+
+    private static IReadOnlyList<ShellSyntaxNode> ExistingChildren<T>(
+        IReadOnlyList<T>? children,
+        string memberName)
+        where T : ShellSyntaxNode
+    {
+        if (children is null)
+        {
+            throw MissingChildren(memberName);
+        }
+
+        for (var index = 0; index < children.Count; index++)
+        {
+            if (children[index] is null)
+            {
+                throw MissingChildren(memberName);
+            }
+        }
+
+        return children;
+    }
+
+    private static IReadOnlyList<ShellSyntaxNode> CopiedChildren<T>(
+        IReadOnlyList<T>? children,
+        string memberName)
+        where T : ShellSyntaxNode
+    {
+        if (children is null)
+        {
+            throw MissingChildren(memberName);
+        }
+
+        var copy = new ShellSyntaxNode[children.Count];
+        for (var index = 0; index < children.Count; index++)
+        {
+            copy[index] = children[index] ?? throw MissingChildren(memberName);
+        }
+
+        return PublicCollection.Copy(copy);
+    }
+
+    private static IReadOnlyList<ShellSyntaxNode> CombinedChildren<TFirst, TSecond>(
+        IReadOnlyList<TFirst>? first,
+        string firstName,
+        IReadOnlyList<TSecond>? second,
+        string secondName)
+        where TFirst : ShellSyntaxNode
+        where TSecond : ShellSyntaxNode
+    {
+        var children = new List<ShellSyntaxNode>();
+        AddChildren(children, first, firstName);
+        AddChildren(children, second, secondName);
+        return PublicCollection.Copy(children);
+    }
+
+    private static IReadOnlyList<ShellSyntaxNode> TwoChildren(
+        ShellSyntaxNode? first,
+        string firstName,
+        ShellSyntaxNode? second,
+        string secondName)
+    {
+        if (first is null)
+        {
+            throw MissingChildren(firstName);
+        }
+
+        if (second is null)
+        {
+            throw MissingChildren(secondName);
+        }
+
+        return PublicCollection.Copy(new[] { first, second });
+    }
+
+    private static IReadOnlyList<ShellSyntaxNode> SingleChild(
+        ShellSyntaxNode? child,
+        string memberName)
+    {
+        if (child is null)
+        {
+            throw MissingChildren(memberName);
+        }
+
+        return PublicCollection.Copy(new[] { child });
+    }
+
+    private static IReadOnlyList<ShellSyntaxNode> ConditionalChildren(
+        ConditionalSyntax conditional)
+    {
+        if (conditional.Branches is null)
+        {
+            throw MissingChildren(nameof(conditional.Branches));
+        }
+
+        var children = new List<ShellSyntaxNode>(conditional.Branches.Count + 1);
+        AddChildren(children, conditional.Branches, nameof(conditional.Branches));
+        if (conditional.Else is not null)
+        {
+            children.Add(conditional.Else);
+        }
+
+        return PublicCollection.Copy(children);
+    }
+
+    private static IReadOnlyList<ShellSyntaxNode> CommandListChildren(
+        IReadOnlyList<CommandListItemSyntax>? items)
+    {
+        if (items is null)
+        {
+            throw MissingChildren(nameof(CommandListSyntax.Items));
+        }
+
+        var children = new List<ShellSyntaxNode>(items.Count);
+        for (var index = 0; index < items.Count; index++)
+        {
+            var item = items[index] ?? throw MissingChildren(nameof(CommandListSyntax.Items));
+            children.Add(item.Command ?? throw MissingChildren(nameof(CommandListItemSyntax.Command)));
+        }
+
+        return PublicCollection.Copy(children);
+    }
+
+    private static void AddChildren<T>(
+        ICollection<ShellSyntaxNode> destination,
+        IReadOnlyList<T>? children,
+        string memberName)
+        where T : ShellSyntaxNode
+    {
+        if (children is null)
+        {
+            throw MissingChildren(memberName);
+        }
+
+        for (var index = 0; index < children.Count; index++)
+        {
+            destination.Add(children[index] ?? throw MissingChildren(memberName));
+        }
+    }
+
+    private static InvalidOperationException MissingChildren(string memberName) =>
+        new($"The required syntax child '{memberName}' is missing.");
 }
 
 internal enum ShellSyntaxKind
@@ -50,6 +242,7 @@ internal enum ShellSyntaxKind
     Pipeline,
     CommandList,
     Group,
+    RedirectedCompound,
     ForEach,
     CommandSubstitution,
     ExecutionRegion,
@@ -211,6 +404,54 @@ public sealed record GroupSyntax : ShellSyntaxNode
     public ShellGroupKind GroupKind { get; internal init; }
 
     public ShellBlockSyntax Body { get; internal init; } = null!;
+}
+
+/// <summary>One supported compound command with its outer redirects.</summary>
+public sealed record RedirectedCompoundSyntax : ShellSyntaxNode
+{
+    private IReadOnlyList<CompoundRedirect> _redirects = Array.Empty<CompoundRedirect>();
+
+    internal RedirectedCompoundSyntax()
+    {
+    }
+
+    private protected override object LibraryOwnership => this;
+
+    /// <summary>Gets the original compound command.</summary>
+    public ShellSyntaxNode Command { get; internal init; } = null!;
+
+    /// <summary>Gets outer redirects in authored order.</summary>
+    public IReadOnlyList<CompoundRedirect> Redirects
+    {
+        get => _redirects;
+        internal init => _redirects = PublicCollection.Copy(value);
+    }
+
+    /// <summary>Gets the working directory at the compound command entry.</summary>
+    public ShellValueDomain WorkingDirectory { get; internal init; } = new ShellValueDomain.Unknown();
+
+    internal Clause RedirectClause { get; init; } = null!;
+
+    internal IReadOnlyList<CompoundRedirectSpan> RedirectSpans { get; init; } = Array.Empty<CompoundRedirectSpan>();
+}
+
+internal readonly record struct CompoundRedirectSpan(int SourceStart, int SourceLength);
+
+/// <summary>One redirect owned by a compound command.</summary>
+public sealed record CompoundRedirect
+{
+    internal CompoundRedirect()
+    {
+    }
+
+    /// <summary>Gets the existing analysis for the redirect.</summary>
+    public RedirectAnalysis Analysis { get; internal init; } = null!;
+
+    /// <summary>Gets the source start of the redirect operator.</summary>
+    public int SourceStart { get; internal init; }
+
+    /// <summary>Gets the source length from the operator through its target.</summary>
+    public int SourceLength { get; internal init; }
 }
 
 public enum ShellGroupKind
