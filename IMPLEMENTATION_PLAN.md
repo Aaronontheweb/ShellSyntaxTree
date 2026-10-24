@@ -10,6 +10,13 @@ priorities.
 
 ---
 
+## Completed (compound redirect code simplification)
+
+- [x] Use `GetChildren()` in the compound redirect test traversal and use a typed redirect assertion.
+- [x] Remove the duplicate heredoc check and share the descriptor-prefix scan.
+- [x] Wrap private child arrays without a second copy. Preserve the read-only snapshot and child identity.
+- [x] Pass the Release build, all 5,272 tests, and the header check. Slopwatch reports only the existing CS1591 warning.
+
 ## Completed (0.4.0 stable publication)
 
 - [x] Publish `0.4.0` stable from the reviewed release metadata after the

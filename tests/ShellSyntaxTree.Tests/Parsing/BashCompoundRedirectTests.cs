@@ -90,8 +90,7 @@ public sealed class BashCompoundRedirectTests
             redirects.Select(redirect => redirect.Analysis switch
             {
                 FileRedirectAnalysis file => (object)file.Mode,
-                var descriptor when descriptor.GetType().Name == "DescriptorDuplicateRedirectAnalysis"
-                    => "DescriptorDuplicate",
+                DescriptorDuplicateRedirectAnalysis => "DescriptorDuplicate",
                 var other => other.GetType().Name,
             }));
         Assert.Equal(
@@ -439,7 +438,7 @@ public sealed class BashCompoundRedirectTests
         if (node is RedirectedCompoundSyntax redirected)
             return redirected;
 
-        foreach (var child in Children(node))
+        foreach (var child in node.GetChildren())
         {
             var found = TryFindCompoundWrapper(child);
             if (found is not null)
@@ -451,26 +450,6 @@ public sealed class BashCompoundRedirectTests
 
     private static CompoundRedirect AssertCompoundRedirect(RedirectedCompoundSyntax wrapper)
         => Assert.Single(wrapper.Redirects);
-
-    private static IEnumerable<ShellSyntaxNode> Children(ShellSyntaxNode node) => node switch
-    {
-        ShellBlockSyntax block => block.Statements,
-        RedirectedCompoundSyntax redirected => new[] { redirected.Command },
-        CommandListSyntax list => list.Items.Select(static item => item.Command),
-        PipelineSyntax pipeline => pipeline.Stages,
-        GroupSyntax group => group.Body.Statements,
-        ForEachSyntax loop => loop.IteratorCommands.Statements.Concat(loop.Body.Statements),
-        ConditionLoopSyntax loop => loop.Condition.Statements.Concat(loop.Body.Statements),
-        ConditionalSyntax conditional => conditional.Branches
-            .SelectMany(static branch => branch.Condition.Statements.Concat(branch.Body.Statements))
-            .Concat(conditional.Else?.Statements ?? Array.Empty<ShellSyntaxNode>()),
-        ConditionalBranchSyntax branch => branch.Condition.Statements.Concat(branch.Body.Statements),
-        CaseSyntax @case => @case.Items.SelectMany(static item => item.Body.Statements),
-        CaseItemSyntax item => item.Body.Statements,
-        CommandSubstitutionSyntax substitution => substitution.Body.Statements,
-        ExecutionRegionSyntax region => region.Body.Statements,
-        _ => Array.Empty<ShellSyntaxNode>(),
-    };
 
     private static string SourceSlice(string source, int start, int length)
         => source.Substring(start, length);

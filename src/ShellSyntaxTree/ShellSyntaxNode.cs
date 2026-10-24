@@ -129,7 +129,7 @@ public abstract record ShellSyntaxNode
             copy[index] = children[index] ?? throw MissingChildren(memberName);
         }
 
-        return PublicCollection.Copy(copy);
+        return copy.Length == 0 ? Array.Empty<ShellSyntaxNode>() : Array.AsReadOnly(copy);
     }
 
     private static IReadOnlyList<ShellSyntaxNode> CombinedChildren<TFirst, TSecond>(
@@ -162,7 +162,7 @@ public abstract record ShellSyntaxNode
             throw MissingChildren(secondName);
         }
 
-        return PublicCollection.Copy(new[] { first, second });
+        return Array.AsReadOnly(new[] { first, second });
     }
 
     private static IReadOnlyList<ShellSyntaxNode> SingleChild(
@@ -174,7 +174,7 @@ public abstract record ShellSyntaxNode
             throw MissingChildren(memberName);
         }
 
-        return PublicCollection.Copy(new[] { child });
+        return Array.AsReadOnly(new[] { child });
     }
 
     private static IReadOnlyList<ShellSyntaxNode> ConditionalChildren(
