@@ -156,6 +156,22 @@ public class ShellSyntaxNodeChildrenTests
     }
 
     [Fact]
+    public void GetChildren_keeps_a_read_only_snapshot_of_assignment_substitutions()
+    {
+        var original = new CommandSubstitutionSyntax { Body = new ShellBlockSyntax() };
+        var substitutions = new[] { original };
+        var assignment = new ShellAssignmentSyntax { Substitutions = substitutions };
+
+        var children = assignment.GetChildren();
+        substitutions[0] = new CommandSubstitutionSyntax { Body = new ShellBlockSyntax() };
+
+        Assert.Same(original, Assert.Single(children));
+        var list = Assert.IsAssignableFrom<IList<ShellSyntaxNode>>(children);
+        Assert.True(list.IsReadOnly);
+        Assert.Throws<NotSupportedException>(() => list[0] = substitutions[0]);
+    }
+
+    [Fact]
     public void Diagnostic_partial_syntax_remains_separate_from_authorization_projection()
     {
         var diagnosticNode = new SimpleCommandSyntax();

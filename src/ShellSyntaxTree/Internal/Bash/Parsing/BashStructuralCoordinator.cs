@@ -1079,12 +1079,6 @@ internal static partial class BashCommandParser
                 return true;
             }
 
-            if (IsCompoundTextInputRedirect(_tokens[redirectStart]))
-            {
-                error = "a here-document or here-string on a compound command is not supported";
-                return false;
-            }
-
             var end = redirectStart;
             while (end < _tokens.Count)
             {
@@ -1234,15 +1228,20 @@ internal static partial class BashCommandParser
                 return false;
             }
 
+            return WithoutSourceDescriptor(text) is
+                "<" or ">" or ">>" or "<<" or "<<-" or "<<<" or "&>" or "&>>" or
+                "<>" or ">|" or "<&" or ">&";
+        }
+
+        private static string WithoutSourceDescriptor(string text)
+        {
             var index = 0;
             while (index < text.Length && text[index] is >= '0' and <= '9')
             {
                 index++;
             }
 
-            return text.Substring(index) is
-                "<" or ">" or ">>" or "<<" or "<<-" or "<<<" or "&>" or "&>>" or
-                "<>" or ">|" or "<&" or ">&";
+            return text.Substring(index);
         }
 
         private static bool IsCompoundTextInputRedirect(BashToken token)
@@ -1252,14 +1251,7 @@ internal static partial class BashCommandParser
                 return false;
             }
 
-            var index = 0;
-            while (index < token.OperatorText.Length &&
-                   token.OperatorText[index] is >= '0' and <= '9')
-            {
-                index++;
-            }
-
-            return token.OperatorText.Substring(index) is "<<" or "<<-" or "<<<";
+            return WithoutSourceDescriptor(token.OperatorText) is "<<" or "<<-" or "<<<";
         }
 
         private bool TryParseForIn(
