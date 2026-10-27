@@ -207,6 +207,26 @@ Used to mint the package icon. Output goes to `assets/icon.png` (or similar)
 and is wired into `Directory.Build.props` via `PackageIcon`. The icon is the
 only graphical artifact this repo needs.
 
+## Focused launch-variable glob mutations
+
+Run this gate after a change to live-variable glob facts:
+
+```bash
+dotnet tool restore
+python3 scripts/run-launch-variable-glob-mutations.py
+```
+
+The gate uses Stryker 5.0.0 and the existing xUnit 2 test project.
+It selects six mutants by source span, original text, and replacement text.
+The selected predicates cover field splits, unsupported pattern characters, revoked names, and literal-prefix identity.
+The gate fails when an expected mutant survives, does not run, or disappears.
+It also fails when the selected scope produces an unexpected mutant.
+The gate uses one test session and the `LaunchVariableGlobTests` filter.
+Its output stays under `artifacts/stryker/launch-variable-globs`.
+CI runs this gate on Linux.
+A local Linux run took 2 minutes and 52 seconds.
+The CI job has a 15-minute limit.
+
 ## Working Assumptions
 
 - Single maintainer (Aaron Stannard). No org-wide review SLA.

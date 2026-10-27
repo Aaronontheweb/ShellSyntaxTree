@@ -11,6 +11,7 @@ on:
       - master
       - dev
       - main
+      - 'feature/*'
 
 jobs:
   test:
@@ -120,3 +121,15 @@ jobs:
 
       - name: "dotnet pack"
         run: dotnet pack -c Release --no-build -o ./bin/nuget
+
+  launch-variable-glob-mutations:
+    name: Launch-variable glob mutations
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-dotnet@v5.3.0
+        with:
+          global-json-file: "./global.json"
+      - run: dotnet tool restore
+      - run: python3 scripts/run-launch-variable-glob-mutations.py

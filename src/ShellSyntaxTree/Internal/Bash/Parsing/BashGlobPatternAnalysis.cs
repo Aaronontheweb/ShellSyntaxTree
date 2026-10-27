@@ -169,8 +169,8 @@ internal static class BashGlobPatternAnalysis
 
     /// <summary>
     /// Expands the word to its pattern text. It accepts literal text, active
-    /// wildcards, and one leading tilde that expands from the live launch
-    /// <c>HOME</c>. Each wildcard position is marked in
+    /// wildcards, live scalar variables, and one leading tilde from the live
+    /// launch <c>HOME</c>. Each wildcard position is marked in
     /// <paramref name="isWildcard"/>.
     /// </summary>
     private static bool TryExpand(
@@ -227,6 +227,21 @@ internal static class BashGlobPatternAnalysis
                 home.IndexOfAny(UnsupportedHomeCharacters) < 0)
             {
                 Append(builder, isWildcard, home, wildcard: false);
+                continue;
+            }
+
+            // The public pattern cannot distinguish a literal wildcard in a
+            // variable value from a wildcard that Bash expands.
+            if (expansion.Kind == ShellExpansionKind.Variable &&
+                fragment.Cardinality == ShellValueCardinality.ExactlyOne &&
+                (fragment.AllowedTransforms & ShellLexicalTransform.Variable) != 0 &&
+                ShellLaunchFacts.TryGetValue(options, expansion.Name, out var launchValue) &&
+                ShellLaunchFacts.IsSingleWordValue(
+                    launchValue,
+                    (fragment.AllowedTransforms & ShellLexicalTransform.FieldSplit) != 0) &&
+                launchValue.IndexOfAny(UnsupportedHomeCharacters) < 0)
+            {
+                Append(builder, isWildcard, launchValue, wildcard: false);
                 continue;
             }
 

@@ -10,6 +10,16 @@ priorities.
 
 ---
 
+## NOW (live-variable glob facts)
+
+- [x] Use live exact scalar launch values in bounded glob facts.
+- [x] Preserve the quote, field-split, representation, and liveness gates.
+- [x] Add `feature/*` PR bases so the dependent parser PR receives CI.
+- [x] Pass the Release build, all 5,322 tests, native Bash, API, mutation, Slopwatch, and header checks.
+- [x] Kill the six declared Stryker mutants and prove that the report check rejects missing or surviving mutants.
+- [ ] Complete independent review before release.
+- [ ] Complete command-word proof in a separate dependent change.
+
 ## Completed (compound redirect code simplification)
 
 - [x] Use `GetChildren()` in the compound redirect test traversal and use a typed redirect assertion.
