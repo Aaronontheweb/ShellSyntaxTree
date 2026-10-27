@@ -17,6 +17,7 @@ priorities.
 - [x] Add `feature/*` PR bases so the dependent parser PR receives CI.
 - [x] Pass the Release build, all 5,322 tests, native Bash, API, mutation, Slopwatch, and header checks.
 - [x] Kill the six declared Stryker mutants and prove that the report check rejects missing or surviving mutants.
+- [x] Use the existing Linux-native theory for the host-filesystem Bash cases. Keep the other parser cases on every platform.
 - [ ] Complete independent review before release.
 - [ ] Complete command-word proof in a separate dependent change.
 

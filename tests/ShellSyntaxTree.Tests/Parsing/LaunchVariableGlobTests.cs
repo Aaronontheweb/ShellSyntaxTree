@@ -172,7 +172,7 @@ public class LaunchVariableGlobTests
         Assert.Equal(1, pattern.Glob!.SegmentDepth);
     }
 
-    [Theory]
+    [BashTheory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
