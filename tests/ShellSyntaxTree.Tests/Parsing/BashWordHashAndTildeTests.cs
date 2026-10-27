@@ -3,6 +3,7 @@
 //      Copyright (C) 2026 - 2026 Aaron Stannard <https://github.com/Aaronontheweb>
 // </copyright>
 // -----------------------------------------------------------------------
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Xunit;
@@ -209,18 +210,31 @@ public class BashWordHashAndTildeTests
     }
 
     [Theory]
-    // Bash reads `(\⏎(` as the arithmetic command `((`: `ls` is a variable
-    // there, not a program. The parser fails closed on `((…))`.
+    // Bash 5.3 can run a program when the second right parenthesis follows
+    // a continuation. The parser refuses both forms across supported hosts.
     [InlineData("(\\\n(ls))")]
     [InlineData("((ls)\\\n)")]
     public void Arithmetic_command_with_a_continuation_fails_closed(string source)
-    {
-        if (BashOracle.IsAvailable())
-        {
-            Assert.Empty(BashOracle.LoggedCommands(source)!);
-        }
+        => Assert.True(Parser.Parse(source).IsUnparseable);
 
-        Assert.True(Parser.Parse(source).IsUnparseable);
+    [BashTheory]
+    [InlineData("(\\\n(ls))", false)]
+    [InlineData("((ls)\\\n)", true)]
+    public void Arithmetic_continuation_native_behavior_depends_on_bash_version(
+        string source, bool runsInBash53)
+    {
+        var version = Assert.IsType<Version>(BashOracle.GetVersion());
+        Assert.Equal(5, version.Major);
+        Assert.InRange(version.Minor, 2, 3);
+        var commands = BashOracle.LoggedCommands(source)!;
+        if (runsInBash53 && version.Minor == 3)
+        {
+            Assert.Equal(new[] { "ls" }, Assert.Single(commands));
+        }
+        else
+        {
+            Assert.Empty(commands);
+        }
     }
 
     [Fact]

@@ -21,6 +21,12 @@ priorities.
 - [ ] Complete independent review before release.
 - [ ] Complete command-word proof in a separate dependent change.
 
+## Completed (Bash continuation oracle by version)
+
+- [x] Preserve parser refusal for both arithmetic continuation forms.
+- [x] Assert the actual native behavior on Bash 5.2 and 5.3. The second form runs `ls` on Bash 5.3.9.
+- [x] Print the Bash version before the CI test suite.
+
 ## Completed (compound redirect code simplification)
 
 - [x] Use `GetChildren()` in the compound redirect test traversal and use a typed redirect assertion.

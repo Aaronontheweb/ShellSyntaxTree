@@ -117,7 +117,9 @@ jobs:
 
       - name: "dotnet test"
         shell: bash
-        run: dotnet test -c Release --no-build
+        run: |
+          bash --version
+          dotnet test -c Release --no-build
 
       - name: "dotnet pack"
         run: dotnet pack -c Release --no-build -o ./bin/nuget
