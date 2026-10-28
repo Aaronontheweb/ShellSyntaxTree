@@ -10,7 +10,7 @@ priorities.
 
 ---
 
-## NOW (PowerShell oracle process correction)
+## Completed (PowerShell oracle process correction)
 
 - [x] Convert the dev-only oracle and its callers to async process and stream waits.
 - [x] Reserve unavailable for executable absence and the intentional version-probe mismatch.
@@ -20,9 +20,10 @@ priorities.
 - [x] Retain the Windows owner handle before ownership transfer.
 - [x] Get the holder's real exit code from its parent on every host. Reject exit 17 and require owner cleanup.
 - [x] Pass all 18 native controls, headers, and Slopwatch for the portable owner protocol.
-- [ ] Complete independent review and current-head hosted CI. The original PR 228 Windows cause remains unproved.
+- [x] Complete independent review and hosted CI at `23fd37a`: 5,373 Linux passes, 5,316 Windows passes, and ten required mutants killed.
+- The original PR 228 Windows cause remains unproved. Native macOS proof remains unverified.
 
-## NOW (live-variable glob facts)
+## Completed (live-variable glob facts)
 
 - [x] Use live exact scalar launch values in bounded glob facts.
 - [x] Preserve the quote, field-split, representation, and liveness gates.
@@ -30,10 +31,10 @@ priorities.
 - [x] Pass the Release build, all 5,322 tests, native Bash, API, mutation, Slopwatch, and header checks.
 - [x] Kill the six declared Stryker mutants and prove that the report check rejects missing or surviving mutants.
 - [x] Use the existing Linux-native theory for the host-filesystem Bash cases. Keep the other parser cases on every platform.
-- [ ] Complete independent review before release.
+- [x] Complete independent review before release.
 - [x] Complete command-word proof in a separate dependent change.
 
-## NOW (all-visits path-glob command words)
+## Completed (all-visits path-glob command words)
 
 - [x] Record the original word's separator and option-prefix proof in the existing internal effective domain.
 - [x] Compare the proof during equality and retain it only across all visits.
@@ -41,7 +42,7 @@ priorities.
 - [x] Add direct Path/Path, Path/Bare, and Path/Unknown checks, plus a control-flow revisit.
 - [x] Pass all 5,355 parser tests on the host and with the Bash 5.3 oracle, native argv checks, and the four command-word mutants.
 - [x] Review coverage and pass the API comparison, Slopwatch, and header checks. Keep independent review and hosted CI separate.
-- [x] Prepare the unused `0.5.0-beta.2` version and release notes. Keep publication with the coordinator.
+- [x] Publish `0.5.0-beta.2` from `4a45ba7` after independent review and hosted CI. Verify the public NuGet package and its source identity.
 
 ## Completed (Bash continuation oracle by version)
 
