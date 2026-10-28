@@ -33,6 +33,19 @@ internal static class BashOracle
     internal static bool IsAvailable() =>
         !OperatingSystem.IsWindows() && Run("true") is { ExitCode: 0 };
 
+    internal static Version? GetVersion()
+    {
+        var result = Run("builtin printf '%s.%s' \"${BASH_VERSINFO[0]}\" \"${BASH_VERSINFO[1]}\"");
+        if (result is null)
+        {
+            return null;
+        }
+
+        Assert.Equal(0, result.Value.ExitCode);
+        Assert.True(Version.TryParse(result.Value.StandardOutput, out var version), result.Value.StandardOutput);
+        return version;
+    }
+
     internal static void AssertPrints(string source, string expected)
     {
         if (!IsAvailable())

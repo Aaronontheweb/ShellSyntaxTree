@@ -130,6 +130,8 @@ public class PathWordFactTests
     [InlineData("ls *.cs", Start, 1, true)]
     [InlineData("ls -d */", Start, 1, true)]
     [InlineData("ls x//y/*", Start + "/x/y", 1, false)]
+    [InlineData("ls \"$TMPDIR\"/*", "/tmp/nc", 1, false)]
+    [InlineData("ls $HOME/*", Home, 1, false)]
     [InlineData("cat ~/.netclaw/*/tool-approvals.json", Home + "/.netclaw", 2, false)]
     [InlineData("cd /tmp && ls *.log", "/tmp", 1, true)]
     public void Glob_argument_gives_a_pattern_fact(
@@ -188,8 +190,6 @@ public class PathWordFactTests
     [InlineData("ls \"a*\"/*")]
     [InlineData("ls a\\*/*")]
     [InlineData("ls src/{a,b}/*")]
-    [InlineData("ls \"$TMPDIR\"/*")]
-    [InlineData("ls $HOME/*")]
     [InlineData("ls ~*")]
     [InlineData("ls ~user/*")]
     [InlineData("ls -- -*")]
@@ -326,6 +326,7 @@ public class PathWordFactTests
     [InlineData("ls 2> ~/e*.log", Home, FileRedirectMode.Output)]
     [InlineData("ls >> \"a\"*.log", Start, FileRedirectMode.Append)]
     [InlineData("ls &> *.log", Start, FileRedirectMode.CombinedOutput)]
+    [InlineData("echo hi > \"$TMPDIR\"/*.log", "/tmp/nc", FileRedirectMode.Output)]
     public void Glob_redirect_target_gives_a_complete_pattern_target(
         string source,
         string covering,
@@ -347,7 +348,6 @@ public class PathWordFactTests
     [Theory]
     [InlineData("echo hi > /tmp/x/*.log", null)]
     [InlineData("echo hi > ../*.log", "launch")]
-    [InlineData("echo hi > \"$TMPDIR\"/*.log", "launch")]
     public void Unproved_glob_redirect_target_keeps_the_occurrence_incomplete(
         string source,
         string? launch)

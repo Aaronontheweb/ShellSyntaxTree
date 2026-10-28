@@ -1523,8 +1523,9 @@ redirect target, it publishes a `PathPattern` value with a `Glob` fact
 (#206):
 
 - `CoveringDirectory`: the literal directory before the first segment with a
-  wildcard. A leading `~` expands from the live launch `HOME`. A relative
-  word starts at the occurrence's proved directory.
+  wildcard. A leading `~` expands from the live launch `HOME`. A plain variable
+  expands only from its live, exact scalar launch value. A relative word starts
+  at the occurrence's proved directory.
 - `Pattern`: the absolute pattern, `CoveringDirectory` followed by the
   segments. A trailing `/` stays in the pattern.
 - `Glob.Segments`: the segments below the covering directory. `Text` is in
@@ -1572,8 +1573,12 @@ Schematic flow for one word (it omits the projection gates):
 
 ```
 if mode != FreshNonInteractiveNoStartup or no live launch fact: Unknown
-text = expand(word)       # literal text, wildcards, a leading ~ from live HOME
-                          # anything else (variable, substitution, brace,
+text = expand(word)       # literal text, wildcards, a leading ~ from live HOME,
+                          # plain variables with a live exact scalar value
+                          # an unquoted variable must pass IsSingleWordValue
+                          # substituted values with wildcard characters,
+                          # braces, or a backslash: Unknown
+                          # anything else (substitution, brace,
                           # quoted or escaped wildcard, backslash): Unknown
 if text starts with "-": Unknown
 root = "/" if absolute else proved command directory (caller WorkingDirectory
@@ -1595,13 +1600,27 @@ loop body after a `cd`, the joined value is `Unknown`.
 | `du -sh ~/r/.*` | depth 1, the segment may match a dot entry |
 | `echo hi > /tmp/x/*.log` | complete redirect, target covering `/tmp/x` |
 | `ls src/../*` | `Unknown` (`..`) |
-| `ls "$TMPDIR"/*` | `Unknown` (a variable and a wildcard) |
+| `ls "$HOME"/repositories/*/` | covering `/home/a/repositories`, depth 1 |
+| `ls $HOME/repositories/*/` | the same facts when the value cannot split or introduce wildcards |
+| `ls "$UNKNOWN"/*` | `Unknown` (no live launch value) |
+| `HOME=/other; ls "$HOME"/*` | `Unknown` (the launch value is revoked) |
+| `ls "$ROOT"/*`, launch `ROOT=/data/a*` | `Unknown` (the pattern cannot represent a literal wildcard) |
 | `ls "a*"/*` | `Unknown` (a quoted wildcard) |
 | `shopt -s dotglob; ls *` | unparseable, as before |
 
 `Arg.Kind` stays `Glob`, and `Arg.Resolved` stays null. When an argument has
 no authored-value fact, `AuthoredValue` repeats the effective value, as for
 every argument. These facts do not grant authority.
+
+`BashGlobPatternAnalysis` reuses `ShellLaunchFacts.TryGetValue` and
+`IsSingleWordValue` for plain variable fragments. The rule preserves quotes:
+spaces in a quoted scalar stay literal, and an unquoted scalar that can split
+gets no fact. Each substituted wildcard character stays unresolved because the
+public pattern cannot distinguish literal wildcards from active wildcards.
+The rule reads no process environment and performs no filesystem access.
+The path fact does not make `CommandWords` known.
+The command-word projection retains its split-word gate.
+A separate change must prove which variable glob results can supply command words or options.
 
 #### Finite Bash scope projection (v0.4.0-beta.3)
 

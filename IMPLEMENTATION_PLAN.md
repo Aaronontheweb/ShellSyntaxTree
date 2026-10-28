@@ -10,6 +10,23 @@ priorities.
 
 ---
 
+## NOW (live-variable glob facts)
+
+- [x] Use live exact scalar launch values in bounded glob facts.
+- [x] Preserve the quote, field-split, representation, and liveness gates.
+- [x] Add `feature/*` PR bases so the dependent parser PR receives CI.
+- [x] Pass the Release build, all 5,322 tests, native Bash, API, mutation, Slopwatch, and header checks.
+- [x] Kill the six declared Stryker mutants and prove that the report check rejects missing or surviving mutants.
+- [x] Use the existing Linux-native theory for the host-filesystem Bash cases. Keep the other parser cases on every platform.
+- [ ] Complete independent review before release.
+- [ ] Complete command-word proof in a separate dependent change.
+
+## Completed (Bash continuation oracle by version)
+
+- [x] Preserve parser refusal for both arithmetic continuation forms.
+- [x] Assert the actual native behavior on Bash 5.2 and 5.3. The second form runs `ls` on Bash 5.3.9.
+- [x] Print the Bash version before the CI test suite.
+
 ## Completed (compound redirect code simplification)
 
 - [x] Use `GetChildren()` in the compound redirect test traversal and use a typed redirect assertion.
