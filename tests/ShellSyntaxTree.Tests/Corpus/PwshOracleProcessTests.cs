@@ -171,6 +171,8 @@ public class PwshOracleProcessTests
             if (mode == "eof-proof")
             {
                 Assert.True(result.RootElement.GetProperty("holderExited").GetBoolean());
+                Assert.Equal(0, result.RootElement.GetProperty("holderExitCode").GetInt32());
+                Assert.True(result.RootElement.GetProperty("ownerExited").GetBoolean());
                 Assert.Contains("stream deadline 5000 ms", result.RootElement.GetProperty("failure").GetString());
             }
             else
@@ -186,6 +188,16 @@ public class PwshOracleProcessTests
             await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(5));
             await Task.WhenAll(stdout, stderr).WaitAsync(TimeSpan.FromSeconds(5));
         }
+    }
+
+    [Fact]
+    public async Task A_nonzero_holder_exit_does_not_pass_the_EOF_control()
+    {
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            PwshOracle.RunRequiredAsync(Child("eof-nonzero-proof"), 15000, CancellationToken.None));
+        Assert.Contains("The pipe-holder exited with code 17", error.Message);
+        Assert.Contains("holderExited=True", error.Message);
+        Assert.Contains("ownerExited=True", error.Message);
     }
 
     private static ProcessStartInfo Emit(string stdout, string stderr, int exitCode) =>

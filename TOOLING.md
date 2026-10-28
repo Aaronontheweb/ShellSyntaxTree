@@ -76,8 +76,14 @@ The controls use explicit TCP acknowledgements for process and pipe phases.
 One private child constrains its own worker count and calls the actual async oracle.
 The test host keeps its original ThreadPool and environment values.
 Separate private children supply mock PowerShell hosts for the public alias and variable operations.
-The retained-handle control transfers the descendant PID before its parent exits.
-The private Linux owner reaps that descendant; other hosts retain its native process handle.
+The retained-handle control uses an intermediate parent, a private owner, and a pipe holder.
+The owner transfers both PIDs before the intermediate parent exits.
+After release, the owner waits for its own holder and reports that holder's actual exit code over TCP.
+The outer control requires holder exit code zero and owner termination on every host.
+A separate control rejects holder exit code 17 and still requires cleanup.
+The Linux control reaps the orphan owner.
+The Windows control retains the owner's native handle before ownership transfer and checks its exit code.
+The Mac control checks owner termination without an external-process exit-code claim.
 
 The oracle keeps its 15-second probe, 60-second catalog, 120-second parse, and five-second stream deadlines.
 An absent executable or intentional version mismatch permits a local skip.

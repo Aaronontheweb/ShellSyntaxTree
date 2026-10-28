@@ -34,8 +34,11 @@ internal static class Program
                 Console.Out.Write(new string('o', 65536));
                 Console.Error.Write(new string('e', 65536));
                 return 17;
-            case "signal":
             case "holder":
+                return Console.In.ReadLine() == "GO" ? int.Parse(args[1]) : 3;
+            case "holder-owner":
+                return HolderOwner(args[1], args[2]);
+            case "signal":
                 using (var client = new TcpClient())
                 {
                     client.Connect(IPAddress.Loopback, int.Parse(args[1]));
@@ -44,12 +47,6 @@ internal static class Program
                     using var reader = new StreamReader(stream, leaveOpen: true);
                     using var writer = new StreamWriter(stream, leaveOpen: true) { AutoFlush = true };
                     writer.WriteLine(Environment.ProcessId);
-                    if (args[0] == "holder")
-                    {
-                        if (reader.ReadLine() != "OWNED")
-                            return 3;
-                        Console.Out.WriteLine("OWNED");
-                    }
                     if (reader.ReadLine() != "GO")
                         return 3;
                     if (args[0] == "signal")
@@ -60,7 +57,7 @@ internal static class Program
                     return 0;
                 }
             case "parent":
-                var holderStart = Child("holder", args[1]);
+                var holderStart = Child("holder-owner", args[1], args[2]);
                 holderStart.RedirectStandardOutput = true;
                 using (var holder = Process.Start(holderStart)
                        ?? throw new InvalidOperationException("The holder did not start."))
@@ -81,9 +78,47 @@ internal static class Program
             case "worker-proof":
                 return WorkerProof();
             case "eof-proof":
-                return EofProof();
+                return EofProof(0);
+            case "eof-nonzero-proof":
+                return EofProof(17);
             default:
                 return 2;
+        }
+    }
+
+    private static int HolderOwner(string port, string exitCode)
+    {
+        var start = Child("holder", exitCode);
+        start.RedirectStandardInput = true;
+        using var holder = Process.Start(start)
+            ?? throw new InvalidOperationException("The pipe-holder did not start.");
+        try
+        {
+            using var client = new TcpClient();
+            client.Connect(IPAddress.Loopback, int.Parse(port));
+            client.ReceiveTimeout = 20000;
+            using var stream = client.GetStream();
+            using var reader = new StreamReader(stream, leaveOpen: true);
+            using var writer = new StreamWriter(stream, leaveOpen: true) { AutoFlush = true };
+            writer.WriteLine($"{Environment.ProcessId} {holder.Id}");
+            if (reader.ReadLine() != "OWNED")
+                return 3;
+            Console.Out.WriteLine("OWNED");
+            if (reader.ReadLine() != "GO")
+                return 3;
+            holder.StandardInput.WriteLine("GO");
+            if (!holder.WaitForExit(5000))
+                throw new InvalidOperationException("The pipe-holder did not exit after release.");
+            // This process starts the holder, so its exit code comes from the real parent on every host.
+            writer.WriteLine($"EXIT {holder.Id} {holder.ExitCode}");
+            return 0;
+        }
+        finally
+        {
+            if (!holder.HasExited)
+                holder.Kill(entireProcessTree: true);
+            if (!holder.WaitForExit(5000))
+                throw new InvalidOperationException("The holder owner did not complete cleanup.");
         }
     }
 
@@ -202,25 +237,32 @@ internal static class Program
         }
     }
 
-    private static int EofProof()
+    private static int EofProof(int requestedExitCode)
     {
-        // Linux delegates orphan reaping to this private process. Other hosts retain a native process handle.
+        // Linux reaps the orphan owner here. The real owner reports the holder's native exit status on every host.
         if (OperatingSystem.IsLinux() && Prctl(36, 1, 0, 0, 0) != 0)
             throw new InvalidOperationException("The private subreaper did not start.");
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port.ToString();
-        var operation = PwshOracle.RunPowerShellAsync(Child("parent", port), 10000, CancellationToken.None);
+        var operation = PwshOracle.RunPowerShellAsync(Child("parent", port, requestedExitCode.ToString()), 10000, CancellationToken.None);
         using var client = listener.AcceptTcpClient();
         client.ReceiveTimeout = 15000;
         using var stream = client.GetStream();
         using var reader = new StreamReader(stream, leaveOpen: true);
         using var writer = new StreamWriter(stream, leaveOpen: true) { AutoFlush = true };
-        var pid = int.Parse(reader.ReadLine() ?? throw new InvalidOperationException("No holder PID."));
-        using var holder = OperatingSystem.IsLinux() ? null : Process.GetProcessById(pid);
+        var identities = (reader.ReadLine() ?? throw new InvalidOperationException("No owner and holder PIDs.")).Split(' ');
+        var ownerPid = int.Parse(identities[0]);
+        var holderPid = int.Parse(identities[1]);
+        using var owner = OperatingSystem.IsLinux() ? null : Process.GetProcessById(ownerPid);
+        // Windows ExitCode requires a retained handle. Acquire it before the owner permits its parent to exit.
+        if (OperatingSystem.IsWindows() && owner!.SafeHandle.IsInvalid)
+            throw new InvalidOperationException("The owner's Windows process handle is invalid.");
         writer.WriteLine("OWNED");
         string failure;
-        bool holderExited;
+        bool ownerExited;
+        bool holderExited = false;
+        int holderExitCode = -1;
         try
         {
             _ = operation.GetAwaiter().GetResult();
@@ -232,29 +274,44 @@ internal static class Program
         }
         finally
         {
-            writer.WriteLine("GO");
-            if (OperatingSystem.IsLinux())
-                holderExited = WaitPid(pid, out var status, 0) == pid && status == 0;
-            else
-                holderExited = holder!.WaitForExit(5000) && holder.ExitCode == 0;
+            try
+            {
+                writer.WriteLine("GO");
+                var report = (reader.ReadLine() ?? throw new InvalidOperationException("No holder exit report.")).Split(' ');
+                if (report.Length != 3 || report[0] != "EXIT" || int.Parse(report[1]) != holderPid)
+                    throw new InvalidOperationException("The exit report does not identify the owned holder.");
+                holderExitCode = int.Parse(report[2]);
+                holderExited = true;
+            }
+            finally
+            {
+                if (OperatingSystem.IsLinux())
+                    ownerExited = WaitPid(ownerPid, out var status, 0) == ownerPid && status == 0;
+                else
+                    ownerExited = owner!.WaitForExit(5000)
+                        && (!OperatingSystem.IsWindows() || owner.ExitCode == 0);
+            }
         }
 
-        if (!holderExited || !failure.Contains("stream deadline 5000 ms", StringComparison.Ordinal)
+        if (holderExitCode != 0)
+            throw new InvalidOperationException(
+                $"The pipe-holder exited with code {holderExitCode}; holderExited={holderExited}; ownerExited={ownerExited}.");
+        if (!ownerExited || !holderExited || !failure.Contains("stream deadline 5000 ms", StringComparison.Ordinal)
             || !failure.Contains("readers=Canceled", StringComparison.Ordinal))
             throw new InvalidOperationException($"The EOF control did not complete cleanup: {failure}");
-        Console.WriteLine(JsonSerializer.Serialize(new { success = true, holderExited, failure }));
+        Console.WriteLine(JsonSerializer.Serialize(new { success = true, holderExited, holderExitCode, ownerExited, holderPid, ownerPid, failure }));
         return 0;
     }
 
-    private static ProcessStartInfo Child(string mode, string argument)
+    private static ProcessStartInfo Child(params string[] arguments)
     {
         var start = new ProcessStartInfo(Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? "dotnet")
         {
             UseShellExecute = false,
         };
         start.ArgumentList.Add(Assembly.GetExecutingAssembly().Location);
-        start.ArgumentList.Add(mode);
-        start.ArgumentList.Add(argument);
+        foreach (var argument in arguments)
+            start.ArgumentList.Add(argument);
         return start;
     }
 

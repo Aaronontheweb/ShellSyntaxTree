@@ -16,8 +16,11 @@ priorities.
 - [x] Reserve unavailable for executable absence and the intentional version-probe mismatch.
 - [x] Preserve native phase, exit, JSON, and terminal cleanup diagnostics.
 - [x] Add real-child controls for public operations, worker constraints, deadlines, cancellation, and retained handles.
-- [x] Pass the Release build, all 5,372 tests, 17 native controls, two focused mutants, headers, and Slopwatch.
-- [ ] Complete independent review and current-head hosted CI. The original Windows cause remains unproved.
+- [x] Pass the first Release suite with 5,372 tests, 17 native controls, two focused mutants, headers, and Slopwatch.
+- [x] Retain the Windows owner handle before ownership transfer.
+- [x] Get the holder's real exit code from its parent on every host. Reject exit 17 and require owner cleanup.
+- [x] Pass all 18 native controls, headers, and Slopwatch for the portable owner protocol.
+- [ ] Complete independent review and current-head hosted CI. The original PR 228 Windows cause remains unproved.
 
 ## NOW (live-variable glob facts)
 
