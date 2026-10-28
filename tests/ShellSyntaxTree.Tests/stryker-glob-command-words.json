@@ -1,0 +1,16 @@
+{
+  "stryker-config": {
+    "project": "ShellSyntaxTree.csproj",
+    "configuration": "Release",
+    "coverage-analysis": "off",
+    "break-on-initial-test-failure": true,
+    "test-case-filter": "FullyQualifiedName~GlobCommandWordsTests",
+    "concurrency": 1,
+    "reporters": ["progress", "json"],
+    "thresholds": {
+      "high": 100,
+      "low": 100,
+      "break": 100
+    }
+  }
+}

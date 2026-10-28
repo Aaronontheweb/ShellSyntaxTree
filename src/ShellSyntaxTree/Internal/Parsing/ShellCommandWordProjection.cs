@@ -80,7 +80,8 @@ internal static class ShellCommandWordProjection
         Clause clause,
         bool occurrenceIsComplete,
         ShellProjectionLanguage language) =>
-        Project(clause, occurrenceIsComplete, language, CommandOccurrenceFacts.EmptyLaunchWordValues);
+        Project(clause, occurrenceIsComplete, language,
+            CommandOccurrenceFacts.EmptyLaunchWordValues, Array.Empty<EffectiveArgumentFacts>());
 
     /// <param name="clause">The authored clause.</param>
     /// <param name="occurrenceIsComplete">Whether the occurrence is complete.</param>
@@ -90,11 +91,16 @@ internal static class ShellCommandWordProjection
     /// live launch variables (#200). Such an element is classified by that
     /// word, the same as a static word.
     /// </param>
+    /// <param name="effectiveArguments">
+    /// The joined whole-element domains. A proved path glob retains its word
+    /// shape only when every visit supplies the same proof.
+    /// </param>
     internal static ShellCommandWords Project(
         Clause clause,
         bool occurrenceIsComplete,
         ShellProjectionLanguage language,
-        IReadOnlyDictionary<int, string> launchWordValues)
+        IReadOnlyDictionary<int, string> launchWordValues,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments)
     {
         if (!occurrenceIsComplete ||
             language is not (ShellProjectionLanguage.Bash or ShellProjectionLanguage.PowerShell) ||
@@ -139,7 +145,9 @@ internal static class ShellCommandWordProjection
             var value = hasLaunchWord ? launchWord! : element.Value;
             var wordClass = hasLaunchWord
                 ? ClassifyLaunchWord(element, launchWord!)
-                : Classify(element, language);
+                : IsProvedPathGlob(element, index, language, effectiveArguments)
+                    ? WordClass.Path
+                    : Classify(element, language);
             var verbSlotFilled = IsVerbSlotFilled(words.Count);
             if (wordClass == WordClass.Dynamic && !verbSlotFilled)
             {
@@ -161,6 +169,34 @@ internal static class ShellCommandWordProjection
         }
 
         return new ShellCommandWords.Known(words);
+    }
+
+    private static bool IsProvedPathGlob(
+        ClauseElement element,
+        int elementIndex,
+        ShellProjectionLanguage language,
+        IReadOnlyList<EffectiveArgumentFacts> effectiveArguments)
+    {
+        if (language != ShellProjectionLanguage.Bash ||
+            element.Role != ClauseElementRole.Argument || element.IsFlag)
+        {
+            return false;
+        }
+
+        foreach (var argument in effectiveArguments)
+        {
+            if (argument.ClauseElementIndex == elementIndex)
+            {
+                return argument.Value is
+                {
+                    Kind: ShellValueDomainKind.Pattern,
+                    Glob: not null,
+                    IsPathGlobWord: true,
+                };
+            }
+        }
+
+        return false;
     }
 
     private static WordClass Classify(ClauseElement element, ShellProjectionLanguage language)
