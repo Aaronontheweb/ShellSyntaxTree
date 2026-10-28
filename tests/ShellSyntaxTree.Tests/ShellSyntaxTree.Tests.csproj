@@ -9,6 +9,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\ShellSyntaxTree\ShellSyntaxTree.csproj" />
+    <ProjectReference Include="..\ShellSyntaxTree.OracleTestChild\ShellSyntaxTree.OracleTestChild.csproj" ReferenceOutputAssembly="false" />
     <!-- PwshOracleTests reuse the tool's real-pwsh validation oracle. -->
     <ProjectReference Include="..\..\tools\PwshCorpusTool\PwshCorpusTool.csproj" />
   </ItemGroup>
@@ -40,4 +41,10 @@
     </None>
   </ItemGroup>
 
+  <Target Name="CopyOracleTestChild" AfterTargets="Build">
+    <ItemGroup>
+      <OracleTestChildFiles Include="../ShellSyntaxTree.OracleTestChild/bin/$(Configuration)/$(NetCoreTestVersion)/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(OracleTestChildFiles)" DestinationFolder="$(OutDir)OracleTestChild" />
+  </Target>
 </Project>

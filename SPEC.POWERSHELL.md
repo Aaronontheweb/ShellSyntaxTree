@@ -1983,6 +1983,12 @@ definition with the parser table. It fails for a missing alias or a different
 canonical command. Static platform/SKU supersets are permitted, but a dialect
 must not inherit an alias known to belong only to another supported edition.
 
+Each oracle operation probes its selected host once.
+An absent executable or the probe's intentional version mismatch permits a local skip.
+Other native failures fail the gate with phase and cleanup context.
+Malformed JSON and a JSON null response also fail the gate.
+The dev-only process waits and stream reads use async completion with explicit deadlines.
+
 ---
 
 ## 14. Sanitization Process

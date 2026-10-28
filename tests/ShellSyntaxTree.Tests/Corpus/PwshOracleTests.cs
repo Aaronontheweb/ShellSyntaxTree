@@ -8,6 +8,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using ShellSyntaxTree.Internal.Pwsh.Verbs;
 using ShellSyntaxTree.Internal.Pwsh.Parsing;
 using ShellSyntaxTree.Tools.PwshCorpus;
@@ -33,7 +35,7 @@ namespace ShellSyntaxTree.Tests.Corpus;
 public class PwshOracleTests
 {
     [Fact]
-    public void PowerShell_corpus_inputs_are_consistent_with_selected_dialect_oracle()
+    public async Task PowerShell_corpus_inputs_are_consistent_with_selected_dialect_oracle()
     {
         var entries = LoadPowershellCorpus();
         if (entries.Count == 0)
@@ -47,7 +49,7 @@ public class PwshOracleTests
                      PwshDialect.WindowsPowerShell51,
                  })
         {
-            ValidateDialectCorpus(
+            await ValidateDialectCorpusAsync(
                 dialect,
                 entries.Where(entry =>
                     (entry.Entry.PowerShellDialect ?? PwshDialect.PowerShell7) == dialect)
@@ -55,7 +57,7 @@ public class PwshOracleTests
         }
     }
 
-    private static void ValidateDialectCorpus(
+    private static async Task ValidateDialectCorpusAsync(
         PwshDialect dialect,
         IReadOnlyList<(string File, CorpusEntry Entry)> entries)
     {
@@ -64,16 +66,13 @@ public class PwshOracleTests
             return;
         }
 
-        if (!PwshOracle.IsAvailable(dialect))
+        var inputs = entries.Select(e => e.Entry.Input).ToList();
+        var counts = await PwshOracle.CountParseErrorsAsync(inputs, dialect, CancellationToken.None);
+        if (counts is null)
         {
-            Console.WriteLine(
-                $"{dialect} compatible oracle is unavailable — its §13 gate is skipped locally.");
+            Console.WriteLine($"{dialect} compatible oracle is unavailable — its §13 gate is skipped locally.");
             return;
         }
-
-        var inputs = entries.Select(e => e.Entry.Input).ToList();
-        var counts = PwshOracle.CountParseErrors(inputs, dialect);
-        Assert.NotNull(counts);
 
         var failures = new List<string>();
         for (var i = 0; i < entries.Count; i++)
@@ -116,17 +115,14 @@ public class PwshOracleTests
     [Theory]
     [InlineData(PwshDialect.PowerShell7)]
     [InlineData(PwshDialect.WindowsPowerShell51)]
-    public void PwshAliases_table_covers_every_live_alias(PwshDialect dialect)
+    public async Task PwshAliases_table_covers_every_live_alias(PwshDialect dialect)
     {
-        if (!PwshOracle.IsAvailable(dialect))
+        var live = await PwshOracle.GetAliasDefinitionsAsync(dialect, CancellationToken.None);
+        if (live is null)
         {
-            Console.WriteLine(
-                $"{dialect} compatible oracle is unavailable — its §6.3 alias gate is skipped locally.");
+            Console.WriteLine($"{dialect} compatible oracle is unavailable — its §6.3 alias gate is skipped locally.");
             return;
         }
-
-        var live = PwshOracle.GetAliasDefinitions(dialect);
-        Assert.NotNull(live);
 
         var gaps = live!
             .Where(alias => dialect != PwshDialect.PowerShell7 ||
@@ -171,18 +167,15 @@ public class PwshOracleTests
     [Theory]
     [InlineData(PwshDialect.PowerShell7)]
     [InlineData(PwshDialect.WindowsPowerShell51)]
-    public void Foreach_binding_boundary_covers_every_fresh_host_variable(
+    public async Task Foreach_binding_boundary_covers_every_fresh_host_variable(
         PwshDialect dialect)
     {
-        if (!PwshOracle.IsAvailable(dialect))
+        var live = await PwshOracle.GetVariableNamesAsync(dialect, CancellationToken.None);
+        if (live is null)
         {
-            Console.WriteLine(
-                $"{dialect} compatible oracle is unavailable — its foreach binding gate is skipped locally.");
+            Console.WriteLine($"{dialect} compatible oracle is unavailable — its foreach gate is skipped locally.");
             return;
         }
-
-        var live = PwshOracle.GetVariableNames(dialect);
-        Assert.NotNull(live);
 
         var gaps = live!
             .Where(IsSimpleLoopBindingName)

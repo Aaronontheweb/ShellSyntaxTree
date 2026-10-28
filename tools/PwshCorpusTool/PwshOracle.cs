@@ -9,6 +9,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace ShellSyntaxTree.Tools.PwshCorpus;
@@ -43,17 +44,24 @@ $counts = foreach ($s in @($inputs)) {
 
     /// <summary>
     /// True when the selected executable is on PATH and its version matches
-    /// the requested dialect contract.
+    /// the requested dialect contract. Other native failures throw with context.
     /// </summary>
-    public static bool IsAvailable(PwshDialect dialect)
+    public static Task<bool> IsAvailableAsync(PwshDialect dialect, CancellationToken cancellationToken) =>
+        IsAvailableAsync(CreateVersionProbe(dialect), cancellationToken);
+
+    internal static async Task<bool> IsAvailableAsync(
+        ProcessStartInfo? probe, CancellationToken cancellationToken)
     {
-        var probe = VersionProbeArguments(dialect);
-        return probe is not null && TryRunPowerShell(
-            Executable(dialect),
-            probe,
-            15000,
-            out _,
-            out _);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (probe is null)
+            return false;
+
+        var result = await RunPowerShellAsync(probe, 15000, cancellationToken).ConfigureAwait(false);
+        if (result is null || result.ExitCode == 2)
+            return false;
+
+        RequireSuccessfulExit(probe.FileName, "version probe", result);
+        return true;
     }
 
     /// <summary>
@@ -63,11 +71,12 @@ $counts = foreach ($s in @($inputs)) {
     /// Throws when a compatible executable starts but the oracle invocation or
     /// response fails.
     /// </summary>
-    public static IReadOnlyList<int>? CountParseErrors(
+    public static async Task<IReadOnlyList<int>?> CountParseErrorsAsync(
         IReadOnlyList<string> inputs,
-        PwshDialect dialect)
+        PwshDialect dialect,
+        CancellationToken cancellationToken)
     {
-        if (!IsAvailable(dialect))
+        if (!await IsAvailableAsync(dialect, cancellationToken).ConfigureAwait(false))
         {
             return null;
         }
@@ -85,33 +94,21 @@ $counts = foreach ($s in @($inputs)) {
             File.WriteAllText(scriptPath, OracleScript);
             File.WriteAllText(inputPath, JsonSerializer.Serialize(inputs));
 
-            if (!TryRunPowerShell(
-                    Executable(dialect),
+            stdout = await RunRequiredAsync(
+                CreateInvocation(dialect,
                     "-NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass " +
-                    $"-File \"{scriptPath}\" \"{inputPath}\"",
-                    120000,
-                    out stdout,
-                    out var failure))
-            {
-                throw new InvalidOperationException(
-                    $"{Executable(dialect)} parse oracle failed: {failure}");
-            }
+                    $"-File \"{scriptPath}\" \"{inputPath}\""),
+                120000, cancellationToken).ConfigureAwait(false);
 
-            var counts = JsonSerializer.Deserialize<int[]>(stdout.Trim());
-            if (counts is null || counts.Length != inputs.Count)
+            var counts = ReadJsonResponse<int[]>(Executable(dialect), stdout);
+            if (counts.Length != inputs.Count)
             {
                 throw new InvalidOperationException(
-                    $"{Executable(dialect)} oracle returned {counts?.Length ?? -1} counts " +
-                    $"for {inputs.Count} inputs. Output: {stdout}");
+                    $"{Executable(dialect)} oracle returned {counts.Length} counts " +
+                    $"for {inputs.Count} inputs. Output: {Excerpt(stdout)}");
             }
 
             return counts;
-        }
-        catch (JsonException ex)
-        {
-            throw new InvalidOperationException(
-                $"{Executable(dialect)} parse oracle returned invalid JSON. Output: {stdout}",
-                ex);
         }
         finally
         {
@@ -124,132 +121,170 @@ $counts = foreach ($s in @($inputs)) {
     /// Every alias and definition the selected PowerShell defines — the live
     /// <c>Get-Alias</c> set for the <c>PwshAliases</c> completeness and
     /// definition gate (SPEC.POWERSHELL.md §6.3). Returns null when the
-    /// selected executable is absent or incompatible.
+    /// selected executable is absent or incompatible. Invocation and JSON failures throw with context.
     /// </summary>
-    public static IReadOnlyList<PwshAliasDefinition>? GetAliasDefinitions(
-        PwshDialect dialect)
+    public static async Task<IReadOnlyList<PwshAliasDefinition>?> GetAliasDefinitionsAsync(
+        PwshDialect dialect, CancellationToken cancellationToken)
     {
-        if (!IsAvailable(dialect) ||
-            !TryRunPowerShell(
-                Executable(dialect),
-                "-NoProfile -NoLogo -NonInteractive -Command \"@(Get-Alias | Select-Object Name,Definition) | ConvertTo-Json -Compress\"",
-                60000,
-                out var stdout,
-                out _))
-        {
+        if (!await IsAvailableAsync(dialect, cancellationToken).ConfigureAwait(false))
             return null;
-        }
 
-        try
-        {
-            return JsonSerializer.Deserialize<PwshAliasDefinition[]>(stdout.Trim());
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
+        var stdout = await RunRequiredAsync(
+            CreateInvocation(dialect,
+                "-NoProfile -NoLogo -NonInteractive -Command \"@(Get-Alias | Select-Object Name,Definition) | ConvertTo-Json -Compress\""),
+            60000, cancellationToken).ConfigureAwait(false);
+        return ReadJsonResponse<PwshAliasDefinition[]>(Executable(dialect), stdout);
     }
 
     /// <summary>
     /// The names of every variable a fresh no-profile <c>pwsh</c> process
     /// defines. Returns null when the selected executable is absent or incompatible.
+    /// Invocation failures throw with context.
     /// </summary>
-    public static IReadOnlyList<string>? GetVariableNames(
-        PwshDialect dialect)
+    public static async Task<IReadOnlyList<string>?> GetVariableNamesAsync(
+        PwshDialect dialect, CancellationToken cancellationToken)
     {
-        if (!IsAvailable(dialect) ||
-            !TryRunPowerShell(
-                Executable(dialect),
-                "-NoProfile -NoLogo -NonInteractive -Command \"Get-Variable | ForEach-Object Name\"",
-                60000,
-                out var stdout,
-                out _))
-        {
+        if (!await IsAvailableAsync(dialect, cancellationToken).ConfigureAwait(false))
             return null;
-        }
 
+        var stdout = await RunRequiredAsync(
+            CreateInvocation(dialect,
+                "-NoProfile -NoLogo -NonInteractive -Command \"Get-Variable | ForEach-Object Name\""),
+            60000, cancellationToken).ConfigureAwait(false);
         return stdout.Split(
             new[] { '\r', '\n' },
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
-    /// <summary>
-    /// Run the selected executable with <paramref name="arguments"/> and capture stdout.
-    /// Returns false when the executable is absent, the run times out, or it
-    /// exits non-zero. stderr is drained concurrently so a chatty child can
-    /// never deadlock on a full pipe buffer; a timed-out child is killed.
-    /// </summary>
-    private static bool TryRunPowerShell(
-        string? executable,
-        string arguments,
-        int timeoutMs,
-        out string stdout,
-        out string failure)
+    internal static T ReadJsonResponse<T>(string executable, string stdout) where T : class
     {
-        stdout = string.Empty;
-        failure = string.Empty;
-        if (executable is null)
-        {
-            failure = "executable is not selected";
-            return false;
-        }
-
         try
         {
-            using var process = Process.Start(new ProcessStartInfo
-            {
-                FileName = executable,
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                StandardOutputEncoding = Encoding.UTF8,
-            });
-
-            if (process is null)
-            {
-                failure = "process did not start";
-                return false;
-            }
-
-            Task<string> stdoutTask = process.StandardOutput.ReadToEndAsync();
-            Task<string> stderrTask = process.StandardError.ReadToEndAsync();
-
-            if (!process.WaitForExit(timeoutMs))
-            {
-                _ = TryKill(process);
-                _ = process.WaitForExit(5000);
-                _ = Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000);
-                failure = $"timed out after {timeoutMs} ms";
-                return false;
-            }
-
-            if (!Task.WaitAll(new Task[] { stdoutTask, stderrTask }, 5000))
-            {
-                _ = TryKill(process);
-                failure = "stdout or stderr did not finish draining";
-                return false;
-            }
-
-            stdout = stdoutTask.GetAwaiter().GetResult();
-            var stderr = stderrTask.GetAwaiter().GetResult();
-            if (process.ExitCode == 0)
-            {
-                return true;
-            }
-
-            failure = $"exited with code {process.ExitCode}; stderr: {stderr.Trim()}";
-            return false;
+            return JsonSerializer.Deserialize<T>(stdout.Trim())
+                ?? throw new InvalidOperationException($"{executable} oracle returned JSON null. Output: {Excerpt(stdout)}");
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or
-                                   FileNotFoundException or
-                                   IOException or
-                                   AggregateException)
+        catch (JsonException ex)
         {
-            failure = ex.Message;
-            return false;
+            throw new InvalidOperationException(
+                $"{executable} oracle returned invalid JSON. Output: {Excerpt(stdout)}", ex);
         }
     }
+
+    internal static async Task<string> RunRequiredAsync(
+        ProcessStartInfo invocation, int timeoutMs, CancellationToken cancellationToken)
+    {
+        var result = await RunPowerShellAsync(invocation, timeoutMs, cancellationToken).ConfigureAwait(false);
+        if (result is null)
+            throw new InvalidOperationException($"{invocation.FileName} oracle executable disappeared after its compatible-host probe.");
+        RequireSuccessfulExit(invocation.FileName, "invocation", result);
+        return result.Stdout;
+    }
+
+    private static void RequireSuccessfulExit(string executable, string phase, NativeOracleResult result)
+    {
+        if (result.ExitCode != 0)
+            throw new InvalidOperationException(
+                $"{executable} oracle {phase} exited with code {result.ExitCode}. " +
+                $"stdout: {Excerpt(result.Stdout)}; stderr: {Excerpt(result.Stderr)}");
+    }
+
+    private static ProcessStartInfo? CreateVersionProbe(PwshDialect dialect) =>
+        VersionProbeArguments(dialect) is { } arguments ? CreateInvocation(dialect, arguments) : null;
+
+    private static ProcessStartInfo CreateInvocation(PwshDialect dialect, string arguments) =>
+        new(Executable(dialect), arguments);
+
+    // The public library remains synchronous. Only this dev-only native oracle owns child processes.
+    internal static async Task<NativeOracleResult?> RunPowerShellAsync(
+        ProcessStartInfo startInfo, int timeoutMs, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+        startInfo.UseShellExecute = false;
+        startInfo.StandardOutputEncoding = Encoding.UTF8;
+        var elapsed = Stopwatch.StartNew();
+        Process? child;
+        try
+        {
+            child = Process.Start(startInfo);
+        }
+        catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 2 || OperatingSystem.IsWindows() && ex.NativeErrorCode == 3)
+        {
+            return null;
+        }
+        catch (System.ComponentModel.Win32Exception ex)
+        {
+            throw new InvalidOperationException($"{startInfo.FileName} oracle start failed: {ex.Message}", ex);
+        }
+
+        using var process = child ?? throw new InvalidOperationException($"{startInfo.FileName} oracle process did not start.");
+        using var readCancellation = new CancellationTokenSource();
+        Task<string> stdout = Task.FromResult(string.Empty);
+        Task<string> stderr = Task.FromResult(string.Empty);
+        var phase = "pipe setup";
+        try
+        {
+            stdout = process.StandardOutput.ReadToEndAsync(readCancellation.Token);
+            stderr = process.StandardError.ReadToEndAsync(readCancellation.Token);
+            var readers = Task.WhenAll(stdout, stderr);
+            phase = $"process deadline {timeoutMs} ms";
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            deadline.CancelAfter(timeoutMs);
+            await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
+            phase = "stream deadline 5000 ms";
+            await readers.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken).ConfigureAwait(false);
+            return new NativeOracleResult(process.ExitCode,
+                await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException or IOException or InvalidOperationException)
+        {
+            var readers = Task.WhenAll(stdout, stderr);
+            var states = $"stdout={stdout.Status}, stderr={stderr.Status}";
+            var cleanup = await CleanupAsync(process, readers, readCancellation).ConfigureAwait(false);
+            var output = stdout.IsCompletedSuccessfully ? Excerpt(await stdout.ConfigureAwait(false)) : "<incomplete>";
+            var error = stderr.IsCompletedSuccessfully ? Excerpt(await stderr.ConfigureAwait(false)) : "<incomplete>";
+            var cause = cancellationToken.IsCancellationRequested ? "caller cancellation" : "failure";
+            var detail = $"{startInfo.FileName} oracle {phase}: {cause} after {elapsed.ElapsedMilliseconds} ms; " +
+                         $"{states}; {cleanup}; stdout: {output}; stderr: {error}";
+            if (cancellationToken.IsCancellationRequested && readers.IsCompleted && process.HasExited)
+                throw new OperationCanceledException(detail, ex, cancellationToken);
+            throw new InvalidOperationException(detail, ex);
+        }
+    }
+
+    private static async Task<string> CleanupAsync(
+        Process process, Task readers, CancellationTokenSource readCancellation)
+    {
+        var detail = "cleanup:";
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+            using var deadline = new CancellationTokenSource(5000);
+            await process.WaitForExitAsync(deadline.Token).ConfigureAwait(false);
+            detail += $" direct child exited {process.ExitCode};";
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            detail += $" direct child not confirmed: {ex.Message};";
+        }
+
+        // An exited parent cannot supply descendant ownership. Cancel this call's reads separately from child exit.
+        await readCancellation.CancelAsync().ConfigureAwait(false);
+        try
+        {
+            await readers.WaitAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
+            detail += $" readers={readers.Status}";
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or IOException or TimeoutException or InvalidOperationException)
+        {
+            detail += $" readers={readers.Status}: {ex.GetType().Name}";
+        }
+        return detail;
+    }
+
+    private static string Excerpt(string text) => text.Length <= 1024 ? text : text[..1024] + " [truncated]";
 
     private static string? VersionProbeArguments(PwshDialect dialect) => dialect switch
     {
@@ -264,25 +299,12 @@ $counts = foreach ($s in @($inputs)) {
         _ => null,
     };
 
-    private static string? Executable(PwshDialect dialect) => dialect switch
+    private static string Executable(PwshDialect dialect) => dialect switch
     {
         PwshDialect.PowerShell7 => "pwsh",
         PwshDialect.WindowsPowerShell51 => "powershell.exe",
-        _ => null,
+        _ => throw new ArgumentOutOfRangeException(nameof(dialect)),
     };
-
-    private static bool TryKill(Process process)
-    {
-        try
-        {
-            process.Kill(entireProcessTree: true);
-            return true;
-        }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
-        {
-            return false;
-        }
-    }
 
     private static bool TryDelete(string path)
     {
@@ -304,3 +326,5 @@ $counts = foreach ($s in @($inputs)) {
 
 /// <summary>An alias name and its canonical definition from real PowerShell.</summary>
 public sealed record PwshAliasDefinition(string Name, string Definition);
+
+internal sealed record NativeOracleResult(int ExitCode, string Stdout, string Stderr);
