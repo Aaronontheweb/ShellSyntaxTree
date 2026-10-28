@@ -19,7 +19,17 @@ priorities.
 - [x] Kill the six declared Stryker mutants and prove that the report check rejects missing or surviving mutants.
 - [x] Use the existing Linux-native theory for the host-filesystem Bash cases. Keep the other parser cases on every platform.
 - [ ] Complete independent review before release.
-- [ ] Complete command-word proof in a separate dependent change.
+- [x] Complete command-word proof in a separate dependent change.
+
+## NOW (all-visits path-glob command words)
+
+- [x] Record the original word's separator and option-prefix proof in the existing internal effective domain.
+- [x] Compare the proof during equality and retain it only across all visits.
+- [x] Read the joined whole-element proof during command-word projection. Keep bare and unproved words unresolved.
+- [x] Add direct Path/Path, Path/Bare, and Path/Unknown checks, plus a control-flow revisit.
+- [x] Pass all 5,355 parser tests on the host and with the Bash 5.3 oracle, native argv checks, and the four command-word mutants.
+- [x] Review coverage and pass the API comparison, Slopwatch, and header checks. Keep independent review and hosted CI separate.
+- [x] Prepare the unused `0.5.0-beta.2` version and release notes. Keep publication with the coordinator.
 
 ## Completed (Bash continuation oracle by version)
 

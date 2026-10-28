@@ -135,3 +135,4 @@ jobs:
           global-json-file: "./global.json"
       - run: dotnet tool restore
       - run: python3 scripts/run-launch-variable-glob-mutations.py
+      - run: python3 scripts/run-launch-variable-glob-mutations.py --command-words

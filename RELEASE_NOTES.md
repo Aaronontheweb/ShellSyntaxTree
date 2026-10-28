@@ -1,3 +1,23 @@
+#### 0.5.0-beta.2 2026-10-28 ####
+
+This prerelease proves bounded glob paths from live scalar launch variables.
+It also proves command words when every result of a glob remains a path.
+The facts grant no authority.
+
+## Added
+
+- Glob facts for quoted and unquoted live scalar launch values, under the existing fresh Bash 5.2 or 5.3 contract.
+- Internal whole-word proof before absolute path normalization. Every joined visit must retain that proof.
+- Exact-identity mutation gates for live-value guards, separators, option prefixes, and all-visit equality.
+
+## Security and compatibility
+
+- Bare globs keep unknown command words. A `pu*` match can supply `push` without a leading dash.
+- Unknown, revoked, split, and unrepresentable variable values keep the existing unresolved result.
+- An option value cannot prove its whole option word. The public API stays unchanged.
+- Consumers still own path protection, grant coverage, alias checks, and execution policy.
+- Native tests use explicit platform scope. Arithmetic continuation checks distinguish Bash 5.2 from Bash 5.3 behavior and retain parser refusal.
+
 #### 0.5.0-beta.1 2026-10-23 ####
 
 This prerelease adds opt-in facts for redirects on supported Bash compound

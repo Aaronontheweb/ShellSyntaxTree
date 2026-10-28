@@ -387,6 +387,12 @@ internal sealed record ShellValueDomainFacts
     /// </summary>
     internal ShellGlobExpansion? Glob { get; init; }
 
+    /// <summary>
+    /// Every result of the original glob word contains a separator and cannot
+    /// start with a dash. The glob analysis proves this before normalization.
+    /// </summary>
+    internal bool IsPathGlobWord { get; init; }
+
     internal long MinimumInclusive { get; init; }
 
     internal long MaximumInclusive { get; init; }
@@ -545,6 +551,7 @@ internal sealed record ShellValueDomainFacts
         ShellValueDomainFacts right)
     {
         if (left.Kind != right.Kind ||
+            left.IsPathGlobWord != right.IsPathGlobWord ||
             left.MinimumInclusive != right.MinimumInclusive ||
             left.MaximumInclusive != right.MaximumInclusive ||
             !string.Equals(left.Pattern, right.Pattern, StringComparison.Ordinal) ||
@@ -945,7 +952,8 @@ internal static class ShellSyntaxProjection
                     simple.Clause,
                     isComplete,
                     _language,
-                    facts.LaunchWordValues),
+                    facts.LaunchWordValues,
+                    facts.EffectiveArguments),
                 LaunchEnvironment = facts.LaunchEnvironment,
             });
             _clauses.Add(simple.Clause);
@@ -2092,6 +2100,9 @@ internal static class ShellSyntaxProjection
                 domain.Parts is null ||
                 ContainsNull(domain.Values) ||
                 ContainsNull(domain.Parts) ||
+                domain.IsPathGlobWord &&
+                (domain.Kind != ShellValueDomainKind.Pattern ||
+                 domain.Glob is null || domain.Glob.MayStartWithDash) ||
                 domain.Glob is not null &&
                 (domain.Kind != ShellValueDomainKind.Pattern ||
                  domain.Glob.Segments.Count == 0 ||

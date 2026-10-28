@@ -1331,6 +1331,14 @@ change the word. Each later verb or argument element then gets one class:
   `git {push,a/b}` runs `git push a/b`. Before v0.4.0-beta.18 the parser
   reported `{push,a/b}` as one resolved path. It now gives a brace word no
   path (see "Bash brace words").
+- A bounded path glob can override the lexical split class when its live
+  scalar fragments cannot split and every result contains `/` without a
+  possible leading dash. The proof uses the expanded word before absolute
+  normalization. It does not come from the public absolute `PathPattern`.
+  For example, with `ROOT=/work/pu` and `PREFIX=pu`, `cmd $ROOT*` gives
+  `cmd`, while `cmd $PREFIX*` stays `Unknown`. Both public patterns can be
+  `/work/pu*`. The bare pattern can supply the subcommand `push` even when
+  `MayStartWithDash` is false.
 - The parser rejects many expansions before this fact exists. For example,
   ``git `cmd` `` and `git $(( a[1] ))` are unparseable. `git $'push'` parses
   from v0.4.0-beta.19, but the word projection reads the authored `$` and gives
@@ -1618,9 +1626,23 @@ spaces in a quoted scalar stay literal, and an unquoted scalar that can split
 gets no fact. Each substituted wildcard character stays unresolved because the
 public pattern cannot distinguish literal wildcards from active wildcards.
 The rule reads no process environment and performs no filesystem access.
-The path fact does not make `CommandWords` known.
-The command-word projection retains its split-word gate.
-A separate change must prove which variable glob results can supply command words or options.
+The public path fact alone does not make `CommandWords` known.
+`BashGlobPatternAnalysis` also records an internal `IsPathGlobWord` proof.
+The expanded word must contain `/` before normalization and must not produce
+a word that starts with `-`. The proof retains the scalar, liveness,
+field-split, representation, shell-state, and bounded-glob gates above.
+Each match and the unmatched literal fallback therefore keep a separator.
+A matched filename with spaces stays one word after pathname expansion.
+
+The existing effective-argument domain carries this proof by whole clause
+element. Domain equality compares it, and every joined visit must retain it.
+A Path/Bare or Path/Unknown join in either order loses the proof, even when
+the public absolute patterns are equal. Record copies retain the proof.
+Other domain constructors leave it false. No public API field changes.
+
+`ShellCommandWordProjection` accepts that joined proof only for a complete
+Bash argument element. An option value cannot prove its whole option word.
+Every other unproved split word keeps the existing command-word rule.
 
 #### Finite Bash scope projection (v0.4.0-beta.3)
 

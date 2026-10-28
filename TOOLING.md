@@ -214,6 +214,7 @@ Run this gate after a change to live-variable glob facts:
 ```bash
 dotnet tool restore
 python3 scripts/run-launch-variable-glob-mutations.py
+python3 scripts/run-launch-variable-glob-mutations.py --command-words
 ```
 
 The gate uses Stryker 5.0.0 and the existing xUnit 2 test project.
@@ -226,6 +227,11 @@ Its output stays under `artifacts/stryker/launch-variable-globs`.
 CI runs this gate on Linux.
 A local Linux run took 2 minutes and 52 seconds.
 The CI job has a 15-minute limit.
+
+The second command checks the command-word proof with `GlobCommandWordsTests`.
+Its four expected mutants cover the original separator, a possible option prefix, and domain equality across visits.
+Both gates use the same report check and separate source spans.
+CI runs the two gates in sequence within the same job limit.
 
 ## Working Assumptions
 

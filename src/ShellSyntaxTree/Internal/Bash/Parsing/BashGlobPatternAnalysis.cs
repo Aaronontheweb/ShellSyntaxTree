@@ -163,6 +163,7 @@ internal static class BashGlobPatternAnalysis
             Pattern = builder.ToString(),
             CoveringDirectory = covering,
             Glob = new ShellGlobExpansion(published, mayStartWithDash),
+            IsPathGlobWord = text.IndexOf('/') >= 0 && !mayStartWithDash,
         };
         return true;
     }

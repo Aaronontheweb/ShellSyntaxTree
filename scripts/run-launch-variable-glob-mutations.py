@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check six explicit mutants at the live-variable glob boundary."""
+"""Check explicit mutants at the live-variable glob boundaries."""
 
 import argparse
 import json
@@ -45,9 +45,8 @@ def offset(source, position):
     return sum(map(len, lines[:position["line"] - 1])) + position["column"] - 1
 
 
-def verify_report(report_path, spans):
-    report = json.loads(report_path.read_text())
-    expected = {
+def launch_expected():
+    return {
         (GLOB_FILE, FIELD_SPLIT, FIELD_SPLIT.replace("!=", "==")),
         (GLOB_FILE, "fragment.AllowedTransforms & ShellLexicalTransform.FieldSplit",
          "fragment.AllowedTransforms | ShellLexicalTransform.FieldSplit"),
@@ -56,6 +55,10 @@ def verify_report(report_path, spans):
         (GLOB_FILE, "false", "true"),
         (LAUNCH_FILE, REVOKED, REVOKED[1:]),
     }
+
+
+def verify_report(report_path, spans, expected):
+    report = json.loads(report_path.read_text())
     observed = {}
     outside = []
     for filename, facts in report["files"].items():
@@ -85,27 +88,53 @@ def verify_report(report_path, spans):
     failures = {identity: status for identity, status in observed.items() if status != "Killed"}
     if failures:
         raise ValueError(f"The expected mutants did not die: {failures}")
-    print("PASS: all six expected live-variable glob mutants were killed.")
+    print(f"PASS: all {len(expected)} expected glob mutants were killed.")
+
+
+def command_word_spans():
+    glob = (ROOT / "src/ShellSyntaxTree" / GLOB_FILE).read_text()
+    domain = (ROOT / "src/ShellSyntaxTree/ShellSyntaxProjection.cs").read_text()
+    return [
+        (GLOB_FILE, *unique_span(glob, "text.IndexOf('/') >= 0")),
+        (GLOB_FILE, *unique_span(glob, "!mayStartWithDash")),
+        ("ShellSyntaxProjection.cs", *unique_span(domain,
+            "left.IsPathGlobWord != right.IsPathGlobWord")),
+    ]
+
+
+def command_word_expected():
+    separator = "text.IndexOf('/') >= 0"
+    equality = "left.IsPathGlobWord != right.IsPathGlobWord"
+    return {
+        (GLOB_FILE, separator, separator.replace(">= 0", "> 0")),
+        (GLOB_FILE, separator, separator.replace(">= 0", "< 0")),
+        (GLOB_FILE, "!mayStartWithDash", "mayStartWithDash"),
+        ("ShellSyntaxProjection.cs", equality, equality.replace("!=", "==")),
+    }
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("output", nargs="?", type=Path,
-                        default=ROOT / "artifacts/stryker/launch-variable-globs")
+                        default=None)
+    parser.add_argument("--command-words", action="store_true",
+                        help="Check separator and all-visits command-word proof.")
     parser.add_argument("--report", type=Path,
                         help="Check an existing report without a Stryker run.")
     args = parser.parse_args()
-    spans = source_spans()
+    spans = command_word_spans() if args.command_words else source_spans()
+    expected = command_word_expected() if args.command_words else launch_expected()
+    scope = "glob-command-words" if args.command_words else "launch-variable-globs"
     if args.report:
-        verify_report(args.report.resolve(), spans)
+        verify_report(args.report.resolve(), spans, expected)
         return
-    output = args.output.resolve()
-    command = ["dotnet", "stryker", "--config-file", "stryker-launch-variable-globs.json",
+    output = (args.output or ROOT / "artifacts/stryker" / scope).resolve()
+    command = ["dotnet", "stryker", "--config-file", f"stryker-{scope}.json",
                "--output", str(output), "--skip-version-check"]
     for path, start, end in spans:
         command.extend(["--mutate", f"{path}{{{start}..{end}}}"])
     subprocess.run(command, cwd=PROJECT, check=True)
-    verify_report(output / "reports/mutation-report.json", spans)
+    verify_report(output / "reports/mutation-report.json", spans, expected)
 
 
 if __name__ == "__main__":
