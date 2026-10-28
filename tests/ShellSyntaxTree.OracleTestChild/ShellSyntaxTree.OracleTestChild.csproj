@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>$(NetCoreTestVersion)</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <PublishRepositoryUrl>false</PublishRepositoryUrl>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../tools/PwshCorpusTool/PwshCorpusTool.csproj" />
+  </ItemGroup>
+</Project>

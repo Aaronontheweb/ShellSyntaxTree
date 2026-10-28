@@ -10,6 +10,15 @@ priorities.
 
 ---
 
+## NOW (PowerShell oracle process correction)
+
+- [x] Convert the dev-only oracle and its callers to async process and stream waits.
+- [x] Reserve unavailable for executable absence and the intentional version-probe mismatch.
+- [x] Preserve native phase, exit, JSON, and terminal cleanup diagnostics.
+- [x] Add real-child controls for public operations, worker constraints, deadlines, cancellation, and retained handles.
+- [x] Pass the Release build, all 5,372 tests, 17 native controls, two focused mutants, headers, and Slopwatch.
+- [ ] Complete independent review and current-head hosted CI. The original Windows cause remains unproved.
+
 ## NOW (live-variable glob facts)
 
 - [x] Use live exact scalar launch values in bounded glob facts.

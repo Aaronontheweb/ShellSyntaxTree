@@ -60,6 +60,34 @@ for cases that require them. A safe generator change MUST regenerate to a
 temporary directory and produce an exact directory diff before rewriting the
 checked-in corpus.
 
+### Native oracle process controls
+
+`tests/ShellSyntaxTree.OracleTestChild` supplies real child processes for `PwshOracleProcessTests`.
+The test project copies its executable and runtime files into `OracleTestChild` beside the test assembly.
+The helper remains a test-only executable and does not enter the parser package.
+
+Run the focused controls with:
+
+```bash
+dotnet test tests/ShellSyntaxTree.Tests -c Release --filter FullyQualifiedName~PwshOracleProcessTests
+```
+
+The controls use explicit TCP acknowledgements for process and pipe phases.
+One private child constrains its own worker count and calls the actual async oracle.
+The test host keeps its original ThreadPool and environment values.
+Separate private children supply mock PowerShell hosts for the public alias and variable operations.
+The retained-handle control transfers the descendant PID before its parent exits.
+The private Linux owner reaps that descendant; other hosts retain its native process handle.
+
+The oracle keeps its 15-second probe, 60-second catalog, 120-second parse, and five-second stream deadlines.
+An absent executable or intentional version mismatch permits a local skip.
+Other native failures include the phase and cleanup state.
+JSON errors and JSON null responses fail explicitly.
+Each exception limits stdout and stderr excerpts to 1,024 characters.
+The dev tool still captures each full stream in memory.
+A direct parent exit does not establish ownership of a surviving descendant.
+The old Windows failure lacks phase evidence, so these controls cannot identify its exact cause.
+
 ## Source Control and CI
 
 | Tool | Access | Purpose |

@@ -6,6 +6,8 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using ShellSyntaxTree;
 using ShellSyntaxTree.Tools.PwshCorpus;
 
@@ -50,7 +52,7 @@ switch (args[0].ToLowerInvariant())
     case "generate":
         return Generate(args.Length > 1 ? args[1] : DefaultCorpusDir());
     case "check":
-        return Check(args.Skip(1).ToArray());
+        return await CheckAsync(args.Skip(1).ToArray());
     case "check-bash":
         return CheckBash(string.Join(' ', args.Skip(1)));
     default:
@@ -98,7 +100,7 @@ int Generate(string outputDir)
     return 0;
 }
 
-int Check(string[] checkArgs)
+async Task<int> CheckAsync(string[] checkArgs)
 {
     var dialect = PwshDialect.PowerShell7;
     var commandStart = 0;
@@ -139,7 +141,7 @@ int Check(string[] checkArgs)
         powerShellDialect: dialect == PwshDialect.PowerShell7 ? null : dialect));
 
     Console.WriteLine($"---- {dialect} oracle ----");
-    var counts = PwshOracle.CountParseErrors(new[] { command }, dialect);
+    var counts = await PwshOracle.CountParseErrorsAsync(new[] { command }, dialect, CancellationToken.None);
     if (counts is null)
     {
         Console.WriteLine($"{dialect} compatible executable not available — oracle skipped.");

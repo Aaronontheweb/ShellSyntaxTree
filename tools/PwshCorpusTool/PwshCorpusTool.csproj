@@ -11,6 +11,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ShellSyntaxTree.Tests" />
+    <InternalsVisibleTo Include="ShellSyntaxTree.OracleTestChild" />
     <ProjectReference Include="..\..\src\ShellSyntaxTree\ShellSyntaxTree.csproj" />
   </ItemGroup>
 

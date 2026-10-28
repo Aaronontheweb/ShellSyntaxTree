@@ -21,6 +21,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/ShellSyntaxTree.Tests/ShellSyntaxTree.Tests.csproj" />
+    <Project Path="tests/ShellSyntaxTree.OracleTestChild/ShellSyntaxTree.OracleTestChild.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/ShellSyntaxTree.Cli.Sample/ShellSyntaxTree.Cli.Sample.csproj" />
