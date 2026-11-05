@@ -40,7 +40,7 @@ jobs:
           fetch-depth: 0
 
       - name: "Install .NET SDK"
-        uses: actions/setup-dotnet@v5.3.0
+        uses: actions/setup-dotnet@v6.1.0
         with:
           global-json-file: "./global.json"
 
@@ -130,7 +130,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-dotnet@v5.3.0
+      - uses: actions/setup-dotnet@v6.1.0
         with:
           global-json-file: "./global.json"
       - run: dotnet tool restore
